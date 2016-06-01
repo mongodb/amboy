@@ -2,23 +2,23 @@ package dependency
 
 import "os"
 
-// CreatesFileDependency describes a task that is only ready to run if
+// CreatesFile describes a task that is only ready to run if
 // a specific file doesn't exist. Specify that file as the FileName
-// attribute, or to the NewCreatesFileDependency constructor.
-type CreatesFileDependency struct {
+// attribute, or to the NewCreatesFile constructor.
+type CreatesFile struct {
 	FileName string   `bson:"file_name" json:"file_name" yaml:"file_name"`
 	T        TypeInfo `bson:"type" json:"type" yaml:"type"`
 
 	*JobEdges
 }
 
-// NewCreatesFileInstance builds a new CreatesFileDependency object,
+// NewCreatesFileInstance builds a new CreatesFile object,
 // used in the factory function for the registry, and for cases when
 // the dependent file is not known at construction time.
-func NewCreatesFileInstance() *CreatesFileDependency {
-	c := &CreatesFileDependency{
+func NewCreatesFileInstance() *CreatesFile {
+	c := &CreatesFile{
 		T: TypeInfo{
-			Name:    "create-file",
+			Name:    Create,
 			Version: 0,
 		},
 		JobEdges: NewJobEdges(),
@@ -27,10 +27,10 @@ func NewCreatesFileInstance() *CreatesFileDependency {
 	return c
 }
 
-// NewCreatesFileDependency constructs a CreatesFileDependency object
+// NewCreatesFile constructs a CreatesFile object
 // in cases when the dependent FileName is known at object creation
 // time.
-func NewCreatesFileDependency(name string) *CreatesFileDependency {
+func NewCreatesFile(name string) *CreatesFile {
 	c := NewCreatesFileInstance()
 	c.FileName = name
 
@@ -41,7 +41,7 @@ func NewCreatesFileDependency(name string) *CreatesFileDependency {
 // specified, and Passed if the file *does* exist. Jobs with Ready
 // states should be executed, while those with Passed states should be
 // a no-op.
-func (d *CreatesFileDependency) State() State {
+func (d *CreatesFile) State() State {
 	if d.FileName == "" {
 		return Ready
 	}
@@ -55,6 +55,6 @@ func (d *CreatesFileDependency) State() State {
 
 // Type returns the type information on the "creates-file" Manager
 // implementation.
-func (d *CreatesFileDependency) Type() TypeInfo {
+func (d *CreatesFile) Type() TypeInfo {
 	return d.T
 }

@@ -23,7 +23,7 @@ func (s *EdgeHandlerSuite) TestAddEdgePersistsInternallyAsExpected() {
 	s.Len(s.edges.Edges(), 0)
 
 	name := "test-one"
-	s.edges.AddEdge(name)
+	s.NoError(s.edges.AddEdge(name))
 	edges := s.edges.Edges()
 	s.Equal(edges[0], name)
 
@@ -38,7 +38,7 @@ func (s *EdgeHandlerSuite) TestInternalEdgesSetIsMaintained() {
 	s.Len(s.edges.Edges(), 0)
 
 	name := "test-one"
-	s.edges.AddEdge(name)
+	s.NoError(s.edges.AddEdge(name))
 	s.Len(s.edges.edgesSet, 1)
 	s.Len(s.edges.Edges(), 1)
 
@@ -46,19 +46,25 @@ func (s *EdgeHandlerSuite) TestInternalEdgesSetIsMaintained() {
 	s.edges.edgesSet = make(map[string]bool)
 	s.Len(s.edges.edgesSet, 0)
 
-	// add another edge, potentially with the same edge, shouldn't
-	// reduce a duplicate edge in the set or the list
-	s.edges.AddEdge(name)
+	// It should be an error to add an edge more than once.
+	s.Error(s.edges.AddEdge(name))
 	s.Len(s.edges.edgesSet, 1)
 	s.Len(s.edges.TaskEdges, 1)
 	s.Len(s.edges.Edges(), 1)
+
+	// add another edge, shouldn't reduce a duplicate edge in the
+	// set or the list
+	s.NoError(s.edges.AddEdge("test-two"))
+	s.Len(s.edges.edgesSet, 2)
+	s.Len(s.edges.TaskEdges, 2)
+	s.Len(s.edges.Edges(), 2)
 }
 
 func (s *EdgeHandlerSuite) TestTaskEdgeTracking() {
 	// edge defaults to empty
 	s.Len(s.edges.Edges(), 0)
 
-	s.edges.AddEdge("foo")
+	s.NoError(s.edges.AddEdge("foo"))
 	s.Len(s.edges.Edges(), 1)
 
 	// make sure the internals look like we expect.

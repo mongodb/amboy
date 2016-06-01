@@ -20,7 +20,7 @@ func NewAlways() *Always {
 		ShouldRebuild: true,
 		JobEdges:      NewJobEdges(),
 		T: TypeInfo{
-			Name:    "always",
+			Name:    AlwaysRun,
 			Version: 0,
 		},
 	}

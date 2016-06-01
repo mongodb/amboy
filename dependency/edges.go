@@ -29,7 +29,7 @@ func NewJobEdges() *JobEdges {
 	}
 }
 
-// JobEdges returns a copy of JobEdges.Edges list of edges for this
+// Edges returns a copy of JobEdges.Edges list of edges for this
 // slice. As a result, adding or removing items from this slice does
 // not affect other readers, and this object *only* reflects changes to
 // the dependencies made after calling this method.
