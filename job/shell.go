@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"sync"
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/dependency"
@@ -23,6 +24,7 @@ type ShellJob struct {
 	D          dependency.Manager `bson:"dependency" json:"dependency" yaml:"dependency"`
 	T          amboy.JobType      `bson:"type" json:"type" yaml:"type"`
 	args       []string
+	*sync.RWMutex
 }
 
 func init() {
@@ -42,7 +44,7 @@ func NewShellJob(cmd string, creates string) *ShellJob {
 	j.getArgsFromCommand()
 
 	if creates != "" {
-		j.D = dependency.NewCreatesFileDependency(creates)
+		j.D = dependency.NewCreatesFile(creates)
 	}
 
 	return j
@@ -54,11 +56,12 @@ func NewShellJob(cmd string, creates string) *ShellJob {
 func NewShellJobInstance() *ShellJob {
 	return &ShellJob{
 		Env: make(map[string]string),
-		D:   dependency.NewAlwaysDependency(),
+		D:   dependency.NewAlways(),
 		T: amboy.JobType{
 			Name:    "shell",
 			Version: 0,
 		},
+		RWMutex: &sync.RWMutex{},
 	}
 }
 
@@ -71,6 +74,8 @@ func (j *ShellJob) ID() string {
 	if j.Name == "" {
 		j.getArgsFromCommand()
 
+		j.RLock()
+		defer j.RUnlock()
 		if len(j.args) == 0 {
 			j.Name = fmt.Sprintf("%d.shell-job", GetNumber())
 		} else {
@@ -82,6 +87,9 @@ func (j *ShellJob) ID() string {
 }
 
 func (j *ShellJob) getArgsFromCommand() {
+	j.Lock()
+	defer j.Unlock()
+
 	j.args = strings.Split(j.Command, " ")
 }
 
@@ -93,12 +101,19 @@ func (j *ShellJob) Run() error {
 	grip.Debugf("running %s", j.Command)
 
 	j.getArgsFromCommand()
+
+	j.RLock()
 	cmd := exec.Command(j.args[0], j.args[1:]...)
+	j.RUnlock()
 
 	cmd.Dir = j.WorkingDir
 	cmd.Env = j.getEnVars()
 
 	output, err := cmd.CombinedOutput()
+
+	j.Lock()
+	defer j.Unlock()
+
 	j.Output = strings.TrimSpace(string(output))
 	j.IsComplete = true
 
@@ -107,8 +122,10 @@ func (j *ShellJob) Run() error {
 
 // Completed returns true if the command has already run.
 func (j *ShellJob) Completed() bool {
-	return j.IsComplete
+	j.RLock()
+	defer j.RUnlock()
 
+	return j.IsComplete
 }
 
 func (j *ShellJob) getEnVars() []string {

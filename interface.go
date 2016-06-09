@@ -1,6 +1,6 @@
 package amboy
 
-import "github.com/tychoish/amboy/dependency"
+import "github.com/mongodb/amboy/dependency"
 
 // Job describes a unit of work. Implementations of Job instances are
 // the content of the Queue. The amboy/job package contains several

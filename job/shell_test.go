@@ -62,7 +62,7 @@ func (s *ShellJobSuite) TestShellDependencyAccessorReturnsPersistedValue() {
 
 func (s *ShellJobSuite) TestSetDependencyChangesDependencyStrategy() {
 	s.Equal(s.job.Dependency().Type().Name, "always")
-	s.job.SetDependency(dependency.NewCreatesFileDependency("foo"))
+	s.job.SetDependency(dependency.NewCreatesFile("foo"))
 	s.Equal(s.job.Dependency().Type().Name, "create-file")
 }
 
