@@ -27,6 +27,8 @@ type Group struct {
 	grip    grip.Journaler
 	catcher grip.MultiCatcher
 	queues  []amboy.Queue
+
+	*sync.RWMutex
 }
 
 type workUnit struct {
@@ -39,8 +41,9 @@ type workUnit struct {
 // multiple queues.
 func NewGroup(numWorkers int) *Group {
 	r := &Group{
-		size: numWorkers,
-		wg:   &sync.WaitGroup{},
+		size:    numWorkers,
+		wg:      &sync.WaitGroup{},
+		RWMutex: &sync.RWMutex{},
 	}
 	r.grip = grip.NewJournaler("amboy.runner.group")
 	r.grip.SetSender(grip.Sender())
@@ -67,6 +70,9 @@ func (r *Group) SetQueue(q amboy.Queue) error {
 
 // Started returns true if the runner's worker threads have started, and false otherwise.
 func (r *Group) Started() bool {
+	r.RLock()
+	defer r.RUnlock()
+
 	return r.started
 }
 
@@ -80,7 +86,7 @@ func (r *Group) Size() int {
 // SetSize allows users to change the size of the worker pool after
 // creating the Runner.  Returns an error if the Runner has started.
 func (r *Group) SetSize(s int) error {
-	if r.started {
+	if r.Started() {
 		return errors.New("cannot change size of worker pool after starting")
 	}
 
@@ -140,7 +146,7 @@ func (r *Group) startMerger() <-chan *workUnit {
 // Start initializes all worker process, and returns an error if the
 // Runner has already started.
 func (r *Group) Start() error {
-	if r.started {
+	if r.Started() {
 		// PoolGrooup noops on successive Start operations so
 		// that so that multiple queues can call start.
 		return nil
@@ -151,7 +157,10 @@ func (r *Group) Start() error {
 	// channel, that the actual workers pull tasks from.
 	work := r.startMerger()
 
+	r.Lock()
 	r.started = true
+	r.Unlock()
+
 	r.grip.Debugf("running %d workers", r.size)
 	for w := 1; w <= r.size; w++ {
 		r.wg.Add(1)

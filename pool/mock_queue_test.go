@@ -2,6 +2,7 @@ package pool
 
 import (
 	"errors"
+	"sync"
 
 	"github.com/mongodb/amboy"
 	"github.com/tychoish/grip"
@@ -14,6 +15,8 @@ type QueueTester struct {
 	numComplete int
 	toProcess   chan amboy.Job
 	storage     map[string]amboy.Job
+
+	*sync.RWMutex
 }
 
 func NewQueueTester(p amboy.Runner) *QueueTester {
@@ -32,6 +35,7 @@ func NewQueueTesterInstance() *QueueTester {
 	return &QueueTester{
 		toProcess: make(chan amboy.Job, 10),
 		storage:   make(map[string]amboy.Job),
+		RWMutex:   &sync.RWMutex{},
 	}
 }
 
@@ -47,15 +51,25 @@ func (q *QueueTester) Get(name string) (amboy.Job, bool) {
 }
 
 func (q *QueueTester) Started() bool {
+	q.RLock()
+	defer q.RUnlock()
+
 	return q.started
 }
 
 func (q *QueueTester) Complete(j amboy.Job) {
+	q.Lock()
+	defer q.Unlock()
+
 	q.numComplete++
+
 	return
 }
 
 func (q *QueueTester) Stats() *amboy.QueueStats {
+	q.RLock()
+	defer q.RUnlock()
+
 	return &amboy.QueueStats{
 		Running:   len(q.storage) - len(q.toProcess),
 		Completed: q.numComplete,
@@ -69,7 +83,7 @@ func (q *QueueTester) Runner() amboy.Runner {
 }
 
 func (q *QueueTester) SetRunner(r amboy.Runner) error {
-	if q.started {
+	if q.Started() {
 		return errors.New("cannot set runner in a started pool")
 	}
 	q.pool = r
@@ -87,7 +101,7 @@ func (q *QueueTester) Next() (amboy.Job, error) {
 }
 
 func (q *QueueTester) Start() error {
-	if q.started {
+	if q.Started() {
 		return nil
 	}
 
@@ -95,6 +109,9 @@ func (q *QueueTester) Start() error {
 	if err != nil {
 		return err
 	}
+
+	q.Lock()
+	defer q.Unlock()
 
 	q.started = true
 	return nil
@@ -129,11 +146,16 @@ func (q *QueueTester) Wait() {
 }
 
 func (q *QueueTester) Close() {
+	q.Lock()
+	defer q.Unlock()
+
 	close(q.toProcess)
 	q.isComplete = true
 }
 
 // Closed is true when the queue has successfully exited.
 func (q *QueueTester) Closed() bool {
+	q.RLock()
+	defer q.RUnlock()
 	return q.isComplete
 }
