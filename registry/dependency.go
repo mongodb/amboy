@@ -13,7 +13,7 @@ func AddDependencyType(name string, f DependencyFactory) {
 	amboyRegistry.registerDependencyType(name, f)
 }
 
-// GetDependencyFactory returns a dependnecy.Manager factory function
+// GetDependencyFactory returns a dependency.Manager factory function
 // from the registry based on the name produced. If the name does not
 // exist, then the error value is non-nil.
 func GetDependencyFactory(name string) (DependencyFactory, error) {

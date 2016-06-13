@@ -78,7 +78,6 @@ func (s *LocalQueueSuite) TestPuttingAJobIntoAQueueImpactsStats() {
 	s.Equal(0, stats.Running)
 	s.Equal(0, stats.Completed)
 
-
 	s.NoError(s.queue.Start())
 
 	j := job.NewShellJob("true", "")
@@ -124,7 +123,6 @@ func (s *LocalQueueSuite) TestJobsChannelProducesJobObjects() {
 		job := job.NewShellJob("echo "+name, "")
 		s.NoError(s.queue.Put(job))
 	}
-
 
 	s.queue.Wait()
 
@@ -189,6 +187,12 @@ func (s *LocalQueueSuite) TestQueuePropogatesRunnerStartError() {
 
 	s.False(s.queue.Started())
 	s.Error(s.queue.Start())
+}
+
+func (s *LocalQueueSuite) TestPutReturnsErrorIfQueueIsNotStarted() {
+	s.False(s.queue.started)
+	j := job.NewShellJob("true", "")
+	s.Error(s.queue.Put(j))
 }
 
 ////////////////////////////////////////////////////////////////////////////////

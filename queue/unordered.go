@@ -69,7 +69,7 @@ func NewLocalUnordered(workers int) *LocalUnordered {
 	q.tasks.m = make(map[string]amboy.Job)
 
 	q.grip = grip.NewJournaler(fmt.Sprintf("amboy.queue.simple"))
-	q.grip.SetSender(grip.Sender())
+	q.grip.CloneSender(grip.Sender())
 	q.grip.Debugln("queue buffer size:", bufferSize)
 
 	r := pool.NewLocalWorkers(workers, q)
@@ -265,6 +265,7 @@ func (q *LocalUnordered) Wait() {
 // open channels and running worker processes.
 func (q *LocalUnordered) Close() {
 	q.Wait()
+
 	q.close()
 	q.runner.Wait()
 }

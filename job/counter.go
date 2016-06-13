@@ -1,6 +1,5 @@
 // Package job provides tools and generic implementations of jobs for
 // amboy Queues.
-
 package job
 
 var jobIDSource <-chan int
@@ -19,7 +18,7 @@ func init() {
 	}()
 }
 
-// GetJobNumber is a source of safe monotonically increasing integers
+// GetNumber is a source of safe monotonically increasing integers
 // for use in Job ids.
 func GetNumber() int {
 	return <-jobIDSource

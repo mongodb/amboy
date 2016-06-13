@@ -39,7 +39,7 @@ func NewLocalWorkers(numWorkers int, q amboy.Queue) *LocalWorkers {
 	}
 
 	r.grip = grip.NewJournaler("amboy.pool.local")
-	r.grip.SetSender(grip.Sender())
+	r.grip.CloneSender(grip.Sender())
 
 	if r.size <= 0 {
 		grip.Infof("setting minimal pool size is 1, overriding setting of '%d'", r.size)
@@ -111,8 +111,10 @@ func (r *LocalWorkers) Start() error {
 					}
 					r.grip.Debug(err)
 				} else {
-					r.catcher.Add(job.Run())
-					r.queue.Complete(job)
+					if !job.Completed() {
+						r.catcher.Add(job.Run())
+						r.queue.Complete(job)
+					}
 				}
 			}
 			r.grip.Debugf("worker (%s) exiting", name)

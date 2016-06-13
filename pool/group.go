@@ -46,7 +46,7 @@ func NewGroup(numWorkers int) *Group {
 		RWMutex: &sync.RWMutex{},
 	}
 	r.grip = grip.NewJournaler("amboy.runner.group")
-	r.grip.SetSender(grip.Sender())
+	r.grip.CloneSender(grip.Sender())
 
 	return r
 }
