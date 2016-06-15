@@ -50,12 +50,12 @@ type LocalOrdered struct {
 		nodes     map[int]amboy.Job
 		completed map[string]bool
 		graph     *simple.DirectedGraph
-		l         *sync.RWMutex
 	}
 
 	// Composed functionality:
 	runner amboy.Runner
 	grip   grip.Journaler
+	*sync.RWMutex
 }
 
 // NewLocalOrdered constructs an LocalOrdered object. The "workers"
@@ -69,7 +69,7 @@ func NewLocalOrdered(workers int) *LocalOrdered {
 	q.tasks.nodes = make(map[int]amboy.Job)
 	q.tasks.completed = make(map[string]bool)
 	q.tasks.graph = simple.NewDirectedGraph(1, 0)
-	q.tasks.l = &sync.RWMutex{}
+	q.RWMutex = &sync.RWMutex{}
 
 	q.grip = grip.NewJournaler(fmt.Sprintf("amboy.queue.ordered"))
 	q.grip.CloneSender(grip.Sender())
@@ -86,8 +86,8 @@ func NewLocalOrdered(workers int) *LocalOrdered {
 func (q *LocalOrdered) Put(j amboy.Job) error {
 	name := j.ID()
 
-	q.tasks.l.Lock()
-	defer q.tasks.l.Unlock()
+	q.Lock()
+	defer q.Unlock()
 
 	if q.started {
 		return fmt.Errorf("cannot add %s because ordered task dispatching has begun", name)
@@ -161,8 +161,8 @@ func (q *LocalOrdered) Results() <-chan amboy.Job {
 	output := make(chan amboy.Job, q.numCompleted)
 
 	go func() {
-		q.tasks.l.RLock()
-		defer q.tasks.l.RUnlock()
+		q.RLock()
+		defer q.RUnlock()
 		for _, job := range q.tasks.m {
 			if job.Completed() {
 				output <- job
@@ -176,8 +176,8 @@ func (q *LocalOrdered) Results() <-chan amboy.Job {
 
 // Get takes a name and returns a completed job.
 func (q *LocalOrdered) Get(name string) (amboy.Job, bool) {
-	q.tasks.l.RLock()
-	defer q.tasks.l.RUnlock()
+	q.RLock()
+	defer q.RUnlock()
 
 	j, ok := q.tasks.m[name]
 
@@ -189,8 +189,8 @@ func (q *LocalOrdered) Get(name string) (amboy.Job, bool) {
 func (q *LocalOrdered) Stats() *amboy.QueueStats {
 	s := &amboy.QueueStats{}
 
-	q.tasks.l.RLock()
-	defer q.tasks.l.RUnlock()
+	q.RLock()
+	defer q.RUnlock()
 
 	s.Completed = q.numCompleted
 	s.Total = len(q.tasks.m)
@@ -201,8 +201,8 @@ func (q *LocalOrdered) Stats() *amboy.QueueStats {
 }
 
 func (q *LocalOrdered) buildGraph() error {
-	q.tasks.l.RLock()
-	defer q.tasks.l.RUnlock()
+	q.RLock()
+	defer q.RUnlock()
 
 	for name, job := range q.tasks.m {
 		id, ok := q.tasks.ids[name]
@@ -281,10 +281,10 @@ func (q *LocalOrdered) jobDispatch(orderedJobs []graph.Node) {
 	for i := len(orderedJobs) - 1; i >= 0; i-- {
 		graphItem := orderedJobs[i]
 
-		q.tasks.l.Lock()
+		q.Lock()
 		job := q.tasks.nodes[graphItem.ID()]
 		q.numStarted++
-		q.tasks.l.Unlock()
+		q.Unlock()
 
 		if job.Dependency().State() == dependency.Passed {
 			q.Complete(job)
@@ -345,8 +345,8 @@ func (q *LocalOrdered) jobDispatch(orderedJobs []graph.Node) {
 func (q *LocalOrdered) Complete(j amboy.Job) {
 	q.grip.Debugf("marking job (%s) as complete", j.ID())
 
-	q.tasks.l.Lock()
-	defer q.tasks.l.Unlock()
+	q.Lock()
+	defer q.Unlock()
 
 	q.tasks.completed[j.ID()] = true
 	q.numCompleted++
@@ -368,9 +368,12 @@ func (q *LocalOrdered) Wait() {
 func (q *LocalOrdered) Close() {
 	q.Wait()
 
-	if !q.closed {
+	if !q.Closed() {
 		close(q.channel)
+
+		q.Lock()
 		q.closed = true
+		q.Unlock()
 	}
 
 	q.runner.Wait()
@@ -379,5 +382,8 @@ func (q *LocalOrdered) Close() {
 // Closed is true when the queue has successfully exited and false
 // otherwise.
 func (q *LocalOrdered) Closed() bool {
+	q.RLock()
+	defer q.RUnlock()
+
 	return q.closed
 }

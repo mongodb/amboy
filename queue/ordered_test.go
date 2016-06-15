@@ -5,13 +5,11 @@ package queue
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	"github.com/mongodb/amboy/dependency"
 	"github.com/mongodb/amboy/job"
 	"github.com/mongodb/amboy/pool"
-	"github.com/tychoish/grip"
-	"github.com/tychoish/grip/level"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 type OrderedQueueSuite struct {
@@ -35,7 +33,6 @@ func TestOrderedQueueSuiteThreeWorker(t *testing.T) {
 
 func (s *OrderedQueueSuite) SetupSuite() {
 	s.require = s.Require()
-	grip.SetThreshold(level.Emergency)
 }
 
 func (s *OrderedQueueSuite) SetupTest() {

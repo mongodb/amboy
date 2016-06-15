@@ -24,7 +24,8 @@ type Group struct {
 	Name     string
 	Jobs     map[string]*registry.JobInterchange
 	D        dependency.Manager
-	l        *sync.RWMutex
+
+	*sync.RWMutex
 	// It might be feasible to make a Queue implementation that
 	// implements the Job interface so that we can eliminate this
 	// entirely.
@@ -36,8 +37,8 @@ func NewGroup(name string) *Group {
 		counter: GetNumber(),
 		Name:    name,
 		Jobs:    make(map[string]*registry.JobInterchange),
-		l:       &sync.RWMutex{},
 		D:       dependency.NewAlways(),
+		RWMutex: &sync.RWMutex{},
 	}
 }
 
@@ -55,8 +56,8 @@ func groupJobFactory() amboy.Job {
 func (g *Group) Add(j amboy.Job) error {
 	name := j.ID()
 
-	g.l.Lock()
-	defer g.l.Unlock()
+	g.Lock()
+	defer g.Unlock()
 	_, exists := g.Jobs[name]
 	if exists {
 		return fmt.Errorf("job named '%s', already exists in Group %s",
@@ -84,6 +85,8 @@ func (g *Group) Run() error {
 
 	catcher := grip.NewCatcher()
 	wg := &sync.WaitGroup{}
+
+	g.RLock()
 	for _, job := range g.Jobs {
 		runnableJob, err := registry.ConvertToJob(job)
 		if err != nil {
@@ -106,19 +109,29 @@ func (g *Group) Run() error {
 			// after the task completes, add the issue
 			// back to Jobs map so that we preserve errors
 			// idiomatically for Groups.
-			group.l.Lock()
-			defer group.l.Unlock()
+
+			group.Lock()
+			defer group.Unlock()
 			group.Jobs[j.ID()] = registry.MakeJobInterchange(j)
 			wg.Done()
 		}(runnableJob, g)
 	}
+	g.RUnlock()
+
 	wg.Wait()
+
+	g.Lock()
+	defer g.Unlock()
 	g.Complete = true
+
 	return catcher.Resolve()
 }
 
 // Completed returns true when the job has executed.
 func (g *Group) Completed() bool {
+	g.RLock()
+	defer g.RUnlock()
+
 	return g.Complete
 }
 

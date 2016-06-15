@@ -7,8 +7,6 @@ import (
 	"github.com/mongodb/amboy/pool"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/tychoish/grip"
-	"github.com/tychoish/grip/level"
 )
 
 type LocalQueueSuite struct {
@@ -32,7 +30,6 @@ func TestLocalQueueSuiteThreeWorkers(t *testing.T) {
 
 func (s *LocalQueueSuite) SetupSuite() {
 	s.require = s.Require()
-	grip.SetThreshold(level.Emergency)
 }
 
 func (s *LocalQueueSuite) SetupTest() {
