@@ -102,7 +102,7 @@ functions:
       aws_key: ${aws_key}
       aws_secret: ${aws_secret}
       local_file: gopath/src/github.com/mongodb/amboy/build/coverage.${name}.html
-      remote_file: gopath/src/github.com/mongodb/amboy/${task_id}b/${name}-coverage.html
+      remote_file: amboy/${task_id}b/${name}-coverage.html
       bucket: mciuploads
       content_type: text/html
       permissions: public-read
