@@ -91,7 +91,7 @@ functions:
          # Configure a local go path for this build.
          export GOPATH=`pwd`/gopath
 
-         cd gopath/src/github.com/mongodb/curator
+         cd gopath/src/github.com/mongodb/amboy
 
          # Run make, called with proper environment variables set,
          # running the target.
