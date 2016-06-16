@@ -1,0 +1,17 @@
+language: go
+env:
+    - GIMME_OS=linux GIMME_ARCH=amd64
+    - GIMME_OS=linux GIMME_ARCH=386
+    - GIMME_OS=darwin GIMME_ARCH=amd64
+    - GIMME_OS=windows GIMME_ARCH=amd64
+    - GIMME_OS=windows GIMME_ARCH=386
+go:
+  - tip
+  - 1.3
+  - 1.4
+  - 1.5
+  - 1.6
+install:
+  - make test-deps
+  - mkdir -p build
+script: make vendor build test

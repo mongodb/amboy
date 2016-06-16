@@ -1,0 +1,8 @@
+hash: 4ebbd5afba4a96a96d61429f912861f3c5e29158a4c58456bd77ed1c13fdb5b2
+updated: 2016-06-14T12:03:19.851358667-04:00
+imports:
+- name: github.com/coreos/go-systemd
+  version: 6dc8b843c670f2027cc26b164935635840a40526
+  subpackages:
+  - journal
+devImports: []

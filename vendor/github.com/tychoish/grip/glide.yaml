@@ -1,0 +1,6 @@
+package: .
+import:
+- package: github.com/coreos/go-systemd
+  version: ^9.0.0
+  subpackages:
+  - journal
