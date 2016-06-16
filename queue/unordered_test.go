@@ -190,34 +190,3 @@ func (s *LocalQueueSuite) TestPutReturnsErrorIfQueueIsNotStarted() {
 	j := job.NewShellJob("true", "")
 	s.Error(s.queue.Put(j))
 }
-
-////////////////////////////////////////////////////////////////////////////////
-//
-// Basic Smoke tests for the un-ordered queue.
-//
-////////////////////////////////////////////////////////////////////////////////
-
-func (s *LocalQueueSuite) runSmokeTest(size int) {
-	q := NewLocalUnordered(size)
-	s.NoError(q.Start())
-	s.Equal(q.Runner().Size(), size)
-
-	for _, name := range []string{"test", "second", "workers"} {
-		s.NoError(q.Put(job.NewShellJob("echo "+name, "")))
-	}
-	q.Wait()
-
-	for result := range q.Results() {
-		s.True(result.Completed())
-	}
-}
-
-func (s *LocalQueueSuite) TestCheckSingleThreaded() {
-	s.runSmokeTest(1)
-}
-
-func (s *LocalQueueSuite) TestCheckLargerWorkerPools() {
-	for _, poolSize := range []int{2, 4, 8, 16, 32, 64} {
-		s.runSmokeTest(poolSize)
-	}
-}

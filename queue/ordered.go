@@ -39,12 +39,11 @@ import (
 // are cycles in the dependency graph, the queue will error before
 // starting.
 type LocalOrdered struct {
-	started      bool
-	closed       bool
-	numCompleted int
-	numStarted   int
-	channel      chan amboy.Job
-	tasks        struct {
+	started    bool
+	closed     bool
+	numStarted int
+	channel    chan amboy.Job
+	tasks      struct {
 		m         map[string]amboy.Job
 		ids       map[string]int
 		nodes     map[int]amboy.Job
@@ -158,7 +157,9 @@ func (q *LocalOrdered) Next() (amboy.Job, error) {
 // results pending. Other implementations may have different semantics
 // for this method.
 func (q *LocalOrdered) Results() <-chan amboy.Job {
-	output := make(chan amboy.Job, q.numCompleted)
+	q.RLock()
+	output := make(chan amboy.Job, len(q.tasks.completed))
+	q.RUnlock()
 
 	go func() {
 		q.RLock()
@@ -192,7 +193,7 @@ func (q *LocalOrdered) Stats() *amboy.QueueStats {
 	q.RLock()
 	defer q.RUnlock()
 
-	s.Completed = q.numCompleted
+	s.Completed = len(q.tasks.completed)
 	s.Total = len(q.tasks.m)
 	s.Pending = s.Total - s.Completed
 	s.Running = q.numStarted - s.Completed
@@ -349,7 +350,6 @@ func (q *LocalOrdered) Complete(j amboy.Job) {
 	defer q.Unlock()
 
 	q.tasks.completed[j.ID()] = true
-	q.numCompleted++
 }
 
 // Wait blocks until all pending jobs in the queue are complete.

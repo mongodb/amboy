@@ -106,10 +106,10 @@ func (r *LocalWorkers) Start() error {
 			for {
 				job, err := r.queue.Next()
 				if err != nil {
+					r.grip.Debug(err)
 					if r.queue.Closed() {
 						break
 					}
-					r.grip.Debug(err)
 				} else {
 					if !job.Completed() {
 						r.catcher.Add(job.Run())
