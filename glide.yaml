@@ -1,0 +1,12 @@
+package: github.com/mongodb/amboy
+import:
+- package: github.com/gonum/graph
+  subpackages:
+  - simple
+  - topo
+- package: github.com/tychoish/grip
+- package: github.com/gonum/matrix
+- package: github.com/stretchr/testify
+- package: github.com/stretchr/objx
+- package: github.com/pmezard/go-difflib
+- package: github.com/davecgh/go-spew

@@ -9,10 +9,7 @@ variables:
     commands:
       - command: git.get_project
         params:
-          directory: amboy
-      - command: git.apply_patch
-        params:
-          directory: amboy
+          directory: gopath/src/github.com/mongodb/amboy
       - func: run-make
         vars: { target: "${task_name}" }
   - &run-go-test-suite
@@ -25,10 +22,7 @@ variables:
     commands:
       - command: git.get_project
         params:
-          directory: amboy
-      - command: git.apply_patch
-        params:
-          directory: amboy
+          directory: gopath/src/github.com/mongodb/amboy
       - func: setup-credentials
       - func: run-make
         vars: { target: "${task_name}" }
@@ -90,24 +84,25 @@ functions:
   run-make:
     command: shell.exec
     params:
-       working_dir: amboy
        script: |
          set -o errexit
          set -o verbose
 
          # Configure a local go path for this build.
-         export GOPATH=`pwd`/build/gopath
+         export GOPATH=`pwd`/gopath
+
+         cd gopath/src/github.com/mongodb/curator
 
          # Run make, called with proper environment variables set,
          # running the target.
-         ${build_env} make ${target}
+         ${build_env} make vendor ${target}
   upload-coverage:
     command: s3.put
     params:
       aws_key: ${aws_key}
       aws_secret: ${aws_secret}
-      local_file: amboy/build/coverage.${name}.html
-      remote_file: amboy/${task_id}/${name}-coverage.html
+      local_file: gopath/src/github.com/mongodb/amboy/build/coverage.${name}.html
+      remote_file: gopath/src/github.com/mongodb/amboy/${task_id}b/${name}-coverage.html
       bucket: mciuploads
       content_type: text/html
       permissions: public-read
@@ -116,8 +111,8 @@ functions:
     command: gotest.parse_files
     params:
       files:
-        - "amboy/build/test.*.out"
-        - "amboy/build/race.*.out"
+        - "gopath/src/github.com/mongodb/amboy/build/test.*.out"
+        - "gopath/src/github.com/mongodb/amboy/build/race.*.out"
 
 
 #######################################
@@ -140,10 +135,7 @@ tasks:
     commands:
       - command: git.get_project
         params:
-          directory: amboy
-      - command: git.apply_patch
-        params:
-          directory: amboy
+          directory: gopath/src/github.com/mongodb/amboy
       - func: setup-credentials
       - func: run-make
         vars: { target: "coverage-html"}
@@ -237,7 +229,7 @@ buildvariants:
   - name: rhel55
     display_name: RHEL 5.5 (gccgo)
     expansions:
-      build_env: "LD_LIBRARY_PATH=/opt/openssl/lib64 PATH=/opt/mongodbtoolchain/v2/bin:/opt/ldwrapper/bin:$PATH"
+      build_env: "LD_LIBRARY_PATH=/opt/openssl/lib64 PATH=/opt/mongodbtoolchain/v2/bin:$PATH"
     run_on:
       - rhel55
     tasks:

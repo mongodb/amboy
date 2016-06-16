@@ -1,0 +1,53 @@
+hash: 8ee8e1a14968cf6c24ca5741992e229bd8d88f06ec31ba649860cdd240102a9d
+updated: 2016-06-16T13:39:28.50048459-04:00
+imports:
+- name: github.com/davecgh/go-spew
+  version: 5215b55f46b2b919f50a1df0eaa5886afe4e3b3d
+- name: github.com/gonum/blas
+  version: cadec4b2f438d716d8205fd6456cbfbcbba6ff1c
+  subpackages:
+  - blas64
+  - native
+  - native/internal/math32
+- name: github.com/gonum/floats
+  version: 3818baedee3067cb265df0d4aab6d72ae2fdc1fa
+- name: github.com/gonum/graph
+  version: 31ba9e80e42315c6128b25f1afc06de017f22343
+  subpackages:
+  - simple
+  - topo
+  - internal/ordered
+  - internal/set
+  - traverse
+  - internal/linear
+- name: github.com/gonum/internal
+  version: 1e4f90128ceb812ff6e569376595abafc132d921
+  subpackages:
+  - asm
+- name: github.com/gonum/lapack
+  version: 04e1e221b7b8b21a8f22b1634b340177c3b4e018
+  subpackages:
+  - lapack64
+  - native
+- name: github.com/gonum/matrix
+  version: bc376b0c3bde35e6d38bf6033c9fdbe3e498342b
+  subpackages:
+  - mat64
+- name: github.com/pmezard/go-difflib
+  version: 792786c7400a136282c1664665ae0a8db921c6c2
+- name: github.com/stretchr/objx
+  version: 1a9d0bb9f541897e62256577b352fdbc1fb4fd94
+- name: github.com/stretchr/testify
+  version: d77da356e56a7428ad25149ca77381849a6a5232
+- name: github.com/tychoish/grip
+  version: bd5275e041d65f9a372212a98d84169249057590
+  subpackages:
+  - level
+  - logging
+  - send
+  - message
+- name: golang.org/x/tools
+  version: a2a552218a0e22e6fb22469f49ef371b492f6178
+  subpackages:
+  - container/intsets
+devImports: []
