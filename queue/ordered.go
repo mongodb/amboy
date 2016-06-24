@@ -345,10 +345,8 @@ func (q *LocalOrdered) jobDispatch(orderedJobs []graph.Node) {
 // Complete marks a job as complete in the context of this queue instance.
 func (q *LocalOrdered) Complete(j amboy.Job) {
 	q.grip.Debugf("marking job (%s) as complete", j.ID())
-
 	q.Lock()
 	defer q.Unlock()
-
 	q.tasks.completed[j.ID()] = true
 }
 

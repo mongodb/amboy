@@ -90,7 +90,6 @@ func (q *LocalUnordered) Put(j amboy.Job) error {
 
 	if !q.started {
 		return fmt.Errorf("cannot add %s because queue has not started", name)
-
 	}
 
 	q.tasks.Lock()
@@ -180,7 +179,6 @@ func (q *LocalUnordered) Next() (amboy.Job, error) {
 	default:
 		return nil, errors.New("no pending jobs")
 	}
-
 }
 
 // Results provides an iterator of all "result objects," or completed
@@ -227,17 +225,19 @@ func (q *LocalUnordered) Stats() *amboy.QueueStats {
 	s.Total = len(q.tasks.m)
 	s.Pending = s.Total - s.Completed
 	s.Running = q.numStarted - s.Completed
-
 	return s
 }
 
 // Complete marks a job as complete, moving it from the in progress
-// state to the completed state.
+// state to the completed state. This operation is asynchronous and non-blocking.
+
 func (q *LocalUnordered) Complete(j amboy.Job) {
-	q.grip.Debugf("marking job (%s) as complete", j.ID())
-	q.tasks.Lock()
-	defer q.tasks.Unlock()
-	q.numCompleted++
+	go func() {
+		q.grip.Debugf("marking job (%s) as complete", j.ID())
+		q.tasks.Lock()
+		defer q.tasks.Unlock()
+		q.numCompleted++
+	}()
 }
 
 func (q *LocalUnordered) close() {
