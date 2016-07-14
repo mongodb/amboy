@@ -26,7 +26,6 @@ variables:
       - func: setup-credentials
       - func: run-make
         vars: { target: "${task_name}" }
-      - func: parse-test-output
 
   # Task lists for build variants. Some (known) duplication between
   # these lists and the task definitions below.
@@ -107,12 +106,6 @@ functions:
       content_type: text/html
       permissions: public-read
       display_name: coverage-${name}
-  parse-test-output:
-    command: gotest.parse_files
-    params:
-      files:
-        - "gopath/src/github.com/mongodb/amboy/build/test.*.out"
-        - "gopath/src/github.com/mongodb/amboy/build/race.*.out"
 
 
 #######################################
@@ -186,11 +179,17 @@ tasks:
 
 
 post:
+  - command: gotest.parse_files
+    params:
+      files:
+        - "gopath/src/github.com/mongodb/amboy/build/test.*.out"
+        - "gopath/src/github.com/mongodb/amboy/build/race.*.out"
   - command: shell.exec
     params:
       script: |
         rm -rf amboy
         rm -rf ~/.aws
+
 
 #######################################
 #           Buildvariants             #

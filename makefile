@@ -10,30 +10,27 @@ projectPath := $(orgPath)/$(name)
 #   package, testing, and linter dependencies specified
 #   separately. This is a temporary solution: eventually we should
 #   vendorize all of these dependencies.
-lintDeps := github.com/alecthomas/gometalinter
 lintDeps += github.com/alecthomas/gocyclo
 lintDeps += github.com/golang/lint/golint
 lintDeps += github.com/gordonklaus/ineffassign
-lintDeps += github.com/jgautheron/goconst/cmd/goconst
+lintDeps += github.com/jgautheron/goconst
 lintDeps += github.com/kisielk/errcheck
 lintDeps += github.com/mdempsky/unconvert
 lintDeps += github.com/mibk/dupl
-lintDeps += github.com/mvdan/interfacer/cmd/interfacer
-lintDeps += github.com/opennota/check/cmd/aligncheck
-lintDeps += github.com/opennota/check/cmd/structcheck
-lintDeps += github.com/opennota/check/cmd/varcheck
+lintDeps += github.com/mvdan/interfacer
+lintDeps += github.com/opennota/check
 lintDeps += github.com/tsenart/deadcode
-lintDeps += github.com/client9/misspell/cmd/misspell
-lintDeps += github.com/walle/lll/cmd/lll
-lintDeps += honnef.co/go/simple/cmd/gosimple
-lintDeps += honnef.co/go/staticcheck/cmd/staticcheck
+lintDeps += github.com/client9/misspell
+lintDeps += github.com/walle/lll
+lintDeps += honnef.co/go/simple
+lintDeps += honnef.co/go/staticcheck
 # end dependency declarations
 
 # start linting configuration
 #   include test files and give linters 40s to run to avoid timeouts
-lintArgs := --deadline=40s --tests
+lintArgs := --deadline=40s --tests --vendor
 #   skip the build directory and the gopath,
-lintArgs += --skip="$(gopath)" --skip="$(buildDir)"
+lintArgs += --skip="$(buildDir)" --skip="buildscripts"
 #  the go type package produces false positives for (sub)packages,
 #  because it doesn't parse dependency information from compiled go
 #  resources correctly.
@@ -45,6 +42,7 @@ lintArgs += --line-length=100 --dupl-threshold=100 --cyclo-over=15
 #  two similar functions triggered the duplicate warning, but they're not.
 lintArgs += --exclude="duplicate of registry.go"
 lintArgs += --exclude="don.t use underscores.*_DependencyState.*"
+lintArgs += --exclude="file is not goimported" # test files aren't imported
 #  golint doesn't handle splitting package comments between multiple files.
 lintArgs += --exclude="package comment should be of the form \"Package .* \(golint\)"
 # end lint suppressions
@@ -113,12 +111,16 @@ $(buildDir)/$(name).race:$(gopath)/src/$(projectPath) $(srcFiles) $(deps)
 makeArgs := --no-print-directory
 race-%:
 	@$(MAKE) $(makeArgs) $(buildDir)/race.$*.out
+	@grep -s -q -e "^PASS" $(buildDir)/coverage.$*.html
 test-%:
 	@$(MAKE) $(makeArgs) $(buildDir)/test.$*.out
+	@grep -s -q -e "^PASS" $(buildDir)/coverage.$*.html
 coverage-%:
 	@$(MAKE) $(makeArgs) $(buildDir)/coverage.$*.out
+	@grep -s -q -e "^PASS" $(buildDir)/coverage.$*.html
 html-coverage-%:
 	@$(MAKE) $(makeArgs) $(buildDir)/coverage.$*.html
+	@grep -s -q -e "^PASS" $(buildDir)/coverage.$*.html
 # end convienence targets
 
 # start test and coverage artifacts
@@ -126,6 +128,7 @@ html-coverage-%:
 #    that the tests actually need to run. (The "build" target is
 #    intentional and makes these targets rerun as expected.)
 testRunDeps := $(testSrcFiles) build
+testArgs := -v --timeout=20m
 #    implementation for package coverage and test running,mongodb to produce
 #    and save test output.
 $(buildDir)/coverage.%.html:$(buildDir)/coverage.%.out
@@ -137,13 +140,13 @@ $(buildDir)/coverage.$(name).out:$(testRunDeps)
 	$(vendorGopath) go test -covermode=count -coverprofile=$@ $(projectPath)
 	@-[ -f $@ ] && go tool cover -func=$@ | sed 's%$(projectPath)/%%' | column -t
 $(buildDir)/test.%.out:$(testRunDeps)
-	$(vendorGopath) go test -v ./$* >| $@; exitCode=$$?; cat $@; [ $$exitCode -eq 0 ]
+	$(vendorGopath) go test $(testArgs) ./$* | tee $@
 $(buildDir)/test.$(name).out:$(testRunDeps)
-	$(vendorGopath) go test -v ./ >| $@; exitCode=$$?; cat $@; [ $$exitCode -eq 0 ]
+	$(vendorGopath) go test $(testArgs) ./ | tee $@
 $(buildDir)/race.%.out:$(testRunDeps)
-	$(vendorGopath) go test -race -v ./$* >| $@; exitCode=$$?; cat $@; [ $$exitCode -eq 0 ]
+	$(vendorGopath) go test $(testArgs) -race ./$* | tee $@
 $(buildDir)/race.$(name).out:$(testRunDeps)
-	$(vendorGopath) go test -race -v ./ >| $@; exitCode=$$?; cat $@; [ $$exitCode -eq 0 ]
+	$(vendorGopath) go test $(testArgs) -race ./ | tee $@
 # end test and coverage artifacts
 
 

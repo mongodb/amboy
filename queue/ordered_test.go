@@ -84,7 +84,7 @@ func (s *OrderedQueueSuite) TestPuttingJobIntoQueueAfterStartingReturnsError() {
 	j := job.NewShellJob("true", "")
 	s.NoError(s.queue.Put(j))
 
-	s.queue.Start()
+	s.NoError(s.queue.Start())
 	s.Error(s.queue.Put(j))
 }
 
