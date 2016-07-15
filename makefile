@@ -111,13 +111,13 @@ $(buildDir)/$(name).race:$(gopath)/src/$(projectPath) $(srcFiles) $(deps)
 makeArgs := --no-print-directory
 race-%:
 	@$(MAKE) $(makeArgs) $(buildDir)/race.$*.out
-	@grep -s -q -e "^PASS" $(buildDir)/coverage.$*.html
+	@grep -s -q -e "^PASS" $(buildDir)/race.$*.out
 test-%:
 	@$(MAKE) $(makeArgs) $(buildDir)/test.$*.out
-	@grep -s -q -e "^PASS" $(buildDir)/coverage.$*.html
+	@grep -s -q -e "^PASS" $(buildDir)/test.$*.out
 coverage-%:
 	@$(MAKE) $(makeArgs) $(buildDir)/coverage.$*.out
-	@grep -s -q -e "^PASS" $(buildDir)/coverage.$*.html
+	@grep -s -q -e "^PASS" $(buildDir)/coverage.$*.out
 html-coverage-%:
 	@$(MAKE) $(makeArgs) $(buildDir)/coverage.$*.html
 	@grep -s -q -e "^PASS" $(buildDir)/coverage.$*.html
