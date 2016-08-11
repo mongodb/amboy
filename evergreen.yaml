@@ -230,7 +230,7 @@ buildvariants:
     expansions:
       build_env: "LD_LIBRARY_PATH=/opt/openssl/lib64 PATH=/opt/mongodbtoolchain/v2/bin:$PATH"
     run_on:
-      - rhel55
+      - rhel55-test
     tasks:
       *test-tasks
 
