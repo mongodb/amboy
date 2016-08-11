@@ -170,7 +170,7 @@ func (r *Group) Start() error {
 			r.grip.Debugf("worker (%s) waiting for jobs", name)
 
 			for unit := range work {
-				r.catcher.Add(unit.j.Run())
+				unit.j.Run()
 				unit.q.Complete(unit.j)
 			}
 

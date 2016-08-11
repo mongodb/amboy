@@ -50,9 +50,11 @@ func (f *JobTest) ID() string {
 	return f.Name
 }
 
-func (f *JobTest) Run() error {
+func (f *JobTest) Run() {
 	f.complete = true
+}
 
+func (f *JobTest) Error() error {
 	if f.shouldFail {
 		return errors.New("poisoned task")
 	}

@@ -1,6 +1,7 @@
 package job
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -23,8 +24,9 @@ type ShellJob struct {
 	Env        map[string]string  `bson:"env" json:"env" yaml:"env"`
 	D          dependency.Manager `bson:"dependency" json:"dependency" yaml:"dependency"`
 	T          amboy.JobType      `bson:"type" json:"type" yaml:"type"`
+	Errors     []error            `bson:"errors" json:"errors" yaml:"errors"`
 	args       []string
-	*sync.RWMutex
+	sync.RWMutex
 }
 
 func init() {
@@ -61,7 +63,6 @@ func NewShellJobInstance() *ShellJob {
 			Name:    "shell",
 			Version: 0,
 		},
-		RWMutex: &sync.RWMutex{},
 	}
 }
 
@@ -97,7 +98,7 @@ func (j *ShellJob) getArgsFromCommand() {
 // the environment, or change the value of the WorkingDir property to
 // set the working directory for this command. Captures output into
 // the Output attribute, and returns the error value of the command.
-func (j *ShellJob) Run() error {
+func (j *ShellJob) Run() {
 	grip.Debugf("running %s", j.Command)
 
 	j.getArgsFromCommand()
@@ -110,14 +111,29 @@ func (j *ShellJob) Run() error {
 	cmd.Env = j.getEnVars()
 
 	output, err := cmd.CombinedOutput()
+	if err != nil {
+		j.Errors = append(j.Errors, err)
+	}
 
 	j.Lock()
 	defer j.Unlock()
 
 	j.Output = strings.TrimSpace(string(output))
 	j.IsComplete = true
+}
 
-	return err
+func (j *ShellJob) Error() error {
+	if len(j.Errors) == 0 {
+		return nil
+	}
+
+	var outputs []string
+
+	for _, err := range j.Errors {
+		outputs = append(outputs, fmt.Sprintf("%+v", err))
+	}
+
+	return errors.New(strings.Join(outputs, "\n"))
 }
 
 // Completed returns true if the command has already run.

@@ -112,7 +112,7 @@ func (r *LocalWorkers) Start() error {
 					}
 				} else {
 					if !job.Completed() {
-						r.catcher.Add(job.Run())
+						job.Run()
 						r.queue.Complete(job)
 					}
 				}

@@ -1,7 +1,9 @@
 package job
 
 import (
+	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/mongodb/amboy"
@@ -20,12 +22,14 @@ func init() {
 // on a single system.
 type Group struct {
 	counter  int
-	Complete bool
-	Name     string
-	Jobs     map[string]*registry.JobInterchange
-	D        dependency.Manager
+	Complete bool                                `bson:"complete" json:"complete" yaml:"complete"`
+	Name     string                              `bson:"name" json:"name" yaml:"name"`
+	Errors   []error                             `bson:"errors" json:"errors" yaml:"errors"`
+	Jobs     map[string]*registry.JobInterchange `bson:"jobs" json:"jobs" yaml:"jobs"`
+	D        dependency.Manager                  `bson:"dependency" json:"dependency" yaml:"dependency"`
 
-	*sync.RWMutex
+	sync.RWMutex
+
 	// It might be feasible to make a Queue implementation that
 	// implements the Job interface so that we can eliminate this
 	// entirely.
@@ -38,7 +42,6 @@ func NewGroup(name string) *Group {
 		Name:    name,
 		Jobs:    make(map[string]*registry.JobInterchange),
 		D:       dependency.NewAlways(),
-		RWMutex: &sync.RWMutex{},
 	}
 }
 
@@ -78,19 +81,20 @@ func (g *Group) ID() string {
 // Jobs in the Group. Returns an error if: the Group has already
 // run, or if any of the constituent Jobs produce an error *or* if
 // there are problems with the JobInterchange converters.
-func (g *Group) Run() error {
+func (g *Group) Run() {
 	if g.Complete {
-		return fmt.Errorf("Group '%s' has already executed", g.Name)
+		g.Errors = append(g.Errors, fmt.Errorf("Group '%s' has already executed", g.Name))
+
+		return
 	}
 
-	catcher := grip.NewCatcher()
 	wg := &sync.WaitGroup{}
 
 	g.RLock()
 	for _, job := range g.Jobs {
 		runnableJob, err := registry.ConvertToJob(job)
 		if err != nil {
-			catcher.Add(err)
+			g.Errors = append(g.Errors, err)
 			continue
 		}
 
@@ -104,7 +108,9 @@ func (g *Group) Run() error {
 
 		wg.Add(1)
 		go func(j amboy.Job, group *Group) {
-			catcher.Add(j.Run())
+			defer wg.Done()
+
+			j.Run()
 
 			// after the task completes, add the issue
 			// back to Jobs map so that we preserve errors
@@ -112,8 +118,11 @@ func (g *Group) Run() error {
 
 			group.Lock()
 			defer group.Unlock()
+			err := j.Error()
+			if err != nil {
+				group.Errors = append(group.Errors, err)
+			}
 			group.Jobs[j.ID()] = registry.MakeJobInterchange(j)
-			wg.Done()
 		}(runnableJob, g)
 	}
 	g.RUnlock()
@@ -123,8 +132,20 @@ func (g *Group) Run() error {
 	g.Lock()
 	defer g.Unlock()
 	g.Complete = true
+}
 
-	return catcher.Resolve()
+func (g *Group) Error() error {
+	if len(g.Errors) == 0 {
+		return nil
+	}
+
+	var outputs []string
+
+	for _, err := range g.Errors {
+		outputs = append(outputs, fmt.Sprintf("%+v", err))
+	}
+
+	return errors.New(strings.Join(outputs, "\n"))
 }
 
 // Completed returns true when the job has executed.
@@ -156,7 +177,7 @@ func (g *Group) Dependency() dependency.Manager {
 func (g *Group) SetDependency(d dependency.Manager) {
 	if d.Type().Name == "always" {
 		g.D = d
-	} else {
-		grip.Warning("repo building jobs should take 'always'-run dependencies.")
 	}
+
+	grip.Warning("repo building jobs should take 'always'-run dependencies.")
 }

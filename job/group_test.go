@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/suite"
 	"github.com/mongodb/amboy/dependency"
 	"github.com/mongodb/amboy/registry"
+	"github.com/stretchr/testify/suite"
 )
 
 // JobGroupSuite exercises the Job implementation that allows you to
@@ -54,8 +54,9 @@ func (s *JobGroupSuite) TestAllJobsAreCompleteAfterRunningGroup() {
 	}
 	s.Len(s.job.Jobs, len(names))
 
-	s.NoError(s.job.Run())
+	s.job.Run()
 	s.True(s.job.Completed())
+	s.NoError(s.job.Error())
 
 	for _, interchange := range s.job.Jobs {
 		// interchange objects provide access to a Job
@@ -81,8 +82,9 @@ func (s *JobGroupSuite) TestJobResultsPersistAfterGroupRuns() {
 	s.NoError(s.job.Add(fail))
 	s.Len(s.job.Jobs, 2)
 
-	s.Error(s.job.Run())
+	s.job.Run()
 	s.True(s.job.Completed())
+	s.Error(s.job.Error())
 
 	s.True(fail.Completed())
 	failEnvName, ok := fail.Env["name"]

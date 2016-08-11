@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/dependency"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // ShellJobSuite collects tests of the generic shell command running
@@ -80,7 +80,8 @@ func (s *ShellJobSuite) TestRunTrivialCommandReturnsWithoutError() {
 	s.job = NewShellJob("true", "")
 
 	s.False(s.job.Completed())
-	s.NoError(s.job.Run())
+	s.job.Run()
+	s.NoError(s.job.Error())
 	s.True(s.job.Completed())
 }
 
@@ -88,13 +89,15 @@ func (s *ShellJobSuite) TestRunWithErroneousCommandReturnsError() {
 	s.job = NewShellJob("foo", "")
 
 	s.False(s.job.Completed())
-	s.Error(s.job.Run())
+	s.job.Run()
+	s.Error(s.job.Error())
 	s.True(s.job.Completed())
 }
 
 func (s *ShellJobSuite) TestEnvironmentVariableIsPassedToCommand() {
 	s.job = NewShellJob("env", "")
 	s.job.Env["MSG"] = "foo"
-	s.NoError(s.job.Run())
+	s.job.Run()
+	s.NoError(s.job.Error())
 	s.Equal("MSG=foo", s.job.Output)
 }

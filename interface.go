@@ -13,12 +13,8 @@ type Job interface {
 	ID() string
 
 	// The primary execution method for the job. Should toggle the
-	// completed state for the job. While Runner implementations
-	// *do* collect errors from tasks, which is accessible from
-	// the queue, in general tasks should maintain their own
-	// success/failure state, and not rely on the return value of
-	// this function.
-	Run() error
+	// completed state for the job.
+	Run()
 
 	// Returns true if the job has been completed. Jobs that
 	// encountered errors are, often, also complete.
@@ -34,6 +30,10 @@ type Job interface {
 	// with jobs.)
 	SetDependency(dependency.Manager)
 	Dependency() dependency.Manager
+
+	// Error returns an error object if the task was an
+	// error. Typically if the job has not run, this is nil.
+	Error() error
 }
 
 // JobType contains information about the type of a job, which queues
@@ -138,9 +138,4 @@ type Runner interface {
 	// called in the context of the Close() method of an enclosing
 	// Queue object.
 	Wait()
-
-	// Error returns an error if *any* Job.Run operation produced
-	// an error. Typically it's more effective for Jobs to track
-	// or handle their own errors internally.
-	Error() error
 }
