@@ -1,6 +1,9 @@
 package amboy
 
-import "github.com/mongodb/amboy/dependency"
+import (
+	"github.com/mongodb/amboy/dependency"
+	"golang.org/x/net/context"
+)
 
 // Job describes a unit of work. Implementations of Job instances are
 // the content of the Queue. The amboy/job package contains several
@@ -61,8 +64,9 @@ type Queue interface {
 	// registered by a Queue.
 	Get(string) (Job, bool)
 
-	// Returns the next job in the queue.
-	Next() (Job, error)
+	// Returns the next job in the queue. These calls are
+	// non-blocking and return errors
+	Next(context.Context) Job
 
 	// Makes it possible to detect if a Queue has started
 	// dispatching jobs to runners.
@@ -70,7 +74,7 @@ type Queue interface {
 
 	// Used to mark a Job complete and remove it from the pending
 	// work of the queue.
-	Complete(Job)
+	Complete(context.Context, Job)
 
 	// Returns a channel that produces completed Job objects.
 	Results() <-chan Job
@@ -91,17 +95,10 @@ type Queue interface {
 
 	// Begins the execution of the job Queue, using the embedded
 	// Runner.
-	Start() error
+	Start(context.Context) error
 
 	// Waits for all jobs to complete.
 	Wait()
-
-	// Close calls ensures that all jobs are complete and cleans
-	// up resources used by the Queue (e.g. channels, workers.)
-	Close()
-
-	// Closed returns true when workers should exit.
-	Closed() bool
 }
 
 // Runner describes a simple worker interface for executing jobs in
@@ -119,23 +116,12 @@ type Runner interface {
 	// association after starting.
 	SetQueue(Queue) error
 
-	// Returns the current size of the runner pool. Some
-	// implementations may not have a meaningful concept of size.
-	Size() int
-
-	// Allows callers to change the size of of the runner,
-	// i.e. the number of workers. Runners are not obligated to
-	// support changing the size after their start method is
-	// called.
-	SetSize(int) error
-
 	// Prepares the runner implementation to begin doing work, if
 	// any is required (e.g. starting workers.) Typically called
 	// by the enclosing Queue object's Start() method.
-	Start() error
+	Start(context.Context) error
 
-	// Blocks until all worker threads have exited. Typically only
-	// called in the context of the Close() method of an enclosing
-	// Queue object.
-	Wait()
+	// Termaintes all in progress work and waits for processes to
+	// return.
+	Close()
 }

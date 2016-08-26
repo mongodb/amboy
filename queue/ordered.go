@@ -1,5 +1,3 @@
-// +build cgo,!gccgo
-
 /*
 Local Ordered Queue
 
@@ -29,6 +27,7 @@ import (
 	"github.com/mongodb/amboy/dependency"
 	"github.com/mongodb/amboy/pool"
 	"github.com/tychoish/grip"
+	"golang.org/x/net/context"
 )
 
 // LocalOrdered implements a dependency aware local queue. The queue
@@ -40,7 +39,6 @@ import (
 // starting.
 type LocalOrdered struct {
 	started    bool
-	closed     bool
 	numStarted int
 	channel    chan amboy.Job
 	tasks      struct {
@@ -53,8 +51,7 @@ type LocalOrdered struct {
 
 	// Composed functionality:
 	runner amboy.Runner
-	grip   grip.Journaler
-	*sync.RWMutex
+	mutex  sync.RWMutex
 }
 
 // NewLocalOrdered constructs an LocalOrdered object. The "workers"
@@ -68,10 +65,6 @@ func NewLocalOrdered(workers int) *LocalOrdered {
 	q.tasks.nodes = make(map[int]amboy.Job)
 	q.tasks.completed = make(map[string]bool)
 	q.tasks.graph = simple.NewDirectedGraph(1, 0)
-	q.RWMutex = &sync.RWMutex{}
-
-	q.grip = grip.NewJournaler(fmt.Sprintf("amboy.queue.ordered"))
-	q.grip.CloneSender(grip.Sender())
 
 	r := pool.NewLocalWorkers(workers, q)
 	q.runner = r
@@ -85,15 +78,11 @@ func NewLocalOrdered(workers int) *LocalOrdered {
 func (q *LocalOrdered) Put(j amboy.Job) error {
 	name := j.ID()
 
-	q.Lock()
-	defer q.Unlock()
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
 
 	if q.started {
 		return fmt.Errorf("cannot add %s because ordered task dispatching has begun", name)
-	}
-
-	if q.closed {
-		return fmt.Errorf("cannot add %s because queue is closed", name)
 	}
 
 	if _, ok := q.tasks.m[name]; ok {
@@ -120,7 +109,7 @@ func (q *LocalOrdered) Runner() amboy.Runner {
 // implementations at run time. This method fails if the runner has
 // started.
 func (q *LocalOrdered) SetRunner(r amboy.Runner) error {
-	if q.runner.Started() {
+	if q.Started() {
 		return errors.New("cannot change runners after starting")
 	}
 
@@ -136,18 +125,13 @@ func (q *LocalOrdered) Started() bool {
 
 // Next returns a job from the Queue. This call is non-blocking. If
 // there are no pending jobs at the moment, then Next returns an
-// error. If the queue is closed and all jobs are complete, then Next
-// also returns an error.
-func (q *LocalOrdered) Next() (amboy.Job, error) {
+// error.
+func (q *LocalOrdered) Next(ctx context.Context) amboy.Job {
 	select {
-	case job, ok := <-q.channel:
-		if !ok {
-			return nil, errors.New("all jobs complete")
-		}
-
-		return job, nil
-	default:
-		return nil, errors.New("no pending jobs")
+	case <-ctx.Done():
+		return nil
+	case job := <-q.channel:
+		return job
 	}
 }
 
@@ -157,13 +141,13 @@ func (q *LocalOrdered) Next() (amboy.Job, error) {
 // results pending. Other implementations may have different semantics
 // for this method.
 func (q *LocalOrdered) Results() <-chan amboy.Job {
-	q.RLock()
+	q.mutex.RLock()
 	output := make(chan amboy.Job, len(q.tasks.completed))
-	q.RUnlock()
+	q.mutex.RUnlock()
 
 	go func() {
-		q.RLock()
-		defer q.RUnlock()
+		q.mutex.RLock()
+		defer q.mutex.RUnlock()
 		for _, job := range q.tasks.m {
 			if job.Completed() {
 				output <- job
@@ -177,8 +161,8 @@ func (q *LocalOrdered) Results() <-chan amboy.Job {
 
 // Get takes a name and returns a completed job.
 func (q *LocalOrdered) Get(name string) (amboy.Job, bool) {
-	q.RLock()
-	defer q.RUnlock()
+	q.mutex.RLock()
+	defer q.mutex.RUnlock()
 
 	j, ok := q.tasks.m[name]
 
@@ -190,8 +174,8 @@ func (q *LocalOrdered) Get(name string) (amboy.Job, bool) {
 func (q *LocalOrdered) Stats() *amboy.QueueStats {
 	s := &amboy.QueueStats{}
 
-	q.RLock()
-	defer q.RUnlock()
+	q.mutex.RLock()
+	defer q.mutex.RUnlock()
 
 	s.Completed = len(q.tasks.completed)
 	s.Total = len(q.tasks.m)
@@ -202,8 +186,8 @@ func (q *LocalOrdered) Stats() *amboy.QueueStats {
 }
 
 func (q *LocalOrdered) buildGraph() error {
-	q.RLock()
-	defer q.RUnlock()
+	q.mutex.RLock()
+	defer q.mutex.RUnlock()
 
 	for name, job := range q.tasks.m {
 		id, ok := q.tasks.ids[name]
@@ -242,23 +226,15 @@ func (q *LocalOrdered) buildGraph() error {
 
 // Start starts the runner worker processes organizes the graph and
 // begins dispatching jobs to the workers.
-func (q *LocalOrdered) Start() error {
-	if q.closed {
-		return fmt.Errorf("cannot start a closed queue")
-	}
-
+func (q *LocalOrdered) Start(ctx context.Context) error {
 	if q.started {
 		return nil
 	}
 
-	err := q.runner.Start()
-	if err != nil {
-		return err
-	}
-
+	q.runner.Start(ctx)
 	q.started = true
 
-	err = q.buildGraph()
+	err := q.buildGraph()
 	if err != nil {
 		return err
 	}
@@ -268,27 +244,34 @@ func (q *LocalOrdered) Start() error {
 		return err
 	}
 
-	go q.jobDispatch(ordered)
+	go q.jobDispatch(ctx, ordered)
+
 	return nil
 }
 
 // Job dispatching that takes an ordering of graph.Nodsand waits for
 // dependencies to be resolved before adding them to the queue.
-func (q *LocalOrdered) jobDispatch(orderedJobs []graph.Node) {
+func (q *LocalOrdered) jobDispatch(ctx context.Context, orderedJobs []graph.Node) {
 	// we need to make sure that dependencies don't just get
 	// dispatched before their dependents but that they're
 	// finished. We iterate through the sorted list in reverse
 	// order:
 	for i := len(orderedJobs) - 1; i >= 0; i-- {
+		select {
+		case <-ctx.Done():
+			break
+		default:
+		}
+
 		graphItem := orderedJobs[i]
 
-		q.Lock()
+		q.mutex.Lock()
 		job := q.tasks.nodes[graphItem.ID()]
 		q.numStarted++
-		q.Unlock()
+		q.mutex.Unlock()
 
 		if job.Dependency().State() == dependency.Passed {
-			q.Complete(job)
+			q.Complete(ctx, job)
 			continue
 		}
 		if job.Dependency().State() == dependency.Ready {
@@ -299,6 +282,11 @@ func (q *LocalOrdered) jobDispatch(orderedJobs []graph.Node) {
 		deps := job.Dependency().Edges()
 		completedDeps := make(map[string]bool)
 		for {
+			select {
+			case <-ctx.Done():
+				break
+			default:
+			}
 			for _, dep := range deps {
 				if completedDeps[dep] {
 					// if this is true, then we've
@@ -329,7 +317,7 @@ func (q *LocalOrdered) jobDispatch(orderedJobs []graph.Node) {
 				// all dependencies have passed, we can try to dispatch the job.
 
 				if job.Dependency().State() == dependency.Passed {
-					q.Complete(job)
+					q.Complete(ctx, job)
 				} else if job.Dependency().State() == dependency.Ready {
 					q.channel <- job
 				}
@@ -343,10 +331,10 @@ func (q *LocalOrdered) jobDispatch(orderedJobs []graph.Node) {
 }
 
 // Complete marks a job as complete in the context of this queue instance.
-func (q *LocalOrdered) Complete(j amboy.Job) {
-	q.grip.Debugf("marking job (%s) as complete", j.ID())
-	q.Lock()
-	defer q.Unlock()
+func (q *LocalOrdered) Complete(ctx context.Context, j amboy.Job) {
+	grip.Debugf("marking job (%s) as complete", j.ID())
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
 	q.tasks.completed[j.ID()] = true
 }
 
@@ -354,34 +342,9 @@ func (q *LocalOrdered) Complete(j amboy.Job) {
 func (q *LocalOrdered) Wait() {
 	for {
 		stats := q.Stats()
-		q.grip.Debugf("waiting for %d pending jobs (total=%d)", stats.Pending, stats.Total)
+		grip.Debugf("waiting for %d pending jobs (total=%d)", stats.Pending, stats.Total)
 		if stats.Pending == 0 {
 			break
 		}
 	}
-}
-
-// Close closes the queue, waiting for all jobs to complete and the
-// runner to complete.
-func (q *LocalOrdered) Close() {
-	q.Wait()
-
-	if !q.Closed() {
-		close(q.channel)
-
-		q.Lock()
-		q.closed = true
-		q.Unlock()
-	}
-
-	q.runner.Wait()
-}
-
-// Closed is true when the queue has successfully exited and false
-// otherwise.
-func (q *LocalOrdered) Closed() bool {
-	q.RLock()
-	defer q.RUnlock()
-
-	return q.closed
 }

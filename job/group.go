@@ -21,14 +21,15 @@ func init() {
 // jobs from other Jobs in the queue, and ensure that several jobs run
 // on a single system.
 type Group struct {
-	counter  int
 	Complete bool                                `bson:"complete" json:"complete" yaml:"complete"`
 	Name     string                              `bson:"name" json:"name" yaml:"name"`
 	Errors   []error                             `bson:"errors" json:"errors" yaml:"errors"`
 	Jobs     map[string]*registry.JobInterchange `bson:"jobs" json:"jobs" yaml:"jobs"`
-	D        dependency.Manager                  `bson:"dependency" json:"dependency" yaml:"dependency"`
+	T        amboy.JobType                       `bson:"type" json:"type" yaml:"type"`
 
-	sync.RWMutex
+	counter int
+	dep     dependency.Manager
+	mutex   sync.RWMutex
 
 	// It might be feasible to make a Queue implementation that
 	// implements the Job interface so that we can eliminate this
@@ -41,7 +42,7 @@ func NewGroup(name string) *Group {
 		counter: GetNumber(),
 		Name:    name,
 		Jobs:    make(map[string]*registry.JobInterchange),
-		D:       dependency.NewAlways(),
+		dep:     dependency.NewAlways(),
 	}
 }
 
@@ -59,8 +60,8 @@ func groupJobFactory() amboy.Job {
 func (g *Group) Add(j amboy.Job) error {
 	name := j.ID()
 
-	g.Lock()
-	defer g.Unlock()
+	g.mutex.Lock()
+	defer g.mutex.Unlock()
 	_, exists := g.Jobs[name]
 	if exists {
 		return fmt.Errorf("job named '%s', already exists in Group %s",
@@ -90,7 +91,7 @@ func (g *Group) Run() {
 
 	wg := &sync.WaitGroup{}
 
-	g.RLock()
+	g.mutex.RLock()
 	for _, job := range g.Jobs {
 		runnableJob, err := registry.ConvertToJob(job)
 		if err != nil {
@@ -116,8 +117,8 @@ func (g *Group) Run() {
 			// back to Jobs map so that we preserve errors
 			// idiomatically for Groups.
 
-			group.Lock()
-			defer group.Unlock()
+			group.mutex.Lock()
+			defer group.mutex.Unlock()
 			err := j.Error()
 			if err != nil {
 				group.Errors = append(group.Errors, err)
@@ -125,12 +126,12 @@ func (g *Group) Run() {
 			group.Jobs[j.ID()] = registry.MakeJobInterchange(j)
 		}(runnableJob, g)
 	}
-	g.RUnlock()
+	g.mutex.RUnlock()
 
 	wg.Wait()
 
-	g.Lock()
-	defer g.Unlock()
+	g.mutex.Lock()
+	defer g.mutex.Unlock()
 	g.Complete = true
 }
 
@@ -150,8 +151,8 @@ func (g *Group) Error() error {
 
 // Completed returns true when the job has executed.
 func (g *Group) Completed() bool {
-	g.RLock()
-	defer g.RUnlock()
+	g.mutex.RLock()
+	defer g.mutex.RUnlock()
 
 	return g.Complete
 }
@@ -167,7 +168,7 @@ func (g *Group) Type() amboy.JobType {
 
 // Dependency returns the dependency object for this task.
 func (g *Group) Dependency() dependency.Manager {
-	return g.D
+	return g.dep
 }
 
 // SetDependency allows you to configure the dependency.Manager
@@ -176,8 +177,8 @@ func (g *Group) Dependency() dependency.Manager {
 // type.
 func (g *Group) SetDependency(d dependency.Manager) {
 	if d.Type().Name == "always" {
-		g.D = d
+		g.dep = d
 	}
 
-	grip.Warning("repo building jobs should take 'always'-run dependencies.")
+	grip.Warning("group jobs should take 'always'-run dependencies.")
 }

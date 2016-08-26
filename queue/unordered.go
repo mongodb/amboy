@@ -21,27 +21,23 @@ import (
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/pool"
 	"github.com/tychoish/grip"
+	"golang.org/x/net/context"
 )
 
 // LocalUnordered implements a local-only, channel based, queue
 // interface, and it is a good prototype for testing, in addition to
 // non-distributed workloads.
 type LocalUnordered struct {
-	closed       bool
 	started      bool
 	numCompleted int
 	numStarted   int
 	channel      chan amboy.Job
-	closeQueue   chan bool
-
-	tasks struct {
+	tasks        struct {
 		m map[string]amboy.Job
-		*sync.RWMutex
+		sync.RWMutex
 	}
 
-	// Composed functionality:
 	runner amboy.Runner
-	grip   grip.Journaler
 }
 
 // NewLocalUnordered is a constructor for the LocalUnordered
@@ -61,16 +57,12 @@ func NewLocalUnordered(workers int) *LocalUnordered {
 	}
 
 	q := &LocalUnordered{
-		channel:    make(chan amboy.Job, bufferSize),
-		closeQueue: make(chan bool),
+		channel: make(chan amboy.Job, bufferSize),
 	}
 
-	q.tasks.RWMutex = &sync.RWMutex{}
 	q.tasks.m = make(map[string]amboy.Job)
 
-	q.grip = grip.NewJournaler(fmt.Sprintf("amboy.queue.simple"))
-	q.grip.CloneSender(grip.Sender())
-	q.grip.Debugln("queue buffer size:", bufferSize)
+	grip.Debugln("queue buffer size:", bufferSize)
 
 	r := pool.NewLocalWorkers(workers, q)
 	q.runner = r
@@ -79,14 +71,10 @@ func NewLocalUnordered(workers int) *LocalUnordered {
 }
 
 // Put adds a job to the amboy.Job Queue. Returns an error if the
-// Queue has not yet started, is closed, or if a amboy.Job with the
+// Queue has not yet started or if an amboy.Job with the
 // same name (i.e. amboy.Job.ID()) exists.
 func (q *LocalUnordered) Put(j amboy.Job) error {
 	name := j.ID()
-
-	if q.closed {
-		return fmt.Errorf("cannot add %s because queue is closed", name)
-	}
 
 	if !q.started {
 		return fmt.Errorf("cannot add %s because queue has not started", name)
@@ -102,7 +90,7 @@ func (q *LocalUnordered) Put(j amboy.Job) error {
 	q.tasks.m[name] = j
 	q.numStarted++
 	q.channel <- j
-	q.grip.Debugf("added job (%s) to queue", j.ID())
+	grip.Debugf("added job (%s) to queue", j.ID())
 
 	return nil
 }
@@ -135,49 +123,29 @@ func (q *LocalUnordered) Started() bool {
 // handle all errors from this method as fatal errors. If you call
 // start on a queue that has been started, subsequent calls to Start()
 // are a noop, and do not return an error.
-func (q *LocalUnordered) Start() error {
-	if q.closed {
-		return errors.New("cannot start a completed queue")
-	}
-
+func (q *LocalUnordered) Start(ctx context.Context) error {
 	if q.started {
 		return nil
 	}
 
-	err := q.runner.Start()
-	if err != nil {
-		return err
-	}
-
+	q.runner.Start(ctx)
 	q.started = true
 
-	// we have a background thread blocking on, and waiting for
-	// the close signal.
-	go func() {
-		<-q.closeQueue
-		// close all the channels
-		close(q.channel)
-		q.grip.Warning("job server exiting")
-	}()
-
-	q.grip.Info("job server running")
+	grip.Info("job server running")
 	return nil
 }
 
 // Next returns a job from the Queue. This call is non-blocking. If
 // there are no pending jobs at the moment, then Next returns an
-// error. If the queue is closed and all jobs are complete, then Next
-// also returns an error.
-func (q *LocalUnordered) Next() (amboy.Job, error) {
-	select {
-	case job, ok := <-q.channel:
-		if !ok {
-			return nil, errors.New("all jobs complete")
+// error. If all jobs are complete, then Next also returns an error.
+func (q *LocalUnordered) Next(ctx context.Context) amboy.Job {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case job := <-q.channel:
+			return job
 		}
-
-		return job, nil
-	default:
-		return nil, errors.New("no pending jobs")
 	}
 }
 
@@ -230,53 +198,22 @@ func (q *LocalUnordered) Stats() *amboy.QueueStats {
 
 // Complete marks a job as complete, moving it from the in progress
 // state to the completed state. This operation is asynchronous and non-blocking.
-func (q *LocalUnordered) Complete(j amboy.Job) {
+func (q *LocalUnordered) Complete(ctx context.Context, j amboy.Job) {
 	go func() {
-		q.grip.Debugf("marking job (%s) as complete", j.ID())
+		grip.Debugf("marking job (%s) as complete", j.ID())
 		q.tasks.Lock()
 		defer q.tasks.Unlock()
 		q.numCompleted++
 	}()
 }
 
-func (q *LocalUnordered) close() {
-	q.closeQueue <- true
-
-	q.tasks.Lock()
-	defer q.tasks.Unlock()
-	q.closed = true
-}
-
-// Wait blocks until all jobs have completed and then closes all
-// channels and resources associated with the queue. Returns
-// immediately if the Queue is already complete.
+// Wait blocks until all currently pending jobs jobs have completed.
 func (q *LocalUnordered) Wait() {
 	for {
 		stats := q.Stats()
-		q.grip.Debugf("waiting for %d pending jobs (total=%d)", stats.Pending, stats.Total)
+		grip.Debugf("waiting for %d pending jobs (total=%d)", stats.Pending, stats.Total)
 		if stats.Pending == 0 {
 			break
 		}
 	}
-}
-
-// Close calls Wait() and the cleans up after all resources, including
-// open channels and running worker processes.
-func (q *LocalUnordered) Close() {
-	q.Wait()
-
-	q.close()
-	q.runner.Wait()
-}
-
-// Closed is true when the queue has successfully exited and false otherwise.
-func (q *LocalUnordered) Closed() bool {
-	q.tasks.RLock()
-	defer q.tasks.RUnlock()
-
-	if q.closed && q.Stats().Pending == 0 {
-		return true
-	}
-
-	return false
 }

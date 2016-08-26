@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"context"
 	"testing"
 
 	"github.com/mongodb/amboy/job"
@@ -37,7 +38,6 @@ func (s *LocalQueueSuite) SetupTest() {
 }
 
 func (s *LocalQueueSuite) TestDefaultStateOfQueueObjectIsExpected() {
-	s.False(s.queue.closed)
 	s.False(s.queue.started)
 
 	s.Len(s.queue.tasks.m, 0)
@@ -45,36 +45,29 @@ func (s *LocalQueueSuite) TestDefaultStateOfQueueObjectIsExpected() {
 	s.IsType(s.queue.runner, &pool.LocalWorkers{})
 }
 
-func (s *LocalQueueSuite) TestPutReturnsErrorAfterClosingQueue() {
-	s.False(s.queue.closed)
-
-	// there's no non-blocking method to close an open queue, so
-	// this is a stand in:
-	s.queue.closed = true
-
-	s.True(s.queue.closed)
-	j := job.NewShellJob("true", "")
-	s.Error(s.queue.Put(j))
-}
-
 func (s *LocalQueueSuite) TestPutReturnsErrorForDuplicateNameTasks() {
-	s.False(s.queue.closed)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	j := job.NewShellJob("true", "")
 
-	s.NoError(s.queue.Start())
+	s.NoError(s.queue.Start(ctx))
 
 	s.NoError(s.queue.Put(j))
 	s.Error(s.queue.Put(j))
 }
 
 func (s *LocalQueueSuite) TestPuttingAJobIntoAQueueImpactsStats() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	stats := s.queue.Stats()
 	s.Equal(0, stats.Total)
 	s.Equal(0, stats.Pending)
 	s.Equal(0, stats.Running)
 	s.Equal(0, stats.Completed)
 
-	s.NoError(s.queue.Start())
+	s.NoError(s.queue.Start(ctx))
 
 	j := job.NewShellJob("true", "")
 	s.NoError(s.queue.Put(j))
@@ -91,13 +84,16 @@ func (s *LocalQueueSuite) TestPuttingAJobIntoAQueueImpactsStats() {
 }
 
 func (s *LocalQueueSuite) TestResultsChannelProducesPointersToConsistentJobObjects() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	job := job.NewShellJob("true", "")
 	s.False(job.Completed())
 
-	s.NoError(s.queue.Start())
+	s.NoError(s.queue.Start(ctx))
 	s.NoError(s.queue.Put(job))
 
-	s.queue.Close()
+	s.queue.Wait()
 
 	result, ok := <-s.queue.Results()
 	s.True(ok)
@@ -107,13 +103,13 @@ func (s *LocalQueueSuite) TestResultsChannelProducesPointersToConsistentJobObjec
 
 func (s *LocalQueueSuite) TestJobsChannelProducesJobObjects() {
 	names := map[string]bool{"ru": true, "es": true, "zh": true, "fr": true, "it": true}
-	s.NoError(s.queue.Runner().SetSize(1))
 
-	s.Require().Equal(1, s.queue.Runner().Size())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	// this test hinges on the queue system, and this
 	// implementation in particular, being FIFO.
-	s.NoError(s.queue.Start())
+	s.NoError(s.queue.Start(ctx))
 
 	for name := range names {
 		job := job.NewShellJob("echo "+name, "")
@@ -127,7 +123,6 @@ func (s *LocalQueueSuite) TestJobsChannelProducesJobObjects() {
 		s.True(ok)
 		s.True(names[shellJob.Output])
 	}
-	s.queue.Close()
 }
 
 func (s *LocalQueueSuite) TestInternalRunnerCanBeChangedBeforeStartingTheQueue() {
@@ -140,9 +135,12 @@ func (s *LocalQueueSuite) TestInternalRunnerCanBeChangedBeforeStartingTheQueue()
 }
 
 func (s *LocalQueueSuite) TestInternalRunnerCannotBeChangedAfterStartingAQueue() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	runner := s.queue.Runner()
 	s.False(s.queue.Started())
-	s.NoError(s.queue.Start())
+	s.NoError(s.queue.Start(ctx))
 	s.True(s.queue.Started())
 
 	newRunner := pool.NewLocalWorkers(2, s.queue)
@@ -151,8 +149,11 @@ func (s *LocalQueueSuite) TestInternalRunnerCannotBeChangedAfterStartingAQueue()
 }
 
 func (s *LocalQueueSuite) TestQueueCanOnlyBeStartedOnce() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	s.False(s.queue.Started())
-	s.NoError(s.queue.Start())
+	s.NoError(s.queue.Start(ctx))
 	s.True(s.queue.Started())
 
 	s.queue.Wait()
@@ -160,29 +161,8 @@ func (s *LocalQueueSuite) TestQueueCanOnlyBeStartedOnce() {
 
 	// you can call start more than once until the queue has
 	// completed/closed
-	s.NoError(s.queue.Start())
+	s.NoError(s.queue.Start(ctx))
 	s.True(s.queue.Started())
-}
-
-func (s *LocalQueueSuite) TestCompleteQueueStartsWillReturnError() {
-	s.False(s.queue.Started())
-	s.NoError(s.queue.Start())
-	s.True(s.queue.Started())
-
-	s.queue.Wait()
-	s.queue.close()
-
-	s.Error(s.queue.Start())
-}
-
-func (s *LocalQueueSuite) TestQueuePropogatesRunnerStartError() {
-	// fake the runner out so that it will fail
-	r := pool.NewLocalWorkers(1, s.queue)
-	s.NoError(r.Start())
-	s.queue.runner = r
-
-	s.False(s.queue.Started())
-	s.Error(s.queue.Start())
 }
 
 func (s *LocalQueueSuite) TestPutReturnsErrorIfQueueIsNotStarted() {

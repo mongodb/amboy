@@ -9,22 +9,19 @@ package pool
 
 import (
 	"errors"
-	"fmt"
-	"sync"
 
 	"github.com/mongodb/amboy"
 	"github.com/tychoish/grip"
+	"golang.org/x/net/context"
 )
 
 // LocalWorkers is a very minimal implementation of a worker pool, and
 // supports a configurable number of workers to process Job tasks.
 type LocalWorkers struct {
-	size    int
-	started bool
-	wg      *sync.WaitGroup
-	queue   amboy.Queue
-	grip    grip.Journaler
-	catcher *grip.MultiCatcher
+	size     int
+	started  bool
+	queue    amboy.Queue
+	canceler context.CancelFunc
 }
 
 // NewLocalWorkers is a constructor for LocalWorkers objects, and
@@ -32,14 +29,9 @@ type LocalWorkers struct {
 // object.
 func NewLocalWorkers(numWorkers int, q amboy.Queue) *LocalWorkers {
 	r := &LocalWorkers{
-		queue:   q,
-		size:    numWorkers,
-		wg:      &sync.WaitGroup{},
-		catcher: grip.NewCatcher(),
+		queue: q,
+		size:  numWorkers,
 	}
-
-	r.grip = grip.NewJournaler("amboy.pool.local")
-	r.grip.CloneSender(grip.Sender())
 
 	if r.size <= 0 {
 		grip.Infof("setting minimal pool size is 1, overriding setting of '%d'", r.size)
@@ -67,72 +59,76 @@ func (r *LocalWorkers) Started() bool {
 	return r.started
 }
 
-// Size returns the size of the worker pool.
-func (r *LocalWorkers) Size() int {
-	return r.size
+func startWorkerServer(ctx context.Context, q amboy.Queue) <-chan amboy.Job {
+	output := make(chan amboy.Job)
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				job := q.Next(ctx)
+				if job == nil {
+					continue
+				}
+				if job.Completed() {
+					grip.Debugf("job '%s' was dispatched from the queue but was completed",
+						job.ID())
+					continue
+				}
+
+				output <- job
+			}
+		}
+	}()
+
+	return output
 }
 
-// SetSize allows users to change the size of the worker pool after
-// creating the Runner.  Returns an error if the Runner has started.
-func (r *LocalWorkers) SetSize(s int) error {
-	if r.started {
-		return errors.New("cannot change size of worker pool after starting")
+func worker(ctx context.Context, jobs <-chan amboy.Job, q amboy.Queue) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case job := <-jobs:
+			job.Run()
+			q.Complete(ctx, job)
+		}
 	}
-
-	if s < 1 {
-		return fmt.Errorf("cannot set poolsize to < 1 (%d), pool size is %d",
-			s, r.size)
-	}
-
-	r.size = s
-	return nil
 }
 
 // Start initializes all worker process, and returns an error if the
 // Runner has already started.
-func (r *LocalWorkers) Start() error {
+func (r *LocalWorkers) Start(ctx context.Context) error {
 	if r.started {
-		return errors.New("runner has already started, cannot start again")
+		return nil
 	}
 
+	if r.queue == nil {
+		return errors.New("runner must have an embedded queue")
+	}
+
+	workerCtx, cancel := context.WithCancel(ctx)
+	r.canceler = cancel
+	jobs := startWorkerServer(workerCtx, r.queue)
+
 	r.started = true
-	r.grip.Debugf("running %d workers", r.size)
+	grip.Debugf("running %d workers", r.size)
+
 	for w := 1; w <= r.size; w++ {
-		r.wg.Add(1)
-
-		go func(name string) {
-			r.grip.Debugf("worker (%s) waiting for jobs", name)
-
-			for {
-				job, err := r.queue.Next()
-				if err != nil {
-					r.grip.Debug(err)
-					if r.queue.Closed() {
-						break
-					}
-				} else {
-					if !job.Completed() {
-						job.Run()
-						r.queue.Complete(job)
-					}
-				}
-			}
-			r.grip.Debugf("worker (%s) exiting", name)
-			r.wg.Done()
-		}(fmt.Sprintf("worker-%d", w))
+		go func() {
+			worker(workerCtx, jobs, r.queue)
+		}()
+		grip.Debugf("started worker %d of %d waiting for jobs", w, r.size)
 	}
 
 	return nil
 }
 
-// Wait blocks until all workers have exited.
-func (r *LocalWorkers) Wait() {
-	r.wg.Wait()
-	r.grip.Infof("all (%d) runners have exited", r.size)
-}
-
-// Error Returns an error object with the concatinated contents of all
-// errors returned by Job Run methods, if there are any errors.
-func (r *LocalWorkers) Error() error {
-	return r.catcher.Resolve()
+// Close terminates all worker processes as soon as possible.
+func (r *LocalWorkers) Close() {
+	if r.canceler != nil {
+		r.canceler()
+	}
 }

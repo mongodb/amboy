@@ -6,6 +6,7 @@ import (
 
 	"github.com/mongodb/amboy"
 	"github.com/tychoish/grip"
+	"golang.org/x/net/context"
 )
 
 type QueueTester struct {
@@ -16,7 +17,7 @@ type QueueTester struct {
 	toProcess   chan amboy.Job
 	storage     map[string]amboy.Job
 
-	*sync.RWMutex
+	mutex sync.RWMutex
 }
 
 func NewQueueTester(p amboy.Runner) *QueueTester {
@@ -35,7 +36,6 @@ func NewQueueTesterInstance() *QueueTester {
 	return &QueueTester{
 		toProcess: make(chan amboy.Job, 10),
 		storage:   make(map[string]amboy.Job),
-		RWMutex:   &sync.RWMutex{},
 	}
 }
 
@@ -51,15 +51,15 @@ func (q *QueueTester) Get(name string) (amboy.Job, bool) {
 }
 
 func (q *QueueTester) Started() bool {
-	q.RLock()
-	defer q.RUnlock()
+	q.mutex.RLock()
+	defer q.mutex.RUnlock()
 
 	return q.started
 }
 
-func (q *QueueTester) Complete(j amboy.Job) {
-	q.Lock()
-	defer q.Unlock()
+func (q *QueueTester) Complete(ctx context.Context, j amboy.Job) {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
 
 	q.numComplete++
 
@@ -67,8 +67,8 @@ func (q *QueueTester) Complete(j amboy.Job) {
 }
 
 func (q *QueueTester) Stats() *amboy.QueueStats {
-	q.RLock()
-	defer q.RUnlock()
+	q.mutex.RLock()
+	defer q.mutex.RUnlock()
 
 	return &amboy.QueueStats{
 		Running:   len(q.storage) - len(q.toProcess),
@@ -90,28 +90,24 @@ func (q *QueueTester) SetRunner(r amboy.Runner) error {
 	return nil
 }
 
-func (q *QueueTester) Next() (amboy.Job, error) {
-	job, ok := <-q.toProcess
-
-	if !ok {
-		return nil, errors.New("all work is complete")
+func (q *QueueTester) Next(ctx context.Context) amboy.Job {
+	select {
+	case <-ctx.Done():
+		return nil
+	case job := <-q.toProcess:
+		return job
 	}
-
-	return job, nil
 }
 
-func (q *QueueTester) Start() error {
+func (q *QueueTester) Start(ctx context.Context) error {
 	if q.Started() {
 		return nil
 	}
 
-	err := q.pool.Start()
-	if err != nil {
-		return err
-	}
+	q.pool.Start(ctx)
 
-	q.Lock()
-	defer q.Unlock()
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
 
 	q.started = true
 	return nil
@@ -146,16 +142,9 @@ func (q *QueueTester) Wait() {
 }
 
 func (q *QueueTester) Close() {
-	q.Lock()
-	defer q.Unlock()
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
 
 	close(q.toProcess)
 	q.isComplete = true
-}
-
-// Closed is true when the queue has successfully exited.
-func (q *QueueTester) Closed() bool {
-	q.RLock()
-	defer q.RUnlock()
-	return q.isComplete
 }

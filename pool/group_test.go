@@ -1,12 +1,14 @@
 package pool
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/job"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // UnorderedGroupSuite is a collection of tests for an alternate pool
@@ -86,58 +88,20 @@ func (s *UnorderedGroupSuite) TestSetQueueRejectsChangesAfterQueueHasStarted() {
 	s.Len(s.pool.queues, 1)
 }
 
-func (s *UnorderedGroupSuite) TestSizeMethodReturnsValueOfPoolSize() {
-	s.Equal(s.size, s.pool.Size())
-	s.Equal(s.pool.size, s.pool.Size())
-}
-
-func (s *UnorderedGroupSuite) TestPoolSizeCannotBeSetLessThanOne() {
-	s.Equal(s.pool.Size(), s.size)
-
-	for i := -20; i <= 0; i++ {
-		err := s.pool.SetSize(i)
-
-		s.Error(err)
-		s.Equal(s.pool.Size(), s.size)
-	}
-}
-
-func (s *UnorderedGroupSuite) TestSettingPoolSizeAreSettableForUnstartedPoolsWithValidSizes() {
-	s.Equal(s.pool.Size(), s.size)
-
-	s.False(s.pool.Started())
-
-	for i := 1; i <= 20; i++ {
-		err := s.pool.SetSize(i)
-
-		s.NoError(err)
-		s.Equal(s.pool.Size(), i)
-	}
-}
-
-func (s *UnorderedGroupSuite) TestPoolSizeAreNotSettableForStartedPools() {
-	s.Equal(s.pool.Size(), s.size)
-
-	s.NoError(s.pool.Start())
-	s.True(s.pool.Started())
-	for i := 1; i <= 20; i++ {
-		err := s.pool.SetSize(i)
-
-		s.Error(err)
-		s.Equal(s.pool.Size(), s.size)
-	}
-}
-
 func (s *UnorderedGroupSuite) TestGroupDoesNotErrorsOnSuccessiveStarts() {
 	s.False(s.pool.Started())
 
-	s.NoError(s.pool.Start())
+	ctx, cancel := context.WithCancel(context.Background())
+	s.NoError(s.pool.SetQueue(NewQueueTester(s.pool)))
+	s.NoError(s.pool.Start(ctx))
 	s.True(s.pool.Started())
 
 	for i := 0; i < 20; i++ {
-		s.NoError(s.pool.Start())
+		s.pool.Start(ctx)
 		s.True(s.pool.Started())
 	}
+
+	cancel()
 }
 
 func (s *UnorderedGroupSuite) TestQueueIsMutableBeforeStartingPool() {
@@ -173,6 +137,7 @@ func (s *UnorderedGroupSuite) TestPoolStartsAndProcessesJobs() {
 		job.NewShellJob("echo four", ""),
 		job.NewShellJob("echo five", ""),
 	}
+
 	for _, job := range jobsTwo {
 		s.NoError(queueTwo.Put(job))
 	}
@@ -185,22 +150,25 @@ func (s *UnorderedGroupSuite) TestPoolStartsAndProcessesJobs() {
 
 	s.NoError(s.pool.SetQueue(queueOne))
 	s.NoError(s.pool.SetQueue(queueTwo))
-	s.NoError(s.pool.Start())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s.NoError(queueOne.Start(ctx))
+	s.NoError(queueTwo.Start(ctx))
+
+	s.True(queueOne.Started())
+	s.True(queueTwo.Started())
 
 	s.True(s.pool.Started())
-	// only starting one queue: the pool will start the queue if
-	// it needs to.
-
-	queueOne.Close()
-	queueTwo.Close()
-	s.pool.Wait()
+	queueTwo.Wait()
+	queueOne.Wait()
 
 	for _, job := range jobsOne {
-		s.True(job.Completed())
+		s.True(job.Completed(), fmt.Sprintf("%T\n\t%+v", job, job))
+		s.NoError(job.Error())
 	}
 	for _, job := range jobsTwo {
-		s.True(job.Completed())
+		s.True(job.Completed(), fmt.Sprintf("%T\n\t%+v", job, job))
+		s.NoError(job.Error())
 	}
-
-	s.NoError(s.pool.Error())
 }

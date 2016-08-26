@@ -16,19 +16,19 @@ import (
 
 	"github.com/mongodb/amboy"
 	"github.com/tychoish/grip"
+	"golang.org/x/net/context"
 )
 
 // Group is a Runner implementation that can, potentially, run
 // tasks from multiple queues at the same time.
 type Group struct {
-	size    int
-	started bool
-	wg      *sync.WaitGroup
-	grip    grip.Journaler
-	catcher grip.MultiCatcher
-	queues  []amboy.Queue
-
-	*sync.RWMutex
+	size     int
+	started  bool
+	catcher  grip.MultiCatcher
+	queues   []amboy.Queue
+	wg       sync.WaitGroup
+	mutex    sync.RWMutex
+	canceler context.CancelFunc
 }
 
 type workUnit struct {
@@ -41,12 +41,8 @@ type workUnit struct {
 // multiple queues.
 func NewGroup(numWorkers int) *Group {
 	r := &Group{
-		size:    numWorkers,
-		wg:      &sync.WaitGroup{},
-		RWMutex: &sync.RWMutex{},
+		size: numWorkers,
 	}
-	r.grip = grip.NewJournaler("amboy.runner.group")
-	r.grip.CloneSender(grip.Sender())
 
 	return r
 }
@@ -70,73 +66,74 @@ func (r *Group) SetQueue(q amboy.Queue) error {
 
 // Started returns true if the runner's worker threads have started, and false otherwise.
 func (r *Group) Started() bool {
-	r.RLock()
-	defer r.RUnlock()
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
 
 	return r.started
 }
 
-// Size returns the configured number of worker threads controlled by
-// the Runner. In the case of the Group, this *does not* include
-// the number of threads used as part of the amboy.Queue aggregation process.
-func (r *Group) Size() int {
-	return r.size
-}
+func (r *Group) startMerger(ctx context.Context) <-chan *workUnit {
+	// making this non-buffered so we don't have to wait as long for jobs to drain from the
+	// channel in the event of a cancellation.
+	work := make(chan *workUnit)
 
-// SetSize allows users to change the size of the worker pool after
-// creating the Runner.  Returns an error if the Runner has started.
-func (r *Group) SetSize(s int) error {
-	if r.Started() {
-		return errors.New("cannot change size of worker pool after starting")
-	}
-
-	if s < 1 {
-		return fmt.Errorf("cannot set poolsize to < 1 (%d), pool size is %d",
-			s, r.size)
-	}
-
-	r.size = s
-	return nil
-}
-
-func (r *Group) startMerger() <-chan *workUnit {
-	wg := &sync.WaitGroup{}
-	work := make(chan *workUnit, len(r.queues))
-
-	// Start a new thread for each queue, send workUnit objects
-	// through the channel.
-	for idx, queue := range r.queues {
-		wg.Add(1)
-
-		go func(q amboy.Queue, num int) {
-			if !q.Started() {
-				_ = q.Start()
-			}
-
-			r.grip.Debugf("starting to dispatch jobs from queue-%d", num)
-			for {
-				job, err := q.Next()
+	go func() {
+		// Make sure all queues are started...
+		for _, queue := range r.queues {
+			if !queue.Started() {
+				err := queue.Start(ctx)
 				if err != nil {
-					if q.Closed() {
-						break
-					}
-					r.grip.Debug(err)
-				} else {
-					w := &workUnit{
-						j: job,
-						q: q,
-					}
-					work <- w
+					grip.Error(err)
+					continue
+				}
+			}
+		}
+
+		// start the background process for merging tasks from multiple queues into one
+		// channel.
+	mergerLoop:
+		for {
+			completed := 0
+			for _, queue := range r.queues {
+				stats := queue.Stats()
+				if stats.Completed == stats.Total {
+					completed++
+					continue
+				}
+
+				job := queue.Next(ctx)
+				if job == nil {
+					continue
+				}
+
+				if job.Completed() {
+					continue
+				}
+
+				task := &workUnit{
+					j: job,
+					q: queue,
+				}
+
+				select {
+				case <-ctx.Done():
+					break mergerLoop
+				case work <- task:
+					continue
 				}
 			}
 
-			r.grip.Debugf("completed all jobs in queue-%d", num)
-			wg.Done()
-		}(queue, idx)
-	}
-
-	go func() {
-		wg.Wait()
+			// we want to check if the context is canceled here too in case we hit the
+			// continue conditions in the above loop, particularly on the next call.
+			select {
+			case <-ctx.Done():
+				break
+			default:
+				if len(r.queues) == completed {
+					break
+				}
+			}
+		}
 		close(work)
 	}()
 
@@ -145,36 +142,47 @@ func (r *Group) startMerger() <-chan *workUnit {
 
 // Start initializes all worker process, and returns an error if the
 // Runner has already started.
-func (r *Group) Start() error {
+func (r *Group) Start(ctx context.Context) error {
 	if r.Started() {
 		// PoolGrooup noops on successive Start operations so
 		// that so that multiple queues can call start.
 		return nil
 	}
 
+	if len(r.queues) == 0 {
+		return errors.New("group runner must have one queue configured")
+
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	r.canceler = cancel
+
 	// Group is mostly similar to LocalWorker, but maintains a
 	// background thread for each queue that puts Jobs onto a
 	// channel, that the actual workers pull tasks from.
-	work := r.startMerger()
+	work := r.startMerger(ctx)
 
-	r.Lock()
+	r.mutex.Lock()
 	r.started = true
-	r.Unlock()
+	r.mutex.Unlock()
 
-	r.grip.Debugf("running %d workers", r.size)
+	grip.Debugf("running %d workers", r.size)
 	for w := 1; w <= r.size; w++ {
 		r.wg.Add(1)
 		name := fmt.Sprintf("worker-%d", w)
 
 		go func(name string) {
-			r.grip.Debugf("worker (%s) waiting for jobs", name)
-
+			grip.Debugf("worker (%s) waiting for jobs", name)
 			for unit := range work {
-				unit.j.Run()
-				unit.q.Complete(unit.j)
+				select {
+				case <-ctx.Done():
+					break
+				default:
+					unit.j.Run()
+					unit.q.Complete(ctx, unit.j)
+				}
 			}
-
-			r.grip.Debugf("worker (%s) exiting", name)
+			grip.Debugf("worker (%s) exiting", name)
 			r.wg.Done()
 		}(name)
 	}
@@ -182,14 +190,10 @@ func (r *Group) Start() error {
 	return nil
 }
 
-// Wait blocks until all workers have exited.
-func (r *Group) Wait() {
-	r.wg.Wait()
-	r.grip.Infof("all (%d) runners have exited", r.size)
-}
+func (r *Group) Close() {
+	if r.canceler != nil {
+		r.canceler()
+	}
 
-// Error Returns an error object with the concatenated contents of all
-// errors returned by Job Run methods, if there are any errors.
-func (r *Group) Error() error {
-	return r.catcher.Resolve()
+	r.wg.Wait()
 }

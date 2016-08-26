@@ -7,54 +7,35 @@ import (
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/job"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	"github.com/tychoish/grip"
 	"github.com/tychoish/grip/level"
 )
 
-type LocalWorkersSuite struct {
-	size  int
-	pool  *LocalWorkers
+type SingleRunnerSuite struct {
+	pool  *SingleRunner
 	queue *QueueTester
 	suite.Suite
 }
 
-func TestLocalWorkersSuiteSizeOne(t *testing.T) {
-	s := new(LocalWorkersSuite)
-	s.size = 1
-
-	suite.Run(t, s)
+func TestSingleWorkerSuite(t *testing.T) {
+	suite.Run(t, new(SingleRunnerSuite))
 }
 
-func TestLocalWorkersSuiteSizeThree(t *testing.T) {
-	s := new(LocalWorkersSuite)
-	s.size = 3
-
-	suite.Run(t, s)
+func (s *SingleRunnerSuite) SetupSuite() {
+	grip.SetThreshold(level.Info)
 }
 
-func TestLocalWorkersSuiteSizeOneHundred(t *testing.T) {
-	s := new(LocalWorkersSuite)
-	s.size = 100
-
-	suite.Run(t, s)
-}
-
-func (s *LocalWorkersSuite) SetupSuite() {
-	grip.SetThreshold(level.Critical)
-}
-
-func (s *LocalWorkersSuite) SetupTest() {
-	s.pool = NewLocalWorkers(s.size, nil)
+func (s *SingleRunnerSuite) SetupTest() {
+	s.pool = NewSingleRunner()
 	s.queue = NewQueueTester(s.pool)
 }
 
-func (s *LocalWorkersSuite) TestConstructedInstanceImplementsInterface() {
+func (s *SingleRunnerSuite) TestConstructedInstanceImplementsInterface() {
 	s.Implements((*amboy.Runner)(nil), s.pool)
 }
 
-func (s *LocalWorkersSuite) TestPoolErrorsOnSuccessiveStarts() {
+func (s *SingleRunnerSuite) TestPoolErrorsOnSuccessiveStarts() {
 	s.False(s.pool.Started())
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -69,8 +50,8 @@ func (s *LocalWorkersSuite) TestPoolErrorsOnSuccessiveStarts() {
 	}
 }
 
-func (s *LocalWorkersSuite) TestPoolStartsAndProcessesJobs() {
-	const num int = 100
+func (s *SingleRunnerSuite) TestPoolStartsAndProcessesJobs() {
+	const num int = 20
 	var jobs []amboy.Job
 
 	for i := 0; i < num; i++ {
@@ -83,7 +64,6 @@ func (s *LocalWorkersSuite) TestPoolStartsAndProcessesJobs() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
 	s.NoError(s.queue.Start(ctx))
 
 	for _, job := range jobs {
@@ -100,7 +80,7 @@ func (s *LocalWorkersSuite) TestPoolStartsAndProcessesJobs() {
 	}
 }
 
-func (s *LocalWorkersSuite) TestQueueIsMutableBeforeStartingPool() {
+func (s *SingleRunnerSuite) TestQueueIsMutableBeforeStartingPool() {
 	s.NotNil(s.pool.queue)
 	s.False(s.pool.Started())
 
@@ -111,7 +91,7 @@ func (s *LocalWorkersSuite) TestQueueIsMutableBeforeStartingPool() {
 	s.NotEqual(s.queue, s.pool.queue)
 }
 
-func (s *LocalWorkersSuite) TestQueueIsNotMutableAfterStartingPool() {
+func (s *SingleRunnerSuite) TestQueueIsNotMutableAfterStartingPool() {
 	s.NotNil(s.pool.queue)
 	s.False(s.pool.Started())
 
@@ -126,16 +106,4 @@ func (s *LocalWorkersSuite) TestQueueIsNotMutableAfterStartingPool() {
 
 	s.Equal(s.queue, s.pool.queue)
 	s.NotEqual(newQueue, s.pool.queue)
-}
-
-// This test makes sense to do without the fixtures in the suite
-
-func TestLocalWorkerPoolConstructorDoesNotAllowSizeValuesLessThanOne(t *testing.T) {
-	assert := assert.New(t)
-	var pool *LocalWorkers
-
-	for _, size := range []int{-10, -1, 0} {
-		pool = NewLocalWorkers(size, nil)
-		assert.Equal(1, pool.size)
-	}
 }
