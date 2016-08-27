@@ -16,15 +16,15 @@ import (
 // ShellJob is an amboy.Job implementation that runs shell commands in
 // the context of an amboy.Job object.
 type ShellJob struct {
-	Name       string             `bson:"name" json:"name" yaml:"name"`
-	IsComplete bool               `bson:"is_complete" json:"is_complete" yaml:"is_complete"`
-	Command    string             `bson:"command" json:"command" yaml:"command"`
-	Output     string             `bson:"output" json:"output" yaml:"output"`
-	WorkingDir string             `bson:"working_dir" json:"working_dir" yaml:"working_dir"`
-	Env        map[string]string  `bson:"env" json:"env" yaml:"env"`
-	D          dependency.Manager `bson:"dependency" json:"dependency" yaml:"dependency"`
-	T          amboy.JobType      `bson:"type" json:"type" yaml:"type"`
-	Errors     []error            `bson:"errors" json:"errors" yaml:"errors"`
+	Name       string            `bson:"name" json:"name" yaml:"name"`
+	IsComplete bool              `bson:"is_complete" json:"is_complete" yaml:"is_complete"`
+	Command    string            `bson:"command" json:"command" yaml:"command"`
+	Output     string            `bson:"output" json:"output" yaml:"output"`
+	WorkingDir string            `bson:"working_dir" json:"working_dir" yaml:"working_dir"`
+	Env        map[string]string `bson:"env" json:"env" yaml:"env"`
+	Errors     []error           `bson:"errors" json:"errors" yaml:"errors"`
+	T          amboy.JobType     `bson:"type" json:"type" yaml:"type"`
+	dep        dependency.Manager
 	args       []string
 	sync.RWMutex
 }
@@ -46,7 +46,13 @@ func NewShellJob(cmd string, creates string) *ShellJob {
 	j.getArgsFromCommand()
 
 	if creates != "" {
-		j.D = dependency.NewCreatesFile(creates)
+		j.dep = dependency.NewCreatesFile(creates)
+	}
+
+	if len(j.args) == 0 {
+		j.Name = fmt.Sprintf("%d.shell-job", GetNumber())
+	} else {
+		j.Name = fmt.Sprintf("%s-%d.shell-job", j.args[0], GetNumber())
 	}
 
 	return j
@@ -58,10 +64,11 @@ func NewShellJob(cmd string, creates string) *ShellJob {
 func NewShellJobInstance() *ShellJob {
 	return &ShellJob{
 		Env: make(map[string]string),
-		D:   dependency.NewAlways(),
+		dep: dependency.NewAlways(),
 		T: amboy.JobType{
 			Name:    "shell",
 			Version: 0,
+			Format:  amboy.BSON,
 		},
 	}
 }
@@ -72,18 +79,6 @@ func shellJobFactory() amboy.Job {
 
 // ID returns a string identifier for the job.
 func (j *ShellJob) ID() string {
-	if j.Name == "" {
-		j.getArgsFromCommand()
-
-		j.RLock()
-		defer j.RUnlock()
-		if len(j.args) == 0 {
-			j.Name = fmt.Sprintf("%d.shell-job", GetNumber())
-		} else {
-			j.Name = fmt.Sprintf("%s-%d.shell-job", j.args[0], GetNumber())
-		}
-	}
-
 	return j.Name
 }
 
@@ -160,15 +155,28 @@ func (j *ShellJob) getEnVars() []string {
 
 // Dependency returns the dependency object for the job.
 func (j *ShellJob) Dependency() dependency.Manager {
-	return j.D
+	return j.dep
 }
 
 // SetDependency allows you to modify the dependency for the job.
 func (j *ShellJob) SetDependency(d dependency.Manager) {
-	j.D = d
+	if d != nil {
+		j.dep = d
+	}
 }
 
 // Type returns the JobType object for this instance.
 func (j *ShellJob) Type() amboy.JobType {
 	return j.T
+}
+
+func (j *ShellJob) Export() ([]byte, error) {
+	return amboy.ConvertTo(j.Type().Format, j)
+}
+
+func (j *ShellJob) Import(data []byte) error {
+	err := amboy.ConvertFrom(j.Type().Format, data, j)
+	j.getArgsFromCommand()
+
+	return err
 }

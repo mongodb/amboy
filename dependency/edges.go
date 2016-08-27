@@ -25,7 +25,8 @@ type JobEdges struct {
 // NewJobEdges returns an initialized JobEdges object.
 func NewJobEdges() *JobEdges {
 	return &JobEdges{
-		edgesSet: make(map[string]bool),
+		TaskEdges: []string{},
+		edgesSet:  make(map[string]bool),
 	}
 }
 

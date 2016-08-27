@@ -33,6 +33,8 @@ imports:
   version: bc376b0c3bde35e6d38bf6033c9fdbe3e498342b
   subpackages:
   - mat64
+- name: github.com/pkg/errors
+  version: a22138067af1c4942683050411a841ade67fe1eb
 - name: github.com/pmezard/go-difflib
   version: 792786c7400a136282c1664665ae0a8db921c6c2
 - name: github.com/satori/go.uuid
@@ -56,6 +58,8 @@ imports:
   version: 17b591df37844cde689f4d5813e5cea0927d8dd2
 - name: golang.org/x/net
   version: 1358eff22f0dd0c54fc521042cc607f6ff4b531a
+  subpackages:
+  - context
 - name: gopkg.in/mgo.v2
   version: 3f83fa5005286a7fe593b055f0d7771a7dce4655
   subpackages:

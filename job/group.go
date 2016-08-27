@@ -1,7 +1,6 @@
 package job
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -9,6 +8,7 @@ import (
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/dependency"
 	"github.com/mongodb/amboy/registry"
+	"github.com/pkg/errors"
 	"github.com/tychoish/grip"
 )
 
@@ -21,15 +21,13 @@ func init() {
 // jobs from other Jobs in the queue, and ensure that several jobs run
 // on a single system.
 type Group struct {
-	Complete bool                                `bson:"complete" json:"complete" yaml:"complete"`
 	Name     string                              `bson:"name" json:"name" yaml:"name"`
+	Complete bool                                `bson:"complete" json:"complete" yaml:"complete"`
 	Errors   []error                             `bson:"errors" json:"errors" yaml:"errors"`
 	Jobs     map[string]*registry.JobInterchange `bson:"jobs" json:"jobs" yaml:"jobs"`
 	T        amboy.JobType                       `bson:"type" json:"type" yaml:"type"`
-
-	counter int
-	dep     dependency.Manager
-	mutex   sync.RWMutex
+	dep      dependency.Manager
+	mutex    sync.RWMutex
 
 	// It might be feasible to make a Queue implementation that
 	// implements the Job interface so that we can eliminate this
@@ -38,19 +36,30 @@ type Group struct {
 
 // NewGroup creates a new, empty Group object.
 func NewGroup(name string) *Group {
-	return &Group{
-		counter: GetNumber(),
-		Name:    name,
-		Jobs:    make(map[string]*registry.JobInterchange),
-		dep:     dependency.NewAlways(),
-	}
+	g := newGroupInstance()
+	g.Name = name
+
+	return g
 }
 
+// groupJobFactory produces an empty initialized job group job object,
+// for use in the job registry. Because of the return type and the
+// registry.JobFactory type.
 func groupJobFactory() amboy.Job {
-	// to produce Job objects for the registry/JobInterchange
-	// mechanism.
+	return newGroupInstance()
+}
+
+// newGroupInstance is a common constructor for the public NewGroup
+// constructior and the registry.JobFactory constructor.
+func newGroupInstance() *Group {
 	return &Group{
 		Jobs: make(map[string]*registry.JobInterchange),
+		dep:  dependency.NewAlways(),
+		T: amboy.JobType{
+			Name:    "group",
+			Version: 0,
+			Format:  amboy.BSON,
+		},
 	}
 }
 
@@ -68,14 +77,20 @@ func (g *Group) Add(j amboy.Job) error {
 			name, g.Name)
 	}
 
-	g.Jobs[name] = registry.MakeJobInterchange(j)
+	job, err := registry.MakeJobInterchange(j)
+	if err != nil {
+		return err
+	}
+
+	g.Jobs[name] = job
 	return nil
 }
 
-// ID returns a (hopefully) unique identifier for the job, based on,
-// in this implementation, the name passed to the constructor and an internal counter.
+// ID returns a (hopefully) unique identifier for the job, based on
+// the name specified to the constructor and in this implementation,
+// the name passed to the constructor and an internal counter.
 func (g *Group) ID() string {
-	return fmt.Sprintf("%s-%d", g.Name, g.counter)
+	return g.Name
 }
 
 // Run executes the jobs. Provides "continue on error" semantics for
@@ -117,13 +132,21 @@ func (g *Group) Run() {
 			// back to Jobs map so that we preserve errors
 			// idiomatically for Groups.
 
+			jobErr := j.Error()
+			job, err := registry.MakeJobInterchange(j)
+			if err != nil {
+				g.Errors = append(g.Errors, err)
+				return
+			}
+
+			if jobErr != nil {
+				g.Errors = append(g.Errors, jobErr)
+				return
+			}
+
 			group.mutex.Lock()
 			defer group.mutex.Unlock()
-			err := j.Error()
-			if err != nil {
-				group.Errors = append(group.Errors, err)
-			}
-			group.Jobs[j.ID()] = registry.MakeJobInterchange(j)
+			group.Jobs[j.ID()] = job
 		}(runnableJob, g)
 	}
 	g.mutex.RUnlock()
@@ -160,10 +183,7 @@ func (g *Group) Completed() bool {
 // Type returns a JobType object for this Job, which reports the kind
 // of job and the version of the Job when it was created.
 func (g *Group) Type() amboy.JobType {
-	return amboy.JobType{
-		Name:    "group",
-		Version: 0,
-	}
+	return g.T
 }
 
 // Dependency returns the dependency object for this task.
@@ -176,9 +196,17 @@ func (g *Group) Dependency() dependency.Manager {
 // instances you can as long as the new instance is of the "Always"
 // type.
 func (g *Group) SetDependency(d dependency.Manager) {
-	if d.Type().Name == "always" {
-		g.dep = d
+	if d == nil || d.Type().Name != "always" {
+		return
 	}
 
-	grip.Warning("group jobs should take 'always'-run dependencies.")
+	g.dep = d
+}
+
+func (g *Group) Export() ([]byte, error) {
+	return amboy.ConvertTo(g.Type().Format, g)
+}
+
+func (g *Group) Import(data []byte) error {
+	return amboy.ConvertFrom(g.Type().Format, data, g)
 }

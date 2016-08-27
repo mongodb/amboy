@@ -19,8 +19,8 @@ type JobTest struct {
 	Content    string
 	complete   bool
 	shouldFail bool
-	D          dependency.Manager
 	T          amboy.JobType
+	dep        dependency.Manager
 }
 
 func NewTestJob(content string) *JobTest {
@@ -29,9 +29,10 @@ func NewTestJob(content string) *JobTest {
 	return &JobTest{
 		Name:    id,
 		Content: content,
-		D:       dependency.NewAlways(),
+		dep:     dependency.NewAlways(),
 		T: amboy.JobType{
 			Name:    "test",
+			Format:  amboy.BSON,
 			Version: 0,
 		},
 	}
@@ -41,6 +42,7 @@ func jobTestFactory() amboy.Job {
 	return &JobTest{
 		T: amboy.JobType{
 			Name:    "test",
+			Format:  amboy.BSON,
 			Version: 0,
 		},
 	}
@@ -71,9 +73,17 @@ func (f *JobTest) Type() amboy.JobType {
 }
 
 func (f *JobTest) Dependency() dependency.Manager {
-	return f.D
+	return f.dep
 }
 
 func (f *JobTest) SetDependency(d dependency.Manager) {
-	f.D = d
+	f.dep = d
+}
+
+func (f *JobTest) Export() ([]byte, error) {
+	return amboy.ConvertTo(f.Type().Format, f)
+}
+
+func (f *JobTest) Import(data []byte) error {
+	return amboy.ConvertFrom(f.Type().Format, data, f)
 }

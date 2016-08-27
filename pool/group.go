@@ -126,10 +126,10 @@ func (r *Group) startMerger(ctx context.Context) <-chan *workUnit {
 			// continue conditions in the above loop, particularly on the next call.
 			select {
 			case <-ctx.Done():
-				break
+				break mergerLoop
 			default:
 				if len(r.queues) == completed {
-					break
+					break mergerLoop
 				}
 			}
 		}

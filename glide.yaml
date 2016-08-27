@@ -13,3 +13,8 @@ import:
 - package: github.com/satori/go.uuid
 - package: github.com/pkg/errors
 - package: golang.org/x/net
+- package: gopkg.in/mgo.v2
+- package: gopkg.in/yaml.v2
+- package: golang.org/x/net
+  subpackages:
+  - context

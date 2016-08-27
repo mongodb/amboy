@@ -171,8 +171,8 @@ func (q *LocalOrdered) Get(name string) (amboy.Job, bool) {
 
 // Stats returns a statistics object with data about the total number
 // of jobs tracked by the queue.
-func (q *LocalOrdered) Stats() *amboy.QueueStats {
-	s := &amboy.QueueStats{}
+func (q *LocalOrdered) Stats() amboy.QueueStats {
+	s := amboy.QueueStats{}
 
 	q.mutex.RLock()
 	defer q.mutex.RUnlock()
@@ -259,7 +259,7 @@ func (q *LocalOrdered) jobDispatch(ctx context.Context, orderedJobs []graph.Node
 	for i := len(orderedJobs) - 1; i >= 0; i-- {
 		select {
 		case <-ctx.Done():
-			break
+			return
 		default:
 		}
 
@@ -281,37 +281,38 @@ func (q *LocalOrdered) jobDispatch(ctx context.Context, orderedJobs []graph.Node
 
 		deps := job.Dependency().Edges()
 		completedDeps := make(map[string]bool)
+	resolveDependencyLoop:
 		for {
 			select {
 			case <-ctx.Done():
-				break
+				return
 			default:
-			}
-			for _, dep := range deps {
-				if completedDeps[dep] {
-					// if this is true, then we've
-					// seen this task before and
-					// we're not waiting for it
-					continue
-				}
+				for _, dep := range deps {
+					if completedDeps[dep] {
+						// if this is true, then we've
+						// seen this task before and
+						// we're not waiting for it
+						continue
+					}
 
-				if q.tasks.completed[dep] || q.tasks.m[dep].Completed() {
-					// we've not seen this task
-					// before, but we're not
-					// waiting for it. We'll do a
-					// less expensive check in the
-					// future.
-					completedDeps[dep] = true
+					if q.tasks.completed[dep] || q.tasks.m[dep].Completed() {
+						// we've not seen this task
+						// before, but we're not
+						// waiting for it. We'll do a
+						// less expensive check in the
+						// future.
+						completedDeps[dep] = true
+					}
+					// if neither of the above cases are
+					// true, then we're still waiting for
+					// a job. might make sense to put a
+					// timeout here. On the other hand, if
+					// there are cycles in the graph, the
+					// topo.Sort should fail, and we'd
+					// never get here, so assuming client
+					// jobs aren't buggy it's safe enough
+					// to wait here.
 				}
-				// if neither of the above cases are
-				// true, then we're still waiting for
-				// a job. might make sense to put a
-				// timeout here. On the other hand, if
-				// there are cycles in the graph, the
-				// topo.Sort should fail, and we'd
-				// never get here, so assuming client
-				// jobs aren't buggy it's safe enough
-				// to wait here.
 			}
 			if len(deps) == len(completedDeps) {
 				// all dependencies have passed, we can try to dispatch the job.
@@ -324,7 +325,7 @@ func (q *LocalOrdered) jobDispatch(ctx context.Context, orderedJobs []graph.Node
 
 				// when the job is dispatched, we can
 				// move on to the next item in the ordered queue.
-				break
+				break resolveDependencyLoop
 			}
 		}
 	}

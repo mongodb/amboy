@@ -183,8 +183,8 @@ func (q *LocalUnordered) Get(name string) (amboy.Job, bool) {
 
 // Stats returns a statistics object with data about the total number
 // of jobs tracked by the queue.
-func (q *LocalUnordered) Stats() *amboy.QueueStats {
-	s := &amboy.QueueStats{}
+func (q *LocalUnordered) Stats() amboy.QueueStats {
+	s := amboy.QueueStats{}
 
 	q.tasks.RLock()
 	defer q.tasks.RUnlock()

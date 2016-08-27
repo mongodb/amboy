@@ -57,7 +57,7 @@ func (s *ShellJobSuite) TestShellJobConstructorHasCreatesFileDependency() {
 }
 
 func (s *ShellJobSuite) TestShellDependencyAccessorReturnsPersistedValue() {
-	s.Equal(s.job.Dependency(), s.job.D)
+	s.Equal(s.job.Dependency(), s.job.dep)
 }
 
 func (s *ShellJobSuite) TestSetDependencyChangesDependencyStrategy() {

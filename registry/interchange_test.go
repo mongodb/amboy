@@ -3,9 +3,10 @@ package registry
 import (
 	"testing"
 
+	"github.com/mongodb/amboy"
+	"github.com/mongodb/amboy/dependency"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/mongodb/amboy/dependency"
 )
 
 // JobInterchangeSuite tests the JobInterchange format and
@@ -27,55 +28,77 @@ func (s *JobInterchangeSuite) SetupTest() {
 	s.job = NewTestJob("interchange-test")
 }
 
-func (s *JobInterchangeSuite) TestConversionToInterchangeMaintainsFidelity() {
-	i := MakeJobInterchange(s.job)
-
-	s.Equal(s.job.ID(), i.Name)
-	s.Equal(s.job.Type().Name, i.Type)
-	s.Equal(s.job.Type().Version, i.Version)
-
-	s.Equal(s.job, i.Job)
+func (s *JobInterchangeSuite) TestConversionToInterchangeMaintainsMetaDataFidelity() {
+	i, err := MakeJobInterchange(s.job)
+	if s.NoError(err) {
+		s.Equal(s.job.ID(), i.Name)
+		s.Equal(s.job.Type().Name, i.Type)
+		s.Equal(s.job.Type().Version, i.Version)
+		s.Equal(s.job.Completed(), i.Completed)
+	}
 }
 
 func (s *JobInterchangeSuite) TestConversionFromInterchangeMaintainsFidelity() {
-	j, err := ConvertToJob(MakeJobInterchange(s.job))
-	s.NoError(err)
+	i, err := MakeJobInterchange(s.job)
+	if s.NoError(err) {
+		return
+	}
 
-	s.IsType(s.job, j)
-	s.Equal(s.job, j)
+	j, err := ConvertToJob(i)
+	if s.NoError(err) {
+		s.IsType(s.job, j)
+
+		new := j.(*JobTest)
+
+		s.Equal(s.job.Name, new.Name)
+		s.Equal(s.job.Content, new.Content)
+		s.Equal(s.job.complete, new.complete)
+		s.Equal(s.job.shouldFail, new.shouldFail)
+		s.Equal(s.job.T, new.T)
+	}
 }
 
 func (s *JobInterchangeSuite) TestUnregisteredTypeCannotConvertToJob() {
 	s.job.T.Name = "different"
 
-	j, err := ConvertToJob(MakeJobInterchange(s.job))
-	s.Nil(j)
-	s.Error(err)
+	i, err := MakeJobInterchange(s.job)
+	if s.NoError(err) {
+		j, err := ConvertToJob(i)
+		s.Nil(j)
+		s.Error(err)
+	}
 }
 
 func (s *JobInterchangeSuite) TestMismatchedVersionResultsInErrorOnConversion() {
 	s.job.T.Version += 100
 
-	j, err := ConvertToJob(MakeJobInterchange(s.job))
-	s.Nil(j)
-	s.Error(err)
+	i, err := MakeJobInterchange(s.job)
+	if s.NoError(err) {
+		j, err := ConvertToJob(i)
+		s.Nil(j)
+		s.Error(err)
+	}
 }
 
 func (s *JobInterchangeSuite) TestConvertToJobForUnknownJobType() {
 	s.job.T.Name = "missing-job-type"
-	j, err := ConvertToJob(MakeJobInterchange(s.job))
-	s.Nil(j)
-	s.Error(err)
+	i, err := MakeJobInterchange(s.job)
+	if s.NoError(err) {
+		j, err := ConvertToJob(i)
+		s.Nil(j)
+		s.Error(err)
+	}
 }
 
 func (s *JobInterchangeSuite) TestMismatchedDependencyCausesJobConversionToError() {
 	s.job.T.Version += 100
 
-	i := MakeJobInterchange(s.job)
-	j, err := ConvertToJob(i)
-
-	s.Error(err)
-	s.Nil(j)
+	i, err := MakeJobInterchange(s.job)
+	if s.NoError(err) {
+		j, err := ConvertToJob(i)
+		s.Error(err)
+		s.Nil(j)
+	}
 }
 
 // DependencyInterchangeSuite tests the DependencyInterchange format
@@ -102,41 +125,52 @@ func (s *DependencyInterchangeSuite) SetupTest() {
 }
 
 func (s *DependencyInterchangeSuite) TestDependencyInterchangeFormatStoresDataCorrectly() {
-	i := MakeDependencyInterchange(s.dep)
-
-	s.Equal(s.dep.Type().Name, i.Type)
-	s.Equal(s.dep.Type().Version, i.Version)
-
-	s.Equal(s.dep, i.Dependency)
+	i, err := makeDependencyInterchange(amboy.BSON, s.dep)
+	if s.NoError(err) {
+		s.Equal(s.dep.Type().Name, i.Type)
+		s.Equal(s.dep.Type().Version, i.Version)
+	}
 }
 
 func (s *DependencyInterchangeSuite) TestConvertFromDependencyInterchangeFormatMaintainsFidelity() {
-	i := MakeDependencyInterchange(s.dep)
-	s.require.IsType(i, s.interchange)
+	i, err := makeDependencyInterchange(amboy.BSON, s.dep)
+	if s.NoError(err) {
+		s.require.IsType(i, s.interchange)
 
-	dep, err := ConvertToDependency(i)
-	s.NoError(err)
-	s.Exactly(dep, s.dep)
+		dep, err := convertToDependency(amboy.BSON, i)
+		s.NoError(err)
+		s.require.IsType(dep, s.dep)
+		old := s.dep.(*dependency.Always)
+		new := dep.(*dependency.Always)
+		s.Equal(old.ShouldRebuild, new.ShouldRebuild)
+		s.Equal(old.T, new.T)
+		s.Equal(len(old.JobEdges.TaskEdges), len(new.JobEdges.TaskEdges))
+	}
+
 }
 
 func (s *DependencyInterchangeSuite) TestVersionInconsistencyCauseConverstionToDependencyToError() {
-	i := MakeDependencyInterchange(s.dep)
-	s.require.IsType(i, s.interchange)
+	i, err := makeDependencyInterchange(amboy.BSON, s.dep)
+	if s.NoError(err) {
+		s.require.IsType(i, s.interchange)
 
-	i.Version += 100
+		i.Version += 100
 
-	dep, err := ConvertToDependency(i)
-	s.Error(err)
-	s.Nil(dep)
+		dep, err := convertToDependency(amboy.BSON, i)
+		s.Error(err)
+		s.Nil(dep)
+	}
 }
 
 func (s *DependencyInterchangeSuite) TestNameInconsistencyCasuesConversionToDependencyToError() {
-	i := MakeDependencyInterchange(s.dep)
-	s.require.IsType(i, s.interchange)
+	i, err := makeDependencyInterchange(amboy.BSON, s.dep)
+	if s.NoError(err) {
+		s.require.IsType(i, s.interchange)
 
-	i.Type = "sommetimes"
+		i.Type = "sommetimes"
 
-	dep, err := ConvertToDependency(i)
-	s.Error(err)
-	s.Nil(dep)
+		dep, err := convertToDependency(amboy.BSON, i)
+		s.Error(err)
+		s.Nil(dep)
+	}
 }

@@ -66,11 +66,11 @@ func (q *QueueTester) Complete(ctx context.Context, j amboy.Job) {
 	return
 }
 
-func (q *QueueTester) Stats() *amboy.QueueStats {
+func (q *QueueTester) Stats() amboy.QueueStats {
 	q.mutex.RLock()
 	defer q.mutex.RUnlock()
 
-	return &amboy.QueueStats{
+	return amboy.QueueStats{
 		Running:   len(q.storage) - len(q.toProcess),
 		Completed: q.numComplete,
 		Pending:   len(q.toProcess),
@@ -114,8 +114,7 @@ func (q *QueueTester) Start(ctx context.Context) error {
 }
 
 func (q *QueueTester) Results() <-chan amboy.Job {
-	output := make(chan amboy.Job, q.Stats().Completed+3)
-	defer close(output)
+	output := make(chan amboy.Job)
 
 	go func(m map[string]amboy.Job) {
 		for _, job := range m {
@@ -123,6 +122,7 @@ func (q *QueueTester) Results() <-chan amboy.Job {
 				output <- job
 			}
 		}
+		close(output)
 	}(q.storage)
 
 	return output

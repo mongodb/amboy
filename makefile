@@ -1,7 +1,7 @@
 # start project configuration
 name := amboy
 buildDir := build
-packages := dependency job registry pool queue
+packages := dependency job registry pool queue queue-remote
 orgPath := github.com/mongodb
 projectPath := $(orgPath)/$(name)
 # end project configuration
@@ -63,26 +63,27 @@ gopath := $(shell go env GOPATH)
 lintDeps := $(addprefix $(gopath)/src/,$(lintDeps))
 srcFiles := makefile $(shell find . -name "*.go" -not -path "./$(buildDir)/*" -not -name "*_test.go")
 testSrcFiles := makefile $(shell find . -name "*.go" -not -path "./$(buildDir)/*")
-testOutput := $(foreach target,$(packages),$(buildDir)/test.$(target).out)
-raceOutput := $(foreach target,$(packages),$(buildDir)/race.$(target).out)
-coverageOutput := $(foreach target,$(packages),$(buildDir)/coverage.$(target).out)
-coverageHtmlOutput := $(foreach target,$(packages),$(buildDir)/coverage.$(target).html)
+testOutput := $(subst -,/,$(foreach target,$(packages),$(buildDir)/test.$(target).out))
+raceOutput := $(subst -,/,$(foreach target,$(packages),$(buildDir)/race.$(target).out))
+coverageOutput := $(subst -,/,$(foreach target,$(packages),$(buildDir)/coverage.$(target).out))
+coverageHtmlOutput := $(subst -,/,$(foreach target,$(packages),$(buildDir)/coverage.$(target).html))
 $(gopath)/src/%:
 	@-[ ! -d $(gopath) ] && mkdir -p $(gopath) || true
 	go get $(subst $(gopath)/src/,,$@)
 # end dependency installation tools
-
+t:
+	@echo $(testOutput)
 
 # userfacing targets for basic build and development operations
 lint:$(lintDeps)
 	$(gopath)/bin/gometalinter $(lintArgs) ./...
 lint-deps:$(lintDeps)
 build:$(deps) $(srcFiles) $(gopath)/src/$(projectPath)
-	$(vendorGopath) go build $(foreach pkg,$(packages),./$(pkg))
+	$(vendorGopath) go build $(subst -,/,$(foreach pkg,$(packages),./$(pkg)))
 build-race:$(deps) $(srcFiles) $(gopath)/src/$(projectPath)
-	$(vendorGopath) go build -race $(foreach pkg,$(packages),./$(pkg))
-test:$(foreach target,$(packages),test-$(target))
-race:$(foreach target,$(packages),race-$(target))
+	$(vendorGopath) go build -race $(subst -,/,$(foreach pkg,$(packages),./$(pkg)))
+test:$(testOutput)
+race:$(raceOutput)
 coverage:$(coverageOutput)
 coverage-html:$(coverageHtmlOutput)
 phony := lint build build-race race test coverage coverage-html
@@ -110,41 +111,40 @@ $(buildDir)/$(name).race:$(gopath)/src/$(projectPath) $(srcFiles) $(deps)
 # specific package.
 makeArgs := --no-print-directory
 race-%:
-	@$(MAKE) $(makeArgs) $(buildDir)/race.$*.out
-	@grep -s -q -e "^PASS" $(buildDir)/race.$*.out
+	@$(MAKE) $(makeArgs) $(buildDir)/race.$(subst -,/,$*).out
+	@grep -s -q -e "^PASS" $(buildDir)/race.$(subst -,/,$*).out
 test-%:
-	@$(MAKE) $(makeArgs) $(buildDir)/test.$*.out
-	@grep -s -q -e "^PASS" $(buildDir)/test.$*.out
+	@$(MAKE) $(makeArgs) $(buildDir)/test.$(subst -,/,$*).out
+	@grep -e "^PASS" $(buildDir)/test.$(subst /,-,$*).out
 coverage-%:
-	@$(MAKE) $(makeArgs) $(buildDir)/coverage.$*.out
-	@grep -s -q -e "^PASS" $(buildDir)/coverage.$*.out
+	@$(MAKE) $(makeArgs) $(buildDir)/coverage.$(subst /,-,$*).out
 html-coverage-%:
-	@$(MAKE) $(makeArgs) $(buildDir)/coverage.$*.html
-	@grep -s -q -e "^PASS" $(buildDir)/coverage.$*.html
+	@$(MAKE) $(makeArgs) $(buildDir)/coverage.$(subst /,-,$*).html
 # end convienence targets
+
 
 # start test and coverage artifacts
 #    tests have compile and runtime deps. This varable has everything
 #    that the tests actually need to run. (The "build" target is
 #    intentional and makes these targets rerun as expected.)
 testRunDeps := $(testSrcFiles) build
-testArgs := -v --timeout=20m
+testArgs := -v --timeout=20s
 #    implementation for package coverage and test running,mongodb to produce
 #    and save test output.
 $(buildDir)/coverage.%.html:$(buildDir)/coverage.%.out
-	go tool cover -html=$< -o $@
+	go tool cover -html=$(buildDir)/coverage.$(subst /,-,$*).out -o $(buildDir)/coverage.$(subst /,-,$*).html
 $(buildDir)/coverage.%.out:$(testRunDeps)
-	$(vendorGopath) go test -covermode=count -coverprofile=$@ $(projectPath)/$*
-	@-[ -f $@ ] && go tool cover -func=$@ | sed 's%$(projectPath)/%%' | column -t
+	$(vendorGopath) go test --timeout=20s -covermode=count -coverprofile=$(buildDir)/coverage.$(subst /,-,$*).out $(projectPath)/$(subst -,/,$*)
+	@-[ -f $(buildDir)/coverage.$(subst /,-,$*).out ] && go tool cover -func=$(buildDir)/coverage.$(subst /,-,$*).out | sed 's%$(projectPath)/%%' | column -t
 $(buildDir)/coverage.$(name).out:$(testRunDeps)
 	$(vendorGopath) go test -covermode=count -coverprofile=$@ $(projectPath)
 	@-[ -f $@ ] && go tool cover -func=$@ | sed 's%$(projectPath)/%%' | column -t
 $(buildDir)/test.%.out:$(testRunDeps)
-	$(vendorGopath) go test $(testArgs) ./$* | tee $@
+	$(vendorGopath) go test $(testArgs) ./$(subst -,/,$*) | tee $(buildDir)/test.$(subst /,-,$*).out
+$(buildDir)/race.%.out:$(testRunDeps)
+	$(vendorGopath) go test $(testArgs) -race ./$(subst -,/,$*) | tee $(buildDir)/race.$(subst /,-,$*).out
 $(buildDir)/test.$(name).out:$(testRunDeps)
 	$(vendorGopath) go test $(testArgs) ./ | tee $@
-$(buildDir)/race.%.out:$(testRunDeps)
-	$(vendorGopath) go test $(testArgs) -race ./$* | tee $@
 $(buildDir)/race.$(name).out:$(testRunDeps)
 	$(vendorGopath) go test $(testArgs) -race ./ | tee $@
 # end test and coverage artifacts
@@ -169,8 +169,9 @@ $(buildDir)/makefile.vendor:$(buildDir)/render-gopath makefile
 vendor-sync:$(vendorDeps)
 	glide install -s
 vendor-clean:
+	rm -rf vendor/gopkg.in/mgo.v2/harness/
 	rm -rf vendor/github.com/stretchr/testify/vendor/
-	find vendor/ -name "*.gif" -o -name "*.gz" -o -name "*.png" -o -name "*.ico" | xargs rm -f
+	find vendor/ -name "*.gif" -o -name "*.gz" -o -name "*.png" -o -name "*.ico" -o -name "*.dat" -o -name "*testdata" | xargs rm -f
 change-go-version:
 	rm -rf $(buildDir)/make-vendor $(buildDir)/render-gopath
 	@$(MAKE) $(makeArgs) vendor > /dev/null 2>&1

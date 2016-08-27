@@ -26,6 +26,20 @@ variables:
       - func: setup-credentials
       - func: run-make
         vars: { target: "${task_name}" }
+  - &run-go-test-suite-with-mongodb
+    # runs a make target above, but only on systems that have a
+    # running mongod started for testing.
+    name: test
+    depends_on:
+      - name: build
+    commands:
+      - command: git.get_project
+        params:
+          directory: gopath/src/github.com/mongodb/amboy
+      - func: setup-credentials
+      - func: set-up-mongodb
+      - func: run-make
+        vars: { target: "${task_name}" }
 
   # Task lists for build variants. Some (known) duplication between
   # these lists and the task definitions below.
@@ -39,6 +53,7 @@ variables:
       - name: test-registry
       - name: test-pool
       - name: test-queue
+      - name: test-queue-remote
   - &dev-tasks
       # dev tasks contains all the test suites plus coverage and
       # linting. Only need/want to run lint/coverage on one builder.
@@ -49,6 +64,7 @@ variables:
       - name: test-registry
       - name: test-pool
       - name: test-queue
+      - name: test-queue-remote
       - name: coverage
   - &race-detector-tasks
       - name: build-race
@@ -57,6 +73,7 @@ variables:
       - name: race-registry
       - name: race-pool
       - name: race-queue
+      - name: race-queue-remote
 
 
 #######################################
@@ -106,6 +123,41 @@ functions:
       content_type: text/html
       permissions: public-read
       display_name: coverage-${name}
+  set-up-mongodb:
+    # TODO replace this configuration with something more robust.
+    # Current version is borrowed directly rom the Evergreen self tests.
+    - command: shell.exec
+      params:
+        script: |
+          set -o errexit
+
+          rm -rf mongodb
+          mkdir mongodb
+          cd mongodb
+          curl ${mongodb_url} -o mongodb.tgz
+
+          tar -zvf mongodb.tgz
+          chmod +x ./mongodb-*/bin/*
+          mv ./mongodb-*/bin/* .
+          rm -rf db_files
+          rm -rf db_logs
+          mkdir db_files
+          mkdir db_logs
+    - command: shell.exec
+      params:
+        background: true
+        script: |
+          set -o verbose
+          cd mongodb
+          echo "starting mongod..."
+          ./mongod --dbpath ./db_files &
+          echo "waiting for mongod to start up"
+    - command: shell.exec
+      params:
+        script: |
+          cd mongodb
+          ./mongo${extension} --nodb --eval 'assert.soon(function(x){try{var d = new Mongo("localhost:27017"); return true}catch(e){return false}}, "timed out connecting")'
+          echo "mongod is up."
 
 
 #######################################
@@ -130,6 +182,7 @@ tasks:
         params:
           directory: gopath/src/github.com/mongodb/amboy
       - func: setup-credentials
+      - func: set-up-mongodb
       - func: run-make
         vars: { target: "coverage-html"}
       - func: upload-coverage
@@ -142,6 +195,8 @@ tasks:
         vars: { name: "pool"}
       - func: upload-coverage
         vars: { name: "queue"}
+      - func: upload-coverage
+        vars: { name: "queue-remote"}
 
   # define tasks for all test suites (modules)
   - <<: *run-go-test-suite
@@ -152,8 +207,10 @@ tasks:
     name: test-registry
   - <<: *run-go-test-suite
     name: test-pool
-  - <<: *run-go-test-suite
+  - <<: *run-go-test-suite-with-mongodb
     name: test-queue
+  - <<: *run-go-test-suite-with-mongodb
+    name: test-queue-remote
 
   # run the suites with the race detector (one variant only)
   - <<: *run-go-test-suite
@@ -172,8 +229,12 @@ tasks:
     name: race-pool
     depends_on:
       - name: build-race
-  - <<: *run-go-test-suite
+  - <<: *run-go-test-suite-with-mongodb
     name: race-queue
+    depends_on:
+      - name: build-race
+  - <<: *run-go-test-suite-with-mongodb
+    name: race-queue-remote
     depends_on:
       - name: build-race
 
@@ -197,6 +258,8 @@ post:
 buildvariants:
   - name: archlinux
     display_name: Arch Linux (go1.6)
+    expansions:
+      mongodb_url: https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-3.2.9.tgz
     run_on:
       - archlinux-test
     tasks:
@@ -204,6 +267,8 @@ buildvariants:
 
   - name: race-detector
     display_name: Race Detector (Arch Linux; go1.6)
+    expansions:
+      mongodb_url: https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-3.2.9.tgz
     run_on:
       - archlinux-test
     tasks:
@@ -212,6 +277,7 @@ buildvariants:
   - name: rhel70
     display_name: RHEL 7.0
     expansions:
+      mongodb_url: https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-rhel70-3.2.9.tgz
       build_env: "PATH=/opt/go:$PATH"
     run_on:
       - rhel70
@@ -220,6 +286,8 @@ buildvariants:
 
   - name: rhel62
     display_name: RHEL 6.2
+    expansions:
+      mongodb_url: https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-rhel62-3.2.9.tgz
     run_on:
       - rhel62-test
     tasks:
@@ -228,6 +296,7 @@ buildvariants:
   - name: rhel55
     display_name: RHEL 5.5 (gccgo)
     expansions:
+      mongodb_url: https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-rhel55-3.2.9.tgz
       build_env: "LD_LIBRARY_PATH=/opt/openssl/lib64 PATH=/opt/mongodbtoolchain/v2/bin:$PATH"
     run_on:
       - rhel55-test
@@ -237,6 +306,7 @@ buildvariants:
   - name: debian81
     display_name: Debian 8.1
     expansions:
+      mongodb_url: https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-debian81-3.2.9.tgz
       build_env: "PATH=/opt/go/bin:$PATH GOROOT=/opt/go"
     run_on:
       - debian81-test
@@ -246,6 +316,7 @@ buildvariants:
   - name: osx
     display_name: OS X 10.10
     expansions:
+      mongodb_url: https://fastdl.mongodb.org/osx/mongodb-osx-ssl-x86_64-3.2.9.tgz
       build_env: "PATH=/usr/local/go/bin:$PATH"
     run_on:
       - osx-1010

@@ -19,6 +19,7 @@ type JobGroupSuite struct {
 }
 
 func TestJobGroupSuite(t *testing.T) {
+	// t.Skip("problems with interchange conversion in the context of group jobs")
 	suite.Run(t, new(JobGroupSuite))
 }
 
@@ -59,9 +60,7 @@ func (s *JobGroupSuite) TestAllJobsAreCompleteAfterRunningGroup() {
 	s.NoError(s.job.Error())
 
 	for _, interchange := range s.job.Jobs {
-		// interchange objects provide access to a Job
-		// interface
-		s.True(interchange.Job.Completed())
+		s.True(interchange.Completed)
 
 		job, err := registry.ConvertToJob(interchange)
 		s.NoError(err)
@@ -86,7 +85,7 @@ func (s *JobGroupSuite) TestJobResultsPersistAfterGroupRuns() {
 	s.True(s.job.Completed())
 	s.Error(s.job.Error())
 
-	s.True(fail.Completed())
+	s.False(fail.Completed())
 	failEnvName, ok := fail.Env["name"]
 	s.True(ok)
 	s.Equal("fail", failEnvName)
@@ -95,7 +94,7 @@ func (s *JobGroupSuite) TestJobResultsPersistAfterGroupRuns() {
 	s.True(exists)
 	job, err := registry.ConvertToJob(interchange)
 	s.NoError(err)
-	s.True(job.Completed())
+	s.False(job.Completed())
 	s.IsType(&ShellJob{}, job)
 }
 
