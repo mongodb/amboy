@@ -1,14 +1,27 @@
 # project configuration
 name := grip
 buildDir := build
-packages := logging grip # TODO: add other packages when there are tests
+packages := logging $(name)
 projectPath := github.com/tychoish/$(name)
 
 
 # declaration of dependencies
 lintDeps := github.com/alecthomas/gometalinter
+lintDeps += github.com/alecthomas/gocyclo
+lintDeps += github.com/golang/lint/golint
+lintDeps += github.com/gordonklaus/ineffassign
+lintDeps += github.com/jgautheron/goconst/cmd/goconst
+lintDeps += github.com/kisielk/errcheck
+lintDeps += github.com/mdempsky/unconvert
+lintDeps += github.com/mibk/dupl
+lintDeps += github.com/mvdan/interfacer
+lintDeps += github.com/opennota/check
+lintDeps += github.com/tsenart/deadcode
+lintDeps += github.com/client9/misspell
+lintDeps += github.com/walle/lll
+lintDeps += honnef.co/go/simple
+lintDeps += honnef.co/go/staticcheck
 testDeps := github.com/stretchr/testify
-deps := github.com/coreos/go-systemd/journal
 # end dependency declarations
 
 
@@ -44,7 +57,6 @@ lintArgs += --exclude="package comment should be of the form \"Package .* \(goli
 # start dependency installation tools
 #   implementation details for being able to lazily install dependencies
 gopath := $(shell go env GOPATH)
-deps := $(addprefix $(gopath)/src/,$(deps))
 lintDeps := $(addprefix $(gopath)/src/,$(lintDeps))
 testDeps := $(addprefix $(gopath)/src/,$(testDeps))
 srcFiles := makefile $(shell find . -name "*.go" -not -path "./$(buildDir)/*" -not -name "*_test.go")
@@ -58,37 +70,34 @@ $(gopath)/src/%:
 	go get $(subst $(gopath)/src/,,$@)
 # end dependency installation tools
 
-
 # userfacing targets for basic build and development operations
-lint:$(gopath)/src/$(projectPath) $(lintDeps) $(deps)
+lint:$(gopath)/src/$(projectPath) $(lintDeps)
 	$(gopath)/bin/gometalinter $(lintArgs) ./... | sed 's%$</%%'
-deps:$(deps)
-test-deps:$(testDeps)
 lint-deps:$(lintDeps)
-build:$(deps) $(gopath)/src/$(projectPath)
-	$(vendorGopath) go build ./ $(foreach pkg,$(shell find . -type d -not -iwholename '*.git*' -not -iwholename "*vendor*" -not -iwholename "*buildscripts*" -not -name "." -not -name "build"),$(pkg))
+test-deps:$(testDeps)
+build:$(deps) $(srcFiles) $(gopath)/src/$(projectPath)
+	$(vendorGopath) go build $(subst $(name),,$(subst -,/,$(foreach pkg,$(packages),./$(pkg))))
+build-race:$(deps) $(srcFiles) $(gopath)/src/$(projectPath)
+	$(vendorGopath) go build -race $(subst -,/,$(foreach pkg,$(packages),./$(pkg)))
 test:$(testOutput)
 race:$(raceOutput)
 coverage:$(coverageOutput)
 coverage-html:$(coverageHtmlOutput)
 phony := lint build build-race race test coverage coverage-html
-phony += deps test-deps lint-deps
+phony += test-deps lint-deps test-deps
 .PRECIOUS: $(testOutput) $(raceOutput) $(coverageOutput) $(coverageHtmlOutput)
 # end front-ends
 
 
 # implementation details for building the binary and creating a
 # convienent link in the working directory
-$(gopath)/src/$(orgPath):
-	@mkdir -p $@
-$(gopath)/src/$(projectPath):$(gopath)/src/$(orgPath)
-	@[ -L $@ ] || ln -s $(shell pwd) $@
 $(name):$(buildDir)/$(name)
-	@[ -L $@ ] || ln -s $< $@
-$(buildDir)/$(name):$(gopath)/src/$(projectPath) $(srcFiles) $(deps)
+	@[ -e $@ ] || ln -s $<
+$(buildDir)/$(name):$(srcFiles)
 	$(vendorGopath) go build -o $@ main/$(name).go
-$(buildDir)/$(name).race:$(gopath)/src/$(projectPath) $(srcFiles) $(deps)
+$(buildDir)/$(name).race:$(srcFiles)
 	$(vendorGopath) go build -race -o $@ main/$(name).go
+phony += $(buildDir)/$(name)
 # end main build
 
 
@@ -96,14 +105,17 @@ $(buildDir)/$(name).race:$(gopath)/src/$(projectPath) $(srcFiles) $(deps)
 # specific package.
 makeArgs := --no-print-directory
 race-%:
-	@$(MAKE) $(makeArgs) $(buildDir)/race.$*.out
+	@$(MAKE) $(makeArgs) $(buildDir)/race.$(subst -,/,$*).out
+	@grep -s -q -e "^PASS" $(buildDir)/race.$(subst -,/,$*).out
 test-%:
-	@$(MAKE) $(makeArgs) $(buildDir)/test.$*.out
+	@$(MAKE) $(makeArgs) $(buildDir)/test.$(subst -,/,$*).out
+	grep -e "^PASS" $(buildDir)/test.$(subst /,-,$*).out
 coverage-%:
-	@$(MAKE) $(makeArgs) $(buildDir)/coverage.$*.out
+	@$(MAKE) $(makeArgs) $(buildDir)/coverage.$(subst -,/,$*).out
 html-coverage-%:
-	@$(MAKE) $(makeArgs) $(buildDir)/coverage.$*.html
+	@$(MAKE) $(makeArgs) $(buildDir)/coverage.$(subst -,/,$*).html
 # end convienence targets
+
 
 # start vendoring configuration
 #    begin with configuration of dependencies
@@ -149,28 +161,29 @@ phony += vendor vendor-deps vendor-clean vendor-sync change-go-version
 
 
 # start test and coverage artifacts
-#    This varable includes everything that the tests actually need to
-#    run. (The "build" target is intentional and makes these targetsb
-#    rerun as expected.)
+#    tests have compile and runtime deps. This varable has everything
+#    that the tests actually need to run. (The "build" target is
+#    intentional and makes these targets rerun as expected.)
 testRunDeps := $(testSrcFiles) build
+testArgs := -v --timeout=20m
 #    implementation for package coverage and test running, to produce
 #    and save test output.
 $(buildDir)/coverage.%.html:$(buildDir)/coverage.%.out
-	$(vendorGopath) go tool cover -html=$< -o $@
+	go tool cover -html=$< -o $(subst -,/,$@)
 $(buildDir)/coverage.%.out:$(testRunDeps)
-	$(vendorGopath) go test -covermode=count -coverprofile=$@ $(projectPath)/$*
+	$(vendorGopath) go test -covermode=count -coverprofile=$@ $(projectPath)/$(subst -,/,$*)
 	@-[ -f $@ ] && go tool cover -func=$@ | sed 's%$(projectPath)/%%' | column -t
 $(buildDir)/coverage.$(name).out:$(testRunDeps)
 	$(vendorGopath) go test -covermode=count -coverprofile=$@ $(projectPath)
 	@-[ -f $@ ] && go tool cover -func=$@ | sed 's%$(projectPath)/%%' | column -t
 $(buildDir)/test.%.out:$(testRunDeps)
-	$(vendorGopath) go test -v ./$* >| $@; exitCode=$$?; cat $@; [ $$exitCode -eq 0 ]
-$(buildDir)/test.$(name).out:$(testRunDeps)
-	$(vendorGopath) go test -v ./ >| $@; exitCode=$$?; cat $@; [ $$exitCode -eq 0 ]
+	$(vendorGopath) go test $(testArgs) ./$(subst -,/,$*) | tee $(buildDir)/test.$(subst /,-,$*).out
 $(buildDir)/race.%.out:$(testRunDeps)
-	$(vendorGopath) go test -race -v ./$* >| $@; exitCode=$$?; cat $@; [ $$exitCode -eq 0 ]
+	$(vendorGopath) go test $(testArgs) -race ./$(subst -,/,$*) | tee $(buildDir)/race.$(subst /,-,$*).out
+$(buildDir)/test.$(name).out:$(testRunDeps)
+	$(vendorGopath) go test $(testArgs) ./ | tee $@
 $(buildDir)/race.$(name).out:$(testRunDeps)
-	$(vendorGopath) go test -race -v ./ >| $@; exitCode=$$?; cat $@; [ $$exitCode -eq 0 ]
+	$(vendorGopath) go test $(testArgs) -race ./ | tee $@
 # end test and coverage artifacts
 
 

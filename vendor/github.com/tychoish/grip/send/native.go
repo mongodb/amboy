@@ -12,14 +12,13 @@ import (
 )
 
 type nativeLogger struct {
-	name           string
-	defaultLevel   level.Priority
-	thresholdLevel level.Priority
-	options        map[string]string
-	logger         *log.Logger
-	template       string
+	name     string
+	level    LevelInfo
+	options  map[string]string
+	logger   *log.Logger
+	template string
 
-	*sync.RWMutex
+	sync.RWMutex
 }
 
 // NewNativeLogger creates a new Sender interface that writes all
@@ -28,8 +27,7 @@ type nativeLogger struct {
 func NewNativeLogger(name string, thresholdLevel, defaultLevel level.Priority) (Sender, error) {
 	l := &nativeLogger{
 		name:     name,
-		template: "[p=%d]: %s\n",
-		RWMutex:  &sync.RWMutex{},
+		template: "[p=%s]: %s\n",
 	}
 	l.createLogger()
 	err := l.SetDefaultLevel(defaultLevel)
@@ -47,11 +45,11 @@ func (n *nativeLogger) createLogger() {
 }
 
 func (n *nativeLogger) Send(p level.Priority, m message.Composer) {
-	if !ShouldLogMessage(n, p, m) {
+	if !GetMessageInfo(n.level, p, m).ShouldLog() {
 		return
 	}
 
-	n.logger.Printf(n.template, int(p), m.Resolve())
+	n.logger.Printf(n.template, p, m.Resolve())
 }
 
 func (n *nativeLogger) Name() string {
@@ -71,14 +69,14 @@ func (n *nativeLogger) DefaultLevel() level.Priority {
 	n.RLock()
 	defer n.RUnlock()
 
-	return n.defaultLevel
+	return n.level.defaultLevel
 }
 
 func (n *nativeLogger) ThresholdLevel() level.Priority {
 	n.RLock()
 	defer n.RUnlock()
 
-	return n.thresholdLevel
+	return n.level.thresholdLevel
 }
 
 func (n *nativeLogger) SetDefaultLevel(p level.Priority) error {
@@ -86,7 +84,7 @@ func (n *nativeLogger) SetDefaultLevel(p level.Priority) error {
 	defer n.Unlock()
 
 	if level.IsValidPriority(p) {
-		n.defaultLevel = p
+		n.level.defaultLevel = p
 		return nil
 	}
 
@@ -98,7 +96,7 @@ func (n *nativeLogger) SetThresholdLevel(p level.Priority) error {
 	defer n.Unlock()
 
 	if level.IsValidPriority(p) {
-		n.thresholdLevel = p
+		n.level.thresholdLevel = p
 		return nil
 	}
 

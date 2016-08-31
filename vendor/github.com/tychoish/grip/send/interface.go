@@ -27,7 +27,7 @@ type Sender interface {
 	// Method that actually sends messages (the string) to the
 	// logging capture system. The Send() method filters out
 	// logged messages based on priority, typically using the
-	// generic ShouldLogMessage() function.
+	// generic MessageInfo.ShouldLog() function.
 	Send(level.Priority, message.Composer)
 
 	// Sets the logger's threshold level. Messages of lower
@@ -36,7 +36,7 @@ type Sender interface {
 	// Retrieves the threshold level for the logger.
 	ThresholdLevel() level.Priority
 
-	// Sets the default level, which is used in conversion of
+	// Sets the default level, which is used in conversion ofS
 	// logging types, and for "default" logging methods.
 	SetDefaultLevel(level.Priority) error
 	// Retreives the default level for the logger.
@@ -55,20 +55,43 @@ type Sender interface {
 	Close()
 }
 
-// ShouldLogMessage provides a sender-independent method for
-// determining if a message should be logged. Considers a priority
-// value for a message, the default and threshould priorities from the
-// sender, and the likability of a message provided by the Composer
-// interface to determine if a message is loggable.
-func ShouldLogMessage(s Sender, p level.Priority, m message.Composer) bool {
-	// higher p numbers are "lower priority" than lower ones
-	// (e.g. Emergency=0, Debug=7)
-	if p > s.ThresholdLevel() {
-		return false
-	}
-	if !m.Loggable() {
-		return false
-	}
+// LevelInfo provides a sender-independent structure for storing
+// information about a sender's configured log levels.
+type LevelInfo struct {
+	defaultLevel   level.Priority
+	thresholdLevel level.Priority
+}
 
-	return true
+// NewLevelInfo builds a level info object based on the default and
+// threshold levels specified.
+func NewLevelInfo(d level.Priority, t level.Priority) LevelInfo {
+	return LevelInfo{
+		defaultLevel:   d,
+		thresholdLevel: t,
+	}
+}
+
+// MessageInfo provides a sender-independent method for determining if
+// a message should be logged. Stores all of the information, and
+// provides a ShouldLog method that senders can use if a message is logabble.
+type MessageInfo struct {
+	aboveThreshold bool
+	loggable       bool
+}
+
+// ShouldLog returns true when the message, according to the
+// information contained in the MessageInfo structure should be
+// logged.
+func (m MessageInfo) ShouldLog() bool {
+	return m.loggable && m.aboveThreshold
+}
+
+// GetMessageInfo takes the sender's configured LevelInfo, a priority
+// for the message, and a MessageComposer object and returns a
+// MessageInfo.
+func GetMessageInfo(info LevelInfo, level level.Priority, m message.Composer) MessageInfo {
+	return MessageInfo{
+		loggable:       m.Loggable(),
+		aboveThreshold: level < info.thresholdLevel,
+	}
 }

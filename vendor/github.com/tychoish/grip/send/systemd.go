@@ -13,13 +13,12 @@ import (
 )
 
 type systemdJournal struct {
-	name           string
-	defaultLevel   journal.Priority
-	thresholdLevel journal.Priority
-	options        map[string]string
-	fallback       *log.Logger
+	name     string
+	level    LevelInfo
+	options  map[string]string
+	fallback *log.Logger
 
-	*sync.RWMutex
+	sync.RWMutex
 }
 
 // NewJournaldLogger creates a Sender object that writes log messages
@@ -30,7 +29,6 @@ func NewJournaldLogger(name string, thresholdLevel, defaultLevel level.Priority)
 	s := &systemdJournal{
 		name:    name,
 		options: make(map[string]string),
-		RWMutex: &sync.RWMutex{},
 	}
 
 	err := s.SetDefaultLevel(defaultLevel)
@@ -61,8 +59,7 @@ func (s *systemdJournal) SetName(name string) {
 }
 
 func (s *systemdJournal) Send(p level.Priority, m message.Composer) {
-	// this calls s.ThresholdLevel()
-	if !ShouldLogMessage(s, p, m) {
+	if !GetMessageInfo(s.level, p, m).ShouldLog() {
 		return
 	}
 
@@ -79,7 +76,7 @@ func (s *systemdJournal) SetDefaultLevel(p level.Priority) error {
 	defer s.Unlock()
 
 	if level.IsValidPriority(p) {
-		s.defaultLevel = s.convertPrioritySystemd(p)
+		s.level.defaultLevel = p
 		return nil
 	}
 
@@ -91,7 +88,7 @@ func (s *systemdJournal) SetThresholdLevel(p level.Priority) error {
 	defer s.Unlock()
 
 	if level.IsValidPriority(p) {
-		s.thresholdLevel = s.convertPrioritySystemd(p)
+		s.level.thresholdLevel = p
 		return nil
 	}
 
@@ -102,14 +99,14 @@ func (s *systemdJournal) DefaultLevel() level.Priority {
 	s.RLock()
 	defer s.RUnlock()
 
-	return level.Priority(s.defaultLevel)
+	return s.level.defaultLevel
 }
 
 func (s *systemdJournal) ThresholdLevel() level.Priority {
 	s.RLock()
 	defer s.RUnlock()
 
-	return level.Priority(s.thresholdLevel)
+	return s.level.thresholdLevel
 }
 
 func (s *systemdJournal) AddOption(key, value string) {
@@ -135,7 +132,7 @@ func (s *systemdJournal) convertPrioritySystemd(p level.Priority) journal.Priori
 	case p == level.Debug:
 		return journal.PriDebug
 	default:
-		return s.defaultLevel
+		return s.convertPrioritySystemd(s.level.defaultLevel)
 	}
 }
 

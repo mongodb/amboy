@@ -9,6 +9,7 @@ import (
 )
 
 func TestConditionalSendFatalExits(t *testing.T) {
+	std.UseNativeLogger()
 	if os.Getenv("SHOULD_CRASH") == "1" {
 		std.EmergencyFatalWhen(true, message.NewLinesMessage("foo"))
 		return

@@ -29,7 +29,9 @@ func (s *GripInternalSuite) SetupSuite() {
 
 func (s *GripInternalSuite) SetupTest() {
 	s.grip.SetName(s.name)
-	s.grip.SetSender(send.NewBootstrapLogger(s.grip.ThresholdLevel(), s.grip.DefaultLevel()))
+	sender, err := send.NewNativeLogger(s.name, s.grip.ThresholdLevel(), s.grip.DefaultLevel())
+	s.NoError(err)
+	s.grip.SetSender(sender)
 }
 
 func (s *GripInternalSuite) TestPanicSenderActuallyPanics() {

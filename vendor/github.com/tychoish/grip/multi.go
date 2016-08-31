@@ -8,6 +8,7 @@ package grip
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -16,18 +17,18 @@ import (
 // don't translate errors into string internally.
 //
 // type Catcher interface {
-// 	Add(error)
-// 	Len() int
-// 	HasErrors() bool
-// 	String() string
-// 	Resolve() error
+//	Add(error)
+//	Len() int
+//	HasErrors() bool
+//	String() string
+//	Resolve() error
 // }
 
 // MultiCatcher provides an interface to collect and coalesse error
 // messages within a function or other sequence of operations. Used to
 // implement a kind of "continue on error"-style operations
 type MultiCatcher struct {
-	errs []string
+	errs []error
 }
 
 // NewCatcher returns a Catcher instance that you can use to capture
@@ -40,7 +41,7 @@ func NewCatcher() *MultiCatcher {
 // internal collection of errors.
 func (c *MultiCatcher) Add(err error) {
 	if err != nil {
-		c.errs = append(c.errs, err.Error())
+		c.errs = append(c.errs, err)
 	}
 }
 
@@ -52,28 +53,29 @@ func (c *MultiCatcher) Len() int {
 // HasErrors returns true if the collector has ingested errors, and
 // false otherwise.
 func (c *MultiCatcher) HasErrors() bool {
-	return c.Len() > 0
+	return len(c.errs) > 0
 }
 
-// String implements the Stringer interface, and returns a comma
+// String implements the Stringer interface, and returns a "\n;"
 // separated string of the string representation of each error object
 // in the collector.
 func (c *MultiCatcher) String() string {
-	return strings.Join(c.errs, ", ")
+	output := make([]string, len(c.errs))
+
+	for _, err := range c.errs {
+		output = append(output, fmt.Sprintf("%+v", err.Error()))
+	}
+
+	return strings.Join(output, "\n")
 }
 
 // Resolve returns a final error object for the Catcher. If there are
 // no errors, it returns nil, and returns an error object with the
 // string form of all error objects in the collector.
-func (c *MultiCatcher) Resolve() (err error) {
-	if c.Len() == 0 {
-		err = nil
-	} else if c.Len() == 1 {
-		err = errors.New(c.errs[0])
-	} else {
-		err = errors.New(c.String())
+func (c *MultiCatcher) Resolve() error {
+	if len(c.errs) == 0 {
+		return nil
 	}
 
-	c = NewCatcher()
-	return err
+	return errors.New(c.String())
 }

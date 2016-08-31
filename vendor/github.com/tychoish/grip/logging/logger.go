@@ -43,14 +43,17 @@ func (g *Grip) SetName(name string) {
 
 // Internal
 
+func (g *Grip) getLevelInfo() send.LevelInfo {
+	return send.NewLevelInfo(g.sender.DefaultLevel(), g.sender.ThresholdLevel())
+}
+
 // For sending logging messages, in most cases, use the
 // Journaler.sender.Send() method, but we have a couple of methods to
 // use for the Panic/Fatal helpers.
-
 func (g *Grip) sendPanic(priority level.Priority, m message.Composer) {
 	// the Send method in the Sender interface will perform this
 	// check but to add fatal methods we need to do this here.
-	if !send.ShouldLogMessage(g.sender, priority, m) {
+	if !send.GetMessageInfo(g.getLevelInfo(), priority, m).ShouldLog() {
 		return
 	}
 
@@ -61,7 +64,7 @@ func (g *Grip) sendPanic(priority level.Priority, m message.Composer) {
 func (g *Grip) sendFatal(priority level.Priority, m message.Composer) {
 	// the Send method in the Sender interface will perform this
 	// check but to add fatal methods we need to do this here.
-	if !send.ShouldLogMessage(g.sender, priority, m) {
+	if !send.GetMessageInfo(g.getLevelInfo(), priority, m).ShouldLog() {
 		return
 	}
 
