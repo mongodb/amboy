@@ -9,6 +9,7 @@ import (
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/dependency"
+	"github.com/mongodb/amboy/priority"
 	"github.com/mongodb/amboy/registry"
 	"github.com/tychoish/grip"
 )
@@ -26,6 +27,7 @@ type ShellJob struct {
 	T          amboy.JobType     `bson:"type" json:"type" yaml:"type"`
 	dep        dependency.Manager
 	args       []string
+	priority.Value
 	sync.RWMutex
 }
 

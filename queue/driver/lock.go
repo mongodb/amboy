@@ -1,4 +1,4 @@
-package remote
+package driver
 
 import (
 	"sync"
@@ -11,7 +11,7 @@ import (
 // same underlying data. This implementation uses a Go mute, and is
 // useful for drivers that are shared only between queues within one
 // process.
-type LocalJobLock struct {
+type InternalLock struct {
 	name      string
 	isLocked  bool
 	mutex     sync.Mutex
@@ -19,19 +19,19 @@ type LocalJobLock struct {
 }
 
 // NewLocalJobLock Returns a new initialized lock instance.
-func NewLocalJobLock(name string) *LocalJobLock {
-	return &LocalJobLock{name: name}
+func NewInternalLock(name string) *InternalLock {
+	return &InternalLock{name: name}
 }
 
 // Name returns the name of the lock, which should also refer to the
 // name of this lock, which is the same as the job it protects.
-func (l *LocalJobLock) Name() string {
+func (l *InternalLock) Name() string {
 	return l.name
 }
 
 // Lock blocks until the mutex is secured. It takes a context object
 // to comply with the interface but the operation can not be canceled.
-func (l *LocalJobLock) Lock(_ context.Context) {
+func (l *InternalLock) Lock(_ context.Context) {
 	l.mutex.Lock()
 
 	l.metaMutex.Lock()
@@ -41,7 +41,7 @@ func (l *LocalJobLock) Lock(_ context.Context) {
 
 // Unlock blocks until the mutex is released. It takes a context object
 // to comply with the interface but the operation can not be canceled.
-func (l *LocalJobLock) Unlock(_ context.Context) {
+func (l *InternalLock) Unlock(_ context.Context) {
 	l.metaMutex.Lock()
 	defer l.metaMutex.Unlock()
 
@@ -51,7 +51,7 @@ func (l *LocalJobLock) Unlock(_ context.Context) {
 
 // IsLocked reports on the lock's current state. It takes a context object
 // to comply with the interface but the operation can not be canceled.
-func (l *LocalJobLock) IsLocked(_ context.Context) bool {
+func (l *InternalLock) IsLocked(_ context.Context) bool {
 	l.metaMutex.RLock()
 	defer l.metaMutex.RUnlock()
 
@@ -62,7 +62,7 @@ func (l *LocalJobLock) IsLocked(_ context.Context) bool {
 // implementation does not support locks in multiple systems. It takes
 // a context object to comply with the interface but the operation can
 // not be canceled.
-func (l *LocalJobLock) IsLockedElsewhere(_ context.Context) bool {
+func (l *InternalLock) IsLockedElsewhere(_ context.Context) bool {
 	// there is no elsewhere in this model, so just return is
 	// locked.
 	return false

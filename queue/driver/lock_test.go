@@ -1,33 +1,38 @@
-package remote
+package driver
 
 import (
 	"testing"
+
+	"gopkg.in/mgo.v2"
 
 	"github.com/satori/go.uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/tychoish/grip"
 	"golang.org/x/net/context"
-	"gopkg.in/mgo.v2"
 )
+
+// This suite of tests should test the interface of the JobLock
+// without depending on the implementation details of the lock
+// itself. All lock implementations should pass this suite.
 
 type LockSuite struct {
 	name            string
-	lock            RemoteJobLock
-	lockConstructor func() RemoteJobLock
+	lock            JobLock
+	lockConstructor func() JobLock
 	tearDown        func()
 	require         *require.Assertions
 	suite.Suite
 }
 
-// This suite of tests should test the interface of the RemoteJobLock
-// without depending on the implementation details of the lock
-// itself. All lock implementations should pass this suite.
+// Each lock implementation should run this suite of tests.
 
 func TestLocalLockSuite(t *testing.T) {
 	s := new(LockSuite)
-	s.lockConstructor = func() RemoteJobLock {
-		return NewLocalJobLock(uuid.NewV4().String())
+
+	s.name = "test"
+	s.lockConstructor = func() JobLock {
+		return NewInternalLock(uuid.NewV4().String())
 	}
 
 	suite.Run(t, s)
@@ -43,7 +48,7 @@ func TestMongoDBLockInterfaceSuite(t *testing.T) {
 	}
 	coll := session.DB("amboy").C(s.name + ".lock")
 	ctx, cancel := context.WithCancel(context.Background())
-	s.lockConstructor = func() RemoteJobLock {
+	s.lockConstructor = func() JobLock {
 		lock, err := NewMongoDBJobLock(ctx, uuid.NewV4().String(), coll)
 		s.NoError(err)
 		return lock
@@ -56,6 +61,8 @@ func TestMongoDBLockInterfaceSuite(t *testing.T) {
 
 	suite.Run(t, s)
 }
+
+// The implementation of the suite and its cases:
 
 func (s *LockSuite) SetupSuite() {
 	s.require = s.Require()

@@ -1,4 +1,4 @@
-package remote
+package driver
 
 import (
 	"testing"
@@ -14,7 +14,7 @@ import (
 )
 
 type MongoDBDriverSuite struct {
-	driver      *MongoDBQueueDriver
+	driver      *MongoDB
 	require     *require.Assertions
 	collections []string
 	uri         string
@@ -34,16 +34,15 @@ func (s *MongoDBDriverSuite) SetupSuite() {
 
 func (s *MongoDBDriverSuite) SetupTest() {
 	name := uuid.NewV4().String()
-	s.driver = NewMongoDBQueueDriver(name, s.uri)
+	s.driver = NewMongoDB(name, DefaultMongoDBOptions())
 	s.driver.dbName = s.dbName
 	s.collections = append(s.collections, name+".jobs", name+".locks")
 }
 
 func (s *MongoDBDriverSuite) TearDownSuite() {
 	session, err := mgo.Dial(s.uri)
-	if !s.NoError(err) {
-		defer session.Close()
-	}
+	s.NoError(err)
+	defer session.Close()
 
 	db := session.DB(s.dbName)
 	for _, coll := range s.collections {

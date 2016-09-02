@@ -34,6 +34,13 @@ type Job interface {
 	SetDependency(dependency.Manager)
 	Dependency() dependency.Manager
 
+	// Provides access to the job's priority value, which some
+	// queues may use to order job dispatching. Most Jobs
+	// implement these values by composing the
+	// amboy/priority.Value type.
+	SetPriority(int)
+	Priority() int
+
 	// Error returns an error object if the task was an
 	// error. Typically if the job has not run, this is nil.
 	Error() error

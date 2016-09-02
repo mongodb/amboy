@@ -21,6 +21,7 @@ import (
 	"github.com/mongodb/amboy/pool"
 	"github.com/pkg/errors"
 	"github.com/tychoish/grip"
+	"github.com/tychoish/grip/sometimes"
 	"golang.org/x/net/context"
 )
 
@@ -215,7 +216,8 @@ func (q *LocalUnordered) Complete(ctx context.Context, j amboy.Job) {
 func (q *LocalUnordered) Wait() {
 	for {
 		stats := q.Stats()
-		grip.Debugf("waiting for %d pending jobs (total=%d)", stats.Pending, stats.Total)
+		grip.DebugWhenf(sometimes.Fifth(),
+			"waiting for %d pending jobs (total=%d)", stats.Pending, stats.Total)
 		if stats.Pending == 0 {
 			break
 		}

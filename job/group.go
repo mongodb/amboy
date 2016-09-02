@@ -7,6 +7,7 @@ import (
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/dependency"
+	"github.com/mongodb/amboy/priority"
 	"github.com/mongodb/amboy/registry"
 	"github.com/pkg/errors"
 	"github.com/tychoish/grip"
@@ -28,6 +29,8 @@ type Group struct {
 	T        amboy.JobType                       `bson:"type" json:"type" yaml:"type"`
 	dep      dependency.Manager
 	mutex    sync.RWMutex
+
+	priority.Value
 
 	// It might be feasible to make a Queue implementation that
 	// implements the Job interface so that we can eliminate this

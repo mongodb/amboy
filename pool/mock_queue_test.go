@@ -143,11 +143,3 @@ func (q *QueueTester) Wait() {
 		}
 	}
 }
-
-func (q *QueueTester) Close() {
-	q.mutex.Lock()
-	defer q.mutex.Unlock()
-
-	close(q.toProcess)
-	q.isComplete = true
-}

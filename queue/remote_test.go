@@ -11,7 +11,7 @@ import (
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/job"
 	"github.com/mongodb/amboy/pool"
-	"github.com/mongodb/amboy/queue/remote"
+	"github.com/mongodb/amboy/queue/driver"
 	"github.com/satori/go.uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -19,41 +19,56 @@ import (
 	"github.com/tychoish/grip/level"
 )
 
+func init() {
+	grip.SetThreshold(level.Debug)
+	grip.CatchError(grip.UseNativeLogger())
+}
+
 type RemoteUnorderedSuite struct {
 	queue             *RemoteUnordered
-	driver            remote.Driver
-	driverConstructor func() remote.Driver
+	driver            driver.Driver
+	driverConstructor func() driver.Driver
 	tearDown          func()
 	require           *require.Assertions
 	canceler          context.CancelFunc
 	suite.Suite
 }
 
-func TestRemoteUnorderedLocalDriverSuite(t *testing.T) {
+func TestRemoteUnorderedInternalDriverSuite(t *testing.T) {
 	tests := new(RemoteUnorderedSuite)
-	tests.driverConstructor = func() remote.Driver {
-		return remote.NewLocalDriver()
+	tests.driverConstructor = func() driver.Driver {
+		return driver.NewInternal()
 	}
 	tests.tearDown = func() { return }
 
 	suite.Run(t, tests)
 }
 
-func TestDriverSuiteWithMongoDBInstance(t *testing.T) {
+func TestRemoteUnorderedPriorityDriverSuite(t *testing.T) {
+	tests := new(RemoteUnorderedSuite)
+	tests.driverConstructor = func() driver.Driver {
+		return driver.NewPriority()
+	}
+	tests.tearDown = func() { return }
+
+	suite.Run(t, tests)
+}
+
+func TestRemoteUnorderedMongoDBSuite(t *testing.T) {
 	tests := new(RemoteUnorderedSuite)
 	name := "test-" + uuid.NewV4().String()
 	uri := "mongodb://localhost"
-	tests.driverConstructor = func() remote.Driver {
-		return remote.NewMongoDBQueueDriver(name, uri)
+	tests.driverConstructor = func() driver.Driver {
+		return driver.NewMongoDB(name, driver.DefaultMongoDBOptions())
 	}
 
 	tests.tearDown = func() {
 		session, err := mgo.Dial(uri)
+		defer session.Close()
 		if err != nil {
 			grip.Error(err)
 			return
 		}
-		defer session.Close()
 
 		err = session.DB("amboy").C(name + ".jobs").DropCollection()
 		if err != nil {
@@ -75,8 +90,6 @@ func TestDriverSuiteWithMongoDBInstance(t *testing.T) {
 // above Test function and replacing the driverConstructor function.
 
 func (s *RemoteUnorderedSuite) SetupSuite() {
-	s.NoError(grip.UseNativeLogger())
-	grip.SetThreshold(level.Info)
 	s.require = s.Require()
 }
 
@@ -109,39 +122,41 @@ func (s *RemoteUnorderedSuite) TestJobPutIntoQueueFetchableViaGetMethod() {
 	name := j.ID()
 	s.NoError(s.queue.Put(j))
 	fetchedJob, ok := s.queue.Get(name)
-	s.True(ok)
 
-	s.IsType(j.Dependency(), fetchedJob.Dependency())
-	s.Equal(j.ID(), fetchedJob.ID())
-	s.Equal(j.Type(), fetchedJob.Type())
+	if s.True(ok) {
+		s.IsType(j.Dependency(), fetchedJob.Dependency())
+		s.Equal(j.ID(), fetchedJob.ID())
+		s.Equal(j.Type(), fetchedJob.Type())
 
-	nj := fetchedJob.(*job.ShellJob)
-	s.Equal(j.Name, nj.Name)
-	s.Equal(j.IsComplete, nj.IsComplete)
-	s.Equal(j.Command, nj.Command)
-	s.Equal(j.Output, nj.Output)
-	s.Equal(j.WorkingDir, nj.WorkingDir)
-	s.Equal(j.T, nj.T)
+		nj := fetchedJob.(*job.ShellJob)
+		s.Equal(j.Name, nj.Name)
+		s.Equal(j.IsComplete, nj.IsComplete)
+		s.Equal(j.Command, nj.Command)
+		s.Equal(j.Output, nj.Output)
+		s.Equal(j.WorkingDir, nj.WorkingDir)
+		s.Equal(j.T, nj.T)
+	}
 }
 
 func (s *RemoteUnorderedSuite) TestGetMethodHandlesMissingJobs() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	s.Nil(s.queue.Driver())
 	s.NoError(s.queue.SetDriver(s.driver))
 	s.NotNil(s.queue.Driver())
 
 	s.NoError(s.queue.Start(ctx))
 
-	job := job.NewShellJob("echo foo", "")
-	name := job.ID()
+	j := job.NewShellJob("echo foo", "")
+	name := j.ID()
 
 	// before putting a job in the queue, it shouldn't exist.
 	fetchedJob, ok := s.queue.Get(name)
 	s.False(ok)
 	s.Nil(fetchedJob)
 
-	s.NoError(s.queue.Put(job))
+	s.NoError(s.queue.Put(j))
 
 	// wrong name also returns error case
 	fetchedJob, ok = s.queue.Get(name + name)
@@ -247,36 +262,59 @@ func (s *RemoteUnorderedSuite) TestStartMethodCanBeCalledMultipleTimes() {
 	}
 }
 
-// func (s *RemoteUnorderedSuite) TestNextMethodSkipsLockedJobs() {
-//	j := job.NewShellJob("echo foo", "")
-//	jobFree := job.NewShellJob("echo bar", "")
+func (s *RemoteUnorderedSuite) TestNextMethodSkipsLockedJobs() {
+	s.queue.SetDriver(s.driver)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	numLocked := 0
+	testJobs := make(map[string]*job.ShellJob)
+	testLocks := make(map[string]driver.JobLock)
+	s.queue.started = true
 
-//	s.queue.SetDriver(s.driver)
-//	s.NoError(s.queue.Put(j))
+	s.queue.Start(ctx)
+	go s.queue.jobServer(ctx)
 
-//	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
-//	defer cancel()
+	for i := 0; i < 30; i++ {
+		cmd := fmt.Sprintf("echo 'foo: %d'", i)
+		j := job.NewShellJob(cmd, "")
+		testJobs[j.ID()] = j
 
-//	lock, err := s.driver.GetLock(ctx, j)
-//	s.NoError(err)
-//	s.NoError(s.queue.Put(jobFree))
-//	lock.Lock(ctx)
+		s.NoError(s.queue.Put(j))
 
-//	for {
-//		work := s.queue.Next(ctx)
-//		if work != nil {
-//			s.Equal(work.ID(), jobFree.ID())
-//			return
-//		}
+		if i%3 == 0 {
+			numLocked++
+			lock, err := s.driver.GetLock(ctx, j)
+			if !s.NoError(err) {
+				continue
+			}
+			testLocks[j.ID()] = lock
+			lock.Lock(ctx)
+		}
 
-//		select {
-//		case <-ctx.Done():
-//			s.NoError(err)
-//			s.Fail("reached timeout")
-//			break
-//		default:
-//			continue
-//		}
-//	}
+	}
 
-// }
+	observed := 0
+checkResults:
+	for {
+		select {
+		case <-ctx.Done():
+			break checkResults
+		default:
+			work := s.queue.Next(ctx)
+			if work == nil {
+				break checkResults
+			}
+
+			s.queue.Complete(ctx, work)
+
+			_, ok := testLocks[work.ID()]
+			s.False(ok)
+			observed++
+
+			if observed == len(testJobs)-len(testLocks) {
+				break checkResults
+			}
+		}
+	}
+	s.Equal(observed, len(testJobs)-len(testLocks))
+}

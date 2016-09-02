@@ -1,7 +1,7 @@
 # start project configuration
 name := amboy
 buildDir := build
-packages := dependency job registry pool queue queue-remote
+packages := dependency job registry pool queue queue-driver
 orgPath := github.com/mongodb
 projectPath := $(orgPath)/$(name)
 # end project configuration

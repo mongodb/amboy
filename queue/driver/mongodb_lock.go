@@ -1,17 +1,15 @@
-package remote
+package driver
 
 import (
 	"os"
 	"sync"
 	"time"
 
-	"golang.org/x/net/context"
-
-	"gopkg.in/mgo.v2"
-
 	"github.com/pkg/errors"
 	"github.com/satori/go.uuid"
 	"github.com/tychoish/grip"
+	"golang.org/x/net/context"
+	"gopkg.in/mgo.v2"
 )
 
 const (
@@ -284,7 +282,11 @@ updateLoop:
 			// this thread can exit.
 			ctxForCheck, _ := context.WithTimeout(ctx, operationTimeout)
 
-			if !l.isLockedUnsafe(ctxForCheck) {
+			l.mutex.RLock()
+			notLocked := !l.isLockedUnsafe(ctxForCheck)
+			l.mutex.RUnlock()
+
+			if notLocked {
 				break updateLoop
 			}
 

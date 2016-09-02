@@ -1,4 +1,4 @@
-package remote
+package driver
 
 import (
 	"github.com/mongodb/amboy"
@@ -16,7 +16,7 @@ type Driver interface {
 	Reload(amboy.Job) amboy.Job
 	Save(amboy.Job) error
 
-	GetLock(context.Context, amboy.Job) (RemoteJobLock, error)
+	GetLock(context.Context, amboy.Job) (JobLock, error)
 
 	Jobs() <-chan amboy.Job
 	Next() amboy.Job
@@ -24,8 +24,8 @@ type Driver interface {
 	Stats() Stats
 }
 
-// Stats is a common structure that Drivers use to report on the
-// current state of their managed jobs and locks.
+// Stats is a common structure that queues' storage Drivers use
+// to report on the current state of their managed jobs and locks.
 type Stats struct {
 	Locked   int `bson:"locked" json:"locked" yaml:"locked"`
 	Unlocked int `bson:"unlocked" json:"unlocked" yaml:"unlocked"`
@@ -34,10 +34,10 @@ type Stats struct {
 	Pending  int `bson:"pending" json:"pending" yaml:"pending"`
 }
 
-// RemoteJobLock defines an interface for Queue objects to interact
+// JobLock defines an interface for Queue objects to interact
 // with a lock that's persisted externally. This lock can't protect
 // resources within a process (use sync.Mutex instead.)
-type RemoteJobLock interface {
+type JobLock interface {
 	Name() string
 	Lock(context.Context)
 	Unlock(context.Context)

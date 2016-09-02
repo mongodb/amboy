@@ -1,4 +1,4 @@
-package remote
+package driver
 
 import (
 	"sync"
@@ -13,28 +13,47 @@ import (
 	"gopkg.in/mgo.v2/bson"
 )
 
-// MongoDBQueueDriver is a type that represents and wraps a queues
+// MongoDB is a type that represents and wraps a queues
 // persistence of jobs *and* locks to a MongoDB instance.
-type MongoDBQueueDriver struct {
+type MongoDB struct {
 	name            string
 	mongodbURI      string
 	dbName          string
 	jobsCollection  *mgo.Collection
 	locksCollection *mgo.Collection
 	canceler        context.CancelFunc
+	priority        bool
 	locks           struct {
 		cache map[string]*MongoDBJobLock
 		mutex sync.RWMutex
 	}
 }
 
-// NewMongoDBQueueDriver creates a driver object given a name, which
+type MongoDBOptions struct {
+	URI      string
+	DB       string
+	Priority bool
+
+	// TODO it might be good to set lock timeouts here.
+}
+
+func DefaultMongoDBOptions() MongoDBOptions {
+	return MongoDBOptions{
+		URI:      "mongodb://localhost:27017",
+		DB:       "amboy",
+		Priority: false,
+	}
+
+}
+
+// NewMongoDB creates a driver object given a name, which
 // serves as a prefix for collection names, and a MongoDB connection
-func NewMongoDBQueueDriver(name, uri string) *MongoDBQueueDriver {
-	d := &MongoDBQueueDriver{
+func NewMongoDB(name string, opts MongoDBOptions) *MongoDB {
+	d := &MongoDB{
 		name:       name,
-		dbName:     "amboy",
-		mongodbURI: uri,
+		dbName:     opts.DB,
+		mongodbURI: opts.URI,
+		priority:   opts.Priority,
 	}
 	d.locks.cache = make(map[string]*MongoDBJobLock)
 
@@ -43,7 +62,7 @@ func NewMongoDBQueueDriver(name, uri string) *MongoDBQueueDriver {
 
 // Open creates a connection to MongoDB, and returns an error if
 // there's a problem connecting.
-func (d *MongoDBQueueDriver) Open(ctx context.Context) error {
+func (d *MongoDB) Open(ctx context.Context) error {
 	if d.canceler != nil {
 		return nil
 	}
@@ -71,16 +90,21 @@ func (d *MongoDBQueueDriver) Open(ctx context.Context) error {
 	return nil
 }
 
-func (d *MongoDBQueueDriver) setupDB(session *mgo.Session) error {
+func (d *MongoDB) setupDB(session *mgo.Session) error {
 	d.jobsCollection = session.DB(d.dbName).C(d.name + ".jobs")
 	d.locksCollection = session.DB(d.dbName).C(d.name + ".locks")
 	return errors.Wrap(d.createIndexes(), "problem building indexes")
 }
 
-func (d *MongoDBQueueDriver) createIndexes() error {
+func (d *MongoDB) createIndexes() error {
 	catcher := grip.NewCatcher()
 
-	catcher.Add(d.jobsCollection.EnsureIndexKey("completed", "dispatched"))
+	if d.priority {
+		catcher.Add(d.jobsCollection.EnsureIndexKey("completed", "dispatched", "priority"))
+	} else {
+		catcher.Add(d.jobsCollection.EnsureIndexKey("completed", "dispatched"))
+	}
+
 	catcher.Add(d.locksCollection.EnsureIndexKey("locked"))
 
 	grip.WarningWhen(catcher.HasErrors(), "problem creating indexes")
@@ -90,7 +114,7 @@ func (d *MongoDBQueueDriver) createIndexes() error {
 }
 
 // Close terminates the connection to the database server.
-func (d *MongoDBQueueDriver) Close() {
+func (d *MongoDB) Close() {
 	if d.canceler != nil {
 		d.canceler()
 	}
@@ -98,7 +122,7 @@ func (d *MongoDBQueueDriver) Close() {
 
 // Put saves a job object to the persistence layer, and returns an
 // error from the MongoDB driver as needed.
-func (d *MongoDBQueueDriver) Put(j amboy.Job) error {
+func (d *MongoDB) Put(j amboy.Job) error {
 	i, err := registry.MakeJobInterchange(j)
 	if err != nil {
 		return errors.Wrap(err, "problem converting job to interchange format")
@@ -115,7 +139,7 @@ func (d *MongoDBQueueDriver) Put(j amboy.Job) error {
 
 // Get takes the name of a job and returns an amboy.Job object from
 // the persistence layer for the job matching that unique id.
-func (d *MongoDBQueueDriver) Get(name string) (amboy.Job, error) {
+func (d *MongoDB) Get(name string) (amboy.Job, error) {
 	j := &registry.JobInterchange{}
 	err := d.jobsCollection.FindId(name).One(j)
 	grip.Debugf("GET operation: [name='%s', payload='%+v' error='%v']", name, j, err)
@@ -136,7 +160,7 @@ func (d *MongoDBQueueDriver) Get(name string) (amboy.Job, error) {
 // Reload takes am amboy.Job object and returns. This operation logs
 // errors, but will return the original document if it encounters an
 // error reloading a document.
-func (d *MongoDBQueueDriver) Reload(j amboy.Job) amboy.Job {
+func (d *MongoDB) Reload(j amboy.Job) amboy.Job {
 	newJob, err := d.Get(j.ID())
 	if err != nil {
 		grip.Warningf("encountered error reloading job %s: %s",
@@ -151,7 +175,7 @@ func (d *MongoDBQueueDriver) Reload(j amboy.Job) amboy.Job {
 // layer. This operation is based on an update, and an existing job
 // with the same "ID()" property must exist. Use "Put()" to insert a
 // new job into the database.
-func (d *MongoDBQueueDriver) Save(j amboy.Job) error {
+func (d *MongoDB) Save(j amboy.Job) error {
 	name := j.ID()
 	job, err := registry.MakeJobInterchange(j)
 	if err != nil {
@@ -163,6 +187,12 @@ func (d *MongoDBQueueDriver) Save(j amboy.Job) error {
 		return errors.Wrapf(err, "problem updating ")
 	}
 
+	d.locks.mutex.Lock()
+	defer d.locks.mutex.Unlock()
+	if _, ok := d.locks.cache[name]; ok && j.Completed() {
+		delete(d.locks.cache, name)
+	}
+
 	grip.Debugf("saved job '%s'", name)
 
 	return nil
@@ -172,7 +202,7 @@ func (d *MongoDBQueueDriver) Save(j amboy.Job) error {
 // driver. This includes all completed, pending, and locked
 // jobs. Errors, including those with connections to MongoDB or with
 // corrupt job documents, are logged.
-func (d *MongoDBQueueDriver) Jobs() <-chan amboy.Job {
+func (d *MongoDB) Jobs() <-chan amboy.Job {
 	output := make(chan amboy.Job)
 	go func() {
 		defer close(output)
@@ -194,10 +224,15 @@ func (d *MongoDBQueueDriver) Jobs() <-chan amboy.Job {
 }
 
 // Next returns one job, not marked complete from the database.
-func (d *MongoDBQueueDriver) Next() amboy.Job {
+func (d *MongoDB) Next() amboy.Job {
 	j := &registry.JobInterchange{}
 
-	err := d.jobsCollection.Find(bson.M{"completed": false, "dispatched": false}).One(j)
+	query := d.jobsCollection.Find(bson.M{"completed": false, "dispatched": false})
+	if d.priority {
+		query = query.Sort("-priority")
+	}
+
+	err := query.One(j)
 	if err != nil {
 		grip.DebugWhenln(err.Error() != "not found",
 			"could not find a job ready for processing:", err.Error())
@@ -225,7 +260,7 @@ func (d *MongoDBQueueDriver) Next() amboy.Job {
 // performs a number of asynchronous queries to collect data, and in
 // an active system with a number of active queues, stats may report
 // incongruous data.
-func (d *MongoDBQueueDriver) Stats() Stats {
+func (d *MongoDB) Stats() Stats {
 	stats := Stats{}
 
 	numJobs, err := d.jobsCollection.Count()
@@ -255,7 +290,7 @@ func (d *MongoDBQueueDriver) Stats() Stats {
 
 // GetLock takes the name of a job and returns, creating if necessary,
 // if the job exists, a MongoDBJobLock instance for that job.
-func (d *MongoDBQueueDriver) GetLock(ctx context.Context, job amboy.Job) (RemoteJobLock, error) {
+func (d *MongoDB) GetLock(ctx context.Context, job amboy.Job) (JobLock, error) {
 	name := job.ID()
 	start := time.Now()
 

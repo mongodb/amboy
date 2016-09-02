@@ -15,6 +15,7 @@ type JobInterchange struct {
 	Name       string                 `json:"name" bson:"_id" yaml:"name"`
 	Type       string                 `json:"type" bson:"type" yaml:"type"`
 	Version    int                    `json:"version" bson:"version" yaml:"version"`
+	Priority   int                    `bson:"priority" json:"priority" yaml:"priority"`
 	Completed  bool                   `bson:"completed" json:"completed" yaml:"completed"`
 	Dispatched bool                   `bson:"dispatched" json:"dispatched" yaml:"dispatched"`
 	Job        []byte                 `json:"job" bson:"job" yaml:"job"`
@@ -40,6 +41,7 @@ func MakeJobInterchange(j amboy.Job) (*JobInterchange, error) {
 		Name:       j.ID(),
 		Type:       typeInfo.Name,
 		Version:    typeInfo.Version,
+		Priority:   j.Priority(),
 		Completed:  j.Completed(),
 		Job:        data,
 		Dependency: dep,
@@ -72,16 +74,13 @@ func ConvertToJob(j *JobInterchange) (amboy.Job, error) {
 		return nil, err
 	}
 
-	// this works, because we want to use all the data from the
-	// interchange object, but want to use the type information
-	// associated with the object that we produced with the
-	// factory.
-
 	err = job.Import(j.Job)
 	job.SetDependency(dep)
 	if err != nil {
 		return nil, err
 	}
+
+	job.SetPriority(j.Priority)
 
 	return job, nil
 }

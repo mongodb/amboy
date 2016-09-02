@@ -6,7 +6,7 @@ import (
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/pool"
-	"github.com/mongodb/amboy/queue/remote"
+	"github.com/mongodb/amboy/queue/driver"
 	"github.com/pkg/errors"
 	"github.com/tychoish/grip"
 	"golang.org/x/net/context"
@@ -17,7 +17,7 @@ import (
 // beyond what's provided by the driver.
 type RemoteUnordered struct {
 	started bool
-	driver  remote.Driver
+	driver  driver.Driver
 	channel chan amboy.Job
 	runner  amboy.Runner
 	mutex   sync.RWMutex
@@ -47,8 +47,13 @@ func (q *RemoteUnordered) Put(j amboy.Job) error {
 // reflects the existence of a job of that name in the queue's
 // storage.
 func (q *RemoteUnordered) Get(name string) (amboy.Job, bool) {
+	if q.driver == nil {
+		return nil, false
+	}
+
 	job, err := q.driver.Get(name)
 	if err != nil {
+		grip.Debug(err)
 		return nil, false
 	}
 
@@ -212,14 +217,14 @@ func (q *RemoteUnordered) SetRunner(r amboy.Runner) error {
 // Driver provides access to the embedded driver instance which
 // provides access to the Queue's persistence layer. This method is
 // not part of the amboy.Queue interface.
-func (q *RemoteUnordered) Driver() remote.Driver {
+func (q *RemoteUnordered) Driver() driver.Driver {
 	return q.driver
 }
 
 // SetDriver allows callers to inject at runtime alternate driver
 // instances. It is an error to change Driver instances after starting
 // a queue. This method is not part of the amboy.Queue interface.
-func (q *RemoteUnordered) SetDriver(d remote.Driver) error {
+func (q *RemoteUnordered) SetDriver(d driver.Driver) error {
 	if q.Started() {
 		return errors.New("cannot change drivers after starting queue")
 	}
@@ -268,8 +273,7 @@ func (q *RemoteUnordered) Start(ctx context.Context) error {
 func (q *RemoteUnordered) Wait() {
 	for {
 		stats := q.Stats()
-
-		if stats.Pending == 0 {
+		if stats.Total == stats.Completed {
 			break
 		}
 		time.Sleep(50 * time.Millisecond)

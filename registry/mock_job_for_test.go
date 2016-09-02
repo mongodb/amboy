@@ -8,6 +8,7 @@ import (
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/dependency"
+	"github.com/mongodb/amboy/priority"
 )
 
 func init() {
@@ -21,6 +22,8 @@ type JobTest struct {
 	shouldFail bool
 	T          amboy.JobType
 	dep        dependency.Manager
+
+	priority.Value
 }
 
 func NewTestJob(content string) *JobTest {
@@ -48,42 +51,42 @@ func jobTestFactory() amboy.Job {
 	}
 }
 
-func (f *JobTest) ID() string {
-	return f.Name
+func (j *JobTest) ID() string {
+	return j.Name
 }
 
-func (f *JobTest) Run() {
-	f.complete = true
+func (j *JobTest) Run() {
+	j.complete = true
 }
 
-func (f *JobTest) Error() error {
-	if f.shouldFail {
+func (j *JobTest) Error() error {
+	if j.shouldFail {
 		return errors.New("poisoned task")
 	}
 
 	return nil
 }
 
-func (f *JobTest) Completed() bool {
-	return f.complete
+func (j *JobTest) Completed() bool {
+	return j.complete
 }
 
-func (f *JobTest) Type() amboy.JobType {
-	return f.T
+func (j *JobTest) Type() amboy.JobType {
+	return j.T
 }
 
-func (f *JobTest) Dependency() dependency.Manager {
-	return f.dep
+func (j *JobTest) Dependency() dependency.Manager {
+	return j.dep
 }
 
-func (f *JobTest) SetDependency(d dependency.Manager) {
-	f.dep = d
+func (j *JobTest) SetDependency(d dependency.Manager) {
+	j.dep = d
 }
 
-func (f *JobTest) Export() ([]byte, error) {
-	return amboy.ConvertTo(f.Type().Format, f)
+func (j *JobTest) Export() ([]byte, error) {
+	return amboy.ConvertTo(j.Type().Format, f)
 }
 
-func (f *JobTest) Import(data []byte) error {
-	return amboy.ConvertFrom(f.Type().Format, data, f)
+func (j *JobTest) Import(data []byte) error {
+	return amboy.ConvertFrom(j.Type().Format, data, f)
 }

@@ -1,19 +1,21 @@
-package remote
+package driver
 
 import (
+	"context"
 	"fmt"
 	"testing"
-
-	mgo "gopkg.in/mgo.v2"
 
 	"github.com/mongodb/amboy/job"
 	"github.com/satori/go.uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/tychoish/grip"
-	"github.com/tychoish/grip/level"
-	"golang.org/x/net/context"
+	"gopkg.in/mgo.v2"
 )
+
+// All drivers should be able to pass this suite of tests which
+// exercise the complete functionality of the interface, without
+// reaching into the implementation details of any specific interface.
 
 type DriverSuite struct {
 	uuid              string
@@ -24,20 +26,23 @@ type DriverSuite struct {
 	suite.Suite
 }
 
-func init() {
-	grip.SetThreshold(level.Debug)
-	grip.CatchError(grip.UseNativeLogger())
-}
-
-// All drivers should be able to pass this suite of tests which
-// exercise the complete functionality of the interface, without
-// reaching into the implementation details of any specific interface.
+// Each driver should invoke this suite:
 
 func TestDriverSuiteWithLocalInstance(t *testing.T) {
 	tests := new(DriverSuite)
 	tests.uuid = uuid.NewV4().String()
 	tests.driverConstructor = func() Driver {
-		return NewLocalDriver()
+		return NewInternal()
+	}
+
+	suite.Run(t, tests)
+}
+
+func TestDriverSuiteWithPriorityInstance(t *testing.T) {
+	tests := new(DriverSuite)
+	tests.uuid = uuid.NewV4().String()
+	tests.driverConstructor = func() Driver {
+		return NewPriority()
 	}
 
 	suite.Run(t, tests)
@@ -46,9 +51,9 @@ func TestDriverSuiteWithLocalInstance(t *testing.T) {
 func TestDriverSuiteWithMongoDBInstance(t *testing.T) {
 	tests := new(DriverSuite)
 	tests.uuid = uuid.NewV4().String()
-	mDriver := NewMongoDBQueueDriver(
+	mDriver := NewMongoDB(
 		"test-"+tests.uuid,
-		"mongodb://localhost")
+		DefaultMongoDBOptions())
 	// "mongodb://localhost:27021,localhost:27022?replicaSet=rs0-1447273659")
 	tests.driverConstructor = func() Driver {
 		return mDriver
@@ -62,6 +67,8 @@ func TestDriverSuiteWithMongoDBInstance(t *testing.T) {
 
 	suite.Run(t, tests)
 }
+
+// Implementation of the suite:
 
 func (s *DriverSuite) SetupSuite() {
 	s.require = s.Require()
@@ -112,16 +119,16 @@ func (s *DriverSuite) TestPutAndGetRoundTripObjects() {
 	s.NoError(err)
 
 	s.Equal(1, s.driver.Stats().Total)
-
 	n, err := s.driver.Get(name)
-	s.NoError(err)
 
-	nsh := n.(*job.ShellJob)
-	s.Equal(nsh.Name, j.Name)
-	s.Equal(nsh.Command, j.Command)
+	if s.NoError(err) {
+		nsh := n.(*job.ShellJob)
+		s.Equal(nsh.Name, j.Name)
+		s.Equal(nsh.Command, j.Command)
 
-	s.Equal(n.ID(), name)
-	s.Equal(1, s.driver.Stats().Total)
+		s.Equal(n.ID(), name)
+		s.Equal(1, s.driver.Stats().Total)
+	}
 }
 
 func (s *DriverSuite) TestReloadRefreshesJobFromMemory() {
@@ -195,15 +202,21 @@ func (s *DriverSuite) TestNextMethodReturnsJob() {
 	j := job.NewShellJob("echo foo", "")
 
 	s.NoError(s.driver.Put(j))
-	s.Equal(1, s.driver.Stats().Total)
+	stats := s.driver.Stats()
+	s.Equal(1, stats.Total)
+	s.Equal(1, stats.Pending)
 
 	nj := s.driver.Next()
-	s.Equal(0, s.driver.Stats().Locked)
-	s.Equal(1, s.driver.Stats().Pending)
-	s.Equal(j.ID(), nj.ID())
+	stats = s.driver.Stats()
+	s.Equal(0, stats.Locked)
+	s.Equal(1, stats.Pending)
+	s.Equal(0, stats.Complete)
 
-	// won't dispatch the same job more than once.
-	s.Nil(s.driver.Next())
+	if s.NotNil(nj) {
+		s.Equal(j.ID(), nj.ID())
+		// won't dispatch the same job more than once.
+		s.Nil(s.driver.Next())
+	}
 }
 
 func (s *DriverSuite) TestNextMethodSkipsCompletedJos() {

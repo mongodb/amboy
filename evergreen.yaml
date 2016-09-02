@@ -53,7 +53,7 @@ variables:
       - name: test-registry
       - name: test-pool
       - name: test-queue
-      - name: test-queue-remote
+      - name: test-queue-driver
   - &dev-tasks
       # dev tasks contains all the test suites plus coverage and
       # linting. Only need/want to run lint/coverage on one builder.
@@ -64,7 +64,7 @@ variables:
       - name: test-registry
       - name: test-pool
       - name: test-queue
-      - name: test-queue-remote
+      - name: test-queue-driver
       - name: coverage
   - &race-detector-tasks
       - name: build-race
@@ -73,7 +73,7 @@ variables:
       - name: race-registry
       - name: race-pool
       - name: race-queue
-      - name: race-queue-remote
+      - name: race-queue-driver
 
 
 #######################################
@@ -196,7 +196,7 @@ tasks:
       - func: upload-coverage
         vars: { name: "queue"}
       - func: upload-coverage
-        vars: { name: "queue-remote"}
+        vars: { name: "queue-driver"}
 
   # define tasks for all test suites (modules)
   - <<: *run-go-test-suite
@@ -210,7 +210,7 @@ tasks:
   - <<: *run-go-test-suite-with-mongodb
     name: test-queue
   - <<: *run-go-test-suite-with-mongodb
-    name: test-queue-remote
+    name: test-queue-driver
 
   # run the suites with the race detector (one variant only)
   - <<: *run-go-test-suite
@@ -234,7 +234,7 @@ tasks:
     depends_on:
       - name: build-race
   - <<: *run-go-test-suite-with-mongodb
-    name: race-queue-remote
+    name: race-queue-driver
     depends_on:
       - name: build-race
 

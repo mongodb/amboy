@@ -1,57 +1,55 @@
-package remote
+package driver
 
 import (
-	"errors"
-	"fmt"
 	"sync"
 
-	"golang.org/x/net/context"
-
 	"github.com/mongodb/amboy"
+	"github.com/pkg/errors"
 	"github.com/tychoish/grip"
+	"golang.org/x/net/context"
 )
 
-// LocalDriver implements the driver interface, but rather than
+// Internal implements the driver interface, but rather than
 // connecting to a remote data source, this implementation is mostly
 // for testing the queue implementation locally, and providing a proof
 // of concept for the remote driver. May also be useful for converting
 // a remote queue into a local-only architecture in a
 // dependency-injection situation.
-type LocalDriver struct {
+type Internal struct {
 	jobs struct {
-		dispatched map[string]bool
+		dispatched map[string]struct{}
 		m          map[string]amboy.Job
 		sync.RWMutex
 	}
 	locks struct {
-		m map[string]RemoteJobLock
+		m map[string]JobLock
 		sync.RWMutex
 	}
 	closer context.CancelFunc
 }
 
-// NewLocalDriver creates a local persistence layer object.
-func NewLocalDriver() *LocalDriver {
-	d := &LocalDriver{}
+// NewInternal creates a local persistence layer object.
+func NewInternal() *Internal {
+	d := &Internal{}
 	d.jobs.m = make(map[string]amboy.Job)
-	d.jobs.dispatched = make(map[string]bool)
-	d.locks.m = make(map[string]RemoteJobLock)
+	d.jobs.dispatched = make(map[string]struct{})
+	d.locks.m = make(map[string]JobLock)
 
 	return d
 }
 
-// Open is a noop for the LocalDriver implementation, and exists to
+// Open is a noop for the Internal implementation, and exists to
 // satisfy the Driver interface.
-func (d *LocalDriver) Open(ctx context.Context) error {
+func (d *Internal) Open(ctx context.Context) error {
 	_, cancel := context.WithCancel(ctx)
 	d.closer = cancel
 
 	return nil
 }
 
-// Close is a noop for the LocalDriver implementation, and exists to
+// Close is a noop for the Internal implementation, and exists to
 // satisfy the Driver interface.
-func (d *LocalDriver) Close() {
+func (d *Internal) Close() {
 	if d.closer != nil {
 		d.closer()
 	}
@@ -59,7 +57,7 @@ func (d *LocalDriver) Close() {
 
 // Put saves a new job in the queue, and returns an error if the job
 // already exists in the persistence system.
-func (d *LocalDriver) Put(j amboy.Job) error {
+func (d *Internal) Put(j amboy.Job) error {
 	d.jobs.Lock()
 	defer d.jobs.Unlock()
 
@@ -72,13 +70,13 @@ func (d *LocalDriver) Put(j amboy.Job) error {
 
 	}
 
-	return fmt.Errorf("job named %s exists, use Save", name)
+	return errors.Errorf("job named %s exists, use Save", name)
 }
 
 // Get retrieves a job object from the persistence system based on the
 // name (ID) of the job. If no job exists by this name, the error is
 // non-nil.
-func (d *LocalDriver) Get(name string) (amboy.Job, error) {
+func (d *Internal) Get(name string) (amboy.Job, error) {
 	d.jobs.RLock()
 	defer d.jobs.RUnlock()
 
@@ -88,13 +86,13 @@ func (d *LocalDriver) Get(name string) (amboy.Job, error) {
 		return j, nil
 	}
 
-	return nil, fmt.Errorf("no job named %s exists", name)
+	return nil, errors.Errorf("no job named %s exists", name)
 }
 
 // Reload takes a job object and returns a more up to date version of
 // the same job object. If there is an error retrieving the document,
 // reload will return the original document. All errors are logged.
-func (d *LocalDriver) Reload(j amboy.Job) amboy.Job {
+func (d *Internal) Reload(j amboy.Job) amboy.Job {
 	newJob, err := d.Get(j.ID())
 
 	if err != nil {
@@ -108,7 +106,7 @@ func (d *LocalDriver) Reload(j amboy.Job) amboy.Job {
 // Save takes a job and persists it in the storage for this driver. If
 // there is no job with a matching ID, then this operation returns an
 // error.
-func (d *LocalDriver) Save(j amboy.Job) error {
+func (d *Internal) Save(j amboy.Job) error {
 	d.jobs.Lock()
 	defer d.jobs.Unlock()
 	name := j.ID()
@@ -118,14 +116,20 @@ func (d *LocalDriver) Save(j amboy.Job) error {
 		grip.Debugf("saving job %s", name)
 		return nil
 	}
-	return fmt.Errorf("cannot save a job named %s, which doesn't exist. use Put", name)
 
+	d.locks.Lock()
+	defer d.locks.Unlock()
+	if _, ok := d.locks.m[name]; ok && j.Completed() {
+		delete(d.locks.m, name)
+	}
+
+	return errors.Errorf("cannot save a job named %s, which doesn't exist. use Put", name)
 }
 
-// GetLock takes a Job and returns a RemoteJobLock implementation for
+// GetLock takes a Job and returns a JobLock implementation for
 // this job, with an error value if there was a problem creating the
-// lock. In the LocalDriver implementation, this operation has the side effect of adding
-func (d *LocalDriver) GetLock(ctx context.Context, j amboy.Job) (RemoteJobLock, error) {
+// lock. In the Internal implementation, this operation has the side effect of adding
+func (d *Internal) GetLock(ctx context.Context, j amboy.Job) (JobLock, error) {
 	name := j.ID()
 
 	if ctx.Err() != nil {
@@ -137,7 +141,7 @@ func (d *LocalDriver) GetLock(ctx context.Context, j amboy.Job) (RemoteJobLock, 
 
 	_, ok := d.jobs.m[name]
 	if !ok {
-		return nil, fmt.Errorf("job %s is not tracked", name)
+		return nil, errors.Errorf("job %s is not tracked", name)
 	}
 
 	if ctx.Err() != nil {
@@ -152,14 +156,14 @@ func (d *LocalDriver) GetLock(ctx context.Context, j amboy.Job) (RemoteJobLock, 
 		return lock, nil
 	}
 
-	lock = NewLocalJobLock(name)
+	lock = NewInternalLock(name)
 	d.locks.m[name] = lock
 	return lock, nil
 }
 
 // Jobs is a generator of all Job objects stored by the driver. There
 // is no additional filtering of the jobs produced by this generator.
-func (d *LocalDriver) Jobs() <-chan amboy.Job {
+func (d *Internal) Jobs() <-chan amboy.Job {
 	d.jobs.RLock()
 	defer d.jobs.RUnlock()
 	output := make(chan amboy.Job, len(d.jobs.m))
@@ -179,7 +183,7 @@ func (d *LocalDriver) Jobs() <-chan amboy.Job {
 // Next returns a job that is not complete from the queue. If there
 // are no pending jobs, then this method returns nil, but does not
 // block.
-func (d *LocalDriver) Next() amboy.Job {
+func (d *Internal) Next() amboy.Job {
 	d.jobs.Lock()
 	defer d.jobs.Unlock()
 
@@ -187,14 +191,12 @@ func (d *LocalDriver) Next() amboy.Job {
 	// this method, because there is no distinction internally
 	// between storage for completed, dispatched, and pending work.
 	for name, job := range d.jobs.m {
-		if exists := d.jobs.dispatched[name]; exists {
+		if _, ok := d.jobs.dispatched[name]; ok {
 			continue
 		}
 
-		if !job.Completed() {
-			d.jobs.dispatched[name] = true
-			return job
-		}
+		d.jobs.dispatched[name] = struct{}{}
+		return job
 	}
 
 	// if we get here then there are no pending jobs and we should
@@ -205,7 +207,7 @@ func (d *LocalDriver) Next() amboy.Job {
 // Stats iterates through all of the jobs stored in the driver and
 // determines how many locked, completed, and pending jobs are stored
 // in the queue.
-func (d *LocalDriver) Stats() Stats {
+func (d *Internal) Stats() Stats {
 	stats := Stats{}
 
 	ctx := context.TODO()

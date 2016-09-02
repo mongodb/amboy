@@ -1,4 +1,4 @@
-package remote
+package driver
 
 import (
 	"testing"
@@ -8,29 +8,29 @@ import (
 	"golang.org/x/net/context"
 )
 
-type LocalDriverSuite struct {
-	driver  *LocalDriver
+type InternalSuite struct {
+	driver  *Internal
 	require *require.Assertions
 	suite.Suite
 }
 
-func TestLocalDriverSuite(t *testing.T) {
-	suite.Run(t, new(LocalDriverSuite))
+func TestInternalSuite(t *testing.T) {
+	suite.Run(t, new(InternalSuite))
 }
 
-func (s *LocalDriverSuite) SetupSuite() {
+func (s *InternalSuite) SetupSuite() {
 	s.require = s.Require()
 }
 
-func (s *LocalDriverSuite) SetupTest() {
-	s.driver = NewLocalDriver()
+func (s *InternalSuite) SetupTest() {
+	s.driver = NewInternal()
 }
 
-func (s *LocalDriverSuite) TestLocalDriverImplementsDriverInterface() {
+func (s *InternalSuite) TestInternalImplementsDriverInterface() {
 	s.Implements((*Driver)(nil), s.driver)
 }
 
-func (s *LocalDriverSuite) TestLocalDriverInitialValues() {
+func (s *InternalSuite) TestInternalInitialValues() {
 	stats := s.driver.Stats()
 	s.Equal(0, stats.Complete)
 	s.Equal(0, stats.Locked)
@@ -42,14 +42,14 @@ func (s *LocalDriverSuite) TestLocalDriverInitialValues() {
 	s.Len(s.driver.locks.m, 0)
 }
 
-func (s *LocalDriverSuite) TestOpenShouldReturnNil() {
+func (s *InternalSuite) TestOpenShouldReturnNil() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	s.NoError(s.driver.Open(ctx))
 }
 
-func (s *LocalDriverSuite) TestOpenShouldReturnNilOnSuccessiveCalls() {
+func (s *InternalSuite) TestOpenShouldReturnNilOnSuccessiveCalls() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -62,7 +62,7 @@ func (s *LocalDriverSuite) TestOpenShouldReturnNilOnSuccessiveCalls() {
 	s.Equal(before, after)
 }
 
-func (s *LocalDriverSuite) TestCloseShouldBeANoop() {
+func (s *InternalSuite) TestCloseShouldBeANoop() {
 	before := s.driver.Stats()
 	for i := 0; i < 200; i++ {
 		s.driver.Close()
