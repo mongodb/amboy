@@ -1,7 +1,6 @@
 package pool
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
@@ -9,6 +8,7 @@ import (
 	"github.com/mongodb/amboy/job"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"golang.org/x/net/context"
 )
 
 // UnorderedGroupSuite is a collection of tests for an alternate pool

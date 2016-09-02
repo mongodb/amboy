@@ -144,8 +144,9 @@ func (r *Group) startMerger(ctx context.Context) <-chan *workUnit {
 // Runner has already started.
 func (r *Group) Start(ctx context.Context) error {
 	if r.Started() {
-		// PoolGrooup noops on successive Start operations so
-		// that so that multiple queues can call start.
+		// The group pool no-ops on successive Start
+		// operations so that so that multiple queues can call
+		// start.
 		return nil
 	}
 

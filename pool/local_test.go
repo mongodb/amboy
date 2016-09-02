@@ -1,7 +1,6 @@
 package pool
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/tychoish/grip"
 	"github.com/tychoish/grip/level"
+	"golang.org/x/net/context"
 )
 
 type LocalWorkersSuite struct {

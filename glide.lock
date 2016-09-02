@@ -52,4 +52,8 @@ imports:
   version: a2a552218a0e22e6fb22469f49ef371b492f6178
   subpackages:
   - container/intsets
+- name: github.com/pkg/errors
+  version: 17b591df37844cde689f4d5813e5cea0927d8dd2
+- name: golang.org/x/net
+  version: 1358eff22f0dd0c54fc521042cc607f6ff4b531a
 devImports: []

@@ -11,3 +11,5 @@ import:
 - package: github.com/pmezard/go-difflib
 - package: github.com/davecgh/go-spew
 - package: github.com/satori/go.uuid
+- package: github.com/pkg/errors
+- package: golang.org/x/net
