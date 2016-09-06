@@ -11,7 +11,7 @@ projectPath := $(orgPath)/$(name)
 #   separately. This is a temporary solution: eventually we should
 #   vendorize all of these dependencies.
 lintDeps += github.com/alecthomas/gocyclo
-lintDeps += github.com/golang/lint/golint
+lintDeps += github.com/golang/lint
 lintDeps += github.com/gordonklaus/ineffassign
 lintDeps += github.com/jgautheron/goconst
 lintDeps += github.com/kisielk/errcheck
@@ -38,7 +38,7 @@ lintArgs += --disable="gotype"
 #  add and configure additional linters
 lintArgs += --enable="go fmt -s" --enable="goimports"
 lintArgs += --linter='misspell:misspell ./*.go:PATH:LINE:COL:MESSAGE' --enable=misspell
-lintArgs += --line-length=100 --dupl-threshold=100 --cyclo-over=15
+lintArgs += --line-length=100 --dupl-threshold=175 --cyclo-over=17
 #  two similar functions triggered the duplicate warning, but they're not.
 lintArgs += --exclude="duplicate of registry.go"
 lintArgs += --exclude="don.t use underscores.*_DependencyState.*"
@@ -74,8 +74,8 @@ $(gopath)/src/%:
 
 
 # userfacing targets for basic build and development operations
-lint:$(gopath)/src/$(projectPath) $(lintDeps)
-	$(gopath)/bin/gometalinter $(lintArgs) ./... | sed 's%$</%%'
+lint:$(lintDeps)
+	$(gopath)/bin/gometalinter $(lintArgs) ./...
 lint-deps:$(lintDeps)
 build:$(deps) $(srcFiles) $(gopath)/src/$(projectPath)
 	$(vendorGopath) go build $(foreach pkg,$(packages),./$(pkg))

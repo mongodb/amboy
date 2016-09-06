@@ -24,7 +24,6 @@ import (
 type Group struct {
 	size     int
 	started  bool
-	catcher  grip.MultiCatcher
 	queues   []amboy.Queue
 	wg       sync.WaitGroup
 	mutex    sync.RWMutex
