@@ -92,6 +92,6 @@ func (m MessageInfo) ShouldLog() bool {
 func GetMessageInfo(info LevelInfo, level level.Priority, m message.Composer) MessageInfo {
 	return MessageInfo{
 		loggable:       m.Loggable(),
-		aboveThreshold: level < info.thresholdLevel,
+		aboveThreshold: level <= info.thresholdLevel,
 	}
 }
