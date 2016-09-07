@@ -136,7 +136,7 @@ functions:
           cd mongodb
           curl ${mongodb_url} -o mongodb.tgz
 
-          tar -zvf mongodb.tgz
+          tar -zxvf mongodb.tgz
           chmod +x ./mongodb-*/bin/*
           mv ./mongodb-*/bin/* .
           rm -rf db_files
@@ -156,7 +156,7 @@ functions:
       params:
         script: |
           cd mongodb
-          ./mongo${extension} --nodb --eval 'assert.soon(function(x){try{var d = new Mongo("localhost:27017"); return true}catch(e){return false}}, "timed out connecting")'
+          ./mongo${extension|} --nodb --eval 'assert.soon(function(x){try{var d = new Mongo("localhost:27017"); return true}catch(e){return false}}, "timed out connecting")'
           echo "mongod is up."
 
 
