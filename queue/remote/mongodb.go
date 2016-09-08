@@ -21,7 +21,6 @@ type MongoDBQueueDriver struct {
 	dbName          string
 	jobsCollection  *mgo.Collection
 	locksCollection *mgo.Collection
-	session         *mgo.Session
 	canceler        context.CancelFunc
 	locks           struct {
 		cache map[string]*MongoDBJobLock
@@ -45,7 +44,7 @@ func NewMongoDBQueueDriver(name, uri string) *MongoDBQueueDriver {
 // Open creates a connection to MongoDB, and returns an error if
 // there's a problem connecting.
 func (d *MongoDBQueueDriver) Open(ctx context.Context) error {
-	if d.session != nil {
+	if d.canceler != nil {
 		return nil
 	}
 
@@ -56,22 +55,18 @@ func (d *MongoDBQueueDriver) Open(ctx context.Context) error {
 
 	dCtx, cancel := context.WithCancel(ctx)
 	d.canceler = cancel
-	d.session = session
-
-	err = d.setupDB(session)
-	if err != nil {
-		return errors.Wrap(err, "problem setting up database")
-	}
 
 	go func() {
 		<-dCtx.Done()
-
-		if d.session != nil {
-			d.session.Close()
-			d.session = nil
-			grip.Info("closing session for mongodb driver")
-		}
+		session.Close()
+		grip.Info("closing session for mongodb driver")
 	}()
+
+	err = d.setupDB(session)
+
+	if err != nil {
+		return errors.Wrap(err, "problem setting up database")
+	}
 
 	return nil
 }

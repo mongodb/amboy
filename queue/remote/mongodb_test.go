@@ -59,14 +59,11 @@ func (s *MongoDBDriverSuite) TestOpenCloseAffectState() {
 	ctx := context.Background()
 
 	s.Nil(s.driver.canceler)
-	s.Nil(s.driver.session)
 	s.NoError(s.driver.Open(ctx))
 	s.NotNil(s.driver.canceler)
-	s.NotNil(s.driver.session)
 
 	s.driver.Close()
 	s.NotNil(s.driver.canceler)
 	// sleep to give it a chance to switch to close the connection
 	time.Sleep(10 * time.Millisecond)
-	s.Nil(s.driver.session)
 }
