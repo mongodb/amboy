@@ -6,35 +6,18 @@ orgPath := github.com/mongodb
 projectPath := $(orgPath)/$(name)
 # end project configuration
 
-# start dependency declarations
+
+# start linting configuration
 #   package, testing, and linter dependencies specified
 #   separately. This is a temporary solution: eventually we should
 #   vendorize all of these dependencies.
-lintDeps += github.com/alecthomas/gocyclo
-lintDeps += github.com/golang/lint
-lintDeps += github.com/gordonklaus/ineffassign
-lintDeps += github.com/jgautheron/goconst
-lintDeps += github.com/kisielk/errcheck
-lintDeps += github.com/mdempsky/unconvert
-lintDeps += github.com/mibk/dupl
-lintDeps += github.com/mvdan/interfacer
-lintDeps += github.com/opennota/check
-lintDeps += github.com/tsenart/deadcode
-lintDeps += github.com/client9/misspell
-lintDeps += github.com/walle/lll
-lintDeps += honnef.co/go/simple
-lintDeps += honnef.co/go/staticcheck
-# end dependency declarations
-
-# start linting configuration
+lintDeps := github.com/alecthomas/gometalinter
 #   include test files and give linters 40s to run to avoid timeouts
-lintArgs := --deadline=40s --tests --vendor
-#   skip the build directory and the gopath,
-lintArgs += --skip="$(buildDir)" --skip="buildscripts"
-#  the go type package produces false positives for (sub)packages,
-#  because it doesn't parse dependency information from compiled go
-#  resources correctly.
-lintArgs += --disable="gotype"
+lintArgs := --tests --deadline=1m --vendor
+#   gotype produces false positives because it reads .a files which
+#   are rarely up to date.
+lintArgs += --disable="gotype" --disable="gas"
+lintArgs += --skip="build" --skip="buildscripts"
 #  add and configure additional linters
 lintArgs += --enable="go fmt -s" --enable="goimports"
 lintArgs += --linter='misspell:misspell ./*.go:PATH:LINE:COL:MESSAGE' --enable=misspell
