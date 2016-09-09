@@ -296,7 +296,7 @@ buildvariants:
   - name: rhel55
     display_name: RHEL 5.5 (gccgo)
     expansions:
-      mongodb_url: https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-rhel55-3.2.9.tgz
+      mongodb_url: http://fastdl.mongodb.org/linux/mongodb-linux-x86_64-rhel55-3.2.9.tgz
       build_env: "LD_LIBRARY_PATH=/opt/openssl/lib64 PATH=/opt/mongodbtoolchain/v2/bin:$PATH"
     run_on:
       - rhel55-test

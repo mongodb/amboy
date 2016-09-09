@@ -112,7 +112,7 @@ $(buildDir)/$(name).race:$(gopath)/src/$(projectPath) $(srcFiles) $(deps)
 makeArgs := --no-print-directory
 race-%:
 	@$(MAKE) $(makeArgs) $(buildDir)/race.$(subst -,/,$*).out
-	@grep -s -q -e "^PASS" $(buildDir)/race.$(subst -,/,$*).out
+	@grep -e "^PASS" $(buildDir)/race.$(subst /,-,$*).out
 test-%:
 	@$(MAKE) $(makeArgs) $(buildDir)/test.$(subst -,/,$*).out
 	@grep -e "^PASS" $(buildDir)/test.$(subst /,-,$*).out
