@@ -1,10 +1,10 @@
 package pool
 
 import (
-	"errors"
 	"sync"
 
 	"github.com/mongodb/amboy"
+	"github.com/pkg/errors"
 	"github.com/tychoish/grip"
 	"golang.org/x/net/context"
 )
@@ -104,7 +104,10 @@ func (q *QueueTester) Start(ctx context.Context) error {
 		return nil
 	}
 
-	q.pool.Start(ctx)
+	err := q.pool.Start(ctx)
+	if err != nil {
+		return errors.Wrap(err, "problem starting worker pool")
+	}
 
 	q.mutex.Lock()
 	defer q.mutex.Unlock()

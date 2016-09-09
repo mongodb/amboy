@@ -158,7 +158,7 @@ func TestSmokeRemoteUnorderedWorkerPoolsWithMongoDBDriver(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(baseCtx)
 		d := remote.NewMongoDBQueueDriver(name, uri)
-		q.SetDriver(d)
+		assert.NoError(q.SetDriver(d))
 
 		runUnorderedSmokeTest(ctx, q, poolSize, assert)
 		cancel()

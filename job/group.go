@@ -203,10 +203,15 @@ func (g *Group) SetDependency(d dependency.Manager) {
 	g.dep = d
 }
 
+// Export serializes the job object according to the Format specified
+// in the the JobType argument.
 func (g *Group) Export() ([]byte, error) {
 	return amboy.ConvertTo(g.Type().Format, g)
 }
 
+// Import takes a byte array, and attempts to marshal that data into
+// the current job object according to the format specified in the Job
+// type definition for this object.
 func (g *Group) Import(data []byte) error {
 	return amboy.ConvertFrom(g.Type().Format, data, g)
 }

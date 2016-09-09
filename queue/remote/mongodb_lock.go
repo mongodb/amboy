@@ -31,6 +31,8 @@ func init() {
 	}
 }
 
+// MongoDBJobLock provides an implementation of the JobLock interface
+// that stores lock information and state in MongoDB.
 type MongoDBJobLock struct {
 	name       string
 	last       *jobLock
@@ -39,6 +41,9 @@ type MongoDBJobLock struct {
 	count      int
 }
 
+// NewMongoDBJobLock creates and returns a new lock instance. The
+// operation also persists this lock into the collection and returns
+// an error if there are problems with the collection.
 func NewMongoDBJobLock(ctx context.Context, name string, collection *mgo.Collection) (*MongoDBJobLock, error) {
 	l := &MongoDBJobLock{
 		name:       name,
@@ -179,6 +184,8 @@ getLockLoop:
 	}
 }
 
+// Unlock releases the lock, checking first that the current process
+// has right to hold the lock..
 func (l *MongoDBJobLock) Unlock(ctx context.Context) {
 	// the challenge here is not in actually unlocking it, but in
 	// determining if we have the authority to release the lock.

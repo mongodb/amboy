@@ -15,7 +15,6 @@ amboy.Runner interface.
 package queue
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -26,6 +25,7 @@ import (
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/dependency"
 	"github.com/mongodb/amboy/pool"
+	"github.com/pkg/errors"
 	"github.com/tychoish/grip"
 	"golang.org/x/net/context"
 )
@@ -231,17 +231,21 @@ func (q *LocalOrdered) Start(ctx context.Context) error {
 		return nil
 	}
 
-	q.runner.Start(ctx)
+	err := q.runner.Start(ctx)
+	if err != nil {
+		return errors.Wrap(err, "problem starting worker pool")
+	}
+
 	q.started = true
 
-	err := q.buildGraph()
+	err = q.buildGraph()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "problem building dependency graph")
 	}
 
 	ordered, err := topo.Sort(q.tasks.graph)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "error ordering dependencies")
 	}
 
 	go q.jobDispatch(ctx, ordered)

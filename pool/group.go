@@ -190,6 +190,8 @@ func (r *Group) Start(ctx context.Context) error {
 	return nil
 }
 
+// Close cancels all pending workers and waits for the running
+// processes to return.
 func (r *Group) Close() {
 	if r.canceler != nil {
 		r.canceler()

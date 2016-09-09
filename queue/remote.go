@@ -12,6 +12,9 @@ import (
 	"golang.org/x/net/context"
 )
 
+// RemoteUnordered are queues that use a Driver as backend for job
+// storage and processing and do not impose any additional ordering
+// beyond what's provided by the driver.
 type RemoteUnordered struct {
 	started bool
 	driver  remote.Driver
@@ -20,6 +23,8 @@ type RemoteUnordered struct {
 	mutex   sync.RWMutex
 }
 
+// NewRemoteUnordered returns a queue that has been initialized with a
+// local worker pool Runner instance of the specified size.
 func NewRemoteUnordered(size int) *RemoteUnordered {
 	q := &RemoteUnordered{
 		channel: make(chan amboy.Job),
@@ -31,10 +36,16 @@ func NewRemoteUnordered(size int) *RemoteUnordered {
 	return q
 }
 
+// Put adds a Job to the queue. It is generally an error to add the
+// same job to a queue more than once, but this depends on the
+// implementation of the underlying driver.
 func (q *RemoteUnordered) Put(j amboy.Job) error {
 	return q.driver.Put(j)
 }
 
+// Get retrieves a job from the queue's storage. The second value
+// reflects the existence of a job of that name in the queue's
+// storage.
 func (q *RemoteUnordered) Get(name string) (amboy.Job, bool) {
 	job, err := q.driver.Get(name)
 	if err != nil {
@@ -61,6 +72,10 @@ func (q *RemoteUnordered) jobServer(ctx context.Context) {
 	}
 }
 
+// Next returns a Job from the queue. Returns a nil Job object if the
+// context is canceled. The operation is blocking until an
+// undispatched, unlocked job is available. This operation takes a job
+// lock.
 func (q *RemoteUnordered) Next(ctx context.Context) amboy.Job {
 	start := time.Now()
 	count := 0
@@ -81,7 +96,7 @@ func (q *RemoteUnordered) Next(ctx context.Context) amboy.Job {
 			}
 
 			lock.Lock(ctx)
-			grip.Infof("returning job from remote source, count = %d; duration = %s",
+			grip.Debugf("returning job from remote source, count = %d; duration = %s",
 				count, time.Since(start))
 			return job
 		}
@@ -89,6 +104,7 @@ func (q *RemoteUnordered) Next(ctx context.Context) amboy.Job {
 
 }
 
+// Started reports if the queue has begun processing jobs.
 func (q *RemoteUnordered) Started() bool {
 	q.mutex.RLock()
 	defer q.mutex.RUnlock()
@@ -96,6 +112,8 @@ func (q *RemoteUnordered) Started() bool {
 	return q.started
 }
 
+// Complete takes a context and, asynchronously, marks the job
+// complete, in the queue.
 func (q *RemoteUnordered) Complete(ctx context.Context, j amboy.Job) {
 	go func() {
 		const retryInterval = 1 * time.Second
@@ -143,6 +161,7 @@ func (q *RemoteUnordered) Complete(ctx context.Context, j amboy.Job) {
 	}()
 }
 
+// Results provides a generator that iterates all completed jobs.
 func (q *RemoteUnordered) Results() <-chan amboy.Job {
 	output := make(chan amboy.Job)
 	go func() {
@@ -157,6 +176,8 @@ func (q *RemoteUnordered) Results() <-chan amboy.Job {
 	return output
 }
 
+// Stats returns a amboy.QueueStats object that reflects the progress
+// jobs in the queue.
 func (q *RemoteUnordered) Stats() amboy.QueueStats {
 	dStats := q.driver.Stats()
 	output := amboy.QueueStats{
@@ -169,10 +190,16 @@ func (q *RemoteUnordered) Stats() amboy.QueueStats {
 	return output
 }
 
+// Runner returns (a pointer generally) to the instances' embedded
+// amboy.Runner instance. Typically used to call the runner's close
+// method.
 func (q *RemoteUnordered) Runner() amboy.Runner {
 	return q.runner
 }
 
+// SetRunner allows callers to inject alternate runner implementations
+// before starting the queue. After the queue is started it is an
+// error to use SetRunner.
 func (q *RemoteUnordered) SetRunner(r amboy.Runner) error {
 	if q.runner.Started() {
 		return errors.New("cannot change runners after starting")
@@ -182,10 +209,16 @@ func (q *RemoteUnordered) SetRunner(r amboy.Runner) error {
 	return nil
 }
 
+// Driver provides access to the embedded driver instance which
+// provides access to the Queue's persistence layer. This method is
+// not part of the amboy.Queue interface.
 func (q *RemoteUnordered) Driver() remote.Driver {
 	return q.driver
 }
 
+// SetDriver allows callers to inject at runtime alternate driver
+// instances. It is an error to change Driver instances after starting
+// a queue. This method is not part of the amboy.Queue interface.
 func (q *RemoteUnordered) SetDriver(d remote.Driver) error {
 	if q.Started() {
 		return errors.New("cannot change drivers after starting queue")
@@ -195,6 +228,11 @@ func (q *RemoteUnordered) SetDriver(d remote.Driver) error {
 	return nil
 }
 
+// Start initiates the job dispatching and prcessing functions of the
+// queue. If the queue is started this is a noop, however, if the
+// driver or runner are not initialized, this operation returns an
+// error. To release the resources created when starting the queue,
+// cancel the context used when starting the queue.
 func (q *RemoteUnordered) Start(ctx context.Context) error {
 	if q.Started() {
 		return nil
@@ -226,6 +264,7 @@ func (q *RemoteUnordered) Start(ctx context.Context) error {
 	return nil
 }
 
+// Wait blocks until there are no pending jobs in the queue.
 func (q *RemoteUnordered) Wait() {
 	for {
 		stats := q.Stats()

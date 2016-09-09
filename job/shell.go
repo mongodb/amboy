@@ -170,10 +170,15 @@ func (j *ShellJob) Type() amboy.JobType {
 	return j.T
 }
 
+// Export serializes the job object according to the Format specified
+// in the the JobType argument.
 func (j *ShellJob) Export() ([]byte, error) {
 	return amboy.ConvertTo(j.Type().Format, j)
 }
 
+// Import takes a byte array, and attempts to marshal that data into
+// the current job object according to the format specified in the Job
+// type definition for this object.
 func (j *ShellJob) Import(data []byte) error {
 	err := amboy.ConvertFrom(j.Type().Format, data, j)
 	j.getArgsFromCommand()

@@ -255,7 +255,7 @@ func (s *DriverSuite) TestJobsMethodReturnsAllJobs() {
 	for idx := range [24]int{} {
 		name := fmt.Sprintf("echo test num %d", idx)
 		j := job.NewShellJob(name, "")
-		s.driver.Put(j)
+		s.NoError(s.driver.Put(j))
 		mocks[j.ID()] = j
 	}
 

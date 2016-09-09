@@ -17,7 +17,7 @@ lintArgs := --tests --deadline=1m --vendor
 #   gotype produces false positives because it reads .a files which
 #   are rarely up to date.
 lintArgs += --disable="gotype" --disable="gas"
-lintArgs += --skip="build" --skip="buildscripts"
+lintArgs += --skip="$(buildDir)" --skip="buildscripts"
 #  add and configure additional linters
 lintArgs += --enable="go fmt -s" --enable="goimports"
 lintArgs += --linter='misspell:misspell ./*.go:PATH:LINE:COL:MESSAGE' --enable=misspell

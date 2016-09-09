@@ -157,6 +157,8 @@ func (d *LocalDriver) GetLock(ctx context.Context, j amboy.Job) (RemoteJobLock, 
 	return lock, nil
 }
 
+// Jobs is a generator of all Job objects stored by the driver. There
+// is no additional filtering of the jobs produced by this generator.
 func (d *LocalDriver) Jobs() <-chan amboy.Job {
 	d.jobs.RLock()
 	defer d.jobs.RUnlock()
@@ -174,10 +176,16 @@ func (d *LocalDriver) Jobs() <-chan amboy.Job {
 	return output
 }
 
+// Next returns a job that is not complete from the queue. If there
+// are no pending jobs, then this method returns nil, but does not
+// block.
 func (d *LocalDriver) Next() amboy.Job {
 	d.jobs.Lock()
 	defer d.jobs.Unlock()
 
+	// TODO: this is a particularly inefficient implementation of
+	// this method, because there is no distinction internally
+	// between storage for completed, dispatched, and pending work.
 	for name, job := range d.jobs.m {
 		if exists := d.jobs.dispatched[name]; exists {
 			continue
@@ -194,6 +202,9 @@ func (d *LocalDriver) Next() amboy.Job {
 	return nil
 }
 
+// Stats iterates through all of the jobs stored in the driver and
+// determines how many locked, completed, and pending jobs are stored
+// in the queue.
 func (d *LocalDriver) Stats() Stats {
 	stats := Stats{}
 

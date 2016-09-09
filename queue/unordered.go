@@ -14,12 +14,12 @@ of amboy.Runner interface.
 package queue
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/pool"
+	"github.com/pkg/errors"
 	"github.com/tychoish/grip"
 	"golang.org/x/net/context"
 )
@@ -128,7 +128,11 @@ func (q *LocalUnordered) Start(ctx context.Context) error {
 		return nil
 	}
 
-	q.runner.Start(ctx)
+	err := q.runner.Start(ctx)
+	if err != nil {
+		return errors.Wrap(err, "problem starting worker pool")
+	}
+
 	q.started = true
 
 	grip.Info("job server running")

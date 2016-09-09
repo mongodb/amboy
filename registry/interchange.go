@@ -88,7 +88,7 @@ func ConvertToJob(j *JobInterchange) (amboy.Job, error) {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// dependencyInterchange objects are a standard form for
+// DependencyInterchange objects are a standard form for
 // dependency.Manager objects. Amboy (should) only pass
 // DependencyInterchange objects between processes, which have the
 // type information in easy to access and index-able locations.
