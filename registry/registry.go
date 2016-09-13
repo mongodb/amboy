@@ -83,3 +83,18 @@ func (r *typeRegistry) getDependencyFactory(name string) (DependencyFactory, err
 
 	return factory, nil
 }
+
+func (r *typeRegistry) jobTypeNames() <-chan string {
+	output := make(chan string)
+
+	go func() {
+		r.job.l.RLock()
+		defer r.job.l.RUnlock()
+		for j := range r.job.m {
+			output <- j
+		}
+		close(output)
+	}()
+
+	return output
+}

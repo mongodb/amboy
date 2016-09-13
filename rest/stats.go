@@ -1,0 +1,36 @@
+package rest
+
+import (
+	"net/http"
+
+	"github.com/tychoish/gimlet"
+)
+
+type status struct {
+	Status            string   `bson:"string" json:"string" yaml:"string"`
+	QueueRunning      bool     `bson:"queue_running" json:"queue_running" yaml:"queue_running"`
+	PendingJobs       int      `bson:"pending_jobs,omitempty" json:"pending_jobs,omitempty" yaml:"pending_jobs,omitempty"`
+	SupportedJobTypes []string `bson:supported_job_types json:supported_job_types yaml:supported_job_types`
+}
+
+func (s *Service) getStatus() status {
+	output := status{
+		SupportedJobTypes: s.registeredTypes,
+	}
+
+	if s.queue != nil && s.queue.Started() {
+		output.Status = "ok"
+		output.QueueRunning = true
+		output.PendingJobs = s.queue.Stats().Pending
+	} else {
+		output.Status = "degraded"
+	}
+
+	return output
+}
+
+func (s *Service) Status(w http.ResponseWriter, r *http.Request) {
+	st := s.getStatus()
+
+	gimlet.WriteJSON(w, st)
+}

@@ -22,3 +22,8 @@ func AddJobType(name string, f JobFactory) {
 func GetJobFactory(name string) (JobFactory, error) {
 	return amboyRegistry.getJobFactory(name)
 }
+
+// JobTypeNames returns an iterator of all registered Job types
+func JobTypeNames() <-chan string {
+	return amboyRegistry.jobTypeNames()
+}

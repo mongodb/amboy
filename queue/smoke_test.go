@@ -387,6 +387,36 @@ func TestSmokeMultipleQueuesWithPriorityDriver(t *testing.T) {
 	cancel()
 }
 
+func TestSmokeLimitedSizeQueueWithSingleWorker(t *testing.T) {
+	assert := assert.New(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	q := NewLocalLimitedSize(1, 150)
+	runner := pool.NewSingleRunner()
+	runner.SetQueue(q)
+
+	assert.NoError(q.SetRunner(runner))
+
+	runUnorderedSmokeTest(ctx, q, 1, assert)
+}
+
+func TestSmokeLimitedSizeQueueWithWorkerPools(t *testing.T) {
+	assert := assert.New(t)
+	baseCtx := context.Background()
+
+	for _, poolSize := range []int{2, 4, 6, 7, 16, 32, 64} {
+		grip.Infoln("testing priority queue for:", poolSize)
+		ctx, cancel := context.WithCancel(baseCtx)
+
+		q := NewLocalLimitedSize(poolSize, 150)
+		runUnorderedSmokeTest(ctx, q, poolSize, assert)
+
+		cancel()
+	}
+}
+
 func cleanupMongoDB(name string, opt driver.MongoDBOptions) error {
 	start := time.Now()
 
