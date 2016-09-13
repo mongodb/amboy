@@ -230,7 +230,7 @@ func (s *DriverSuite) TestNextMethodSkipsCompletedJos() {
 	s.Equal(0, s.driver.Stats().Locked)
 	s.Equal(1, s.driver.Stats().Complete)
 
-	s.Nil(s.driver.Next())
+	s.Nil(s.driver.Next(), fmt.Sprintf("%T", s.driver))
 }
 
 func (s *DriverSuite) TestGetLockMethodReturnsRelevantLock() {

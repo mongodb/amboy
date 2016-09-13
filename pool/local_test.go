@@ -94,7 +94,6 @@ func (s *LocalWorkersSuite) TestPoolStartsAndProcessesJobs() {
 	s.True(s.queue.Started())
 
 	s.queue.Wait()
-	s.queue.Close() // this should call pool.Wait()
 
 	counter := 0
 	for j := range s.queue.Results() {

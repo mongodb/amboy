@@ -59,7 +59,7 @@ func (s *MongoDBLockSuite) TearDownSuite() {
 
 }
 
-func (s *MongoDBLockSuite) TestIsLockedElseWhere() {
+func (s *MongoDBLockSuite) TestIsLockedElsewhere() {
 	ctx := context.Background()
 	s.lock.Lock(ctx)
 
@@ -71,7 +71,7 @@ func (s *MongoDBLockSuite) TestIsLockedElseWhere() {
 	s.True(s.lock.IsLockedElsewhere(ctx), fmt.Sprintf("%+v", s.lock.last))
 }
 
-func (s *MongoDBLockSuite) TestIsLockedElseWhere() {
+func (s *MongoDBLockSuite) TestIsNotLockedElsewhere() {
 	ctx := context.Background()
 	s.lock.Lock(ctx)
 

@@ -74,7 +74,7 @@ func (s *SingleRunnerSuite) TestPoolStartsAndProcessesJobs() {
 	s.True(s.queue.Started())
 
 	s.queue.Wait()
-	s.queue.Close() // this should call pool.Wait()
+
 	for _, job := range jobs {
 		s.True(job.Completed())
 	}

@@ -195,6 +195,11 @@ func (d *Internal) Next() amboy.Job {
 			continue
 		}
 
+		if job.Completed() {
+			d.jobs.dispatched[name] = struct{}{}
+			continue
+		}
+
 		d.jobs.dispatched[name] = struct{}{}
 		return job
 	}
