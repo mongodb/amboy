@@ -84,9 +84,9 @@ func (j *JobTest) SetDependency(d dependency.Manager) {
 }
 
 func (j *JobTest) Export() ([]byte, error) {
-	return amboy.ConvertTo(j.Type().Format, f)
+	return amboy.ConvertTo(j.Type().Format, j)
 }
 
 func (j *JobTest) Import(data []byte) error {
-	return amboy.ConvertFrom(j.Type().Format, data, f)
+	return amboy.ConvertFrom(j.Type().Format, data, j)
 }
