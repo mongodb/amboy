@@ -1,7 +1,6 @@
 package driver
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/tychoish/grip"
+	"golang.org/x/net/context"
 	"gopkg.in/mgo.v2"
 )
 
