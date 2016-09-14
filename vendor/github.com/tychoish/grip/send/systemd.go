@@ -67,7 +67,7 @@ func (s *systemdJournal) Send(p level.Priority, m message.Composer) {
 	err := journal.Send(msg, s.convertPrioritySystemd(p), s.options)
 	if err != nil {
 		s.fallback.Println("systemd journaling error:", err.Error())
-		s.fallback.Printf("[p=%d]: %s\n", int(p), msg)
+		s.fallback.Printf("[p=%s]: %s\n", p, msg)
 	}
 }
 
