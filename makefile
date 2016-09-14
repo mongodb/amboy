@@ -112,7 +112,7 @@ html-coverage-%:
 #    that the tests actually need to run. (The "build" target is
 #    intentional and makes these targets rerun as expected.)
 testRunDeps := $(testSrcFiles) build
-testArgs := -v --timeout=10m
+testArgs := -v --timeout=20m
 #    implementation for package coverage and test running,mongodb to produce
 #    and save test output.
 $(buildDir)/coverage.%.html:$(buildDir)/coverage.%.out
