@@ -59,6 +59,7 @@ t:
 
 # userfacing targets for basic build and development operations
 lint:$(lintDeps)
+	@-$(gopath)/bin/gometalinter --install >/dev/null
 	$(gopath)/bin/gometalinter $(lintArgs) ./...
 lint-deps:$(lintDeps)
 build:$(deps) $(srcFiles) $(gopath)/src/$(projectPath)
