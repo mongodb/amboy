@@ -1,7 +1,6 @@
 package driver
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/mongodb/amboy"
@@ -15,6 +14,9 @@ import (
 //
 ////////////////////////////////////////////////////////////////////////
 
+// Priority implements the Driver interface, wrapping a
+// PriorityStorage instance. This allows "local" (i.e. intraprocess)
+// shared queues that dispatch jobs in priority order.
 type Priority struct {
 	storage *PriorityStorage
 	closer  context.CancelFunc
@@ -24,6 +26,7 @@ type Priority struct {
 	}
 }
 
+// NewPriority returns an initialized Priority Driver instances.
 func NewPriority() *Priority {
 	p := &Priority{
 		storage: NewPriorityStorage(),
@@ -34,6 +37,9 @@ func NewPriority() *Priority {
 	return p
 }
 
+// Open initilizes the resources of the Driver, and is part of the
+// Driver interface. In the case of the Priority Driver, this
+// operation cannot error.
 func (p *Priority) Open(ctx context.Context) error {
 	if p.closer != nil {
 		return nil
@@ -45,12 +51,17 @@ func (p *Priority) Open(ctx context.Context) error {
 	return nil
 }
 
+// Close release all resources associated with the Driver instance.
 func (p *Priority) Close() {
 	if p.closer != nil {
 		p.closer()
 	}
 }
 
+// Put inserts a job into the Drivers' backing storage. For
+// consistency with other Driver's the Job's ID must be unique,
+// otherwise this operation will return an error. To update an
+// existing job use the Save method.
 func (p *Priority) Put(j amboy.Job) error {
 	if _, ok := p.storage.Get(j.ID()); ok {
 		return errors.Errorf("job %s exists, use Save", j.ID())
@@ -61,6 +72,8 @@ func (p *Priority) Put(j amboy.Job) error {
 	return nil
 }
 
+// Get returns a job object, specified by name/ID from the backing
+// storage. If the job doesn't exist the error value is non-nil.
 func (p *Priority) Get(name string) (amboy.Job, error) {
 	job, ok := p.storage.Get(name)
 	if !ok {
@@ -70,6 +83,9 @@ func (p *Priority) Get(name string) (amboy.Job, error) {
 	return job, nil
 }
 
+// Reload updates returns a, potentially updated, version of the Job
+// from the Driver's backing storage. If there is no matching job
+// stored in the Driver, Reload returns the same job.
 func (p *Priority) Reload(j amboy.Job) amboy.Job {
 	job, ok := p.storage.Get(j.ID())
 
@@ -80,6 +96,9 @@ func (p *Priority) Reload(j amboy.Job) amboy.Job {
 	return job
 }
 
+// Save updates the stored version of the job in the Driver's backing
+// storage. If the job is not tracked by the Driver, this operation is
+// an error.
 func (p *Priority) Save(j amboy.Job) error {
 	name := j.ID()
 
@@ -98,10 +117,14 @@ func (p *Priority) Save(j amboy.Job) error {
 	return nil
 }
 
+// Jobs returns an iterator of all Job objects tracked by the Driver.
 func (p *Priority) Jobs() <-chan amboy.Job {
 	return p.storage.Contents()
 }
 
+// Next returns the next, highest priority Job from the Driver's
+// backing storage. If there are no queued jobs, the job object is
+// nil.
 func (p *Priority) Next() amboy.Job {
 	j := p.storage.Pop()
 
@@ -113,6 +136,8 @@ func (p *Priority) Next() amboy.Job {
 
 }
 
+// Stats returns a report of the Driver's current state in the form of
+// a driver.Stats document.
 func (p *Priority) Stats() Stats {
 	stats := Stats{
 		Total: p.storage.Size(),
@@ -141,16 +166,21 @@ func (p *Priority) Stats() Stats {
 	return stats
 }
 
+// GetLock produces the JobLock object for the specified Job.
 func (p *Priority) GetLock(ctx context.Context, j amboy.Job) (JobLock, error) {
 	name := j.ID()
 
 	_, ok := p.storage.Get(name)
 	if !ok {
-		return nil, fmt.Errorf("job %s is not tracked", name)
+		return nil, errors.Errorf("job %s is not tracked", name)
 	}
 
 	p.locks.mutex.Lock()
 	defer p.locks.mutex.Unlock()
+
+	if ctx.Err() != nil {
+		return nil, errors.New("job canceled before getting lock")
+	}
 
 	lock, ok := p.locks.cache[name]
 	if ok {

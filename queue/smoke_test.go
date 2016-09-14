@@ -188,7 +188,7 @@ func TestSmokeRemoteUnorderedWorkerPoolsWithInternalDriver(t *testing.T) {
 
 		q := NewRemoteUnordered(poolSize)
 		d := driver.NewInternal()
-		q.SetDriver(d)
+		assert.NoError(q.SetDriver(d))
 		runUnorderedSmokeTest(ctx, q, poolSize, assert)
 
 		cancel()
@@ -250,7 +250,7 @@ func TestSmokeRemoteUnorderedWorkerPoolsWithMongoDBDriver(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(baseCtx)
 		d := driver.NewMongoDB(name, opts)
-		q.SetDriver(d)
+		assert.NoError(q.SetDriver(d))
 
 		runUnorderedSmokeTest(ctx, q, poolSize, assert)
 		cancel()
@@ -271,7 +271,7 @@ func TestSmokePriorityQueueWithSingleWorker(t *testing.T) {
 
 	q := NewLocalPriorityQueue(1)
 	runner := pool.NewSingleRunner()
-	runner.SetQueue(q)
+	assert.NoError(runner.SetQueue(q))
 
 	assert.NoError(q.SetRunner(runner))
 
@@ -302,11 +302,11 @@ func TestSmokePriorityDriverWithRemoteQueueSingleWorker(t *testing.T) {
 	q := NewRemoteUnordered(1)
 
 	runner := pool.NewSingleRunner()
-	runner.SetQueue(q)
+	assert.NoError(runner.SetQueue(q))
 	assert.NoError(q.SetRunner(runner))
 
 	d := driver.NewPriority()
-	d.Open(ctx)
+	assert.NoError(d.Open(ctx))
 	assert.NoError(q.SetDriver(d))
 
 	runUnorderedSmokeTest(ctx, q, 1, assert)
@@ -323,7 +323,7 @@ func TestSmokePriorityDriverWIthRemoteQueueWithWorkerPools(t *testing.T) {
 
 		q := NewRemoteUnordered(poolSize)
 		d := driver.NewPriority()
-		q.SetDriver(d)
+		assert.NoError(q.SetDriver(d))
 		runUnorderedSmokeTest(ctx, q, poolSize, assert)
 
 		cancel()

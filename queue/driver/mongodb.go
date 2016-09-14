@@ -29,6 +29,9 @@ type MongoDB struct {
 	}
 }
 
+// MongoDBOptions is a struct passed to the NewMongoDB constructor to
+// communicate MongoDB specific settings about the driver's behavior
+// and operation.
 type MongoDBOptions struct {
 	URI      string
 	DB       string
@@ -37,6 +40,9 @@ type MongoDBOptions struct {
 	// TODO it might be good to set lock timeouts here.
 }
 
+// DefaultMongoDBOptions constructs a new options object with default
+// values: connecting to a MongoDB instance on localhost, using the
+// "amboy" database, and *not* using priority ordering of jobs.
 func DefaultMongoDBOptions() MongoDBOptions {
 	return MongoDBOptions{
 		URI:      "mongodb://localhost:27017",

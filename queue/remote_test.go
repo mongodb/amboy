@@ -263,7 +263,7 @@ func (s *RemoteUnorderedSuite) TestStartMethodCanBeCalledMultipleTimes() {
 }
 
 func (s *RemoteUnorderedSuite) TestNextMethodSkipsLockedJobs() {
-	s.queue.SetDriver(s.driver)
+	s.require.NoError(s.queue.SetDriver(s.driver))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	numLocked := 0
@@ -271,7 +271,7 @@ func (s *RemoteUnorderedSuite) TestNextMethodSkipsLockedJobs() {
 	testLocks := make(map[string]driver.JobLock)
 	s.queue.started = true
 
-	s.queue.Start(ctx)
+	s.require.NoError(s.queue.Start(ctx))
 	go s.queue.jobServer(ctx)
 
 	for i := 0; i < 30; i++ {

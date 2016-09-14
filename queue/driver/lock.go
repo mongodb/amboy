@@ -6,7 +6,7 @@ import (
 	"golang.org/x/net/context"
 )
 
-// LocalJobLock provides an implementation of the JobLock interface
+// InternalLock provides an implementation of the JobLock interface
 // used by the drivers to allow different queues to operate on the
 // same underlying data. This implementation uses a Go mute, and is
 // useful for drivers that are shared only between queues within one
@@ -18,7 +18,7 @@ type InternalLock struct {
 	metaMutex sync.RWMutex
 }
 
-// NewLocalJobLock Returns a new initialized lock instance.
+// NewInternalLock returns a new initialized lock instance.
 func NewInternalLock(name string) *InternalLock {
 	return &InternalLock{name: name}
 }

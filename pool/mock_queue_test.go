@@ -11,7 +11,6 @@ import (
 
 type QueueTester struct {
 	started     bool
-	isComplete  bool
 	pool        amboy.Runner
 	numComplete int
 	toProcess   chan amboy.Job
