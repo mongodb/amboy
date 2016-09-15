@@ -113,6 +113,7 @@ func (d *Internal) Save(j amboy.Job) error {
 
 	if _, ok := d.jobs.m[name]; ok {
 		d.jobs.m[name] = j
+
 		grip.Debugf("saving job %s", name)
 		return nil
 	}
@@ -214,26 +215,29 @@ func (d *Internal) Next() amboy.Job {
 // in the queue.
 func (d *Internal) Stats() Stats {
 	stats := Stats{}
-
 	ctx := context.TODO()
 
-	for job := range d.Jobs() {
-		stats.Total++
-
-		lock, err := d.GetLock(ctx, job)
-		grip.CatchError(err)
-
-		if lock.IsLocked(ctx) {
-			stats.Locked++
-		} else {
-			stats.Unlocked++
-		}
-
-		if job.Completed() {
+	d.jobs.RLock()
+	stats.Total = len(d.jobs.m)
+	for name := range d.jobs.m {
+		j := d.jobs.m[name]
+		if j.Completed() {
 			stats.Complete++
 		} else {
 			stats.Pending++
 		}
 	}
+	d.jobs.RUnlock()
+
+	d.locks.RLock()
+	for _, lock := range d.locks.m {
+		if lock.IsLocked(ctx) {
+			stats.Locked++
+		}
+	}
+	d.locks.RUnlock()
+
+	stats.Unlocked = stats.Total - stats.Locked
+
 	return stats
 }

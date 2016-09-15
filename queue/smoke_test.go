@@ -2,6 +2,7 @@ package queue
 
 import (
 	"fmt"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -340,9 +341,9 @@ func TestSmokeMultipleMongoDBQueuesWithTheSameName(t *testing.T) {
 
 	// create queues with two runners, mongodb backed drivers, and
 	// configure injectors
-	qOne := NewRemoteUnordered(2)
+	qOne := NewRemoteUnordered(runtime.NumCPU() / 2)
 	dOne := driver.NewMongoDB(name, opts)
-	qTwo := NewRemoteUnordered(2)
+	qTwo := NewRemoteUnordered(runtime.NumCPU() / 2)
 	dTwo := driver.NewMongoDB(name, opts)
 	assert.NoError(dOne.Open(ctx))
 	assert.NoError(dTwo.Open(ctx))
@@ -362,8 +363,8 @@ func TestSmokeMultipleLocalQueuesWithOneDriver(t *testing.T) {
 	assert := assert.New(t)
 	ctx, cancel := context.WithCancel(context.Background())
 
-	qOne := NewRemoteUnordered(2)
-	qTwo := NewRemoteUnordered(2)
+	qOne := NewRemoteUnordered(runtime.NumCPU() / 2)
+	qTwo := NewRemoteUnordered(runtime.NumCPU() / 2)
 	d := driver.NewInternal()
 	assert.NoError(qOne.SetDriver(d))
 	assert.NoError(qTwo.SetDriver(d))
@@ -376,8 +377,8 @@ func TestSmokeMultipleQueuesWithPriorityDriver(t *testing.T) {
 	assert := assert.New(t)
 	ctx, cancel := context.WithCancel(context.Background())
 
-	qOne := NewRemoteUnordered(2)
-	qTwo := NewRemoteUnordered(2)
+	qOne := NewRemoteUnordered(runtime.NumCPU() / 2)
+	qTwo := NewRemoteUnordered(runtime.NumCPU() / 2)
 	d := driver.NewPriority()
 	assert.NoError(qOne.SetDriver(d))
 	assert.NoError(qTwo.SetDriver(d))
