@@ -8,8 +8,6 @@ import (
 	"github.com/mongodb/amboy/job"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
-	"github.com/tychoish/grip"
-	"github.com/tychoish/grip/level"
 	"golang.org/x/net/context"
 )
 
@@ -39,10 +37,6 @@ func TestLocalWorkersSuiteSizeOneHundred(t *testing.T) {
 	s.size = 100
 
 	suite.Run(t, s)
-}
-
-func (s *LocalWorkersSuite) SetupSuite() {
-	grip.SetThreshold(level.Critical)
 }
 
 func (s *LocalWorkersSuite) SetupTest() {

@@ -131,14 +131,18 @@ func (q *QueueTester) Results() <-chan amboy.Job {
 }
 
 func (q *QueueTester) Wait() {
-	if len(q.toProcess) == 0 {
-		return
-	}
-
 	for {
-		grip.Debugf("%+v\n", q.Stats())
-		if len(q.storage) == q.numComplete {
-			break
+		grip.Debugf("test queue status: %+v\n", q.Stats())
+
+		if q.isComplete() {
+			return
 		}
 	}
+}
+
+func (q *QueueTester) isComplete() bool {
+	q.mutex.RLock()
+	defer q.mutex.RUnlock()
+
+	return len(q.storage) == q.numComplete
 }
