@@ -50,6 +50,8 @@ imports:
   - logging
   - send
   - message
+- name: github.com/tychoish/gimlet
+  version: 97dab2f19a9b5eeca02e1bc38157310a8042b120
 - name: golang.org/x/tools
   version: a2a552218a0e22e6fb22469f49ef371b492f6178
   subpackages:
