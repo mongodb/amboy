@@ -144,7 +144,7 @@ vendor-deps:$(vendorDeps)
 #   new-style vendor directories. When this codebase can drop support
 #   for go1.4, we can delete most of this.
 -include $(buildDir)/makefile.vendor
-nestedVendored := vendor/github.com/tychoish/grip
+nestedVendored := vendor/github.com/tychoish/grip vendor/github.com/tychoish/gimlet
 nestedVendored := $(foreach project,$(nestedVendored),$(project)/build/vendor)
 $(buildDir)/makefile.vendor:$(buildDir)/render-gopath makefile
 	@mkdir -p $(buildDir)
