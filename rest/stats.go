@@ -10,7 +10,7 @@ type status struct {
 	Status            string   `bson:"string" json:"string" yaml:"string"`
 	QueueRunning      bool     `bson:"queue_running" json:"queue_running" yaml:"queue_running"`
 	PendingJobs       int      `bson:"pending_jobs,omitempty" json:"pending_jobs,omitempty" yaml:"pending_jobs,omitempty"`
-	SupportedJobTypes []string `bson:supported_job_types json:supported_job_types yaml:supported_job_types`
+	SupportedJobTypes []string `bson:"supported_job_types" json:"supported_job_types" yaml:"supported_job_types"`
 }
 
 func (s *Service) getStatus() status {
@@ -29,6 +29,8 @@ func (s *Service) getStatus() status {
 	return output
 }
 
+// Status defines an http.HandlerFunc that returns health check and
+// current staus status information for the entire service.
 func (s *Service) Status(w http.ResponseWriter, r *http.Request) {
 	st := s.getStatus()
 

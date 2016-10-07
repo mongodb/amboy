@@ -44,6 +44,8 @@ func (s *Service) createJob(payload *registry.JobInterchange) (*createResponse, 
 	return resp, nil
 }
 
+// Create provides an interface for REST clients to create jobs in the
+// local queue that backs the service.
 func (s *Service) Create(w http.ResponseWriter, r *http.Request) {
 	jobPayload := &registry.JobInterchange{}
 	resp := s.createJobResponseBase()

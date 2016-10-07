@@ -33,7 +33,7 @@ func Do(ctx context.Context, client *http.Client, req *http.Request) (*http.Resp
 
 	// TODO(djd): Respect any existing value of req.Cancel.
 	cancel := make(chan struct{})
-	req.Cancel = cancel
+	// req.Cancel = cancel
 
 	type responseAndError struct {
 		resp *http.Response

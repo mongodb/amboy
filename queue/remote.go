@@ -161,7 +161,6 @@ func (q *RemoteUnordered) Complete(ctx context.Context, j amboy.Job) {
 			case <-timer.C:
 				continue
 			}
-
 		}
 	}()
 }

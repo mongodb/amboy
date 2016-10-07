@@ -3,6 +3,7 @@ package queue
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -102,8 +103,9 @@ func (s *RemoteUnorderedSuite) SetupTest() {
 }
 
 func (s *RemoteUnorderedSuite) TearDownTest() {
-	s.canceler()
+	// this order is important
 	s.tearDown()
+	s.canceler()
 }
 
 func (s *RemoteUnorderedSuite) TestDriverIsUnitializedByDefault() {
@@ -264,7 +266,7 @@ func (s *RemoteUnorderedSuite) TestStartMethodCanBeCalledMultipleTimes() {
 
 func (s *RemoteUnorderedSuite) TestNextMethodSkipsLockedJobs() {
 	s.require.NoError(s.queue.SetDriver(s.driver))
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	numLocked := 0
 	testJobs := make(map[string]*job.ShellJob)

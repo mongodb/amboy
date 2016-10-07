@@ -132,13 +132,11 @@ func (q *LocalPriorityQueue) Stats() amboy.QueueStats {
 // Complete marks a job complete. The operation is asynchronous in
 // this implementation.
 func (q *LocalPriorityQueue) Complete(ctx context.Context, j amboy.Job) {
-	go func() {
-		grip.Debugf("marking job (%s) as complete", j.ID())
-		q.counters.Lock()
-		defer q.counters.Unlock()
+	grip.Debugf("marking job (%s) as complete", j.ID())
+	q.counters.Lock()
+	defer q.counters.Unlock()
 
-		q.counters.completed++
-	}()
+	q.counters.completed++
 }
 
 // Start begins the work of the queue. It is a noop, without error, to

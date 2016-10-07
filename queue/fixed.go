@@ -11,6 +11,11 @@ import (
 	"golang.org/x/net/context"
 )
 
+// LocalLimitedSize implements the amboy.Queue interface, and unlike
+// other implementations, the size of the queue is limited for both
+// incoming tasks and completed tasks. This makes it possible use
+// these queues in situations as part services and in longer-running
+// contexts.
 type LocalLimitedSize struct {
 	channel  chan amboy.Job
 	results  *driver.CappedResultStorage
@@ -25,6 +30,8 @@ type LocalLimitedSize struct {
 	}
 }
 
+// NewLocalLimitedSize constructs a LocalLimitedSize queue instance
+// with the specified number of workers and capacity.
 func NewLocalLimitedSize(workers, capacity int) *LocalLimitedSize {
 	q := &LocalLimitedSize{
 		results:  driver.NewCappedResultStorage(capacity),
@@ -36,7 +43,15 @@ func NewLocalLimitedSize(workers, capacity int) *LocalLimitedSize {
 	return q
 }
 
+// Put adds a job to the queue, returning an error if the queue isn't
+// opened, a task of that name exists has been completed (and is
+// stored in the results storage,) or is pending, and finally if the
+// queue is at capacity.
 func (q *LocalLimitedSize) Put(j amboy.Job) error {
+	if !q.Started() {
+		return errors.Errorf("queue not open. could not add %s", j.ID())
+	}
+
 	name := j.ID()
 
 	if _, ok := q.results.Get(name); ok {
@@ -57,14 +72,19 @@ func (q *LocalLimitedSize) Put(j amboy.Job) error {
 
 		return nil
 	default:
-		return errors.Errorf("queue not open. could not add %s", j.ID())
+		return errors.Errorf("queue full, cannot add '%s'", name)
 	}
 }
 
+// Get returns a job, by name, from the results storage. This does not
+// retrieve pending tasks.
 func (q *LocalLimitedSize) Get(name string) (amboy.Job, bool) {
 	return q.results.Get(name)
 }
 
+// Next returns the next pending job, and is used by amboy.Runner
+// implementations to fetch work. This operation blocks until a job is
+// available or the context is canceled.
 func (q *LocalLimitedSize) Next(ctx context.Context) amboy.Job {
 	select {
 	case <-ctx.Done():
@@ -77,18 +97,24 @@ func (q *LocalLimitedSize) Next(ctx context.Context) amboy.Job {
 	}
 }
 
+// Started returns true if the queue is open and is processing jobs,
+// and false otherwise.
 func (q *LocalLimitedSize) Started() bool {
 	return q.channel != nil
 }
 
+// Results is a generator of all completed tasks in the queue.
 func (q *LocalLimitedSize) Results() <-chan amboy.Job {
 	return q.results.Contents()
 }
 
+// Runner returns the Queue's embedded amboy.Runner instance.
 func (q *LocalLimitedSize) Runner() amboy.Runner {
 	return q.runner
 }
 
+// SetRunner allows callers to, if the queue has not started, inject a
+// different runner implementation.
 func (q *LocalLimitedSize) SetRunner(r amboy.Runner) error {
 	if q.Started() {
 		return errors.New("cannot set runner on started queue")
@@ -99,6 +125,8 @@ func (q *LocalLimitedSize) SetRunner(r amboy.Runner) error {
 	return nil
 }
 
+// Stats returns information about the current state of jobs in the
+// queue, and the amount of work completed.
 func (q *LocalLimitedSize) Stats() amboy.QueueStats {
 	q.counters.RLock()
 	defer q.counters.RUnlock()
@@ -111,19 +139,21 @@ func (q *LocalLimitedSize) Stats() amboy.QueueStats {
 	}
 }
 
+// Complete marks a job complete in the queue.
 func (q *LocalLimitedSize) Complete(ctx context.Context, j amboy.Job) {
-	go func() {
-		name := j.ID()
-		grip.Debugf("marking job (%s) as complete", name)
-		q.counters.Lock()
-		defer q.counters.Unlock()
+	name := j.ID()
+	grip.Debugf("marking job (%s) as complete", name)
+	q.counters.Lock()
+	defer q.counters.Unlock()
 
-		q.counters.completed++
-		delete(q.counters.queued, name)
-		q.results.Add(j)
-	}()
+	q.counters.completed++
+	delete(q.counters.queued, name)
+	q.results.Add(j)
 }
 
+// Start starts the runner and initializes the pending task
+// storage. Only produces an error if the underlying runner fails to
+// start.
 func (q *LocalLimitedSize) Start(ctx context.Context) error {
 	if q.channel != nil {
 		return nil
@@ -141,6 +171,7 @@ func (q *LocalLimitedSize) Start(ctx context.Context) error {
 	return nil
 }
 
+// Wait blocks until all tasks are complete.
 func (q *LocalLimitedSize) Wait() {
 	for {
 		stats := q.Stats()

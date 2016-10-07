@@ -268,7 +268,7 @@ post:
 #######################################
 buildvariants:
   - name: archlinux
-    display_name: Arch Linux (go1.6)
+    display_name: Arch Linux
     expansions:
       mongodb_url: https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-3.2.9.tgz
     run_on:
@@ -277,7 +277,7 @@ buildvariants:
       *dev-tasks
 
   - name: race-detector
-    display_name: Race Detector (Arch Linux; go1.6)
+    display_name: Race Detector (Arch Linux)
     expansions:
       mongodb_url: https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-3.2.9.tgz
     run_on:

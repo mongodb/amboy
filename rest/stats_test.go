@@ -1,3 +1,5 @@
+// +build go1.7
+
 package rest
 
 import (
@@ -40,7 +42,7 @@ func TestStatusMethod(t *testing.T) {
 	assert.Equal(200, w.Code)
 
 	st := status{}
-	json.Unmarshal(w.Body.Bytes(), &st)
+	assert.NoError(json.Unmarshal(w.Body.Bytes(), &st))
 	assert.Equal("degraded", st.Status)
 	assert.False(st.QueueRunning)
 	assert.True(len(st.SupportedJobTypes) > 0)
@@ -55,7 +57,7 @@ func TestStatusMethod(t *testing.T) {
 	assert.Equal(200, w.Code)
 
 	st = status{}
-	json.Unmarshal(w.Body.Bytes(), &st)
+	assert.NoError(json.Unmarshal(w.Body.Bytes(), &st))
 	assert.Equal("ok", st.Status)
 	assert.True(st.QueueRunning)
 	assert.True(len(st.SupportedJobTypes) > 0)

@@ -38,30 +38,30 @@ func runUnorderedSmokeTest(ctx context.Context, q amboy.Queue, size int, assert 
 	}
 
 	testNames := []string{"test", "second", "workers", "forty-two", "true", "false", ""}
-	numAdders := 2 * size
-	numJobs := numAdders * len(testNames)
+	numJobs := size * len(testNames)
 
 	wg := &sync.WaitGroup{}
 
-	for i := 0; i < numAdders; i++ {
+	for i := 0; i < size; i++ {
 		wg.Add(1)
 		go func(num int) {
 			for _, name := range testNames {
 				cmd := fmt.Sprintf("echo %s.%d", name, num)
-				assert.NoError(q.Put(job.NewShellJob(cmd, "")))
+				assert.NoError(q.Put(job.NewShellJob(cmd, "")),
+					fmt.Sprintf("with %d workers", num))
 			}
 			wg.Done()
 		}(i)
 	}
 	wg.Wait()
 
-	assert.Equal(numJobs, q.Stats().Total)
+	assert.Equal(numJobs, q.Stats().Total, fmt.Sprintf("with %d workers", size))
 	q.Wait()
 
 	grip.Infof("workers complete for %d worker smoke test", size)
 	assert.Equal(numJobs, q.Stats().Completed, fmt.Sprintf("%+v", q.Stats()))
 	for result := range q.Results() {
-		assert.True(result.Completed())
+		assert.True(result.Completed(), fmt.Sprintf("with %d workers", size))
 	}
 	grip.Infof("completed results check for %d worker smoke test", size)
 }
@@ -171,11 +171,13 @@ func TestSmokeUnorderedWorkerPools(t *testing.T) {
 
 func TestSmokeRemoteUnorderedWorkerSingleThreadedWithInternalDriver(t *testing.T) {
 	assert := assert.New(t)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
 	q := NewRemoteUnordered(1)
-	assert.NoError(q.SetDriver(driver.NewInternal()))
+	d := driver.NewInternal()
+	defer d.Close()
+	assert.NoError(q.SetDriver(d))
 
 	runUnorderedSmokeTest(ctx, q, 1, assert)
 }
@@ -185,7 +187,7 @@ func TestSmokeRemoteUnorderedWorkerPoolsWithInternalDriver(t *testing.T) {
 	baseCtx := context.Background()
 
 	for _, poolSize := range []int{2, 4, 8, 16, 32, 64} {
-		ctx, cancel := context.WithCancel(baseCtx)
+		ctx, cancel := context.WithTimeout(baseCtx, time.Minute)
 
 		q := NewRemoteUnordered(poolSize)
 		d := driver.NewInternal()
@@ -267,7 +269,7 @@ func TestSmokeRemoteUnorderedWorkerPoolsWithMongoDBDriver(t *testing.T) {
 func TestSmokePriorityQueueWithSingleWorker(t *testing.T) {
 	assert := assert.New(t)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
 	q := NewLocalPriorityQueue(1)
@@ -285,7 +287,7 @@ func TestSmokePriorityQueueWithWorkerPools(t *testing.T) {
 
 	for _, poolSize := range []int{2, 4, 6, 7, 16, 32, 64} {
 		grip.Infoln("testing priority queue for:", poolSize)
-		ctx, cancel := context.WithCancel(baseCtx)
+		ctx, cancel := context.WithTimeout(baseCtx, time.Minute)
 
 		q := NewLocalPriorityQueue(poolSize)
 		runUnorderedSmokeTest(ctx, q, poolSize, assert)
@@ -297,7 +299,7 @@ func TestSmokePriorityQueueWithWorkerPools(t *testing.T) {
 func TestSmokePriorityDriverWithRemoteQueueSingleWorker(t *testing.T) {
 	assert := assert.New(t)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
 	q := NewRemoteUnordered(1)
@@ -320,7 +322,7 @@ func TestSmokePriorityDriverWIthRemoteQueueWithWorkerPools(t *testing.T) {
 
 	for _, poolSize := range []int{2, 4, 6, 7, 16, 32, 64} {
 		grip.Infoln("testing priority queue for:", poolSize)
-		ctx, cancel := context.WithCancel(baseCtx)
+		ctx, cancel := context.WithTimeout(baseCtx, time.Minute)
 
 		q := NewRemoteUnordered(poolSize)
 		d := driver.NewPriority()
@@ -361,7 +363,8 @@ func TestSmokeMultipleMongoDBQueuesWithTheSameName(t *testing.T) {
 
 func TestSmokeMultipleLocalQueuesWithOneDriver(t *testing.T) {
 	assert := assert.New(t)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
 
 	qOne := NewRemoteUnordered(runtime.NumCPU() / 2)
 	qTwo := NewRemoteUnordered(runtime.NumCPU() / 2)
@@ -370,12 +373,12 @@ func TestSmokeMultipleLocalQueuesWithOneDriver(t *testing.T) {
 	assert.NoError(qTwo.SetDriver(d))
 
 	runMultiQueueSingleBackEndSmokeTest(ctx, qOne, qTwo, assert)
-	cancel()
 }
 
 func TestSmokeMultipleQueuesWithPriorityDriver(t *testing.T) {
 	assert := assert.New(t)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
 
 	qOne := NewRemoteUnordered(runtime.NumCPU() / 2)
 	qTwo := NewRemoteUnordered(runtime.NumCPU() / 2)
@@ -384,7 +387,6 @@ func TestSmokeMultipleQueuesWithPriorityDriver(t *testing.T) {
 	assert.NoError(qTwo.SetDriver(d))
 
 	runMultiQueueSingleBackEndSmokeTest(ctx, qOne, qTwo, assert)
-	cancel()
 }
 
 func TestSmokeLimitedSizeQueueWithSingleWorker(t *testing.T) {
@@ -395,7 +397,7 @@ func TestSmokeLimitedSizeQueueWithSingleWorker(t *testing.T) {
 
 	q := NewLocalLimitedSize(1, 150)
 	runner := pool.NewSingleRunner()
-	runner.SetQueue(q)
+	assert.NoError(runner.SetQueue(q))
 
 	assert.NoError(q.SetRunner(runner))
 
@@ -410,7 +412,7 @@ func TestSmokeLimitedSizeQueueWithWorkerPools(t *testing.T) {
 		grip.Infoln("testing priority queue for:", poolSize)
 		ctx, cancel := context.WithCancel(baseCtx)
 
-		q := NewLocalLimitedSize(poolSize, 150)
+		q := NewLocalLimitedSize(poolSize, 7*poolSize)
 		runUnorderedSmokeTest(ctx, q, poolSize, assert)
 
 		cancel()

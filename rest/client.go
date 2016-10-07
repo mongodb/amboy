@@ -21,20 +21,25 @@ const (
 	maxClientPort         = 65535
 )
 
+// Client provides an interface for interacting with a remote amboy
+// Service.
 type Client struct {
-	apiPrefix string
-	host      string
-	prefix    string
-	port      int
-	client    *http.Client
+	host   string
+	prefix string
+	port   int
+	client *http.Client
 }
 
+// NewClient takes host, port, and URI prefix information and
+// constructs a new Client.
 func NewClient(host string, port int, prefix string) (*Client, error) {
 	c := &Client{client: &http.Client{}}
 
 	return c.initClient(host, port, prefix)
 }
 
+// NewClientFromExisting takes an existing http.Client object and
+// produces a new Client object.
 func NewClientFromExisting(client *http.Client, host string, port int, prefix string) (*Client, error) {
 	if client == nil {
 		return nil, errors.New("must use a non-nil existing client")
@@ -45,6 +50,8 @@ func NewClientFromExisting(client *http.Client, host string, port int, prefix st
 	return c.initClient(host, port, prefix)
 }
 
+// Copy takes an existing Client object and returns a new client
+// object with the same settings that uses a *new* http.Client.
 func (c *Client) Copy() *Client {
 	new := &Client{}
 	*new = *c
@@ -80,10 +87,14 @@ func (c *Client) initClient(host string, port int, prefix string) (*Client, erro
 //
 ////////////////////////////////////////////////////////////////////////
 
+// Client returns a pointer to embedded http.Client object.
 func (c *Client) Client() *http.Client {
 	return c.client
 }
 
+// SetHost allows callers to change the hostname (including leading
+// "http(s)") for the Client. Returns an error if the specified host
+// does not start with "http".
 func (c *Client) SetHost(h string) error {
 	if !strings.HasPrefix(h, "http") {
 		return errors.Errorf("host '%s' is malformed. must start with 'http'", h)
@@ -98,10 +109,14 @@ func (c *Client) SetHost(h string) error {
 	return nil
 }
 
+// Host returns the current host.
 func (c *Client) Host() string {
 	return c.host
 }
 
+// SetPort allows callers to change the port used for the client. If
+// the port is invalid, returns an error and sets the port to the
+// default value. (3000)
 func (c *Client) SetPort(p int) error {
 	if p <= 0 || p >= maxClientPort {
 		c.port = defaultClientPort
@@ -112,15 +127,19 @@ func (c *Client) SetPort(p int) error {
 	return nil
 }
 
+// Port returns the current port value for the Client.
 func (c *Client) Port() int {
 	return c.port
 }
 
+// SetPrefix allows callers to modify the prefix, for this client,
 func (c *Client) SetPrefix(p string) error {
 	c.prefix = strings.Trim(p, "/")
 	return nil
 }
 
+// Prefix accesses the prefix for the client, The prefix is the part
+// of the URI between the end-point and the hostname, of the API.
 func (c *Client) Prefix() string {
 	return c.prefix
 }
@@ -236,6 +255,9 @@ func (c *Client) jobStatus(ctx context.Context, name string) (*jobStatusResponse
 	return s, nil
 }
 
+// JobComplete checks the stats of a job, by name, and returns true if
+// that job is complete. When false, check the second return value to
+// ensure that the job exists in the remote queue.
 func (c *Client) JobComplete(ctx context.Context, name string) (bool, error) {
 	st, err := c.jobStatus(ctx, name)
 	if err != nil {
@@ -249,7 +271,7 @@ func waitForOutcome(ctx context.Context, outcome func() (bool, error)) bool {
 	timer := time.NewTimer(0)
 	factor := 0
 	for {
-		// TOOD replace this interval with some exponential
+		// TODO replace this interval with some exponential
 		// backoff+jitter.
 		if factor <= 50 {
 			factor++

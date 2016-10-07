@@ -1,3 +1,5 @@
+// +build go1.7
+
 package rest
 
 import (
@@ -34,7 +36,7 @@ func (s *JobStatusSuite) SetupSuite() {
 
 	j := job.NewShellJob("echo foo", "")
 	s.jobName = j.ID()
-	s.service.queue.Put(j)
+	s.NoError(s.service.queue.Put(j))
 
 	s.NoError(s.service.App().Resolve())
 }
@@ -101,7 +103,7 @@ func (s *JobStatusSuite) TestRequestValidJobStatus() {
 
 	s.Equal(200, w.Code)
 	jst := jobStatusResponse{}
-	json.Unmarshal(w.Body.Bytes(), &jst)
+	s.NoError(json.Unmarshal(w.Body.Bytes(), &jst))
 
 	s.Equal(s.jobName, jst.ID)
 	s.True(jst.Exists)

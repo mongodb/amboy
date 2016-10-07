@@ -42,16 +42,20 @@ func (s *LimitedSizeQueueSuite) TestBufferForPendingWorkEqualToCapacityForResult
 	s.False(s.queue.Started())
 	s.queue.Runner().Close()
 	s.Nil(s.queue.channel)
-	s.Error(s.queue.Put(job.NewShellJob("true", "")))
+	s.Error(s.queue.Put(job.NewShellJob("sleep 10", "")))
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	s.NoError(s.queue.Start(ctx))
-	for i := 0; i < s.numCapacity+3; i++ {
-		s.NoError(s.queue.Put(job.NewShellJob("true", "")))
+	for i := 0; i < s.numCapacity+s.numWorkers+1; i++ {
+		err := s.queue.Put(job.NewShellJob("sleep 10", ""))
+		if len(s.queue.channel) != s.numCapacity {
+			s.NoError(err)
+		}
 	}
 
 	s.Len(s.queue.channel, s.numCapacity)
-	s.Error(s.queue.Put(job.NewShellJob("true", "")))
+	s.Error(s.queue.Put(job.NewShellJob("sleep 10", "")))
 }
 
 func (s *LimitedSizeQueueSuite) TestCallingStartMultipleTimesDoesNotImpactState() {
@@ -113,7 +117,7 @@ func (s *LimitedSizeQueueSuite) TestGetMethodOnlyReturnsCompletedJobs() {
 	}
 
 	j := job.NewShellJob("true", "")
-	s.queue.Put(j)
+	s.NoError(s.queue.Put(j))
 	rj, ok := s.queue.Get(j.ID())
 	s.Nil(rj)
 	s.False(ok)

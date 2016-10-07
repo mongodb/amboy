@@ -16,6 +16,9 @@ import (
 	"github.com/tychoish/grip"
 )
 
+// CappedResultStorage provides a fixed size storage structure for
+// queue results, and is used as the backend for a queue
+// implementation.
 type CappedResultStorage struct {
 	Cap     int
 	results cappedResults
@@ -23,6 +26,8 @@ type CappedResultStorage struct {
 	mutex   sync.RWMutex
 }
 
+// NewCappedResultStorage creates a new structure for storing queue
+// results.
 func NewCappedResultStorage(cap int) *CappedResultStorage {
 	return &CappedResultStorage{
 		Cap:   cap,
@@ -30,6 +35,7 @@ func NewCappedResultStorage(cap int) *CappedResultStorage {
 	}
 }
 
+// Add inserts a job into the structure.
 func (s *CappedResultStorage) Add(j amboy.Job) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -56,6 +62,8 @@ func (s *CappedResultStorage) Add(j amboy.Job) {
 	}
 }
 
+// Get retrieves an object from the results storage by name. if the
+// object doesn't exist, the second value is false.
 func (s *CappedResultStorage) Get(name string) (amboy.Job, bool) {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
@@ -67,6 +75,8 @@ func (s *CappedResultStorage) Get(name string) (amboy.Job, bool) {
 	return j, true
 }
 
+// Contents is a generator that produces all jobs in the results
+// storage. The order is random.
 func (s *CappedResultStorage) Contents() <-chan amboy.Job {
 	output := make(chan amboy.Job)
 
@@ -83,6 +93,8 @@ func (s *CappedResultStorage) Contents() <-chan amboy.Job {
 	return output
 }
 
+// Size returns the current number of results in the storage
+// structure.
 func (s *CappedResultStorage) Size() int {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
