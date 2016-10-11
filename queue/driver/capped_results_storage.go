@@ -62,7 +62,7 @@ func (s *CappedResultStorage) Add(j amboy.Job) {
 	}
 }
 
-// Get retrieves an object from the results storage by name. if the
+// Get retrieves an object from the results storage by name. If the
 // object doesn't exist, the second value is false.
 func (s *CappedResultStorage) Get(name string) (amboy.Job, bool) {
 	s.mutex.RLock()

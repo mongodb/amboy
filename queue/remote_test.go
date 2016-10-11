@@ -103,7 +103,10 @@ func (s *RemoteUnorderedSuite) SetupTest() {
 }
 
 func (s *RemoteUnorderedSuite) TearDownTest() {
-	// this order is important
+	// this order is important, running teardown before canceling
+	// the context to prevent closing the connection before
+	// running the teardown procedure, given that some connection
+	// resources may be shared in the driver.
 	s.tearDown()
 	s.canceler()
 }
