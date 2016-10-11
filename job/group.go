@@ -13,14 +13,10 @@ import (
 	"github.com/tychoish/grip"
 )
 
-func init() {
-	registry.AddJobType("group", groupJobFactory)
-}
-
-// Group is a structure for running collections of Job objects at
-// the same time, as a single Job. Use Job groups to isolate several
-// jobs from other Jobs in the queue, and ensure that several jobs run
-// on a single system.
+// Group is a structure for running collections of Job objects at the
+// same time, as a single Job. Use Groups to isolate several Jobs from
+// other Jobs in the queue, and ensure that several Jobs run on a
+// single system.
 type Group struct {
 	Name     string                              `bson:"name" json:"name" yaml:"name"`
 	Complete bool                                `bson:"complete" json:"complete" yaml:"complete"`
@@ -31,7 +27,6 @@ type Group struct {
 	mutex    sync.RWMutex
 
 	priority.Value
-
 	// It might be feasible to make a Queue implementation that
 	// implements the Job interface so that we can eliminate this
 	// entirely.
@@ -43,13 +38,6 @@ func NewGroup(name string) *Group {
 	g.Name = name
 
 	return g
-}
-
-// groupJobFactory produces an empty initialized job group job object,
-// for use in the job registry. Because of the return type and the
-// registry.JobFactory type.
-func groupJobFactory() amboy.Job {
-	return newGroupInstance()
 }
 
 // newGroupInstance is a common constructor for the public NewGroup
@@ -136,6 +124,10 @@ func (g *Group) Run() {
 			// idiomatically for Groups.
 
 			jobErr := j.Error()
+			if jobErr != nil {
+				g.Errors = append(g.Errors, jobErr)
+			}
+
 			job, err := registry.MakeJobInterchange(j)
 			if err != nil {
 				g.Errors = append(g.Errors, err)
@@ -143,7 +135,6 @@ func (g *Group) Run() {
 			}
 
 			if jobErr != nil {
-				g.Errors = append(g.Errors, jobErr)
 				return
 			}
 
@@ -200,21 +191,10 @@ func (g *Group) Dependency() dependency.Manager {
 // type.
 func (g *Group) SetDependency(d dependency.Manager) {
 	if d == nil || d.Type().Name != "always" {
+		grip.Warningf("group job types must have 'always' dependency types, '%s' is invalid",
+			d.Type().Name)
 		return
 	}
 
 	g.dep = d
-}
-
-// Export serializes the job object according to the Format specified
-// in the the JobType argument.
-func (g *Group) Export() ([]byte, error) {
-	return amboy.ConvertTo(g.Type().Format, g)
-}
-
-// Import takes a byte array, and attempts to marshal that data into
-// the current job object according to the format specified in the Job
-// type definition for this object.
-func (g *Group) Import(data []byte) error {
-	return amboy.ConvertFrom(g.Type().Format, data, g)
 }

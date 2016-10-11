@@ -44,12 +44,6 @@ type Job interface {
 	// Error returns an error object if the task was an
 	// error. Typically if the job has not run, this is nil.
 	Error() error
-
-	// Exposes access to a serialized representation of the job
-	// object, using the method the "Format" specified in the
-	// JobType object.
-	Export() ([]byte, error)
-	Import([]byte) error
 }
 
 // JobType contains information about the type of a job, which queues

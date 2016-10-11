@@ -24,7 +24,7 @@ func TestRestServiceSuite(t *testing.T) {
 func (s *RestServiceSuite) SetupSuite() {
 	// need to import job so that we load the init functions that
 	// register jobs so these tests are more meaningful.
-	_ = job.NewShellJob("", "")
+	job.RegisterDefaultJobs()
 	s.require = s.Require()
 }
 

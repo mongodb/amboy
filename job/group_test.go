@@ -9,8 +9,12 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+func init() {
+	RegisterDefaultJobs()
+}
+
 // JobGroupSuite exercises the Job implementation that allows you to
-// run multiple jobs in a worker pool as part of a single isolated
+// run multiple tasks in a worker pool as part of a single isolated
 // task. This is good exercise for the JobInterchange code and
 // requires some type fidelity of the interchange system.
 type JobGroupSuite struct {
@@ -28,12 +32,14 @@ func (s *JobGroupSuite) SetupTest() {
 }
 
 func (s *JobGroupSuite) TestJobFactoryAndConstructorHaveIdenticalTypeInformation() {
-	fj := groupJobFactory()
+	fj, err := registry.GetJobFactory("group")
+	s.NoError(err)
 
-	s.Equal(s.job.Type().Name, fj.Type().Name)
-	s.Equal(s.job.Type().Version, fj.Type().Version)
+	j := fj()
+	s.Equal(s.job.Type().Name, j.Type().Name)
+	s.Equal(s.job.Type().Version, j.Type().Version)
 
-	s.IsType(s.job, fj)
+	s.IsType(s.job, j)
 }
 
 func (s *JobGroupSuite) TestGroupAddMethodRequiresUniqueNames() {

@@ -38,13 +38,13 @@ func (s *ShellJobSuite) TestShellJobProducesObjectsThatImplementJobInterface() {
 }
 
 func (s *ShellJobSuite) TestShellJobFactoryImplementsInterfaceWithCorrectTypeInfo() {
-	sj := shellJobFactory()
+	sj := NewShellJobInstance()
 
 	s.IsType(sj, s.job)
 	s.Equal(sj.Type(), s.job.Type())
 
 	s.Equal(sj.Type().Name, "shell")
-	s.Equal(sj.Type().Version, 0)
+	s.Equal(sj.Type().Version, 1)
 }
 
 func (s *ShellJobSuite) TestShellJobDefaultsToAlwaysDependency() {
@@ -56,19 +56,14 @@ func (s *ShellJobSuite) TestShellJobConstructorHasCreatesFileDependency() {
 	s.Equal(job.Dependency().Type().Name, "create-file")
 }
 
-func (s *ShellJobSuite) TestShellDependencyAccessorReturnsPersistedValue() {
-	s.Equal(s.job.Dependency(), s.job.dep)
-}
-
 func (s *ShellJobSuite) TestSetDependencyChangesDependencyStrategy() {
-	s.Equal(s.job.Dependency().Type().Name, "always")
 	s.job.SetDependency(dependency.NewCreatesFile("foo"))
 	s.Equal(s.job.Dependency().Type().Name, "create-file")
 }
 
 func (s *ShellJobSuite) TestShellJobNameConstructedFromCommandNames() {
 	job := NewShellJob("foo", "bar")
-	s.Equal(job.ID(), job.Name)
+	s.Equal(job.ID(), job.JobBase.TaskID)
 
 	s.True(strings.HasPrefix(job.ID(), "foo"))
 

@@ -13,7 +13,7 @@ import (
 
 // LocalLimitedSize implements the amboy.Queue interface, and unlike
 // other implementations, the size of the queue is limited for both
-// incoming tasks and completed tasks. This makes it possible use
+// incoming tasks and completed tasks. This makes it possible to use
 // these queues in situations as parts of services and in
 // longer-running contexts.
 type LocalLimitedSize struct {

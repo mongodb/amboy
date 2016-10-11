@@ -71,6 +71,7 @@ func TestDriverSuiteWithMongoDBInstance(t *testing.T) {
 // Implementation of the suite:
 
 func (s *DriverSuite) SetupSuite() {
+	job.RegisterDefaultJobs()
 	s.require = s.Require()
 }
 
@@ -123,7 +124,7 @@ func (s *DriverSuite) TestPutAndGetRoundTripObjects() {
 
 	if s.NoError(err) {
 		nsh := n.(*job.ShellJob)
-		s.Equal(nsh.Name, j.Name)
+		s.Equal(nsh.ID(), j.ID())
 		s.Equal(nsh.Command, j.Command)
 
 		s.Equal(n.ID(), name)
@@ -277,9 +278,10 @@ func (s *DriverSuite) TestJobsMethodReturnsAllJobs() {
 		task := j.(*job.ShellJob)
 		counter++
 		mock, ok := mocks[j.ID()]
-		s.True(ok)
-		s.Equal(mock.Name, task.Name)
-		s.Equal(mock.Command, task.Command)
+		if s.True(ok) {
+			s.Equal(mock.ID(), task.ID())
+			s.Equal(mock.Command, task.Command)
+		}
 	}
 
 	s.Equal(counter, len(mocks))

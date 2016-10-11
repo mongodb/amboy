@@ -32,7 +32,7 @@ func MakeJobInterchange(j amboy.Job) (*JobInterchange, error) {
 		return nil, err
 	}
 
-	data, err := j.Export()
+	data, err := amboy.ConvertTo(j.Type().Format, j)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +74,7 @@ func ConvertToJob(j *JobInterchange) (amboy.Job, error) {
 		return nil, err
 	}
 
-	err = job.Import(j.Job)
+	err = amboy.ConvertFrom(job.Type().Format, j.Job, job)
 	job.SetDependency(dep)
 	if err != nil {
 		return nil, err

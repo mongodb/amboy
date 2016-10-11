@@ -23,6 +23,7 @@ import (
 func init() {
 	grip.SetThreshold(level.Debug)
 	grip.CatchError(grip.UseNativeLogger())
+	job.RegisterDefaultJobs()
 }
 
 type RemoteUnorderedSuite struct {
@@ -134,12 +135,12 @@ func (s *RemoteUnorderedSuite) TestJobPutIntoQueueFetchableViaGetMethod() {
 		s.Equal(j.Type(), fetchedJob.Type())
 
 		nj := fetchedJob.(*job.ShellJob)
-		s.Equal(j.Name, nj.Name)
+		s.Equal(j.ID(), nj.ID())
 		s.Equal(j.IsComplete, nj.IsComplete)
-		s.Equal(j.Command, nj.Command)
+		s.Equal(j.Command, nj.Command, fmt.Sprintf("%+v\n%+v", j, nj))
 		s.Equal(j.Output, nj.Output)
 		s.Equal(j.WorkingDir, nj.WorkingDir)
-		s.Equal(j.T, nj.T)
+		s.Equal(j.Type(), nj.Type())
 	}
 }
 
