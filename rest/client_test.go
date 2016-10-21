@@ -287,7 +287,7 @@ func (s *ClientSuite) TestGetStatusResponseHasExpectedValues() {
 	s.True(st.QueueRunning)
 	s.Equal("ok", st.Status)
 	s.Equal(0, st.PendingJobs)
-	s.Len(st.SupportedJobTypes, 1)
+	s.Len(st.SupportedJobTypes, 2, fmt.Sprint(st.SupportedJobTypes))
 }
 
 func (s *ClientSuite) TestGetStatsHelperWithInvalidHostReturnsError() {

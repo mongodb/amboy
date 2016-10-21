@@ -1,7 +1,7 @@
 # start project configuration
 name := amboy
 buildDir := build
-packages := dependency job registry pool queue queue-driver rest
+packages := dependency job registry pool queue queue-driver rest $(name)
 orgPath := github.com/mongodb
 projectPath := $(orgPath)/$(name)
 # end project configuration
@@ -63,9 +63,9 @@ lint:$(lintDeps)
 	$(gopath)/bin/gometalinter $(lintArgs) ./...
 lint-deps:$(lintDeps)
 build:$(deps) $(srcFiles) $(gopath)/src/$(projectPath)
-	$(vendorGopath) go build $(subst -,/,$(foreach pkg,$(packages),./$(pkg)))
+	$(vendorGopath) go build $(subst $(name),,$(subst -,/,$(foreach pkg,$(packages),./$(pkg))))
 build-race:$(deps) $(srcFiles) $(gopath)/src/$(projectPath)
-	$(vendorGopath) go build -race $(subst -,/,$(foreach pkg,$(packages),./$(pkg)))
+	$(vendorGopath) go build -race $(subst $(name),,$(subst -,/,$(foreach pkg,$(packages),./$(pkg))))
 test:$(testOutput)
 race:$(raceOutput)
 coverage:$(coverageOutput)

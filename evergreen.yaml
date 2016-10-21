@@ -48,6 +48,7 @@ variables:
       # must additionally add the test suite name to the dev-tasks list
       # bellow and the task list, using the run-go-suite template
       - name: build
+      - name: test-amboy
       - name: test-dependency
       - name: test-job
       - name: test-registry
@@ -60,6 +61,7 @@ variables:
       # linting. Only need/want to run lint/coverage on one builder.
       - name: build
       - name: lint
+      - name: test-amboy
       - name: test-dependency
       - name: test-job
       - name: test-registry
@@ -70,6 +72,7 @@ variables:
       - name: coverage
   - &race-detector-tasks
       - name: build-race
+      - name: race-amboy
       - name: race-dependency
       - name: race-job
       - name: race-registry
@@ -189,6 +192,8 @@ tasks:
       - func: run-make
         vars: { target: "coverage-html"}
       - func: upload-coverage
+        vars: { name: "amboy"}
+      - func: upload-coverage
         vars: { name: "dependency"}
       - func: upload-coverage
         vars: { name: "job"}
@@ -205,6 +210,8 @@ tasks:
 
   # define tasks for all test suites (modules)
   - <<: *run-go-test-suite
+    name: test-amboy
+  - <<: *run-go-test-suite
     name: test-dependency
   - <<: *run-go-test-suite
     name: test-job
@@ -220,6 +227,10 @@ tasks:
     name: test-queue-driver
 
   # run the suites with the race detector (one variant only)
+  - <<: *run-go-test-suite
+    name: race-amboy
+    depends_on:
+      - name: build-race
   - <<: *run-go-test-suite
     name: race-dependency
     depends_on:
