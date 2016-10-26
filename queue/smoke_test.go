@@ -144,6 +144,10 @@ func TestUnorderedSingleThreadedLocalPool(t *testing.T) {
 }
 
 func TestUnorderedSingleThreadedSingleRunner(t *testing.T) {
+	if runtime.Compiler == "gccgo" {
+		t.Skip("gccgo not supported.")
+	}
+
 	assert := assert.New(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -171,6 +175,10 @@ func TestSmokeUnorderedWorkerPools(t *testing.T) {
 }
 
 func TestSmokeRemoteUnorderedWorkerSingleThreadedWithInternalDriver(t *testing.T) {
+	if runtime.Compiler == "gccgo" {
+		t.Skip("gccgo not supported.")
+	}
+
 	assert := assert.New(t)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
@@ -184,6 +192,10 @@ func TestSmokeRemoteUnorderedWorkerSingleThreadedWithInternalDriver(t *testing.T
 }
 
 func TestSmokeRemoteUnorderedWorkerPoolsWithInternalDriver(t *testing.T) {
+	if runtime.Compiler == "gccgo" {
+		t.Skip("gccgo not supported.")
+	}
+
 	assert := assert.New(t)
 	baseCtx := context.Background()
 
@@ -219,6 +231,10 @@ func TestSmokeRemoteUnorderedSingleThreadedWithMongoDBDriver(t *testing.T) {
 }
 
 func TestSmokeRemoteUnorderedSingleRunnerWithMongoDBDriver(t *testing.T) {
+	if runtime.Compiler == "gccgo" {
+		t.Skip("gccgo not supported.")
+	}
+
 	assert := assert.New(t)
 	name := uuid.NewV4().String()
 	opts := driver.DefaultMongoDBOptions()
@@ -268,6 +284,10 @@ func TestSmokeRemoteUnorderedWorkerPoolsWithMongoDBDriver(t *testing.T) {
 }
 
 func TestSmokePriorityQueueWithSingleWorker(t *testing.T) {
+	if runtime.Compiler == "gccgo" {
+		t.Skip("gccgo not supported.")
+	}
+
 	assert := assert.New(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
@@ -283,6 +303,10 @@ func TestSmokePriorityQueueWithSingleWorker(t *testing.T) {
 }
 
 func TestSmokePriorityQueueWithWorkerPools(t *testing.T) {
+	if runtime.Compiler == "gccgo" {
+		t.Skip("gccgo not supported.")
+	}
+
 	assert := assert.New(t)
 	baseCtx := context.Background()
 
@@ -298,6 +322,10 @@ func TestSmokePriorityQueueWithWorkerPools(t *testing.T) {
 }
 
 func TestSmokePriorityDriverWithRemoteQueueSingleWorker(t *testing.T) {
+	if runtime.Compiler == "gccgo" {
+		t.Skip("gccgo not supported.")
+	}
+
 	assert := assert.New(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
@@ -317,7 +345,11 @@ func TestSmokePriorityDriverWithRemoteQueueSingleWorker(t *testing.T) {
 	d.Close()
 }
 
-func TestSmokePriorityDriverWIthRemoteQueueWithWorkerPools(t *testing.T) {
+func TestSmokePriorityDriverWithRemoteQueueWithWorkerPools(t *testing.T) {
+	if runtime.Compiler == "gccgo" {
+		t.Skip("gccgo not supported.")
+	}
+
 	assert := assert.New(t)
 	baseCtx := context.Background()
 
@@ -363,6 +395,10 @@ func TestSmokeMultipleMongoDBQueuesWithTheSameName(t *testing.T) {
 }
 
 func TestSmokeMultipleLocalQueuesWithOneDriver(t *testing.T) {
+	if runtime.Compiler == "gccgo" {
+		t.Skip("gccgo not supported.")
+	}
+
 	assert := assert.New(t)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
@@ -377,6 +413,10 @@ func TestSmokeMultipleLocalQueuesWithOneDriver(t *testing.T) {
 }
 
 func TestSmokeMultipleQueuesWithPriorityDriver(t *testing.T) {
+	if runtime.Compiler == "gccgo" {
+		t.Skip("gccgo not supported.")
+	}
+
 	assert := assert.New(t)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
@@ -391,6 +431,10 @@ func TestSmokeMultipleQueuesWithPriorityDriver(t *testing.T) {
 }
 
 func TestSmokeLimitedSizeQueueWithSingleWorker(t *testing.T) {
+	if runtime.Compiler == "gccgo" {
+		t.Skip("gccgo not supported.")
+	}
+
 	assert := assert.New(t)
 
 	ctx, cancel := context.WithCancel(context.Background())

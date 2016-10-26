@@ -2,6 +2,7 @@ package queue
 
 import (
 	"fmt"
+	"runtime"
 	"testing"
 	"time"
 
@@ -37,6 +38,10 @@ type RemoteUnorderedSuite struct {
 }
 
 func TestRemoteUnorderedInternalDriverSuite(t *testing.T) {
+	if runtime.Compiler == "gccgo" {
+		t.Skip("gccgo not supported.")
+	}
+
 	tests := new(RemoteUnorderedSuite)
 	tests.driverConstructor = func() driver.Driver {
 		return driver.NewInternal()
@@ -47,6 +52,10 @@ func TestRemoteUnorderedInternalDriverSuite(t *testing.T) {
 }
 
 func TestRemoteUnorderedPriorityDriverSuite(t *testing.T) {
+	if runtime.Compiler == "gccgo" {
+		t.Skip("gccgo not supported.")
+	}
+
 	tests := new(RemoteUnorderedSuite)
 	tests.driverConstructor = func() driver.Driver {
 		return driver.NewPriority()
