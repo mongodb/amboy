@@ -20,7 +20,7 @@ type ShellJob struct {
 	Env        map[string]string `bson:"env" json:"env" yaml:"env"`
 	args       []string
 
-	*amboy.JobBase `bson:"job_base" json:"job_base" yaml:"job_base"`
+	*Base `bson:"job_base" json:"job_base" yaml:"job_base"`
 	sync.RWMutex
 }
 
@@ -54,7 +54,7 @@ func NewShellJob(cmd string, creates string) *ShellJob {
 func NewShellJobInstance() *ShellJob {
 	j := &ShellJob{
 		Env: make(map[string]string),
-		JobBase: &amboy.JobBase{
+		Base: &Base{
 			JobType: amboy.JobType{
 				Name:    "shell",
 				Version: 1,

@@ -1,7 +1,7 @@
 # start project configuration
 name := amboy
 buildDir := build
-packages := dependency job registry pool queue queue-driver rest $(name)
+packages := dependency job registry pool queue queue-driver rest
 orgPath := github.com/mongodb
 projectPath := $(orgPath)/$(name)
 # end project configuration
@@ -54,8 +54,7 @@ $(gopath)/src/%:
 	@-[ ! -d $(gopath) ] && mkdir -p $(gopath) || true
 	go get $(subst $(gopath)/src/,,$@)
 # end dependency installation tools
-t:
-	@echo $(testOutput)
+
 
 # userfacing targets for basic build and development operations
 lint:$(lintDeps)

@@ -110,7 +110,7 @@ func (s *JobGroupSuite) TestJobIdReturnsUniqueString() {
 		job := NewGroup(name)
 
 		id := job.ID()
-		s.True(strings.HasPrefix(id, name))
+		s.True(strings.HasPrefix(id, name), id)
 	}
 }
 

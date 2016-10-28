@@ -1,4 +1,4 @@
-package amboy
+package job
 
 import (
 	"errors"
@@ -11,7 +11,7 @@ import (
 )
 
 type BaseCheckSuite struct {
-	base    *JobBase
+	base    *Base
 	require *require.Assertions
 	suite.Suite
 }
@@ -25,7 +25,7 @@ func (s *BaseCheckSuite) SetupSuite() {
 }
 
 func (s *BaseCheckSuite) SetupTest() {
-	s.base = &JobBase{dep: dependency.NewAlways()}
+	s.base = &Base{dep: dependency.NewAlways()}
 }
 
 func (s *BaseCheckSuite) TestInitialValuesOfBaseObject() {

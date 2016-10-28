@@ -1,5 +1,3 @@
-// Package job provides tools and generic implementations of jobs for
-// amboy Queues.
 package job
 
 var jobIDSource <-chan int

@@ -26,5 +26,4 @@ func RegisterDefaultJobs() {
 		return newGroupInstance()
 	})
 	grip.Info("registered 'group' job type")
-
 }
