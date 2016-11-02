@@ -1,4 +1,4 @@
-/* Package job provides tools and generic implementations of jobs for
+/*Package job provides tools and generic implementations of jobs for
 amboy Queues.
 
 Base Metadata

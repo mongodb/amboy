@@ -8,7 +8,6 @@ import (
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/dependency"
-	"github.com/mongodb/amboy/priority"
 )
 
 func init() {
@@ -22,8 +21,7 @@ type JobTest struct {
 	shouldFail bool
 	T          amboy.JobType
 	dep        dependency.Manager
-
-	priority.Value
+	priority   int
 }
 
 func NewTestJob(content string) *JobTest {
@@ -83,10 +81,10 @@ func (j *JobTest) SetDependency(d dependency.Manager) {
 	j.dep = d
 }
 
-func (j *JobTest) Export() ([]byte, error) {
-	return amboy.ConvertTo(j.Type().Format, j)
+func (j *JobTest) Priority() int {
+	return j.priority
 }
 
-func (j *JobTest) Import(data []byte) error {
-	return amboy.ConvertFrom(j.Type().Format, data, j)
+func (j *JobTest) SetPriority(p int) {
+	j.priority = p
 }
