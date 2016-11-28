@@ -33,8 +33,7 @@ func init() {
 ////////////////////////////////////////////////////////////////////////////////
 
 func runUnorderedSmokeTest(ctx context.Context, q amboy.Queue, size int, assert *assert.Assertions) {
-	err := q.Start(ctx)
-	if !assert.NoError(err) {
+	if err := q.Start(ctx); !assert.NoError(err) {
 		return
 	}
 
@@ -458,6 +457,39 @@ func TestSmokeLimitedSizeQueueWithWorkerPools(t *testing.T) {
 		ctx, cancel := context.WithCancel(baseCtx)
 
 		q := NewLocalLimitedSize(poolSize, 7*poolSize)
+		runUnorderedSmokeTest(ctx, q, poolSize, assert)
+
+		cancel()
+	}
+}
+
+func TestSmokeShuffledQueueWithSingleWorker(t *testing.T) {
+	assert := assert.New(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	q := &LocalShuffled{}
+	runner := pool.NewSingleRunner()
+	assert.NoError(runner.SetQueue(q))
+
+	assert.NoError(q.SetRunner(runner))
+
+	runUnorderedSmokeTest(ctx, q, 1, assert)
+}
+
+func TestSmokeShuffledQueueWithWorkerPools(t *testing.T) {
+	assert := assert.New(t)
+	baseCtx := context.Background()
+
+	for _, poolSize := range []int{2, 4, 6, 7, 16, 32, 64} {
+		grip.Infoln("testing shuffled queue for:", poolSize)
+		ctx, cancel := context.WithCancel(baseCtx)
+
+		q := &LocalShuffled{}
+		r := pool.NewLocalWorkers(poolSize, q)
+		q.SetRunner(r)
+
 		runUnorderedSmokeTest(ctx, q, poolSize, assert)
 
 		cancel()

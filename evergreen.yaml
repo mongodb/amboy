@@ -121,7 +121,7 @@ functions:
       aws_key: ${aws_key}
       aws_secret: ${aws_secret}
       local_file: gopath/src/github.com/mongodb/amboy/build/coverage.${name}.html
-      remote_file: amboy/${task_id}b/${name}-coverage.html
+      remote_file: amboy/${task_id}/${name}-coverage.html
       bucket: mciuploads
       content_type: text/html
       permissions: public-read
@@ -289,7 +289,7 @@ buildvariants:
     display_name: RHEL 7.0
     expansions:
       mongodb_url: https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-rhel70-3.2.9.tgz
-      build_env: "PATH=/opt/go:$PATH"
+      build_env: "PATH=/opt/go/bin:$PATH"
     run_on:
       - rhel70
     tasks:
