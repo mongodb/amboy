@@ -8,7 +8,7 @@ cycles in the dependency graph, the queue will not run any tasks. This
 implementation is local, in the sense that there is no persistence or
 shared state between queue implementations.
 
-By deafult, LocalOrdered uses the amboy/pool.Workers implementation of
+By default, LocalOrdered uses the amboy/pool.Workers implementation of
 amboy.Runner interface.
 */
 

@@ -488,7 +488,7 @@ func TestSmokeShuffledQueueWithWorkerPools(t *testing.T) {
 
 		q := &LocalShuffled{}
 		r := pool.NewLocalWorkers(poolSize, q)
-		q.SetRunner(r)
+		assert.NoError(q.SetRunner(r))
 
 		runUnorderedSmokeTest(ctx, q, poolSize, assert)
 

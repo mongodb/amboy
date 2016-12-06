@@ -39,7 +39,7 @@ type LocalShuffled struct {
 	runner     amboy.Runner
 }
 
-// Start takes a context object and starts the embeded Runner instance
+// Start takes a context object and starts the embedded Runner instance
 // and the queue's own background dispatching thread. Returns an error
 // if there is no embedded runner, but is safe to call multiple times.
 func (q *LocalShuffled) Start(ctx context.Context) error {
@@ -50,7 +50,7 @@ func (q *LocalShuffled) Start(ctx context.Context) error {
 	q.starter.Do(func() {
 		q.operations = make(chan func(map[string]amboy.Job, map[string]amboy.Job, map[string]amboy.Job))
 		go q.reactor(ctx)
-		q.runner.Start(ctx)
+		grip.CatchError(q.runner.Start(ctx))
 		grip.Info("started shuffled job storage rector")
 	})
 
@@ -246,7 +246,7 @@ func (q *LocalShuffled) Complete(ctx context.Context, j amboy.Job) {
 	}
 }
 
-// SetRunner modifies the embeded amboy.Runner instance, and return an
+// SetRunner modifies the embedded amboy.Runner instance, and return an
 // error if the current runner has started.
 func (q *LocalShuffled) SetRunner(r amboy.Runner) error {
 	if q.runner != nil && q.runner.Started() {

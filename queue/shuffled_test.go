@@ -46,7 +46,7 @@ func (s *ShuffledQueueSuite) TestCannotStartQueueWithNilRunner() {
 	s.False(s.queue.Started())
 
 	// now validate the inverse
-	s.queue.SetRunner(pool.NewSingleRunner())
+	s.NoError(s.queue.SetRunner(pool.NewSingleRunner()))
 	s.NotNil(s.queue.runner)
 	s.NoError(s.queue.Start(ctx))
 	s.True(s.queue.Started())
@@ -59,7 +59,7 @@ func (s *ShuffledQueueSuite) TestPutFailsWithUnstartedQueue() {
 	// now validate the inverse
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	s.queue.SetRunner(pool.NewSingleRunner())
+	s.NoError(s.queue.SetRunner(pool.NewSingleRunner()))
 	s.NoError(s.queue.Start(ctx))
 	s.True(s.queue.Started())
 
@@ -69,7 +69,7 @@ func (s *ShuffledQueueSuite) TestPutFailsWithUnstartedQueue() {
 func (s *ShuffledQueueSuite) TestPutFailsIfJobIsTracked() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	s.queue.SetRunner(pool.NewSingleRunner())
+	s.NoError(s.queue.SetRunner(pool.NewSingleRunner()))
 	s.NoError(s.queue.Start(ctx))
 
 	j := job.NewShellJob("echo 1", "")
