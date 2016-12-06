@@ -106,7 +106,7 @@ func (s *LimitedSizeQueueSuite) TestGetMethodOnlyReturnsCompletedJobs() {
 		jobs[j.ID()] = j
 	}
 
-	s.queue.Wait()
+	amboy.Wait(s.queue)
 	s.queue.Runner().Close()
 
 	for name, j := range jobs {

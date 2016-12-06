@@ -87,7 +87,7 @@ func (s *LocalWorkersSuite) TestPoolStartsAndProcessesJobs() {
 	s.True(s.pool.Started())
 	s.True(s.queue.Started())
 
-	s.queue.Wait()
+	amboy.Wait(s.queue)
 
 	counter := 0
 	for j := range s.queue.Results() {

@@ -73,7 +73,7 @@ type Queue interface {
 	Get(string) (Job, bool)
 
 	// Returns the next job in the queue. These calls are
-	// non-blocking and return errors
+	// blocking, but may be interrupted with a canceled context.
 	Next(context.Context) Job
 
 	// Makes it possible to detect if a Queue has started
@@ -104,9 +104,6 @@ type Queue interface {
 	// Begins the execution of the job Queue, using the embedded
 	// Runner.
 	Start(context.Context) error
-
-	// Waits for all jobs to complete.
-	Wait()
 }
 
 // Runner describes a simple worker interface for executing jobs in

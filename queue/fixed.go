@@ -170,14 +170,3 @@ func (q *LocalLimitedSize) Start(ctx context.Context) error {
 	grip.Info("job server running")
 	return nil
 }
-
-// Wait blocks until all tasks are complete.
-func (q *LocalLimitedSize) Wait() {
-	for {
-		stats := q.Stats()
-		grip.Debugf("%d jobs complete of %d total", stats.Completed, stats.Total)
-		if stats.Total == stats.Completed {
-			break
-		}
-	}
-}

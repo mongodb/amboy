@@ -27,7 +27,6 @@ import (
 	"github.com/mongodb/amboy/pool"
 	"github.com/pkg/errors"
 	"github.com/tychoish/grip"
-	"github.com/tychoish/grip/sometimes"
 	"golang.org/x/net/context"
 )
 
@@ -342,16 +341,4 @@ func (q *LocalOrdered) Complete(ctx context.Context, j amboy.Job) {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 	q.tasks.completed[j.ID()] = true
-}
-
-// Wait blocks until all pending jobs in the queue are complete.
-func (q *LocalOrdered) Wait() {
-	for {
-		stats := q.Stats()
-		grip.DebugWhenf(sometimes.Fifth(),
-			"waiting for %d pending jobs (total=%d)", stats.Pending, stats.Total)
-		if stats.Pending == 0 {
-			break
-		}
-	}
 }

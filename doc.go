@@ -43,7 +43,7 @@ Consider the following example:
       // handle error case
    }
 
-   queue.Wait() // waits for all tasks to finish.
+   Wait(queue) // waits for all tasks to finish.
    queue.Close() // waits for all tasks to finish and releases
 		 // all resources.
 */

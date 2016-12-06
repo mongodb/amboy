@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/job"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -59,7 +60,7 @@ func (s *JobStatusSuite) TestIncorrectOrInvalidJobNamesReturnExpectedResults() {
 }
 
 func (s *JobStatusSuite) TestJobNameReturnsSuccessfulResponse() {
-	s.service.queue.Wait()
+	amboy.Wait(s.service.queue)
 
 	resp, err := s.service.getJobStatusResponse(s.jobName)
 	s.NoError(err)

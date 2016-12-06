@@ -5,7 +5,6 @@ import (
 
 	"github.com/mongodb/amboy"
 	"github.com/pkg/errors"
-	"github.com/tychoish/grip"
 	"golang.org/x/net/context"
 )
 
@@ -128,16 +127,6 @@ func (q *QueueTester) Results() <-chan amboy.Job {
 	}(q.storage)
 
 	return output
-}
-
-func (q *QueueTester) Wait() {
-	for {
-		grip.Debugf("test queue status: %+v\n", q.Stats())
-
-		if q.isComplete() {
-			return
-		}
-	}
 }
 
 func (q *QueueTester) isComplete() bool {

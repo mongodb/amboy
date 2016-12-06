@@ -270,14 +270,3 @@ func (q *RemoteUnordered) Start(ctx context.Context) error {
 
 	return nil
 }
-
-// Wait blocks until there are no pending jobs in the queue.
-func (q *RemoteUnordered) Wait() {
-	for {
-		stats := q.Stats()
-		if stats.Total == stats.Completed {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-}

@@ -5,6 +5,7 @@ package queue
 import (
 	"testing"
 
+	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/dependency"
 	"github.com/mongodb/amboy/job"
 	"github.com/mongodb/amboy/pool"
@@ -112,7 +113,7 @@ func (s *OrderedQueueSuite) TestResultsChannelProducesPointersToConsistentJobObj
 	s.NoError(s.queue.Put(job))
 	s.NoError(s.queue.Start(ctx))
 
-	s.queue.Wait()
+	amboy.Wait(s.queue)
 
 	result, ok := <-s.queue.Results()
 	s.True(ok)
@@ -128,7 +129,7 @@ func (s *OrderedQueueSuite) TestQueueCanOnlyBeStartedOnce() {
 	s.NoError(s.queue.Start(ctx))
 	s.True(s.queue.Started())
 
-	s.queue.Wait()
+	amboy.Wait(s.queue)
 	s.True(s.queue.Started())
 
 	// you can call start more than once until the queue has
@@ -210,7 +211,7 @@ func (s *OrderedQueueSuite) TestPassedIsCompletedButDoesNotRun() {
 	defer cancel()
 
 	s.NoError(s.queue.Start(ctx))
-	s.queue.Wait()
+	amboy.Wait(s.queue)
 	s.False(j1.Completed())
 	s.True(j2.Completed())
 }

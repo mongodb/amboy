@@ -56,7 +56,7 @@ func runUnorderedSmokeTest(ctx context.Context, q amboy.Queue, size int, assert 
 	wg.Wait()
 
 	assert.Equal(numJobs, q.Stats().Total, fmt.Sprintf("with %d workers", size))
-	q.Wait()
+	amboy.Wait(q)
 
 	grip.Infof("workers complete for %d worker smoke test", size)
 	assert.Equal(numJobs, q.Stats().Completed, fmt.Sprintf("%+v", q.Stats()))
@@ -105,8 +105,8 @@ func runMultiQueueSingleBackEndSmokeTest(ctx context.Context, qOne, qTwo amboy.Q
 	grip.Infof("before wait statsTwo: %+v", statsTwo)
 
 	// wait for all jobs to complete.
-	qOne.Wait()
-	qTwo.Wait()
+	amboy.Wait(qOne)
+	amboy.Wait(qTwo)
 
 	grip.Infof("after wait statsOne: %+v", qOne.Stats())
 	grip.Infof("after wait statsTwo: %+v", qTwo.Stats())

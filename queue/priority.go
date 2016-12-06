@@ -8,7 +8,6 @@ import (
 	"github.com/mongodb/amboy/pool"
 	"github.com/mongodb/amboy/queue/driver"
 	"github.com/tychoish/grip"
-	"github.com/tychoish/grip/sometimes"
 	"golang.org/x/net/context"
 )
 
@@ -160,16 +159,4 @@ func (q *LocalPriorityQueue) Start(ctx context.Context) error {
 	grip.Info("job server running")
 
 	return nil
-}
-
-// Wait blocks until there is no pending work remaining in the queue.
-func (q *LocalPriorityQueue) Wait() {
-	for {
-		stats := q.Stats()
-		grip.DebugWhenf(sometimes.Fifth(),
-			"%d jobs complete of %d total", stats.Completed, stats.Total)
-		if stats.Total == stats.Completed {
-			break
-		}
-	}
 }

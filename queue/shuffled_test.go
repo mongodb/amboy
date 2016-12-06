@@ -124,7 +124,7 @@ func (s *ShuffledQueueSuite) TestGetMethodRetrieves() {
 	jReturn, ok = s.queue.Get(j.ID())
 	s.True(ok)
 	s.Exactly(jReturn, j)
-	s.queue.Wait()
+	amboy.Wait(s.queue)
 
 	jReturn, ok = s.queue.Get(j.ID())
 	s.True(ok)

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/job"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -324,7 +325,7 @@ func (s *ClientSuite) TestGetStatsHelperWithActualJob() {
 	j := job.NewShellJob("true", "")
 
 	s.NoError(s.service.queue.Put(j))
-	s.service.queue.Wait()
+	amboy.Wait(s.service.queue)
 
 	st, err := s.client.getStats(ctx)
 	s.NoError(err, fmt.Sprintf("%+v", st))
@@ -377,7 +378,7 @@ func (s *ClientSuite) TestJobStatusWithValidJob() {
 
 	j := job.NewShellJob("echo foo", "")
 	s.NoError(s.service.queue.Put(j))
-	s.service.queue.Wait()
+	amboy.Wait(s.service.queue)
 	st, err := s.client.jobStatus(ctx, j.ID())
 	s.NoError(err)
 	s.Equal(j.ID(), st.ID)
@@ -480,7 +481,7 @@ func (s *ClientSuite) TestPendingJobsWithCanceledContextReturnsError() {
 }
 
 func (s *ClientSuite) TestPendingJobsIsZeroAfterWaitingOnTheQueue() {
-	s.service.queue.Wait()
+	amboy.Wait(s.service.queue)
 	var err error
 	ctx := context.Background()
 	s.client, err = NewClient(s.info.host, s.info.port, "")
@@ -506,7 +507,7 @@ func (s *ClientSuite) TestJobCompleteWithCanceledContextReturnsError() {
 }
 
 func (s *ClientSuite) TestJobCompleteIsZeroAfterWaitingOnTheQueue() {
-	s.service.queue.Wait()
+	amboy.Wait(s.service.queue)
 	var err error
 	ctx := context.Background()
 	s.client, err = NewClient(s.info.host, s.info.port, "")
@@ -515,7 +516,7 @@ func (s *ClientSuite) TestJobCompleteIsZeroAfterWaitingOnTheQueue() {
 	j := job.NewShellJob("echo foo", "")
 	s.NoError(s.service.queue.Put(j))
 
-	s.service.queue.Wait()
+	amboy.Wait(s.service.queue)
 
 	isComplete, err := s.client.JobComplete(ctx, j.ID())
 	s.True(isComplete)

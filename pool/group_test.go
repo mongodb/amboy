@@ -160,8 +160,8 @@ func (s *UnorderedGroupSuite) TestPoolStartsAndProcessesJobs() {
 	s.True(queueTwo.Started())
 
 	s.True(s.pool.Started())
-	queueTwo.Wait()
-	queueOne.Wait()
+	amboy.Wait(queueTwo)
+	amboy.Wait(queueOne)
 
 	for _, job := range jobsOne {
 		s.True(job.Completed(), fmt.Sprintf("%T\n\t%+v", job, job))

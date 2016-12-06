@@ -20,7 +20,6 @@ import (
 	"github.com/mongodb/amboy"
 	"github.com/pkg/errors"
 	"github.com/tychoish/grip"
-	"github.com/tychoish/grip/sometimes"
 	"golang.org/x/net/context"
 )
 
@@ -260,16 +259,4 @@ func (q *LocalShuffled) SetRunner(r amboy.Runner) error {
 // Runner returns the embedded runner.
 func (q *LocalShuffled) Runner() amboy.Runner {
 	return q.runner
-}
-
-// Wait blocks until all submitted jobs are complete.
-func (q *LocalShuffled) Wait() {
-	for {
-		stats := q.Stats()
-		grip.DebugWhenf(sometimes.Fifth(),
-			"%d jobs complete of %d total", stats.Completed, stats.Total)
-		if stats.Total == stats.Completed {
-			break
-		}
-	}
 }

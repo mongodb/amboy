@@ -3,6 +3,7 @@ package queue
 import (
 	"testing"
 
+	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/job"
 	"github.com/mongodb/amboy/pool"
 	"github.com/stretchr/testify/require"
@@ -93,7 +94,7 @@ func (s *LocalQueueSuite) TestResultsChannelProducesPointersToConsistentJobObjec
 	s.NoError(s.queue.Start(ctx))
 	s.NoError(s.queue.Put(job))
 
-	s.queue.Wait()
+	amboy.Wait(s.queue)
 
 	result, ok := <-s.queue.Results()
 	s.True(ok)
@@ -116,7 +117,7 @@ func (s *LocalQueueSuite) TestJobsChannelProducesJobObjects() {
 		s.NoError(s.queue.Put(job))
 	}
 
-	s.queue.Wait()
+	amboy.Wait(s.queue)
 
 	for j := range s.queue.Results() {
 		shellJob, ok := j.(*job.ShellJob)
@@ -156,7 +157,7 @@ func (s *LocalQueueSuite) TestQueueCanOnlyBeStartedOnce() {
 	s.NoError(s.queue.Start(ctx))
 	s.True(s.queue.Started())
 
-	s.queue.Wait()
+	amboy.Wait(s.queue)
 	s.True(s.queue.Started())
 
 	// you can call start more than once until the queue has
