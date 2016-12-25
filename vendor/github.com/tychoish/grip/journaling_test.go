@@ -24,18 +24,18 @@ func (s *GripSuite) SetupSuite() {
 
 func (s *GripSuite) SetupTest() {
 	s.grip.SetName(s.name)
-	s.grip.SetSender(send.NewBootstrapLogger(s.grip.ThresholdLevel(), s.grip.DefaultLevel()))
+	s.grip.SetSender(send.NewBootstrapLogger(s.name, s.grip.GetSender().Level()))
 }
 
 func (s *GripSuite) TestDefaultJournalerIsBootstrap() {
-	s.Equal(s.grip.Sender().Name(), "bootstrap")
+	s.Equal(s.grip.GetSender().Type(), send.Bootstrap)
 
 	// the bootstrap sender is a bit special because you can't
 	// change it's name, therefore:
 	secondName := "something_else"
 	s.grip.SetName(secondName)
 
-	s.Equal(s.grip.Sender().Name(), "bootstrap")
+	s.Equal(s.grip.GetSender().Type(), send.Bootstrap)
 	s.Equal(s.grip.Name(), secondName)
 }
 

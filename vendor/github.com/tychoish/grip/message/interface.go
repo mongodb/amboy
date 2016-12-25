@@ -1,5 +1,7 @@
 package message
 
+import "github.com/tychoish/grip/level"
+
 // Composer defines an interface with a "Resolve()" method that
 // returns the message in string format. Objects that implement this
 // interface, in combination to the Compose[*] operations, the
@@ -15,7 +17,7 @@ type Composer interface {
 
 	// A "raw" format of the logging output for use by some Sender
 	// implementations that write logged items to interfaces that
-	// accept JSON or another structured.
+	// accept JSON or another structured format.
 	Raw() interface{}
 
 	// Returns "true" when the message has content and should be
@@ -23,21 +25,26 @@ type Composer interface {
 	// (and should!) ignore messages even if they are otherwise
 	// above the logging threshold.
 	Loggable() bool
+
+	// Priority returns the priority of the message.
+	Priority() level.Priority
+	SetPriority(level.Priority) error
 }
 
 // ConvertToComposer can coerce unknown objects into Composer
 // instances, as possible.
-func ConvertToComposer(message interface{}) Composer {
+func ConvertToComposer(p level.Priority, message interface{}) Composer {
 	switch message := message.(type) {
 	case Composer:
+		message.SetPriority(p)
 		return message
 	case string:
-		return NewDefaultMessage(message)
+		return NewDefaultMessage(p, message)
 	case []interface{}:
-		return NewLinesMessage(message)
+		return NewLinesMessage(p, message)
 	case error:
-		return NewErrorMessage(message)
+		return NewErrorMessage(p, message)
 	default:
-		return NewFormatedMessage("%+v", message)
+		return NewFormattedMessage(p, "%+v", message)
 	}
 }

@@ -44,14 +44,14 @@ imports:
 - name: github.com/stretchr/testify
   version: d77da356e56a7428ad25149ca77381849a6a5232
 - name: github.com/tychoish/grip
-  version: 5190de1e82dbbd9bc844319fdec6be9ea40aa4dd
+  version: 9bb9cdb30e0106da20cdb4f351edf05f6d65062f
   subpackages:
   - level
   - logging
   - send
   - message
 - name: github.com/tychoish/gimlet
-  version: 97dab2f19a9b5eeca02e1bc38157310a8042b120
+  version: d4259773e16bb0ef8ed8bc7c0ad9cc602c461e12
 - name: golang.org/x/tools
   version: a2a552218a0e22e6fb22469f49ef371b492f6178
   subpackages:

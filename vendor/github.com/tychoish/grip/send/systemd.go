@@ -1,11 +1,11 @@
+// +build linux
+
 package send
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"strings"
-	"sync"
 
 	"github.com/coreos/go-systemd/journal"
 	"github.com/tychoish/grip/level"
@@ -13,133 +13,77 @@ import (
 )
 
 type systemdJournal struct {
-	name     string
-	level    LevelInfo
 	options  map[string]string
 	fallback *log.Logger
-
-	sync.RWMutex
+	*base
 }
 
 // NewJournaldLogger creates a Sender object that writes log messages
 // to the system's systemd journald logging facility. If there's an
 // error with the sending to the journald, messages fallback to
 // writing to standard output.
-func NewJournaldLogger(name string, thresholdLevel, defaultLevel level.Priority) (Sender, error) {
-	s := &systemdJournal{
-		name:    name,
-		options: make(map[string]string),
+func NewSystemdLogger(name string, l LevelInfo) (Sender, error) {
+	s := MakeSystemdLogger()
+
+	if err := s.SetLevel(l); err != nil {
+		return nil, err
 	}
 
-	err := s.SetDefaultLevel(defaultLevel)
-	if err != nil {
-		return s, err
-	}
+	s.SetName(name)
+	s.reset()
 
-	err = s.SetThresholdLevel(thresholdLevel)
-	if err != nil {
-		return s, err
-	}
-
-	s.createFallback()
 	return s, nil
 }
 
-func (s *systemdJournal) Name() string {
-	return s.name
-}
-
-func (s *systemdJournal) createFallback() {
-	s.fallback = log.New(os.Stdout, strings.Join([]string{"[", s.name, "] "}, ""), log.LstdFlags)
-}
-
-func (s *systemdJournal) SetName(name string) {
-	s.name = name
-	s.createFallback()
-}
-
-func (s *systemdJournal) Send(p level.Priority, m message.Composer) {
-	if !GetMessageInfo(s.level, p, m).ShouldLog() {
-		return
+// MakeSystemdLogger constructs an unconfigured systemd journald
+// logger. Pass to Journaler.SetSender or call SetName before using.
+func MakeSystemdLogger() Sender {
+	s := &systemdJournal{
+		options: make(map[string]string),
+		base:    newBase(""),
 	}
 
-	msg := m.Resolve()
-	err := journal.Send(msg, s.convertPrioritySystemd(p), s.options)
-	if err != nil {
-		s.fallback.Println("systemd journaling error:", err.Error())
-		s.fallback.Printf("[p=%s]: %s\n", p, msg)
+	s.reset = func() {
+		s.fallback = log.New(os.Stdout, strings.Join([]string{"[", s.Name(), "] "}, ""), log.LstdFlags)
+	}
+
+	return s
+}
+
+func (s *systemdJournal) Close() error     { return nil }
+func (s *systemdJournal) Type() SenderType { return Systemd }
+
+func (s *systemdJournal) Send(m message.Composer) {
+	if s.level.ShouldLog(m) {
+		msg := m.Resolve()
+		p := m.Priority()
+		err := journal.Send(msg, s.level.convertPrioritySystemd(p), s.options)
+		if err != nil {
+			s.fallback.Println("systemd journaling error:", err.Error())
+			s.fallback.Printf("[p=%s]: %s", p, msg)
+		}
 	}
 }
 
-func (s *systemdJournal) SetDefaultLevel(p level.Priority) error {
-	s.Lock()
-	defer s.Unlock()
-
-	if level.IsValidPriority(p) {
-		s.level.defaultLevel = p
-		return nil
-	}
-
-	return fmt.Errorf("%s (%d) is not a valid priority value (0-6)", p, (p))
-}
-
-func (s *systemdJournal) SetThresholdLevel(p level.Priority) error {
-	s.Lock()
-	defer s.Unlock()
-
-	if level.IsValidPriority(p) {
-		s.level.thresholdLevel = p
-		return nil
-	}
-
-	return fmt.Errorf("%s (%d) is not a valid priority value (0-6)", p, (p))
-}
-
-func (s *systemdJournal) DefaultLevel() level.Priority {
-	s.RLock()
-	defer s.RUnlock()
-
-	return s.level.defaultLevel
-}
-
-func (s *systemdJournal) ThresholdLevel() level.Priority {
-	s.RLock()
-	defer s.RUnlock()
-
-	return s.level.thresholdLevel
-}
-
-func (s *systemdJournal) AddOption(key, value string) {
-	s.options[key] = value
-}
-
-func (s *systemdJournal) convertPrioritySystemd(p level.Priority) journal.Priority {
-	switch {
-	case p == level.Emergency:
+func (l LevelInfo) convertPrioritySystemd(p level.Priority) journal.Priority {
+	switch p {
+	case level.Emergency:
 		return journal.PriEmerg
-	case p == level.Alert:
+	case level.Alert:
 		return journal.PriAlert
-	case p == level.Critical:
+	case level.Critical:
 		return journal.PriCrit
-	case p == level.Error:
+	case level.Error:
 		return journal.PriErr
-	case p == level.Warning:
+	case level.Warning:
 		return journal.PriWarning
-	case p == level.Notice:
+	case level.Notice:
 		return journal.PriNotice
-	case p == level.Info:
+	case level.Info:
 		return journal.PriInfo
-	case p == level.Debug:
+	case level.Debug, level.Trace:
 		return journal.PriDebug
 	default:
-		return s.convertPrioritySystemd(s.level.defaultLevel)
+		return l.convertPrioritySystemd(l.Default)
 	}
-}
-
-func (s *systemdJournal) Close() {
-	return
-}
-
-func (s *systemdJournal) Type() SenderType {
-	return Systemd
 }

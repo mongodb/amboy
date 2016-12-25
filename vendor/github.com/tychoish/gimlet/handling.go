@@ -57,8 +57,9 @@ func WriteInternalErrorJSON(w http.ResponseWriter, data interface{}) {
 	WriteJSONResponse(w, http.StatusInternalServerError, data)
 }
 
-// GetJSON parses JSON from a request body into an object specified by
-// the request. Used in handler functiosn to retreve and parse data
+// GetJSON parses JSON from a io.ReadCloser (e.g. http/*Request.Body
+// or http/*Response.Body) into an object specified by the
+// request. Used in handler functiosn to retreve and parse data
 // submitted by the client.
 func GetJSON(r io.ReadCloser, data interface{}) error {
 	defer r.Close()

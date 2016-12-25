@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 )
 
 // TODO: make a new catcher package, leave constructors in this
@@ -28,7 +29,8 @@ import (
 // messages within a function or other sequence of operations. Used to
 // implement a kind of "continue on error"-style operations
 type MultiCatcher struct {
-	errs []error
+	errs  []error
+	mutex sync.RWMutex
 }
 
 // NewCatcher returns a Catcher instance that you can use to capture
@@ -40,6 +42,9 @@ func NewCatcher() *MultiCatcher {
 // Add takes an error object and, if it's non-nil, adds it to the
 // internal collection of errors.
 func (c *MultiCatcher) Add(err error) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
 	if err != nil {
 		c.errs = append(c.errs, err)
 	}
@@ -47,12 +52,18 @@ func (c *MultiCatcher) Add(err error) {
 
 // Len returns the number of errors stored in the collector.
 func (c *MultiCatcher) Len() int {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
 	return len(c.errs)
 }
 
 // HasErrors returns true if the collector has ingested errors, and
 // false otherwise.
 func (c *MultiCatcher) HasErrors() bool {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
 	return len(c.errs) > 0
 }
 
@@ -60,10 +71,13 @@ func (c *MultiCatcher) HasErrors() bool {
 // separated string of the string representation of each error object
 // in the collector.
 func (c *MultiCatcher) String() string {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
 	output := make([]string, len(c.errs))
 
 	for _, err := range c.errs {
-		output = append(output, fmt.Sprintf("%+v", err.Error()))
+		output = append(output, fmt.Sprintf("%+v", err))
 	}
 
 	return strings.Join(output, "\n")
@@ -73,7 +87,7 @@ func (c *MultiCatcher) String() string {
 // no errors, it returns nil, and returns an error object with the
 // string form of all error objects in the collector.
 func (c *MultiCatcher) Resolve() error {
-	if len(c.errs) == 0 {
+	if !c.HasErrors() {
 		return nil
 	}
 

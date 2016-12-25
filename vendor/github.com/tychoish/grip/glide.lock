@@ -5,4 +5,8 @@ imports:
   version: 6dc8b843c670f2027cc26b164935635840a40526
   subpackages:
   - journal
+- name: github.com/bluele/slack
+  version: 1f14901342cf5347555c2a6b0160d1a94f9c46ea
+- name: github.com/mattn/go-xmpp
+  version: f4550b5399387339df5ce4c3f88c1ef85333bdd5
 devImports: []

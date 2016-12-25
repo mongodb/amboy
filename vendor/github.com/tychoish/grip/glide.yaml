@@ -4,3 +4,5 @@ import:
   version: ^9.0.0
   subpackages:
   - journal
+- package: github.com/bluele/slack
+- package: github.com/mattn/go-xmpp

@@ -29,7 +29,7 @@ func (s *GripInternalSuite) SetupSuite() {
 
 func (s *GripInternalSuite) SetupTest() {
 	s.grip.SetName(s.name)
-	sender, err := send.NewNativeLogger(s.name, s.grip.ThresholdLevel(), s.grip.DefaultLevel())
+	sender, err := send.NewNativeLogger(s.grip.Name(), s.grip.GetSender().Level())
 	s.NoError(err)
 	s.grip.SetSender(sender)
 }
@@ -44,7 +44,7 @@ func (s *GripInternalSuite) TestPanicSenderActuallyPanics() {
 			s.Nil(recover())
 		}()
 
-		s.grip.Sender().Send(s.grip.DefaultLevel(), message.NewLinesMessage("foo"))
+		s.grip.GetSender().Send(message.NewLinesMessage(s.grip.DefaultLevel(), "foo"))
 	}()
 
 	func() {
@@ -53,71 +53,45 @@ func (s *GripInternalSuite) TestPanicSenderActuallyPanics() {
 			s.NotNil(recover())
 		}()
 
-		s.grip.sendPanic(s.grip.DefaultLevel(), message.NewLinesMessage("foo"))
+		s.grip.sendPanic(message.NewLinesMessage(s.grip.DefaultLevel(), "foo"))
 	}()
 }
 
 func (s *GripInternalSuite) TestPanicSenderRespectsTThreshold() {
-	s.True(level.Debug > s.grip.DefaultLevel())
+	s.True(level.Debug < s.grip.DefaultLevel())
 
 	// test that there is a no panic if the message isn't "logabble"
 	defer func() {
 		s.Nil(recover())
 	}()
 
-	s.grip.sendPanic(level.Debug, message.NewLinesMessage("foo"))
+	s.grip.sendPanic(message.NewLinesMessage(level.Debug, "foo"))
 }
 
 func (s *GripInternalSuite) TestConditionalSend() {
 	// because sink is an internal type (implementation of
 	// sender,) and "GetMessage" isn't in the interface, though it
 	// is exported, we can't pass the sink between functions.
-	sink, err := send.NewInternalLogger(s.grip.ThresholdLevel(), s.grip.DefaultLevel())
+	sink, err := send.NewInternalLogger("sink", s.grip.GetSender().Level())
 	s.NoError(err)
 	s.grip.SetSender(sink)
 
-	msg := message.NewLinesMessage("foo")
-	msgTwo := message.NewLinesMessage("bar")
+	msg := message.NewLinesMessage(level.Info, "foo")
+	msgTwo := message.NewLinesMessage(level.Notice, "bar")
 
 	// when the conditional argument is true, it should work
-	s.grip.conditionalSend(level.Emergency, true, msg)
+	s.grip.conditionalSend(true, msg)
 	s.Equal(sink.GetMessage().Message, msg)
 
 	// when the conditional argument is true, it should work, and the channel is fifo
-	s.grip.conditionalSend(level.Emergency, false, msgTwo)
-	s.grip.conditionalSend(level.Emergency, true, msg)
+	s.grip.conditionalSend(false, msgTwo)
+	s.grip.conditionalSend(true, msg)
 	s.Equal(sink.GetMessage().Message, msg)
 
 	// change the order
-	s.grip.conditionalSend(level.Emergency, true, msg)
-	s.grip.conditionalSend(level.Emergency, false, msgTwo)
+	s.grip.conditionalSend(true, msg)
+	s.grip.conditionalSend(false, msgTwo)
 	s.Equal(sink.GetMessage().Message, msg)
-}
-
-func (s *GripInternalSuite) TestConditionalSendPanic() {
-	sink, err := send.NewInternalLogger(s.grip.ThresholdLevel(), s.grip.DefaultLevel())
-	s.NoError(err)
-	s.grip.SetSender(sink)
-
-	msg := message.NewLinesMessage("foo")
-
-	// first if the conditional is false, it can't panic.
-	s.NotPanics(func() {
-		s.grip.conditionalSendPanic(level.Emergency, false, msg)
-	})
-
-	// next, if the conditional is true it should panic
-	s.Panics(func() {
-		s.grip.conditionalSendPanic(level.Emergency, true, msg)
-	})
-}
-
-func (s *GripInternalSuite) TestConditionalSendFatalDoesNotExitIfNotLoggable() {
-	msg := message.NewLinesMessage("foo")
-	s.grip.conditionalSendFatal(s.grip.DefaultLevel(), false, msg)
-
-	s.True(level.Debug > s.grip.DefaultLevel())
-	s.grip.conditionalSendFatal(level.Debug, true, msg)
 }
 
 // This testing method uses the technique outlined in:
@@ -126,7 +100,7 @@ func (s *GripInternalSuite) TestConditionalSendFatalDoesNotExitIfNotLoggable() {
 func TestSendFatalExits(t *testing.T) {
 	grip := NewGrip("test")
 	if os.Getenv("SHOULD_CRASH") == "1" {
-		grip.sendFatal(grip.DefaultLevel(), message.NewLinesMessage("foo"))
+		grip.sendFatal(message.NewLinesMessage(grip.DefaultLevel(), "foo"))
 		return
 	}
 
@@ -134,6 +108,6 @@ func TestSendFatalExits(t *testing.T) {
 	cmd.Env = append(os.Environ(), "SHOULD_CRASH=1")
 	err := cmd.Run()
 	if err == nil {
-		t.Errorf("sendFatal should have exited 0, instead: %s", err.Error())
+		t.Errorf("sendFatal should have exited 0, instead: %+v", err)
 	}
 }

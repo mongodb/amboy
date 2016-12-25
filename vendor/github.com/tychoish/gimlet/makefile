@@ -3,7 +3,7 @@ name := gimlet
 buildDir := build
 packages := $(name)
 orgPath := github.com/tychoish
-projectPath := github.com/tychoish/$(name)
+projectPath := $(orgPath)/$(name)
 # end project configuration
 
 
@@ -12,46 +12,24 @@ projectPath := github.com/tychoish/$(name)
 #   separately. This is a temporary solution: eventually we should
 #   vendorize all of these dependencies.
 lintDeps := github.com/alecthomas/gometalinter
-#   explicitly download linters used by the metalinter so that we can
-#   avoid using the installation/update options, which often hit
-#   timeouts and do not propagate dependency installation errors.
-lintDeps += github.com/alecthomas/gocyclo
-lintDeps += github.com/golang/lint/golint
-lintDeps += github.com/gordonklaus/ineffassign
-lintDeps += github.com/jgautheron/goconst/cmd/goconst
-lintDeps += github.com/kisielk/errcheck
-lintDeps += github.com/mdempsky/unconvert
-lintDeps += github.com/mibk/dupl
-lintDeps += github.com/mvdan/interfacer
-lintDeps += github.com/opennota/check
-lintDeps += github.com/tsenart/deadcode
-lintDeps += github.com/client9/misspell
-lintDeps += github.com/walle/lll
-lintDeps += honnef.co/go/simple
-lintDeps += honnef.co/go/staticcheck
-# end dependency declarations
-
-
-# start linting configuration
 #   include test files and give linters 40s to run to avoid timeouts
 lintArgs := --tests --deadline=1m --vendor
 #   gotype produces false positives because it reads .a files which
 #   are rarely up to date.
 lintArgs += --disable="gotype" --disable="gas"
-lintArgs += --skip="build" --skip="buildscripts"
-#   enable and configure additional linters
+lintArgs += --skip="$(buildDir)" --skip="buildscripts"
+#  add and configure additional linters
 lintArgs += --enable="go fmt -s" --enable="goimports"
 lintArgs += --linter='misspell:misspell ./*.go:PATH:LINE:COL:MESSAGE' --enable=misspell
-lintArgs += --line-length=100 --dupl-threshold=50 --cyclo-over=10
-#   the gotype linter has an imperfect compilation simulator and
-#   produces the following false postive errors:
-lintArgs += --exclude="error: could not import github.com/mongodb/curator"
-#   go lint warns on an error in docstring format, erroneously because
-#   it doesn't consider the entire package.
-lintArgs += --exclude="warning: package comment should be of the form \"Package .* ...\""
-#   known issues that the linter picks up that are not relevant in our cases
-lintArgs += --exclude="file is not goimported" # top-level mains aren't imported
-# end linting configuration
+lintArgs += --line-length=100 --dupl-threshold=175 --cyclo-over=17
+#  two similar functions triggered the duplicate warning, but they're not.
+lintArgs += --exclude="duplicate of registry.go"
+lintArgs += --exclude="don.t use underscores.*_DependencyState.*"
+lintArgs += --exclude="file is not goimported" # test files aren't imported
+#  golint doesn't handle splitting package comments between multiple files.
+lintArgs += --exclude="package comment should be of the form \"Package .* \(golint\)"
+lintArgs += --exclude "error return value not checked \(defer.*"
+# end lint suppressions
 
 ######################################################################
 ##
@@ -115,7 +93,7 @@ $(buildDir)/$(name).race:$(gopath)/src/$(projectPath) $(srcFiles) $(deps)
 makeArgs := --no-print-directory
 race-%:
 	@$(MAKE) $(makeArgs) $(buildDir)/race.$(subst -,/,$*).out
-	@grep -s -q -e "^PASS" $(buildDir)/race.$(subst -,/,$*).out
+	@grep -e "^PASS" $(buildDir)/race.$(subst /,-,$*).out
 test-%:
 	@$(MAKE) $(makeArgs) $(buildDir)/test.$(subst -,/,$*).out
 	@grep -e "^PASS" $(buildDir)/test.$(subst /,-,$*).out
@@ -137,7 +115,7 @@ testArgs := -v --timeout=1m
 $(buildDir)/coverage.%.html:$(buildDir)/coverage.%.out
 	go tool cover -html=$(buildDir)/coverage.$(subst /,-,$*).out -o $(buildDir)/coverage.$(subst /,-,$*).html
 $(buildDir)/coverage.%.out:$(testRunDeps)
-	$(vendorGopath) go test --timeout=1m -covermode=count -coverprofile=$(buildDir)/coverage.$(subst /,-,$*).out $(projectPath)/$(subst -,/,$*)
+	$(vendorGopath) go test $(testArgs) -covermode=count -coverprofile=$(buildDir)/coverage.$(subst /,-,$*).out $(projectPath)/$(subst -,/,$*)
 	@-[ -f $(buildDir)/coverage.$(subst /,-,$*).out ] && go tool cover -func=$(buildDir)/coverage.$(subst /,-,$*).out | sed 's%$(projectPath)/%%' | column -t
 $(buildDir)/coverage.$(name).out:$(testRunDeps)
 	$(vendorGopath) go test -covermode=count -coverprofile=$@ $(projectPath)
@@ -163,7 +141,7 @@ vendor-deps:$(vendorDeps)
 #   new-style vendor directories. When this codebase can drop support
 #   for go1.4, we can delete most of this.
 -include $(buildDir)/makefile.vendor
-nestedVendored := ""
+nestedVendored := vendor/github.com/tychoish/grip
 nestedVendored := $(foreach project,$(nestedVendored),$(project)/build/vendor)
 $(buildDir)/makefile.vendor:$(buildDir)/render-gopath makefile
 	@mkdir -p $(buildDir)
@@ -179,6 +157,7 @@ change-go-version:
 	rm -rf $(buildDir)/make-vendor $(buildDir)/render-gopath
 	@$(MAKE) $(makeArgs) vendor > /dev/null 2>&1
 vendor:$(buildDir)/vendor/src
+	$(MAKE) $(makeArgs) -C vendor/github.com/tychoish/grip $@
 $(buildDir)/vendor/src:$(buildDir)/make-vendor $(buildDir)/render-gopath
 	@./$(buildDir)/make-vendor
 #   targets to build the small programs used to support vendoring.

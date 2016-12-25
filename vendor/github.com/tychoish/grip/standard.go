@@ -3,6 +3,8 @@ package grip
 import (
 	"os"
 	"strings"
+
+	"github.com/tychoish/grip/send"
 )
 
 var std = NewJournaler("grip")
@@ -12,5 +14,7 @@ func init() {
 		std.SetName(os.Args[0])
 	}
 
-	std.CatchAlert(std.UseNativeLogger())
+	sender, err := send.NewNativeLogger(std.Name(), std.GetSender().Level())
+	std.CatchAlert(std.SetSender(sender))
+	std.CatchAlert(err)
 }

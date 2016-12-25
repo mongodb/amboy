@@ -14,43 +14,42 @@ import "strings"
 // defined constants.
 type Priority int
 
-// Invalid is a constant for incorrect log levels, (i.e. all outside
-// of [0-7]). Typically only produced by the String() and FromString
-// functions
-const Invalid Priority = -1
-
 // Constants defined for easy access to
 const (
-	Emergency Priority = iota
-	Alert
-	Critical
-	Error
-	Warning
-	Notice
-	Info
-	Debug
+	Emergency Priority = 100
+	Alert     Priority = 90
+	Critical  Priority = 80
+	Error     Priority = 70
+	Warning   Priority = 60
+	Notice    Priority = 50
+	Info      Priority = 40
+	Debug     Priority = 30
+	Trace     Priority = 20
+	Invalid   Priority = 0
 )
 
 // String implements the Stringer interface and makes it possible to
 // print human-readable string identifier for a log level.
 func (p Priority) String() string {
-	switch {
-	case p == 0:
+	switch p {
+	case 100:
 		return "emergency"
-	case p == 1:
+	case 90:
 		return "alert"
-	case p == 2:
+	case 80:
 		return "critical"
-	case p == 3:
+	case 70:
 		return "error"
-	case p == 4:
+	case 60:
 		return "warning"
-	case p == 5:
+	case 50:
 		return "notice"
-	case p == 6:
+	case 40:
 		return "info"
-	case p == 7:
+	case 30:
 		return "debug"
+	case 20:
+		return "trace"
 	default:
 		return "invalid"
 	}
@@ -59,29 +58,30 @@ func (p Priority) String() string {
 // IsValidPriority takes a value (generally a number or a Priority
 // value) and returns true if it's valid.
 func IsValidPriority(p Priority) bool {
-	return p >= 0 && p <= 7
+	return p > 1 && p <= 100
 }
 
 // FromString takes a string, (case insensitive, leading and trailing space removed, )
-func FromString(level string) Priority {
-	level = strings.TrimSpace(strings.ToLower(level))
-	switch {
-	case level == "emergency":
+func FromString(l string) Priority {
+	switch strings.TrimSpace(strings.ToLower(l)) {
+	case "emergency":
 		return Emergency
-	case level == "alert":
+	case "alert":
 		return Alert
-	case level == "crtical":
+	case "crtical":
 		return Critical
-	case level == "error":
+	case "error":
 		return Error
-	case level == "warning":
+	case "warning":
 		return Warning
-	case level == "notice":
+	case "notice":
 		return Notice
-	case level == "info":
+	case "info":
 		return Info
-	case level == "debug":
+	case "debug":
 		return Debug
+	case "trace":
+		return Trace
 	default:
 		return Invalid
 	}

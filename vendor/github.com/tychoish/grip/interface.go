@@ -10,118 +10,101 @@ import (
 // packages.
 type Journaler interface {
 	Name() string
-	Sender() send.Sender
-	SetDefaultLevel(interface{})
 	SetName(string)
-	SetSender(send.Sender)
-	CloneSender(send.Sender)
-	SetThreshold(level interface{})
+
+	// Methods to access the underlying message sending backend.
+	GetSender() send.Sender
+	SetSender(send.Sender) error
+
+	// Configure the default and threshold levels of the current
+	// sender.
+	SetThreshold(interface{})
 	ThresholdLevel() level.Priority
-	UseFileLogger(string) error
-	UseNativeLogger() error
-	UseSystemdLogger() error
-
-	CatchAlert(error)
-	CatchAlertFatal(error)
-	CatchAlertPanic(error)
-	CatchCritical(error)
-	CatchCriticalFatal(error)
-	CatchCriticalPanic(error)
-	CatchDebug(error)
-	CatchDefault(error)
-	CatchEmergency(error)
-	CatchEmergencyFatal(error)
-	CatchEmergencyPanic(error)
-	CatchError(error)
-	CatchErrorFatal(error)
-	CatchErrorPanic(error)
-	CatchInfo(error)
-	CatchNotice(error)
-	CatchWarning(error)
-
-	Default(interface{})
+	SetDefaultLevel(interface{})
 	DefaultLevel() level.Priority
+
+	// Specify a log level as an argument rather than a method
+	// name.
+	Log(level.Priority, interface{})
+	Logf(level.Priority, string, ...interface{})
+	Logln(level.Priority, ...interface{})
+	LogWhen(bool, level.Priority, interface{})
+	LogWhenf(bool, level.Priority, string, ...interface{})
+	LogWhenln(bool, level.Priority, ...interface{})
+
+	// Send at the default logging level. This might be below the
+	// threshold.
+	Default(interface{})
+	Defaultf(string, ...interface{})
+	Defaultln(...interface{})
 	DefaultWhen(bool, interface{})
 	DefaultWhenf(bool, string, ...interface{})
 	DefaultWhenln(bool, ...interface{})
-	Defaultf(string, ...interface{})
-	Defaultln(...interface{})
 
-	Emergency(interface{})
+	// Log a message (the contents of the error,) only if the
+	// error is non-nil. These are redundant to the similar base
+	// methods. (e.g. Alert and CatchAlert have the same behavior.)
+	CatchLog(level.Priority, error)
+	CatchDefault(error)
+	CatchEmergency(error)
+	CatchAlert(error)
+	CatchCritical(error)
+	CatchError(error)
+	CatchWarning(error)
+	CatchNotice(error)
+	CatchInfo(error)
+	CatchDebug(error)
+
+	// Methods for sending messages at specific levels. If you
+	// send a message at a level that is below the threshold, then it is a no-op.
+
+	// Emergency methods have "panic" and "fatal" variants that
+	// call panic or os.Exit(1). It is impossible for "Emergency"
+	// to be below threshold, however, if the message isn't
+	// loggable (e.g. error is nil, or message is empty,) these
+	// methods will not panic/error.
+	CatchEmergencyFatal(error)
+	CatchEmergencyPanic(error)
 	EmergencyFatal(interface{})
-	EmergencyFatalWhen(bool, interface{})
-	EmergencyFatalWhenf(bool, string, ...interface{})
-	EmergencyFatalWhenln(bool, ...interface{})
 	EmergencyFatalf(string, ...interface{})
 	EmergencyFatalln(...interface{})
 	EmergencyPanic(interface{})
-	EmergencyPanicWhen(bool, interface{})
-	EmergencyPanicWhenf(bool, string, ...interface{})
-	EmergencyPanicWhenln(bool, ...interface{})
 	EmergencyPanicf(string, ...interface{})
 	EmergencyPanicln(...interface{})
+
+	// For each level, in addition to a basic logger that takes
+	// strings and message.Composer objects (and tries to do its best
+	// with everythingelse.) there are println and printf
+	// loggers. Each Level also has "When" variants that only log
+	// if the passed condition are true.
+
+	Emergency(interface{})
+	Emergencyf(string, ...interface{})
+	Emergencyln(...interface{})
 	EmergencyWhen(bool, interface{})
 	EmergencyWhenf(bool, string, ...interface{})
 	EmergencyWhenln(bool, ...interface{})
-	Emergencyf(string, ...interface{})
-	Emergencyln(...interface{})
 
 	Alert(interface{})
-	AlertFatal(interface{})
-	AlertFatalWhen(bool, interface{})
-	AlertFatalWhenf(bool, string, ...interface{})
-	AlertFatalWhenln(bool, ...interface{})
-	AlertFatalf(string, ...interface{})
-	AlertFatalln(...interface{})
-	AlertPanic(interface{})
-	AlertPanicWhen(bool, interface{})
-	AlertPanicWhenf(bool, string, ...interface{})
-	AlertPanicWhenln(bool, ...interface{})
-	AlertPanicf(string, ...interface{})
-	AlertPanicln(...interface{})
+	Alertf(string, ...interface{})
+	Alertln(...interface{})
 	AlertWhen(bool, interface{})
 	AlertWhenf(bool, string, ...interface{})
 	AlertWhenln(bool, ...interface{})
-	Alertf(string, ...interface{})
-	Alertln(...interface{})
 
 	Critical(interface{})
-	CriticalFatal(interface{})
-	CriticalFatalWhen(bool, interface{})
-	CriticalFatalWhenf(bool, string, ...interface{})
-	CriticalFatalWhenln(bool, ...interface{})
-	CriticalFatalf(string, ...interface{})
-	CriticalFatalln(...interface{})
-	CriticalPanic(interface{})
-	CriticalPanicWhen(bool, interface{})
-	CriticalPanicWhenf(bool, string, ...interface{})
-	CriticalPanicWhenln(bool, ...interface{})
-	CriticalPanicf(string, ...interface{})
-	CriticalPanicln(...interface{})
+	Criticalf(string, ...interface{})
+	Criticalln(...interface{})
 	CriticalWhen(bool, interface{})
 	CriticalWhenf(bool, string, ...interface{})
 	CriticalWhenln(bool, ...interface{})
-	Criticalf(string, ...interface{})
-	Criticalln(...interface{})
 
 	Error(interface{})
-	ErrorFatal(interface{})
-	ErrorFatalWhen(bool, interface{})
-	ErrorFatalWhenf(bool, string, ...interface{})
-	ErrorFatalWhenln(bool, ...interface{})
-	ErrorFatalf(string, ...interface{})
-	ErrorFatalln(...interface{})
-	ErrorPanic(interface{})
-	ErrorPanicWhen(bool, interface{})
-	ErrorPanicWhenf(bool, string, ...interface{})
-	ErrorPanicWhenln(bool, ...interface{})
-	ErrorPanicf(string, ...interface{})
-	ErrorPanicln(...interface{})
+	Errorf(string, ...interface{})
+	Errorln(...interface{})
 	ErrorWhen(bool, interface{})
 	ErrorWhenf(bool, string, ...interface{})
 	ErrorWhenln(bool, ...interface{})
-	Errorf(string, ...interface{})
-	Errorln(...interface{})
 
 	Warning(interface{})
 	Warningf(string, ...interface{})

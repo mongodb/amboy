@@ -2,7 +2,9 @@ package grip
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -95,4 +97,19 @@ func (s *CatcherSuite) TestResolveMethodDoesNotClearStateOfCatcher() {
 
 	s.True(s.catcher.HasErrors())
 	s.Equal(10, s.catcher.Len())
+}
+
+func (s *CatcherSuite) TestConcurrentAddingOfErrors() {
+	wg := &sync.WaitGroup{}
+	s.Equal(s.catcher.Len(), 0)
+	for i := 0; i < 256; i++ {
+		wg.Add(1)
+		go func(num int) {
+			s.catcher.Add(fmt.Errorf("adding err #%d", num))
+			wg.Done()
+		}(i)
+	}
+	wg.Wait()
+	s.Equal(s.catcher.Len(), 256)
+
 }

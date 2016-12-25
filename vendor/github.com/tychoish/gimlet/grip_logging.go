@@ -26,7 +26,7 @@ func NewAppLogger() *AppLogging {
 	l := &AppLogging{grip.NewJournaler("gimlet")}
 
 	// use the default sender for grip's standard logger.
-	l.SetSender(grip.Sender())
+	l.SetSender(grip.GetSender())
 
 	return l
 }
