@@ -30,7 +30,6 @@ func NewSystemdLogger(name string, l LevelInfo) (Sender, error) {
 	}
 
 	s.SetName(name)
-	s.reset()
 
 	return s, nil
 }
