@@ -23,7 +23,6 @@ import (
 
 func init() {
 	grip.SetThreshold(level.Debug)
-	grip.CatchError(grip.UseNativeLogger())
 	job.RegisterDefaultJobs()
 }
 

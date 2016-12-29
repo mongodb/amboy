@@ -172,14 +172,13 @@ func (c *Client) getURL(endpoint string) string {
 
 func (c *Client) getStats(ctx context.Context) (*status, error) {
 	resp, err := ctxhttp.Get(ctx, c.client, c.getURL("/v1/status"))
-
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 
 	s := &status{}
-	err = gimlet.GetJSON(resp.Body, s)
-	if err != nil {
+	if err = gimlet.GetJSON(resp.Body, s); err != nil {
 		return nil, err
 	}
 
@@ -226,10 +225,11 @@ func (c *Client) SubmitJob(ctx context.Context, j amboy.Job) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	defer resp.Body.Close()
 
 	cjr := createResponse{}
-	err = gimlet.GetJSON(resp.Body, &cjr)
-	if err != nil {
+
+	if err = gimlet.GetJSON(resp.Body, &cjr); err != nil {
 		return "", err
 	}
 
@@ -240,15 +240,37 @@ func (c *Client) SubmitJob(ctx context.Context, j amboy.Job) (string, error) {
 	return cjr.ID, nil
 }
 
+// FetchJob takes the name of a queue, and returns if possible a
+// representation of that job object.
+func (c *Client) FetchJob(ctx context.Context, name string) (amboy.Job, error) {
+	resp, err := ctxhttp.Get(ctx, c.client, c.getURL(fmt.Sprintf("/v1/job/%s", name)))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	ji := &registry.JobInterchange{}
+	if err = gimlet.GetJSON(resp.Body, &ji); err != nil {
+		return nil, err
+	}
+
+	j, err := registry.ConvertToJob(ji)
+	if err != nil {
+		return nil, err
+	}
+
+	return j, nil
+}
+
 func (c *Client) jobStatus(ctx context.Context, name string) (*jobStatusResponse, error) {
 	resp, err := ctxhttp.Get(ctx, c.client, c.getURL(fmt.Sprintf("/v1/job/status/%s", name)))
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 
 	s := &jobStatusResponse{}
-	err = gimlet.GetJSON(resp.Body, s)
-	if err != nil {
+	if err = gimlet.GetJSON(resp.Body, s); err != nil {
 		return nil, err
 	}
 
@@ -267,71 +289,38 @@ func (c *Client) JobComplete(ctx context.Context, name string) (bool, error) {
 	return st.Completed, nil
 }
 
-func waitForOutcome(ctx context.Context, outcome func() (bool, error)) bool {
-	timer := time.NewTimer(0)
-	factor := 0
-	for {
-		// TODO replace this interval with some exponential
-		// backoff+jitter.
-		if factor <= 50 {
-			factor++
-		}
-
-		select {
-		case <-ctx.Done():
-			return false
-		case <-timer.C:
-			complete, err := outcome()
-			if err != nil {
-				grip.CatchError(err)
-				timer.Reset(time.Duration(factor) * 100 * time.Millisecond)
-				if factor < 10 {
-					continue
-				}
-				return false
-			}
-
-			if !complete {
-				timer.Reset(time.Duration(factor) * 100 * time.Millisecond)
-				continue
-			}
-
-			return true
-		}
-	}
-}
-
 // Wait blocks until the job identified by the name argument is
 // complete. Does not handle the case where a job does not exist.
 func (c *Client) Wait(ctx context.Context, name string) bool {
-	return waitForOutcome(ctx, func() (bool, error) {
-		s, err := c.jobStatus(ctx, name)
-		if err != nil || !s.Exists {
-			return false, err
-		}
+	timeout := 20 * time.Second
+	deadline, ok := ctx.Deadline()
+	if ok {
+		timeout = time.Since(deadline)
+	}
 
-		if !s.Completed {
-			grip.Debugf("job %s is not completed", name)
-			return false, nil
-		}
-
-		return true, nil
-	})
+	resp, err := ctxhttp.Get(ctx, c.client, c.getURL(fmt.Sprintf("/v1/job/wait/%s?timeout=%s", name, timeout)))
+	if err != nil {
+		grip.Info(err)
+		grip.Debugf("%+v", resp)
+		return false
+	}
+	return true
 }
 
 // WaitAll waits for *all* pending jobs in the queue to complete.
 func (c *Client) WaitAll(ctx context.Context) bool {
-	return waitForOutcome(ctx, func() (bool, error) {
-		s, err := c.getStats(ctx)
-		if err != nil || !s.QueueRunning {
-			return false, err
-		}
+	timeout := 20 * time.Second
+	deadline, ok := ctx.Deadline()
+	if ok {
+		timeout = time.Since(deadline)
+	}
 
-		if s.PendingJobs != 0 {
-			grip.Debugf("%d pending jobs, waiting", s.PendingJobs)
-			return false, nil
-		}
+	resp, err := ctxhttp.Get(ctx, c.client, c.getURL(fmt.Sprintf("/v1/status/wait?timeout=%s", timeout)))
+	if err != nil {
+		grip.Info(err)
+		grip.Debugf("%+v", resp)
+		return false
+	}
 
-		return true, nil
-	})
+	return true
 }

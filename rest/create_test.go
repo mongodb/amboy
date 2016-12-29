@@ -33,7 +33,7 @@ func (s *CreateJobSuite) SetupSuite() {
 	ctx, cancel := context.WithCancel(context.Background())
 	s.closer = cancel
 
-	s.service.Open(ctx)
+	s.NoError(s.service.Open(ctx))
 
 	s.NoError(s.service.App().Resolve())
 }

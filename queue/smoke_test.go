@@ -21,7 +21,6 @@ import (
 
 func init() {
 	grip.SetThreshold(level.Info)
-	grip.CatchError(grip.UseNativeLogger())
 	grip.SetName("amboy.queue.tests")
 	job.RegisterDefaultJobs()
 }

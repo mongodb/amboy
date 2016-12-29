@@ -8,6 +8,9 @@ circumstances. All of these functions wait until the total number of
 jobs submitted to the queue is equal to the number of completed jobs,
 and as a result these methods don't prevent other threads from adding
 jobs to the queue after beginning to wait.
+
+Additionally, there are a set of methods that allow callers to wait for
+a specific job to complete.
 */
 package amboy
 
@@ -65,6 +68,7 @@ func WaitInterval(q Queue, interval time.Duration) {
 // all tasks are complete.
 func WaitCtxInterval(ctx context.Context, q Queue, interval time.Duration) bool {
 	timer := time.NewTimer(0)
+	defer timer.Stop()
 
 	for {
 		select {
@@ -72,6 +76,102 @@ func WaitCtxInterval(ctx context.Context, q Queue, interval time.Duration) bool 
 			return false
 		case <-timer.C:
 			if q.Stats().isComplete() {
+				return true
+			}
+
+			timer.Reset(interval)
+		}
+	}
+}
+
+// WaitJob blocks until the job, based on its ID, is marked complete
+// in the queue. The return value is false if the job does not exist
+// (or is removed) and true when the job completes. This operation could
+// block indefinitely.
+func WaitJob(j Job, q Queue) bool {
+	var ok bool
+
+	for {
+		j, ok = q.Get(j.ID())
+		if !ok {
+			return false
+		}
+
+		if j.Completed() {
+			return true
+		}
+	}
+}
+
+// WaitJobCtx blocks until the job, based on its ID, is marked complete
+// in the queue. This operation blocks indefinitely, unless the
+// context is canceled or reaches its timeout. The return value is
+// false if the job does not exist or if the context is canceled, and
+// only returns true when the job is complete.
+func WaitJobCtx(ctx context.Context, j Job, q Queue) bool {
+	var ok bool
+	for {
+		if ctx.Err() != nil {
+			return false
+		}
+
+		j, ok = q.Get(j.ID())
+		if !ok {
+			return false
+		}
+
+		if ctx.Err() != nil {
+			return false
+		}
+
+		if j.Completed() {
+			return true
+		}
+	}
+}
+
+// WaitJobInterval takes a job and queue object and waits for the job
+// to be marked complete. The interval parameter controls how long the
+// operation waits between checks, and can be used to limit the impact
+// of waiting on a busy queue. The operation returns false if the job
+// is not registered in the queue, and true when the job completes.
+func WaitJobInterval(j Job, q Queue, interval time.Duration) bool {
+	var ok bool
+
+	for {
+		j, ok = q.Get(j.ID())
+		if !ok {
+			return false
+		}
+
+		if j.Completed() {
+			return true
+		}
+
+		time.Sleep(interval)
+	}
+}
+
+// WaitJobCtxInterval waits for a job in a queue to complete. Returns
+// false if the context has been canceled, or if the job does not exist
+// in the queue, and true only after the job is marked complete.
+func WaitJobCtxInterval(ctx context.Context, j Job, q Queue, interval time.Duration) bool {
+	var ok bool
+
+	timer := time.NewTimer(0)
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-timer.C:
+			j, ok = q.Get(j.ID())
+			if !ok {
+				return false
+			}
+
+			if j.Completed() {
 				return true
 			}
 

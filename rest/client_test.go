@@ -3,7 +3,6 @@
 package rest
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -44,7 +43,7 @@ func (s *ClientSuite) SetupSuite() {
 	ctx, cancel := context.WithCancel(context.Background())
 	s.closer = cancel
 	s.service = NewService()
-	s.service.Open(ctx)
+	s.NoError(s.service.Open(ctx))
 
 	app := s.service.App()
 	s.NoError(app.Resolve())
@@ -387,37 +386,6 @@ func (s *ClientSuite) TestJobStatusWithValidJob() {
 	s.Equal(0, st.JobsPending)
 }
 
-func (s *ClientSuite) TestWaitForOutcomeWithCanceledContextReturnsFalseWhenOutcomeIsUnresolvable() {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	s.False(waitForOutcome(ctx, func() (bool, error) {
-		return false, errors.New("foo")
-	}))
-}
-
-func (s *ClientSuite) TestWaitForOutcomeReturnsTrueIfOutcomeOperationIsValid() {
-	ctx := context.Background()
-	s.True(waitForOutcome(ctx, func() (bool, error) {
-		return true, nil
-	}))
-}
-
-func (s *ClientSuite) TestWaitForOutcomeShouldReturnFalseIfOutcomeOperationHasErrors() {
-	// because we'll hit context timeout
-	ctx, _ := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	s.False(waitForOutcome(ctx, func() (bool, error) {
-		return true, errors.New("foo")
-	}))
-}
-
-func (s *ClientSuite) TestWaitForOutcomeShouldReturnFalseIfOutcomeOperationIsFalse() {
-	// because we'll hit context timeout
-	ctx, _ := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	s.False(waitForOutcome(ctx, func() (bool, error) {
-		return false, nil
-	}))
-}
-
 ////////////////////////////////////////////////////////////////////////
 //
 // Public Client Interfaces
@@ -607,6 +575,32 @@ func (s *ClientSuite) TestWhenWaitAllMethodReturnsAllJobsAreComplete() {
 
 	qst = s.service.queue.Stats()
 	s.Equal(0, qst.Pending)
+}
+
+func (s *ClientSuite) TestFetchJobReturnsEquivalentJob() {
+	var err error
+
+	s.client, err = NewClient(s.info.host, s.info.port, "")
+	ctx := context.Background()
+	s.NoError(err)
+	jobs := []*job.ShellJob{}
+
+	for i := 0; i < 10; i++ {
+		j := job.NewShellJob(fmt.Sprintf("echo %d", i), "")
+		_, err = s.client.SubmitJob(ctx, j)
+		s.NoError(err)
+		jobs = append(jobs, j)
+	}
+
+	ok := s.client.WaitAll(ctx)
+	s.True(ok)
+
+	for _, j := range jobs {
+		rj, err := s.client.FetchJob(ctx, j.ID())
+		s.NoError(err)
+		s.Equal(j.ID(), rj.ID())
+		s.Equal(j.Command, rj.(*job.ShellJob).Command)
+	}
 }
 
 // TODO: wait

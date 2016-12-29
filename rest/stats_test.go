@@ -22,7 +22,7 @@ func TestStatusOuputGenerator(t *testing.T) {
 	assert.True(len(st.SupportedJobTypes) > 0)
 
 	// Now open the the service, and thus the queue, and watch the response change:
-	service.Open(ctx)
+	assert.NoError(service.Open(ctx))
 	defer service.Close()
 
 	st = service.getStatus()
@@ -48,7 +48,7 @@ func TestStatusMethod(t *testing.T) {
 	assert.True(len(st.SupportedJobTypes) > 0)
 
 	// Now open the the service, and thus the queue, and watch the response change:
-	service.Open(ctx)
+	assert.NoError(service.Open(ctx))
 	defer service.Close()
 
 	w = httptest.NewRecorder()

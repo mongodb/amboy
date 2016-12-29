@@ -55,12 +55,10 @@ func (s *RestServiceSuite) TestInitialListOfRegisteredJobs() {
 func (s *RestServiceSuite) TestServiceOpenMethodInitializesResources() {
 	s.Nil(s.service.closer)
 	s.Nil(s.service.queue)
-	s.Nil(s.service.app)
 
 	ctx := context.Background()
-	s.service.Open(ctx)
+	s.NoError(s.service.Open(ctx))
 
-	s.NotNil(s.service.app)
 	s.NotNil(s.service.queue)
 	s.NotNil(s.service.closer)
 }

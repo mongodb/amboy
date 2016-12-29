@@ -19,7 +19,7 @@ lintArgs := --tests --deadline=1m --vendor
 lintArgs += --disable="gotype" --disable="gas"
 lintArgs += --skip="$(buildDir)" --skip="buildscripts"
 #  add and configure additional linters
-lintArgs += --enable="go fmt -s" --enable="goimports"
+lintArgs += --enable="goimports"
 lintArgs += --linter='misspell:misspell ./*.go:PATH:LINE:COL:MESSAGE' --enable=misspell
 lintArgs += --line-length=100 --dupl-threshold=175 --cyclo-over=17
 #  two similar functions triggered the duplicate warning, but they're not.
@@ -28,6 +28,8 @@ lintArgs += --exclude="don.t use underscores.*_DependencyState.*"
 lintArgs += --exclude="file is not goimported" # test files aren't imported
 #  golint doesn't handle splitting package comments between multiple files.
 lintArgs += --exclude="package comment should be of the form \"Package .* \(golint\)"
+#  no need to check the error of closer read operations in defer cases
+lintArgs += --exclude="error return value not checked \(defer.*"
 # end lint suppressions
 
 
