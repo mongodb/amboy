@@ -1,13 +1,13 @@
 package rest
 
 import (
-	"context"
 	"net/http"
 	"time"
 
 	"github.com/mongodb/amboy"
 	"github.com/tychoish/gimlet"
 	"github.com/tychoish/grip"
+	"golang.org/x/net/context"
 )
 
 type status struct {
