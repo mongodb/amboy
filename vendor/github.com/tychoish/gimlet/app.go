@@ -209,3 +209,18 @@ func (a *APIApp) SetPort(port int) error {
 
 	return nil
 }
+
+// SetHost sets the hostname or address for the application to listen
+// on. Errors after resolving the application. You do not need to set
+// this, and if unset the application will listen on the specified
+// port on all interfaces.
+func (a *APIApp) SetHost(name string) error {
+	if a.isResolved {
+		return fmt.Errorf("cannot set host to '%s', after resolving. Host is still '%s'",
+			name, a.address)
+	}
+
+	a.address = name
+
+	return nil
+}

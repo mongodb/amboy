@@ -51,7 +51,7 @@ imports:
   - send
   - message
 - name: github.com/tychoish/gimlet
-  version: d4259773e16bb0ef8ed8bc7c0ad9cc602c461e12
+  version: c6dd6f1b79f1a67c193533b38b82076faef2f451
 - name: golang.org/x/tools
   version: a2a552218a0e22e6fb22469f49ef371b492f6178
   subpackages:
