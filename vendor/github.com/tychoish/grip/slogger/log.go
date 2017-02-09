@@ -15,7 +15,7 @@ import (
 // type. Additionally implements grip's "message.Composer" interface
 // for use with other logging mechanisms.
 //
-// Note that the Resolve() method, which Sender's use to format the
+// Note that the String() method, which Sender's use to format the
 // output of the log lines includes timestamp and component
 // (name/prefix) information.
 type Log struct {
@@ -31,35 +31,34 @@ type Log struct {
 // FormatLog provides compatibility with the original slogger
 // implementation.
 func FormatLog(log *Log) string {
-	return log.Resolve()
+	return log.String()
 }
 
 // Message returns the formatted log message.
-func (l *Log) Message() string                      { return l.msg.Resolve() }
+func (l *Log) Message() string                      { return l.msg.String() }
 func (l *Log) Priority() level.Priority             { return l.Level.Priority() }
 func (l *Log) SetPriority(lvl level.Priority) error { l.Level = convertFromPriority(lvl); return nil }
 func (l *Log) Loggable() bool                       { return l.msg.Loggable() }
-func (l *Log) Raw() interface{}                     { _ = l.Resolve(); return l }
-func (l *Log) Resolve() string {
+func (l *Log) Raw() interface{}                     { _ = l.String(); return l }
+func (l *Log) String() string {
 	if l.Output == "" {
 		year, month, day := l.Timestamp.Date()
 		hour, min, sec := l.Timestamp.Clock()
 
-		l.Output = fmt.Sprintf("[%.4d/%.2d/%.2d %.2d:%.2d:%.2d] [%v.%v] [%v:%d] %v\n",
+		l.Output = fmt.Sprintf("[%.4d/%.2d/%.2d %.2d:%.2d:%.2d] [%v.%v] [%v:%d] %v",
 			year, month, day,
 			hour, min, sec,
 			l.Prefix, l.Level.String(),
 			l.Filename, l.Line,
-			l.msg.Resolve())
+			l.msg.String())
 	}
 
 	return l.Output
 }
 
-// TODO(tycho) have the public constructors call appendCallerInfo at
-// current-1 so they're usable generally, and then have one to use in
-// the loggers which is private and matches the current settings
-
+// NewLog takes a message.Composer object and returns a slogger.Log
+// instance (which also implements message.Composer). This method
+// records its callsite, so you ought to call this method directly.
 func NewLog(m message.Composer) *Log {
 	l := &Log{
 		Level:     convertFromPriority(m.Priority()),
@@ -80,6 +79,8 @@ func newLog(m message.Composer) *Log {
 	return l
 }
 
+// NewPrefixedLog allows you to construct a slogger.Log message from a
+// message composer, while specifying a prefix.
 func NewPrefixedLog(prefix string, m message.Composer) *Log {
 	l := NewLog(m)
 	l.Prefix = prefix

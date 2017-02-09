@@ -2,10 +2,10 @@ package message
 
 import "github.com/tychoish/grip/level"
 
-// Composer defines an interface with a "Resolve()" method that
+// Composer defines an interface with a "String()" method that
 // returns the message in string format. Objects that implement this
 // interface, in combination to the Compose[*] operations, the
-// Resolve() method is only caled if the priority of the method is
+// String() method is only caled if the priority of the method is
 // greater than the threshold priority. This makes it possible to
 // defer building log messages (that may be somewhat expensive to
 // generate) until it's certain that we're going to be outputting the
@@ -13,7 +13,7 @@ import "github.com/tychoish/grip/level"
 type Composer interface {
 	// Returns the content of the message as a string for use in
 	// line-printing logging engines.
-	Resolve() string
+	String() string
 
 	// A "raw" format of the logging output for use by some Sender
 	// implementations that write logged items to interfaces that
@@ -36,14 +36,22 @@ type Composer interface {
 func ConvertToComposer(p level.Priority, message interface{}) Composer {
 	switch message := message.(type) {
 	case Composer:
-		message.SetPriority(p)
+		_ = message.SetPriority(p)
 		return message
 	case string:
 		return NewDefaultMessage(p, message)
-	case []interface{}:
-		return NewLinesMessage(p, message)
 	case error:
 		return NewErrorMessage(p, message)
+	case []string, []interface{}:
+		return NewLineMessage(p, message)
+	case []byte:
+		return NewBytesMessage(p, message)
+	case map[string]interface{}:
+		return NewFields(p, Fields(message))
+	case Fields:
+		return NewFields(p, message)
+	case nil:
+		return NewLineMessage(p)
 	default:
 		return NewFormattedMessage(p, "%+v", message)
 	}

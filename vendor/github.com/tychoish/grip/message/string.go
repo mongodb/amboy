@@ -14,16 +14,17 @@ func NewDefaultMessage(p level.Priority, message string) Composer {
 		Message: message,
 	}
 
-	m.SetPriority(p)
+	_ = m.SetPriority(p)
 
 	return m
 }
 
+// NewString provides a basic message consisting of a single line.
 func NewString(m string) Composer {
 	return &stringMessage{Message: m}
 }
 
-func (s *stringMessage) Resolve() string {
+func (s *stringMessage) String() string {
 	return s.Message
 }
 

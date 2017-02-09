@@ -31,7 +31,7 @@ func (s *GripInternalSuite) SetupTest() {
 	s.grip.SetName(s.name)
 	sender, err := send.NewNativeLogger(s.grip.Name(), s.grip.GetSender().Level())
 	s.NoError(err)
-	s.grip.SetSender(sender)
+	s.NoError(s.grip.SetSender(sender))
 }
 
 func (s *GripInternalSuite) TestPanicSenderActuallyPanics() {
@@ -39,12 +39,12 @@ func (s *GripInternalSuite) TestPanicSenderActuallyPanics() {
 	// cover the correct area.
 
 	func() {
-		// first make sure that the defualt send method doesn't panic
+		// first make sure that the default send method doesn't panic
 		defer func() {
 			s.Nil(recover())
 		}()
 
-		s.grip.GetSender().Send(message.NewLinesMessage(s.grip.DefaultLevel(), "foo"))
+		s.grip.GetSender().Send(message.NewLineMessage(s.grip.DefaultLevel(), "foo"))
 	}()
 
 	func() {
@@ -53,7 +53,7 @@ func (s *GripInternalSuite) TestPanicSenderActuallyPanics() {
 			s.NotNil(recover())
 		}()
 
-		s.grip.sendPanic(message.NewLinesMessage(s.grip.DefaultLevel(), "foo"))
+		s.grip.sendPanic(message.NewLineMessage(s.grip.DefaultLevel(), "foo"))
 	}()
 }
 
@@ -65,7 +65,7 @@ func (s *GripInternalSuite) TestPanicSenderRespectsTThreshold() {
 		s.Nil(recover())
 	}()
 
-	s.grip.sendPanic(message.NewLinesMessage(level.Debug, "foo"))
+	s.grip.sendPanic(message.NewLineMessage(level.Debug, "foo"))
 }
 
 func (s *GripInternalSuite) TestConditionalSend() {
@@ -74,10 +74,10 @@ func (s *GripInternalSuite) TestConditionalSend() {
 	// is exported, we can't pass the sink between functions.
 	sink, err := send.NewInternalLogger("sink", s.grip.GetSender().Level())
 	s.NoError(err)
-	s.grip.SetSender(sink)
+	s.NoError(s.grip.SetSender(sink))
 
-	msg := message.NewLinesMessage(level.Info, "foo")
-	msgTwo := message.NewLinesMessage(level.Notice, "bar")
+	msg := message.NewLineMessage(level.Info, "foo")
+	msgTwo := message.NewLineMessage(level.Notice, "bar")
 
 	// when the conditional argument is true, it should work
 	s.grip.conditionalSend(true, msg)
@@ -100,7 +100,7 @@ func (s *GripInternalSuite) TestConditionalSend() {
 func TestSendFatalExits(t *testing.T) {
 	grip := NewGrip("test")
 	if os.Getenv("SHOULD_CRASH") == "1" {
-		grip.sendFatal(message.NewLinesMessage(grip.DefaultLevel(), "foo"))
+		grip.sendFatal(message.NewLineMessage(grip.DefaultLevel(), "foo"))
 		return
 	}
 

@@ -11,12 +11,13 @@ import (
 )
 
 type xmppLogger struct {
-	target   string
-	client   *xmpp.Client
-	fallback *log.Logger
+	target string
+	client *xmpp.Client
 	*base
 }
 
+// XMPPConnectionInfo stores all information needed to connect to an
+// XMPP (jabber) server to send log messages.
 type XMPPConnectionInfo struct {
 	Hostname string
 	Username string
@@ -29,6 +30,20 @@ const (
 	xmppPasswordEnvVar = "GRIP_XMMP_PASSWORD"
 )
 
+// GetXMPPConnectionInfo builds an XMPPConnectionInfo structure
+// reading default values from the following environment variables:
+//
+//    GRIP_XMPP_HOSTNAME
+//    GRIP_XMPP_USERNAME
+//    GRIP_XMPP_PASSWORD
+func GetXMPPConnectionInfo() XMPPConnectionInfo {
+	return XMPPConnectionInfo{
+		Hostname: os.Getenv(xmppHostEnvVar),
+		Username: os.Getenv(xmppUsernameEnvVar),
+		Password: os.Getenv(xmppPasswordEnvVar),
+	}
+}
+
 // NewXMPPLogger constructs a new Sender implementation that sends
 // messages to an XMPP user, "target", using the credentials specified in
 // the XMPPConnectionInfo struct. The constructor will attempt to exablish
@@ -40,16 +55,10 @@ func NewXMPPLogger(name, target string, info XMPPConnectionInfo, l LevelInfo) (S
 		return nil, err
 	}
 
-	if err := s.SetLevel(l); err != nil {
-		return nil, err
-	}
-
-	s.SetName(name)
-
-	return s, nil
+	return setup(s, name, l)
 }
 
-// MakeXMPPLogger constructs an XMPP logging backend that reads the
+// MakeXMPP constructs an XMPP logging backend that reads the
 // hostname, username, and password from environment variables:
 //
 //    - GRIP_XMPP_HOSTNAME
@@ -59,11 +68,7 @@ func NewXMPPLogger(name, target string, info XMPPConnectionInfo, l LevelInfo) (S
 // The instance is otherwise unconquered. Call SetName or inject it
 // into a Journaler instance using SetSender before using.
 func MakeXMPP(target string) (Sender, error) {
-	info := XMPPConnectionInfo{
-		Hostname: os.Getenv(xmppHostEnvVar),
-		Username: os.Getenv(xmppUsernameEnvVar),
-		Password: os.Getenv(xmppUsernameEnvVar),
-	}
+	info := GetXMPPConnectionInfo()
 
 	s, err := constructXMPPLogger(target, info)
 	if err != nil {
@@ -82,11 +87,7 @@ func MakeXMPP(target string) (Sender, error) {
 //
 // Otherwise, the semantics of NewXMPPDefault are the same as NewXMPPLogger.
 func NewXMPP(name, target string, l LevelInfo) (Sender, error) {
-	info := XMPPConnectionInfo{
-		Hostname: os.Getenv(xmppHostEnvVar),
-		Username: os.Getenv(xmppUsernameEnvVar),
-		Password: os.Getenv(xmppUsernameEnvVar),
-	}
+	info := GetXMPPConnectionInfo()
 
 	return NewXMPPLogger(name, target, info, l)
 }
@@ -109,32 +110,32 @@ func constructXMPPLogger(target string, info XMPPConnectionInfo) (Sender, error)
 	}
 	s.client = client
 
-	s.reset = func() {
-		s.fallback = log.New(os.Stdout, strings.Join([]string{"[", s.Name(), "] "}, ""), log.LstdFlags)
-	}
-
 	s.closer = func() error {
 		return client.Close()
+	}
+
+	fallback := log.New(os.Stdout, "", log.LstdFlags)
+	if err := s.SetErrorHandler(ErrorHandlerFromLogger(fallback)); err != nil {
+		return nil, err
+	}
+
+	s.reset = func() {
+		fallback.SetPrefix(fmt.Sprintf("[%s]", s.Name()))
 	}
 
 	return s, nil
 }
 
-func (s *xmppLogger) Type() SenderType { return Xmpp }
-
 func (s *xmppLogger) Send(m message.Composer) {
 	if s.level.ShouldLog(m) {
-		s.RLock()
 		c := xmpp.Chat{
 			Remote: s.target,
 			Type:   "chat",
-			Text:   fmt.Sprintf("[%s] (p=%s)  %s", s.name, m.Priority(), m.Resolve()),
+			Text:   fmt.Sprintf("[%s] (p=%s)  %s", s.Name(), m.Priority(), m.String()),
 		}
-		s.RUnlock()
 
 		if _, err := s.client.Send(c); err != nil {
-			s.fallback.Println("xmpp error:", err.Error())
-			s.fallback.Printf("[p=%s]: %s\n", m.Priority(), c.Text)
+			s.errHandler(err, m)
 		}
 	}
 }

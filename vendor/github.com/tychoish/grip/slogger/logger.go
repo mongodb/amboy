@@ -18,7 +18,7 @@ type Logger struct {
 	Appenders []send.Sender
 }
 
-// Log a message and a level to a logger instance. This returns a
+// Logf logs a message and a level to a logger instance. This returns a
 // pointer to a Log and a slice of errors that were gathered from every
 // Appender (nil errors included).
 //
@@ -51,7 +51,7 @@ func (l *Logger) Errorf(level Level, messageFmt string, args ...interface{}) err
 		send.Send(log)
 	}
 
-	return errors.New(m.Resolve())
+	return errors.New(m.String())
 }
 
 // Stackf is designed to work in tandem with `NewStackError`. This
@@ -60,14 +60,14 @@ func (l *Logger) Errorf(level Level, messageFmt string, args ...interface{}) err
 // not have to be.
 //
 // In this implementation, Logf will never return an error. This part
-// of the type definition was retained for backwards compatiblity.
+// of the type definition was retained for backwards compatibility.
 //
 // An additional difference is that the new implementation, will not
 // log if the error is nil, and the previous implementation would.
 func (l *Logger) Stackf(level Level, stackErr error, messageFmt string, args ...interface{}) (*Log, []error) {
 	m := newPrefixedLog(l.Name, message.NewErrorWrapMessage(level.Priority(), stackErr, messageFmt, args...))
 
-	// this check is not neccessary, but prevents redundancy if
+	// this check is not necessary, but prevents redundancy if
 	// there are multiple senders, as each might need to perform this
 	// check for themselves.
 	if !m.Loggable() {

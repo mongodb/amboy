@@ -12,7 +12,7 @@ import (
 
 func TestLoggerLogf(t *testing.T) {
 	assert := assert.New(t)
-	sink, err := send.NewInternalLogger("sink", send.LevelInfo{level.Info, level.Info})
+	sink, err := send.NewInternalLogger("sink", send.LevelInfo{Default: level.Info, Threshold: level.Info})
 	assert.NoError(err)
 	defer sink.Close()
 	logger := &Logger{Name: "sloggerTest", Appenders: []send.Sender{sink}}
@@ -27,7 +27,7 @@ func TestLoggerLogf(t *testing.T) {
 
 func TestLoggerErrorf(t *testing.T) {
 	assert := assert.New(t)
-	sink, err := send.NewInternalLogger("sink", send.LevelInfo{level.Info, level.Info})
+	sink, err := send.NewInternalLogger("sink", send.LevelInfo{Default: level.Info, Threshold: level.Info})
 	assert.NoError(err)
 	defer sink.Close()
 	logger := &Logger{Name: "sloggerTest", Appenders: []send.Sender{sink}}
@@ -40,7 +40,7 @@ func TestLoggerErrorf(t *testing.T) {
 
 func TestLoggerStackf(t *testing.T) {
 	assert := assert.New(t)
-	sink, err := send.NewInternalLogger("sink", send.LevelInfo{level.Info, level.Info})
+	sink, err := send.NewInternalLogger("sink", send.LevelInfo{Default: level.Info, Threshold: level.Info})
 	assert.NoError(err)
 	defer sink.Close()
 	logger := &Logger{Name: "sloggerTest", Appenders: []send.Sender{sink}}
@@ -51,6 +51,6 @@ func TestLoggerStackf(t *testing.T) {
 	assert.True(len(errs) == 0)
 	assert.NotNil(l)
 
-	assert.True(strings.HasSuffix(sink.GetMessage().Rendered, "foo bar\nbaz\n"))
+	assert.True(strings.HasSuffix(sink.GetMessage().Rendered, "foo bar\nbaz"))
 
 }

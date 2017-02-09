@@ -8,12 +8,6 @@ import (
 	"github.com/tychoish/grip/send"
 )
 
-type logger interface {
-	send(message.Composer)
-	sendFatal(message.Composer)
-	sendPanic(message.Composer)
-}
-
 // Grip provides the core implementation of the Logging interface. The
 // interface is mirrored in the "grip" package's public interface, to
 // provide a single, global logging interface that requires minimal
@@ -21,16 +15,16 @@ type logger interface {
 type Grip struct{ send.Sender }
 
 // NewGrip takes the name for a logging instance and creates a new
-// Grip instance with configured with a Bootstrap logging
-// instance. The default level is "Notice" and the threshold level is
-// "info."
+// Grip instance with configured with a local, standard output logging.
+// The default level is "Notice" and the threshold level is "info."
 func NewGrip(name string) *Grip {
-	return &Grip{send.NewBootstrapLogger(name,
+	sender, _ := send.NewNativeLogger(name,
 		send.LevelInfo{
 			Threshold: level.Info,
 			Default:   level.Notice,
-		}),
-	}
+		})
+
+	return &Grip{sender}
 }
 
 // Internal
@@ -43,7 +37,7 @@ func (g *Grip) sendPanic(m message.Composer) {
 	// check but to add fatal methods we need to do this here.
 	if g.Level().ShouldLog(m) {
 		g.Send(m)
-		panic(m.Resolve())
+		panic(m.String())
 	}
 }
 

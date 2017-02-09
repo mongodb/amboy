@@ -38,8 +38,8 @@ func (s *AppenderSenderSuite) SetupTest() {
 }
 
 func (s *AppenderSenderSuite) TearDownSuite() {
-	s.sender.Close()
-	s.appender.Close()
+	s.NoError(s.sender.Close())
+	s.NoError(s.appender.Close())
 }
 
 func (s *AppenderSenderSuite) Test() {
@@ -74,13 +74,13 @@ func (s *AppenderSenderSuite) TestNameSetterRoundTrip() {
 
 func (s *AppenderSenderSuite) TestLevelSetterRejectsInvalidSettings() {
 	levels := []send.LevelInfo{
-		{level.Invalid, level.Invalid},
-		{level.Priority(-10), level.Priority(-1)},
-		{level.Debug, level.Priority(-1)},
-		{level.Priority(800), level.Priority(-2)},
+		{Default: level.Invalid, Threshold: level.Invalid},
+		{Default: level.Priority(-10), Threshold: level.Priority(-1)},
+		{Default: level.Debug, Threshold: level.Priority(-1)},
+		{Default: level.Priority(800), Threshold: level.Priority(-2)},
 	}
 
-	s.sender.SetLevel(send.LevelInfo{level.Debug, level.Alert})
+	s.NoError(s.sender.SetLevel(send.LevelInfo{Default: level.Debug, Threshold: level.Alert}))
 	for _, l := range levels {
 		s.True(s.sender.Level().Valid())
 		s.False(l.Valid())

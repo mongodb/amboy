@@ -6,11 +6,15 @@ import (
 	"github.com/tychoish/grip/slogger"
 )
 
+// NewJournalerFromSlogger takes a slogger logging instance and
+// returns a functionally equivalent Jouranler instance.
 func NewJournalerFromSlogger(logger *slogger.Logger) (Journaler, error) {
-	l := send.LevelInfo{level.Debug, level.Debug}
+	l := send.LevelInfo{Default: level.Debug, Threshold: level.Debug}
 
 	j := NewJournaler(logger.Name)
-	j.GetSender().SetLevel(l)
+	if err := j.GetSender().SetLevel(l); err != nil {
+		return nil, err
+	}
 
 	sender, err := send.NewMultiSender(logger.Name, l, logger.Appenders)
 	if err != nil {

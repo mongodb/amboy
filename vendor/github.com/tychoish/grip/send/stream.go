@@ -1,9 +1,18 @@
 package send
 
-import "github.com/tychoish/grip/message"
+import (
+	"fmt"
+	"log"
+	"os"
+	"strings"
+
+	"github.com/tychoish/grip/message"
+)
 
 // this file contains tools to support the slogger interface
 
+// WriteStringer captures the relevant part of the io.Writer interface
+// useful for writing log messages to streams.
 type WriteStringer interface {
 	WriteString(str string) (int, error)
 }
@@ -13,28 +22,41 @@ type streamLogger struct {
 	*base
 }
 
+// NewStreamLogger produces a fully configured Sender that writes
+// un-formatted log messages to an io.Writer (or conforming subset).
 func NewStreamLogger(name string, ws WriteStringer, l LevelInfo) (Sender, error) {
-	s := MakeStreamLogger(ws)
-
-	if err := s.SetLevel(l); err != nil {
-		return nil, err
-	}
-
-	s.SetName(name)
-
-	return s, nil
+	return setup(MakeStreamLogger(ws), name, l)
 }
 
+// MakeStreamLogger constructs an unconfigured stream sender that
+// writes un-formatted log messages to the specified io.Writer, or
+// instance that implements a conforming subset.
 func MakeStreamLogger(ws WriteStringer) Sender {
-	return &streamLogger{
+	s := &streamLogger{
 		fobj: ws,
 		base: newBase(""),
 	}
+
+	fallback := log.New(os.Stdout, "", log.LstdFlags)
+	_ = s.SetErrorHandler(ErrorHandlerFromLogger(fallback))
+
+	s.reset = func() {
+		fallback.SetPrefix(fmt.Sprintf("[%s]", s.Name()))
+	}
+
+	return s
 }
 
-func (s *streamLogger) Type() SenderType { return Stream }
 func (s *streamLogger) Send(m message.Composer) {
 	if s.level.ShouldLog(m) {
-		_, _ = s.fobj.WriteString(m.Resolve())
+		msg := m.String()
+
+		if !strings.HasSuffix(msg, "\n") {
+			msg += "\n"
+		}
+
+		if _, err := s.fobj.WriteString(msg); err != nil {
+			s.errHandler(err, m)
+		}
 	}
 }

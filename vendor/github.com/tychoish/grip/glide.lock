@@ -9,4 +9,14 @@ imports:
   version: 1f14901342cf5347555c2a6b0160d1a94f9c46ea
 - name: github.com/mattn/go-xmpp
   version: f4550b5399387339df5ce4c3f88c1ef85333bdd5
+- name: github.com/shirou/gopsutil
+  version: 93564b314264efac01934715fad4c355ed6af1c5
+- name: github.com/shirou/w32
+  version: bb4de0191aa41b5507caa14b0650cdbddcd9280b
+- name: github.com/StackExchange/wmi
+  version: e54cbda6595d7293a7a468ccf9525f6bc8887f99
+- name: github.com/go-ole/go-ole
+  version: 5e9c030faf78847db7aa77e3661b9cc449de29b7
+  subpackages:
+  - oleutil
 devImports: []

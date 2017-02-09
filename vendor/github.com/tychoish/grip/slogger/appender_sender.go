@@ -30,7 +30,7 @@ func NewAppenderSender(name string, a Appender) send.Sender {
 	return &appenderSender{
 		appender: a,
 		name:     name,
-		level:    send.LevelInfo{level.Debug, level.Debug},
+		level:    send.LevelInfo{Default: level.Debug, Threshold: level.Debug},
 	}
 }
 
@@ -41,16 +41,16 @@ func WrapAppender(a Appender) send.Sender {
 	return &appenderSender{
 		appender: a,
 		name:     os.Args[0],
-		level:    send.LevelInfo{level.Debug, level.Debug},
+		level:    send.LevelInfo{Default: level.Debug, Threshold: level.Debug},
 	}
 }
 
 // TODO: we may want to add a mutex here
-func (a *appenderSender) Close() error          { return nil }
-func (a *appenderSender) Name() string          { return a.name }
-func (a *appenderSender) SetName(n string)      { a.name = n }
-func (a *appenderSender) Type() send.SenderType { return send.Custom }
-func (a *appenderSender) Level() send.LevelInfo { return a.level }
+func (a *appenderSender) Close() error                            { return nil }
+func (a *appenderSender) Name() string                            { return a.name }
+func (a *appenderSender) SetName(n string)                        { a.name = n }
+func (a *appenderSender) Level() send.LevelInfo                   { return a.level }
+func (a *appenderSender) SetErrorHandler(send.ErrorHandler) error { return nil }
 func (a *appenderSender) SetLevel(l send.LevelInfo) error {
 	if !l.Valid() {
 		return fmt.Errorf("level settings are not valid: %+v", l)
@@ -62,6 +62,11 @@ func (a *appenderSender) SetLevel(l send.LevelInfo) error {
 
 func (a *appenderSender) Send(m message.Composer) {
 	if a.level.ShouldLog(m) {
-		_ = a.appender.Append(NewLog(m))
+		log, ok := m.(*Log)
+		if ok {
+			_ = a.appender.Append(log)
+		} else {
+			_ = a.appender.Append(NewLog(m))
+		}
 	}
 }

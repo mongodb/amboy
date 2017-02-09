@@ -5,8 +5,8 @@ import "github.com/tychoish/grip/send"
 // SetSender swaps send.Sender() implementations in a logging
 // instance. Calls the Close() method on the existing instance before
 // changing the implementation for the current instance.
-func SetSender(s send.Sender) {
-	std.SetSender(s)
+func SetSender(s send.Sender) error {
+	return std.SetSender(s)
 }
 
 // GetSender returns the current Journaler's sender instance. Use this in

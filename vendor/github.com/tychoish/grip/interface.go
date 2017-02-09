@@ -2,6 +2,7 @@ package grip
 
 import (
 	"github.com/tychoish/grip/level"
+	"github.com/tychoish/grip/message"
 	"github.com/tychoish/grip/send"
 )
 
@@ -28,18 +29,22 @@ type Journaler interface {
 	Log(level.Priority, interface{})
 	Logf(level.Priority, string, ...interface{})
 	Logln(level.Priority, ...interface{})
+	LogMany(level.Priority, ...message.Composer)
 	LogWhen(bool, level.Priority, interface{})
 	LogWhenf(bool, level.Priority, string, ...interface{})
 	LogWhenln(bool, level.Priority, ...interface{})
+	LogManyWhen(bool, level.Priority, ...message.Composer)
 
 	// Send at the default logging level. This might be below the
 	// threshold.
 	Default(interface{})
 	Defaultf(string, ...interface{})
 	Defaultln(...interface{})
+	DefaultMany(...message.Composer)
 	DefaultWhen(bool, interface{})
 	DefaultWhenf(bool, string, ...interface{})
 	DefaultWhenln(bool, ...interface{})
+	DefaultManyWhen(bool, ...message.Composer)
 
 	// Log a message (the contents of the error,) only if the
 	// error is non-nil. These are redundant to the similar base
@@ -81,56 +86,72 @@ type Journaler interface {
 	Emergency(interface{})
 	Emergencyf(string, ...interface{})
 	Emergencyln(...interface{})
+	EmergencyMany(...message.Composer)
 	EmergencyWhen(bool, interface{})
 	EmergencyWhenf(bool, string, ...interface{})
 	EmergencyWhenln(bool, ...interface{})
+	EmergencyManyWhen(bool, ...message.Composer)
 
 	Alert(interface{})
 	Alertf(string, ...interface{})
 	Alertln(...interface{})
+	AlertMany(...message.Composer)
 	AlertWhen(bool, interface{})
 	AlertWhenf(bool, string, ...interface{})
 	AlertWhenln(bool, ...interface{})
+	AlertManyWhen(bool, ...message.Composer)
 
 	Critical(interface{})
 	Criticalf(string, ...interface{})
 	Criticalln(...interface{})
+	CriticalMany(...message.Composer)
 	CriticalWhen(bool, interface{})
 	CriticalWhenf(bool, string, ...interface{})
 	CriticalWhenln(bool, ...interface{})
+	CriticalManyWhen(bool, ...message.Composer)
 
 	Error(interface{})
 	Errorf(string, ...interface{})
 	Errorln(...interface{})
+	ErrorMany(...message.Composer)
 	ErrorWhen(bool, interface{})
 	ErrorWhenf(bool, string, ...interface{})
 	ErrorWhenln(bool, ...interface{})
+	ErrorManyWhen(bool, ...message.Composer)
 
 	Warning(interface{})
 	Warningf(string, ...interface{})
 	Warningln(...interface{})
+	WarningMany(...message.Composer)
 	WarningWhen(bool, interface{})
 	WarningWhenf(bool, string, ...interface{})
 	WarningWhenln(bool, ...interface{})
+	WarningManyWhen(bool, ...message.Composer)
 
 	Notice(interface{})
 	Noticef(string, ...interface{})
 	Noticeln(...interface{})
+	NoticeMany(...message.Composer)
 	NoticeWhen(bool, interface{})
 	NoticeWhenf(bool, string, ...interface{})
 	NoticeWhenln(bool, ...interface{})
+	NoticeManyWhen(bool, ...message.Composer)
 
 	Info(interface{})
 	Infof(string, ...interface{})
 	Infoln(...interface{})
+	InfoMany(...message.Composer)
 	InfoWhen(bool, interface{})
 	InfoWhenf(bool, string, ...interface{})
 	InfoWhenln(bool, ...interface{})
+	InfoManyWhen(bool, ...message.Composer)
 
 	Debug(interface{})
 	Debugf(string, ...interface{})
 	Debugln(...interface{})
+	DebugMany(...message.Composer)
 	DebugWhen(bool, interface{})
 	DebugWhenf(bool, string, ...interface{})
 	DebugWhenln(bool, ...interface{})
+	DebugManyWhen(bool, ...message.Composer)
 }

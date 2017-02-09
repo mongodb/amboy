@@ -15,17 +15,19 @@ type formatMessenger struct {
 
 // NewFormattedMessage takes arguments as fmt.Sprintf(), and returns
 // an object that only runs the format operation as part of the
-// Resolve() method.
+// String() method.
 func NewFormattedMessage(p level.Priority, base string, args ...interface{}) Composer {
 	m := &formatMessenger{
 		base: base,
 		args: args,
 	}
-	m.SetPriority(p)
+	_ = m.SetPriority(p)
 
 	return m
 }
 
+// NewFormatted returns a message.Composer roughly equivalent to an
+// fmt.Sprintf().
 func NewFormatted(base string, args ...interface{}) Composer {
 	return &formatMessenger{
 		base: base,
@@ -33,7 +35,7 @@ func NewFormatted(base string, args ...interface{}) Composer {
 	}
 }
 
-func (f *formatMessenger) Resolve() string {
+func (f *formatMessenger) String() string {
 	if f.Message == "" {
 		f.Message = fmt.Sprintf(f.base, f.args...)
 	}
@@ -41,13 +43,11 @@ func (f *formatMessenger) Resolve() string {
 	return f.Message
 }
 
-func (f *formatMessenger) Loggable() bool {
-	return f.base != ""
-}
+func (f *formatMessenger) Loggable() bool { return f.base != "" }
 
 func (f *formatMessenger) Raw() interface{} {
 	_ = f.Collect()
-	_ = f.Resolve()
+	_ = f.String()
 
 	return f
 }

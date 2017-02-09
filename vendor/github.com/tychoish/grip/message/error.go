@@ -1,3 +1,8 @@
+// Error Messages
+//
+// The error message composers underpin the Catch<> logging messages,
+// which allow you to log error messages but let the logging system
+// elide logging for nil errors.
 package message
 
 import (
@@ -21,7 +26,7 @@ func NewErrorMessage(p level.Priority, err error) Composer {
 		err: err,
 	}
 
-	m.SetPriority(p)
+	_ = m.SetPriority(p)
 	return m
 }
 
@@ -32,7 +37,7 @@ func NewError(err error) Composer {
 	return &errorMessage{err: err}
 }
 
-func (e *errorMessage) Resolve() string {
+func (e *errorMessage) String() string {
 	if e.err == nil {
 		return ""
 	}
@@ -46,7 +51,7 @@ func (e *errorMessage) Loggable() bool {
 
 func (e *errorMessage) Raw() interface{} {
 	_ = e.Collect()
-	_ = e.Resolve()
+	_ = e.String()
 
 	extended := fmt.Sprintf("%+v", e.err)
 	if extended != e.Error {
