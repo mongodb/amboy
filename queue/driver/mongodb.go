@@ -16,14 +16,13 @@ import (
 // MongoDB is a type that represents and wraps a queues
 // persistence of jobs *and* locks to a MongoDB instance.
 type MongoDB struct {
-	name            string
-	mongodbURI      string
-	dbName          string
-	jobsCollection  *mgo.Collection
-	locksCollection *mgo.Collection
-	canceler        context.CancelFunc
-	priority        bool
-	locks           struct {
+	name       string
+	mongodbURI string
+	dbName     string
+	session    *mgo.Session
+	canceler   context.CancelFunc
+	priority   bool
+	locks      struct {
 		cache map[string]*MongoDBJobLock
 		mutex sync.RWMutex
 	}
@@ -80,43 +79,50 @@ func (d *MongoDB) Open(ctx context.Context) error {
 
 	dCtx, cancel := context.WithCancel(ctx)
 	d.canceler = cancel
+	d.session = session
 
 	go func() {
 		<-dCtx.Done()
-		session.Close()
+		d.session.Close()
 		grip.Info("closing session for mongodb driver")
 	}()
 
-	err = d.setupDB(session)
-
-	if err != nil {
+	if err = d.setupDB(); err != nil {
 		return errors.Wrap(err, "problem setting up database")
 	}
 
 	return nil
 }
 
-func (d *MongoDB) setupDB(session *mgo.Session) error {
-	d.jobsCollection = session.DB(d.dbName).C(d.name + ".jobs")
-	d.locksCollection = session.DB(d.dbName).C(d.name + ".locks")
-	return errors.Wrap(d.createIndexes(), "problem building indexes")
+func (d *MongoDB) getLocksCollection() (*mgo.Session, *mgo.Collection) {
+	session := d.session.Copy()
+
+	return session, session.DB(d.dbName).C(d.name + ".locks")
 }
 
-func (d *MongoDB) createIndexes() error {
+func (d *MongoDB) getJobsCollection() (*mgo.Session, *mgo.Collection) {
+	session := d.session.Copy()
+
+	return session, session.DB(d.dbName).C(d.name + ".jobs")
+}
+
+func (d *MongoDB) setupDB() error {
 	catcher := grip.NewCatcher()
+	session, jobs := d.getJobsCollection()
+	defer session.Close()
 
 	if d.priority {
-		catcher.Add(d.jobsCollection.EnsureIndexKey("completed", "dispatched", "priority"))
+		catcher.Add(jobs.EnsureIndexKey("completed", "dispatched", "priority"))
 	} else {
-		catcher.Add(d.jobsCollection.EnsureIndexKey("completed", "dispatched"))
+		catcher.Add(jobs.EnsureIndexKey("completed", "dispatched"))
 	}
 
-	catcher.Add(d.locksCollection.EnsureIndexKey("locked"))
+	session, locks := d.getLocksCollection()
+	defer session.Close()
 
-	grip.WarningWhen(catcher.HasErrors(), "problem creating indexes")
-	grip.DebugWhen(!catcher.HasErrors(), "created indexes successfully")
+	catcher.Add(locks.EnsureIndexKey("locked"))
 
-	return catcher.Resolve()
+	return errors.Wrap(catcher.Resolve(), "problem building indexes")
 }
 
 // Close terminates the connection to the database server.
@@ -134,8 +140,10 @@ func (d *MongoDB) Put(j amboy.Job) error {
 		return errors.Wrap(err, "problem converting job to interchange format")
 	}
 
-	err = d.jobsCollection.Insert(i)
-	if err != nil {
+	session, jobs := d.getJobsCollection()
+	defer session.Close()
+
+	if err = jobs.Insert(i); err != nil {
 		return errors.Wrap(err,
 			"problem inserting document into collection during PUT")
 	}
@@ -146,8 +154,12 @@ func (d *MongoDB) Put(j amboy.Job) error {
 // Get takes the name of a job and returns an amboy.Job object from
 // the persistence layer for the job matching that unique id.
 func (d *MongoDB) Get(name string) (amboy.Job, error) {
+	session, jobs := d.getJobsCollection()
+	defer session.Close()
+
 	j := &registry.JobInterchange{}
-	err := d.jobsCollection.FindId(name).One(j)
+
+	err := jobs.FindId(name).One(j)
 	grip.Debugf("GET operation: [name='%s', payload='%+v' error='%v']", name, j, err)
 
 	if err != nil {
@@ -188,8 +200,10 @@ func (d *MongoDB) Save(j amboy.Job) error {
 		return errors.Wrap(err, "problem converting error to interchange format")
 	}
 
-	err = d.jobsCollection.UpdateId(name, job)
-	if err != nil {
+	session, jobs := d.getJobsCollection()
+	defer session.Close()
+
+	if err = jobs.UpdateId(name, job); err != nil {
 		return errors.Wrapf(err, "problem updating ")
 	}
 
@@ -213,7 +227,10 @@ func (d *MongoDB) Jobs() <-chan amboy.Job {
 	go func() {
 		defer close(output)
 
-		results := d.jobsCollection.Find(nil).Iter()
+		session, jobs := d.getJobsCollection()
+		defer session.Close()
+
+		results := jobs.Find(nil).Iter()
 		defer grip.CatchError(results.Close())
 		j := &registry.JobInterchange{}
 		for results.Next(j) {
@@ -231,9 +248,12 @@ func (d *MongoDB) Jobs() <-chan amboy.Job {
 
 // Next returns one job, not marked complete from the database.
 func (d *MongoDB) Next() amboy.Job {
+	session, jobs := d.getJobsCollection()
+	defer session.Close()
+
 	j := &registry.JobInterchange{}
 
-	query := d.jobsCollection.Find(bson.M{"completed": false, "dispatched": false})
+	query := jobs.Find(bson.M{"completed": false, "dispatched": false})
 	if d.priority {
 		query = query.Sort("-priority")
 	}
@@ -246,7 +266,7 @@ func (d *MongoDB) Next() amboy.Job {
 	}
 
 	j.Dispatched = true
-	err = d.jobsCollection.UpdateId(j.Name, j)
+	err = jobs.UpdateId(j.Name, j)
 	if err != nil {
 		grip.Errorf("problem marking job %s dispatched: %+v", j.Name, err.Error())
 		return nil
@@ -269,22 +289,25 @@ func (d *MongoDB) Next() amboy.Job {
 func (d *MongoDB) Stats() Stats {
 	stats := Stats{}
 
-	numJobs, err := d.jobsCollection.Count()
+	session, jobs := d.getJobsCollection()
+	defer session.Close()
+
+	numJobs, err := jobs.Count()
 	grip.ErrorWhenf(err != nil,
 		"problem getting count from jobs collection (%s): %+v ",
-		d.jobsCollection, err)
+		jobs.Name, err)
 	stats.Total = numJobs
 
-	numIncomplete, err := d.jobsCollection.Find(bson.M{"completed": false}).Count()
+	numIncomplete, err := jobs.Find(bson.M{"completed": false}).Count()
 	grip.ErrorWhenf(err != nil,
 		"problem getting count of pending jobs (%s): %+v ",
-		d.jobsCollection, err)
+		jobs.Name, err)
 	stats.Pending = numIncomplete
 
-	numLocked, err := d.locksCollection.Find(bson.M{"locked": true}).Count()
+	numLocked, err := jobs.Find(bson.M{"locked": true}).Count()
 	grip.ErrorWhenf(err != nil,
 		"problem getting count of locked Jobs (%s): %+v",
-		d.jobsCollection, err)
+		jobs.Name, err)
 	stats.Locked = numLocked
 
 	// computed stats
@@ -313,7 +336,7 @@ func (d *MongoDB) GetLock(ctx context.Context, job amboy.Job) (JobLock, error) {
 		return lock, nil
 	}
 
-	lock, err := NewMongoDBJobLock(ctx, name, d.locksCollection)
+	lock, err := NewMongoDBJobLock(ctx, name, d.dbName, d.name+".locks", d.session.Clone())
 	if err != nil {
 		return nil, err
 	}

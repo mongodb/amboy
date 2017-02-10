@@ -32,21 +32,28 @@ func init() {
 // MongoDBJobLock provides an implementation of the JobLock interface
 // that stores lock information and state in MongoDB.
 type MongoDBJobLock struct {
-	name       string
-	last       *jobLock
-	collection *mgo.Collection
-	mutex      sync.RWMutex
-	count      int
+	name     string
+	last     *jobLock
+	dbName   string
+	collName string
+	session  *mgo.Session
+	mutex    sync.RWMutex
+	count    int
 }
 
 // NewMongoDBJobLock creates and returns a new lock instance. The
 // operation also persists this lock into the collection and returns
 // an error if there are problems with the collection.
-func NewMongoDBJobLock(ctx context.Context, name string, collection *mgo.Collection) (*MongoDBJobLock, error) {
+func NewMongoDBJobLock(ctx context.Context, name, dbName, collName string, session *mgo.Session) (*MongoDBJobLock, error) {
 	l := &MongoDBJobLock{
-		name:       name,
-		collection: collection,
+		name:     name,
+		session:  session,
+		dbName:   dbName,
+		collName: collName,
 	}
+
+	session, collection := l.getCollection()
+	defer session.Close()
 
 	err := collection.FindId(name).One(l.last)
 	if err != nil {
@@ -73,6 +80,12 @@ func NewMongoDBJobLock(ctx context.Context, name string, collection *mgo.Collect
 	l.count = l.last.Count
 
 	return l, nil
+}
+
+func (l *MongoDBJobLock) getCollection() (*mgo.Session, *mgo.Collection) {
+	session := l.session.Copy()
+
+	return session, session.DB(l.dbName).C(l.collName)
 }
 
 type jobLock struct {
@@ -358,15 +371,21 @@ func (l *MongoDBJobLock) hasCountMismatch() bool {
 //////////////////////////////
 
 func (l *MongoDBJobLock) reload() error {
-	return errors.Wrapf(l.collection.FindId(l.name).One(l.last),
+	session, locks := l.getCollection()
+	defer session.Close()
+
+	return errors.Wrapf(locks.FindId(l.name).One(l.last),
 		"problem reloading lock for %s", l.name)
 }
 
 func (l *MongoDBJobLock) update(new *jobLock) error {
+	session, locks := l.getCollection()
+	defer session.Close()
+
 	new.Count = l.last.Count + 1
 	l.count = new.Count
 
-	err := l.collection.UpdateId(l.name, new)
+	err := locks.UpdateId(l.name, new)
 	grip.DebugWhenf(err == nil, "updated lock for %s", l.name)
 
 	return errors.Wrapf(err, "problem updating lock for '%s'", l.name)

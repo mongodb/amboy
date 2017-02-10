@@ -46,16 +46,18 @@ func TestMongoDBLockInterfaceSuite(t *testing.T) {
 		grip.Alert("failed to connect to local mongodb")
 		t.FailNow()
 	}
-	coll := session.DB("amboy").C(s.name + ".lock")
 	ctx, cancel := context.WithCancel(context.Background())
+	collName := s.name + ".lock"
+	dbName := "amboy"
+
 	s.lockConstructor = func() JobLock {
-		lock, err := NewMongoDBJobLock(ctx, uuid.NewV4().String(), coll)
+		lock, err := NewMongoDBJobLock(ctx, uuid.NewV4().String(), dbName, collName, session)
 		s.NoError(err)
 		return lock
 	}
 	s.tearDown = func() {
 		cancel()
-		s.NoError(coll.DropCollection())
+		s.NoError(session.DB("amboy").C(collName).DropCollection())
 		session.Close()
 	}
 

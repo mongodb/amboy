@@ -40,9 +40,8 @@ func (s *MongoDBLockSuite) SetupTest() {
 	ctx := context.Background()
 
 	name := uuid.NewV4().String()
-	coll := s.session.DB(s.dbName).C(name)
-	s.collections = append(s.collections, coll)
-	lock, err := NewMongoDBJobLock(ctx, name, coll)
+
+	lock, err := NewMongoDBJobLock(ctx, name, s.dbName, name, s.session)
 	s.NoError(err)
 	s.lock = lock
 }

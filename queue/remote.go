@@ -29,6 +29,7 @@ func NewRemoteUnordered(size int) *RemoteUnordered {
 	q := &RemoteUnordered{
 		channel: make(chan amboy.Job),
 	}
+
 	q.runner = pool.NewLocalWorkers(size, q)
 
 	grip.Infof("creating new remote job queue with %d workers", size)
@@ -101,6 +102,8 @@ func (q *RemoteUnordered) Next(ctx context.Context) amboy.Job {
 			}
 
 			lock.Lock(ctx)
+			q.driver.Reload(job)
+
 			grip.Debugf("returning job from remote source, count = %d; duration = %s",
 				count, time.Since(start))
 			return job

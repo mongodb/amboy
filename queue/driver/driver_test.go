@@ -59,7 +59,12 @@ func TestDriverSuiteWithMongoDBInstance(t *testing.T) {
 		return mDriver
 	}
 	tests.tearDown = func() {
-		for _, coll := range []*mgo.Collection{mDriver.jobsCollection, mDriver.locksCollection} {
+		session, jobs := mDriver.getJobsCollection()
+		defer session.Close()
+		session, locks := mDriver.getLocksCollection()
+		colls := []*mgo.Collection{jobs, locks}
+
+		for _, coll := range colls {
 			err := coll.DropCollection()
 			grip.Infof("removed %s collection (%+v)", coll.Name, err)
 		}
