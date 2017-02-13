@@ -3,42 +3,130 @@
 package queue
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/dependency"
 	"github.com/mongodb/amboy/job"
 	"github.com/mongodb/amboy/pool"
-	"github.com/stretchr/testify/require"
+	"github.com/mongodb/amboy/queue/driver"
+	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/suite"
+	"github.com/tychoish/grip"
 	"golang.org/x/net/context"
+	mgo "gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
 )
 
 type OrderedQueueSuite struct {
-	size    int
-	queue   *LocalOrdered
-	require *require.Assertions
+	size     int
+	queue    amboy.Queue
+	setup    func()
+	tearDown func()
+	reset    func()
 	suite.Suite
 }
 
-func TestOrderedQueueSuiteOneWorker(t *testing.T) {
+func TestLocalOrderedQueueSuiteOneWorker(t *testing.T) {
 	s := &OrderedQueueSuite{}
 	s.size = 1
+	s.setup = func() { s.queue = NewLocalOrdered(s.size) }
+
 	suite.Run(t, s)
 }
 
-func TestOrderedQueueSuiteThreeWorker(t *testing.T) {
+func TestLocalOrderedQueueSuiteThreeWorker(t *testing.T) {
 	s := &OrderedQueueSuite{}
 	s.size = 3
+	s.setup = func() { s.queue = NewLocalOrdered(s.size) }
 	suite.Run(t, s)
 }
 
-func (s *OrderedQueueSuite) SetupSuite() {
-	s.require = s.Require()
+func TestRemoteMongoDBOrderedQueueSuiteTwoWorkers(t *testing.T) {
+	s := &OrderedQueueSuite{}
+	name := "test-" + uuid.NewV4().String()
+	uri := "mongodb://localhost"
+	ctx, cancel := context.WithCancel(context.Background())
+
+	session, err := mgo.Dial(uri)
+	if err != nil {
+		if !s.NoError(err) {
+			return
+		}
+	}
+	defer session.Close()
+
+	s.size = 4
+
+	s.setup = func() {
+		remote := NewSimpleRemoteOrdered(s.size)
+		d := driver.NewMongoDB(name, driver.DefaultMongoDBOptions())
+		s.Require().NoError(d.Open(ctx))
+		s.Require().NoError(remote.SetDriver(d))
+		s.queue = remote
+		s.Require().NotNil(remote.remoteBase)
+	}
+
+	s.tearDown = func() {
+		cancel()
+
+		grip.CatchError(session.DB("amboy").C(name + ".jobs").DropCollection())
+		grip.CatchError(session.DB("amboy").C(name + ".locks").DropCollection())
+	}
+
+	s.reset = func() {
+		_, err = session.DB("amboy").C(name + ".jobs").RemoveAll(bson.M{})
+		grip.CatchError(err)
+		_, err = session.DB("amboy").C(name + ".locks").RemoveAll(bson.M{})
+		grip.CatchError(err)
+	}
+
+	suite.Run(t, s)
+}
+
+func TestRemoteLocalOrderedQueueSuite(t *testing.T) {
+	s := &OrderedQueueSuite{}
+	ctx, cancel := context.WithCancel(context.Background())
+
+	s.size = 4
+
+	s.reset = func() {
+		d := driver.NewInternal()
+		remote := NewSimpleRemoteOrdered(s.size)
+		s.Require().NotNil(remote.remoteBase)
+		s.Require().NoError(d.Open(ctx))
+		s.Require().NoError(remote.SetDriver(d))
+		s.queue = remote
+	}
+
+	s.setup = func() {
+		s.reset()
+	}
+
+	s.tearDown = func() {
+		cancel()
+	}
+
+	suite.Run(t, s)
 }
 
 func (s *OrderedQueueSuite) SetupTest() {
-	s.queue = NewLocalOrdered(s.size)
+	if s.setup != nil {
+		s.setup()
+	}
+}
+
+func (s *OrderedQueueSuite) TearDownTest() {
+	if s.reset != nil {
+		s.reset()
+	}
+}
+
+func (s *OrderedQueueSuite) TearDownSuite() {
+	if s.tearDown != nil {
+		s.tearDown()
+	}
 }
 
 func (s *OrderedQueueSuite) TestPutReturnsErrorForDuplicateNameTasks() {
@@ -60,7 +148,13 @@ func (s *OrderedQueueSuite) TestPuttingAJobIntoAQueueImpactsStats() {
 
 	jReturn, ok := s.queue.Get(j.ID())
 	s.True(ok)
-	s.Exactly(jReturn, j)
+
+	base := &job.Base{}
+	jActual := jReturn.(*job.ShellJob)
+	jActual.Base = base
+	j.Base = base
+
+	s.Equal(jActual, j)
 
 	stats = s.queue.Stats()
 	s.Equal(1, stats.Total)
@@ -81,8 +175,9 @@ func (s *OrderedQueueSuite) TestPuttingJobIntoQueueAfterStartingReturnsError() {
 }
 
 func (s *OrderedQueueSuite) TestInternalRunnerCanBeChangedBeforeStartingTheQueue() {
-	originalRunner := s.queue.Runner()
 	newRunner := pool.NewLocalWorkers(2, s.queue)
+	fmt.Printf("%T %+v\n", s.queue, s.queue)
+	originalRunner := s.queue.Runner()
 	s.NotEqual(originalRunner, newRunner)
 
 	s.NoError(s.queue.SetRunner(newRunner))
@@ -138,7 +233,54 @@ func (s *OrderedQueueSuite) TestQueueCanOnlyBeStartedOnce() {
 	s.True(s.queue.Started())
 }
 
-func (s *OrderedQueueSuite) TestQueueFailsToStartIfGraphIsOutOfSync() {
+func (s *OrderedQueueSuite) TestPassedIsCompletedButDoesNotRun() {
+	j1 := job.NewShellJob("echo foo", "")
+	j2 := job.NewShellJob("true", "")
+	j1.SetDependency(dependency.NewCreatesFile("ordered_test.go"))
+	s.NoError(j1.Dependency().AddEdge(j2.ID()))
+
+	s.Equal(j1.Dependency().State(), dependency.Passed)
+	s.Equal(j2.Dependency().State(), dependency.Ready)
+
+	s.False(j1.Completed())
+	s.False(j2.Completed())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s.NoError(s.queue.Put(j1))
+	s.NoError(s.queue.Put(j2))
+
+	s.NoError(s.queue.Start(ctx))
+
+	amboy.Wait(s.queue)
+	j1Refreshed, ok1 := s.queue.Get(j1.ID())
+	j2Refreshed, ok2 := s.queue.Get(j2.ID())
+	s.True(ok1)
+	s.True(ok2)
+	s.False(j1Refreshed.Completed())
+	s.True(j2Refreshed.Completed())
+}
+
+////////////////////////////////////////////////////////////////////////
+//
+// The following tests are specific to the local implementation of the ordered queue
+//
+////////////////////////////////////////////////////////////////////////
+
+type LocalOrderedSuite struct {
+	queue *LocalOrdered
+	suite.Suite
+}
+
+func TestLocalOrderedSuite(t *testing.T) {
+	suite.Run(t, new(LocalOrderedSuite))
+}
+
+func (s *LocalOrderedSuite) SetupTest() {
+	s.queue = NewLocalOrdered(2)
+}
+
+func (s *LocalOrderedSuite) TestLocalQueueFailsToStartIfGraphIsOutOfSync() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -157,26 +299,7 @@ func (s *OrderedQueueSuite) TestQueueFailsToStartIfGraphIsOutOfSync() {
 	s.Error(s.queue.Start(ctx))
 }
 
-func (s *OrderedQueueSuite) TestQueueFailsToStartIfTaskGraphIsCyclic() {
-	j1 := job.NewShellJob("true", "")
-	j2 := job.NewShellJob("true", "")
-
-	s.NoError(j1.Dependency().AddEdge(j2.ID()))
-	s.NoError(j2.Dependency().AddEdge(j1.ID()))
-
-	s.Len(j1.Dependency().Edges(), 1)
-	s.Len(j2.Dependency().Edges(), 1)
-
-	s.NoError(s.queue.Put(j1))
-	s.NoError(s.queue.Put(j2))
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	s.Error(s.queue.Start(ctx))
-}
-
-func (s *OrderedQueueSuite) TestQueueFailsToStartIfDependencyDoesNotExist() {
+func (s *LocalOrderedSuite) TestQueueFailsToStartIfDependencyDoesNotExist() {
 	// this shouldn't be possible, but if the tasks and graph
 	// mappings get out of sync, then there's an error on start.
 
@@ -197,12 +320,15 @@ func (s *OrderedQueueSuite) TestQueueFailsToStartIfDependencyDoesNotExist() {
 	s.Error(s.queue.Start(ctx))
 }
 
-func (s *OrderedQueueSuite) TestPassedIsCompletedButDoesNotRun() {
-	j1 := job.NewShellJob("echo foo", "")
+func (s *LocalOrderedSuite) TestQueueFailsToStartIfTaskGraphIsCyclic() {
+	j1 := job.NewShellJob("true", "")
 	j2 := job.NewShellJob("true", "")
-	j1.SetDependency(dependency.NewCreatesFile("ordered_test.go"))
+
 	s.NoError(j1.Dependency().AddEdge(j2.ID()))
-	s.Equal(dependency.Passed, j1.Dependency().State())
+	s.NoError(j2.Dependency().AddEdge(j1.ID()))
+
+	s.Len(j1.Dependency().Edges(), 1)
+	s.Len(j2.Dependency().Edges(), 1)
 
 	s.NoError(s.queue.Put(j1))
 	s.NoError(s.queue.Put(j2))
@@ -210,8 +336,5 @@ func (s *OrderedQueueSuite) TestPassedIsCompletedButDoesNotRun() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	s.NoError(s.queue.Start(ctx))
-	amboy.Wait(s.queue)
-	s.False(j1.Completed())
-	s.True(j2.Completed())
+	s.Error(s.queue.Start(ctx))
 }

@@ -6,10 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
-
-	"gopkg.in/mgo.v2"
-
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/job"
 	"github.com/mongodb/amboy/pool"
@@ -18,11 +14,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/tychoish/grip"
-	"github.com/tychoish/grip/level"
+	"golang.org/x/net/context"
+	"gopkg.in/mgo.v2"
 )
 
 func init() {
-	grip.SetThreshold(level.Debug)
 	job.RegisterDefaultJobs()
 }
 
@@ -90,7 +86,6 @@ func TestRemoteUnorderedMongoDBSuite(t *testing.T) {
 			grip.Error(err)
 			return
 		}
-
 	}
 
 	suite.Run(t, tests)

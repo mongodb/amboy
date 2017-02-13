@@ -18,7 +18,6 @@ type ShellJob struct {
 	Output     string            `bson:"output" json:"output" yaml:"output"`
 	WorkingDir string            `bson:"working_dir" json:"working_dir" yaml:"working_dir"`
 	Env        map[string]string `bson:"env" json:"env" yaml:"env"`
-	args       []string
 
 	*Base `bson:"job_base" json:"job_base" yaml:"job_base"`
 	sync.RWMutex
@@ -33,17 +32,12 @@ type ShellJob struct {
 func NewShellJob(cmd string, creates string) *ShellJob {
 	j := NewShellJobInstance()
 	j.Command = cmd
-	j.getArgsFromCommand()
 
 	if creates != "" {
 		j.SetDependency(dependency.NewCreatesFile(creates))
 	}
 
-	if len(j.args) == 0 {
-		j.SetID(fmt.Sprintf("%d.shell-job", GetNumber()))
-	} else {
-		j.SetID(fmt.Sprintf("%s-%d.shell-job", j.args[0], GetNumber()))
-	}
+	j.SetID(fmt.Sprintf("shell-job-%d-%s", GetNumber(), strings.Split(cmd, " ")[0]))
 
 	return j
 }
@@ -66,12 +60,6 @@ func NewShellJobInstance() *ShellJob {
 	return j
 }
 
-func (j *ShellJob) getArgsFromCommand() {
-	j.Lock()
-	defer j.Unlock()
-	j.args = strings.Split(j.Command, " ")
-}
-
 // Run executes the shell commands. Add keys to the Env map to modify
 // the environment, or change the value of the WorkingDir property to
 // set the working directory for this command. Captures output into
@@ -80,10 +68,10 @@ func (j *ShellJob) Run() {
 	defer j.MarkComplete()
 	grip.Debugf("running %s", j.Command)
 
-	j.getArgsFromCommand()
+	args := strings.Split(j.Command, " ")
 
 	j.RLock()
-	cmd := exec.Command(j.args[0], j.args[1:]...)
+	cmd := exec.Command(args[0], args[1:]...)
 	j.RUnlock()
 
 	cmd.Dir = j.WorkingDir

@@ -13,7 +13,7 @@ projectPath := $(orgPath)/$(name)
 #   vendorize all of these dependencies.
 lintDeps := github.com/alecthomas/gometalinter
 #   include test files and give linters 40s to run to avoid timeouts
-lintArgs := --tests --deadline=1m --vendor --concurrency=4
+lintArgs := --tests --deadline=10m --vendor --concurrency=4
 #   gotype produces false positives because it reads .a files which
 #   are rarely up to date.
 lintArgs += --disable="gotype" --disable="gas"
