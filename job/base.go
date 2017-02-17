@@ -35,13 +35,13 @@ import (
 // need not implement themselves.
 type Base struct {
 	TaskID        string        `bson:"name" json:"name" yaml:"name"`
-	IsComplete    bool          `bson:"completed" json:"completed" yaml:"completed"`
 	JobType       amboy.JobType `bson:"job_type" json:"job_type" yaml:"job_type"`
 	Errors        []string      `bson:"errors" json:"errors" yaml:"errors"`
 	PriorityValue int           `bson:"priority" json:"priority" yaml:"priority"`
 
-	dep   dependency.Manager
-	mutex sync.RWMutex
+	status amboy.JobStatusInfo
+	dep    dependency.Manager
+	mutex  sync.RWMutex
 	// adds common priority tracking.
 }
 
@@ -57,7 +57,7 @@ func (b *Base) MarkComplete() {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
-	b.IsComplete = true
+	b.status.Completed = true
 }
 
 // AddError takes an error object and if it is non-nil, tracks it
@@ -104,15 +104,6 @@ func (b *Base) ID() string {
 	defer b.mutex.RUnlock()
 
 	return b.TaskID
-}
-
-// Completed returns true if the job has been marked completed, and is
-// a component of the Job interface.
-func (b *Base) Completed() bool {
-	b.mutex.RLock()
-	defer b.mutex.RUnlock()
-
-	return b.IsComplete
 }
 
 // Type returns the JobType specification for this object, and
@@ -167,4 +158,19 @@ func (b *Base) SetPriority(p int) {
 	defer b.mutex.Unlock()
 
 	b.PriorityValue = p
+}
+
+func (b *Base) Status() amboy.JobStatusInfo {
+	b.mutex.RLock()
+	defer b.mutex.RUnlock()
+
+	return b.status
+}
+
+func (b *Base) SetStatus(s amboy.JobStatusInfo) {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	b.status = s
+
 }

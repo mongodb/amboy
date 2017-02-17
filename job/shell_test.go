@@ -74,19 +74,19 @@ func (s *ShellJobSuite) TestShellJobNameConstructedFromCommandNames() {
 func (s *ShellJobSuite) TestRunTrivialCommandReturnsWithoutError() {
 	s.job = NewShellJob("true", "")
 
-	s.False(s.job.Completed())
+	s.False(s.job.Status().Completed)
 	s.job.Run()
 	s.NoError(s.job.Error())
-	s.True(s.job.Completed())
+	s.True(s.job.Status().Completed)
 }
 
 func (s *ShellJobSuite) TestRunWithErroneousCommandReturnsError() {
 	s.job = NewShellJob("foo", "")
 
-	s.False(s.job.Completed())
+	s.False(s.job.Status().Completed)
 	s.job.Run()
 	s.Error(s.job.Error())
-	s.True(s.job.Completed())
+	s.True(s.job.Status().Completed)
 }
 
 func (s *ShellJobSuite) TestEnvironmentVariableIsPassedToCommand() {

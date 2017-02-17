@@ -67,7 +67,7 @@ func (q *SimpleRemoteOrdered) Next(ctx context.Context) amboy.Job {
 			lock.Lock(ctx)
 			q.driver.Reload(job)
 
-			if job.Completed() {
+			if job.Status().Completed {
 				grip.Infof("task '%s' is completed, skipping (but may be misfiled)", job.ID())
 				lock.Unlock(ctx)
 				continue

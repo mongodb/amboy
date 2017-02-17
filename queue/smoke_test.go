@@ -64,7 +64,7 @@ func runUnorderedSmokeTest(ctx context.Context, q amboy.Queue, size int, assert 
 	grip.Infof("workers complete for %d worker smoke test", size)
 	assert.Equal(numJobs, q.Stats().Completed, fmt.Sprintf("%+v", q.Stats()))
 	for result := range q.Results() {
-		assert.True(result.Completed(), fmt.Sprintf("with %d workers", size))
+		assert.True(result.Status().Completed, fmt.Sprintf("with %d workers", size))
 	}
 	grip.Infof("completed results check for %d worker smoke test", size)
 }
@@ -117,14 +117,14 @@ func runMultiQueueSingleBackEndSmokeTest(ctx context.Context, qOne, qTwo amboy.Q
 	// check that all the results in queue one are completed, and that
 	results := make(map[string]struct{})
 	for result := range qOne.Results() {
-		assert.True(result.Completed())
+		assert.True(result.Status().Completed)
 		results[result.ID()] = struct{}{}
 	}
 
 	// make sure that all of the results in the second queue match
 	// the results in the first queue.
 	for result := range qTwo.Results() {
-		assert.True(result.Completed())
+		assert.True(result.Status().Completed)
 		_, ok := results[result.ID()]
 		assert.True(ok)
 	}

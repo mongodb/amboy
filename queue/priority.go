@@ -81,7 +81,7 @@ func (q *LocalPriorityQueue) Results() <-chan amboy.Job {
 
 	go func() {
 		for job := range q.storage.Contents() {
-			if job.Completed() {
+			if job.Status().Completed {
 				output <- job
 			}
 		}

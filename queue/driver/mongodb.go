@@ -112,9 +112,9 @@ func (d *MongoDB) setupDB() error {
 	defer session.Close()
 
 	if d.priority {
-		catcher.Add(jobs.EnsureIndexKey("completed", "dispatched", "priority"))
+		catcher.Add(jobs.EnsureIndexKey("status.completed", "dispatched", "priority"))
 	} else {
-		catcher.Add(jobs.EnsureIndexKey("completed", "dispatched"))
+		catcher.Add(jobs.EnsureIndexKey("status.completed", "dispatched"))
 	}
 
 	session, locks := d.getLocksCollection()
@@ -209,7 +209,8 @@ func (d *MongoDB) Save(j amboy.Job) error {
 
 	d.locks.mutex.Lock()
 	defer d.locks.mutex.Unlock()
-	if _, ok := d.locks.cache[name]; ok && j.Completed() {
+
+	if _, ok := d.locks.cache[name]; ok && j.Status().Completed {
 		delete(d.locks.cache, name)
 	}
 
@@ -253,7 +254,7 @@ func (d *MongoDB) Next() amboy.Job {
 
 	j := &registry.JobInterchange{}
 
-	query := jobs.Find(bson.M{"completed": false, "dispatched": false})
+	query := jobs.Find(bson.M{"status.completed": false, "dispatched": false})
 	if d.priority {
 		query = query.Sort("-priority")
 	}
@@ -298,9 +299,8 @@ func (d *MongoDB) Stats() Stats {
 		jobs.Name, err)
 	stats.Total = numJobs
 
-	numIncomplete, err := jobs.Find(bson.M{"completed": false}).Count()
-	grip.ErrorWhenf(err != nil,
-		"problem getting count of pending jobs (%s): %+v ",
+	numIncomplete, err := jobs.Find(bson.M{"status.completed": false}).Count()
+	grip.ErrorWhenf(err != nil, "problem getting count of pending jobs (%s): %+v ",
 		jobs.Name, err)
 	stats.Pending = numIncomplete
 

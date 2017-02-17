@@ -139,7 +139,7 @@ func (s *RemoteUnorderedSuite) TestJobPutIntoQueueFetchableViaGetMethod() {
 
 		nj := fetchedJob.(*job.ShellJob)
 		s.Equal(j.ID(), nj.ID())
-		s.Equal(j.IsComplete, nj.IsComplete)
+		s.Equal(j.Status().Completed, nj.Status().Completed)
 		s.Equal(j.Command, nj.Command, fmt.Sprintf("%+v\n%+v", j, nj))
 		s.Equal(j.Output, nj.Output)
 		s.Equal(j.WorkingDir, nj.WorkingDir)

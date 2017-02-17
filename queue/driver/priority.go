@@ -110,7 +110,7 @@ func (p *Priority) Save(j amboy.Job) error {
 
 	p.locks.mutex.Lock()
 	defer p.locks.mutex.Unlock()
-	if _, ok := p.locks.cache[name]; ok && j.Completed() {
+	if _, ok := p.locks.cache[name]; ok && j.Status().Completed {
 		delete(p.locks.cache, name)
 	}
 
@@ -128,7 +128,7 @@ func (p *Priority) Jobs() <-chan amboy.Job {
 func (p *Priority) Next() amboy.Job {
 	j := p.storage.Pop()
 
-	if j == nil || j.Completed() {
+	if j == nil || j.Status().Completed {
 		return nil
 	}
 
@@ -156,7 +156,7 @@ func (p *Priority) Stats() Stats {
 	p.locks.mutex.RUnlock()
 
 	for job := range p.storage.Contents() {
-		if job.Completed() {
+		if job.Status().Completed {
 			stats.Complete++
 			continue
 		}

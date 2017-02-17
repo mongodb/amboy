@@ -149,7 +149,7 @@ func (q *LocalOrdered) Results() <-chan amboy.Job {
 		q.mutex.RLock()
 		defer q.mutex.RUnlock()
 		for _, job := range q.tasks.m {
-			if job.Completed() {
+			if job.Status().Completed {
 				output <- job
 			}
 		}
@@ -299,7 +299,7 @@ func (q *LocalOrdered) jobDispatch(ctx context.Context, orderedJobs []graph.Node
 						continue
 					}
 
-					if q.tasks.completed[dep] || q.tasks.m[dep].Completed() {
+					if q.tasks.completed[dep] || q.tasks.m[dep].Status().Completed {
 						// we've not seen this task
 						// before, but we're not
 						// waiting for it. We'll do a

@@ -17,8 +17,8 @@ func init() {
 type JobTest struct {
 	Name       string
 	Content    string
-	complete   bool
 	shouldFail bool
+	status     amboy.JobStatusInfo
 	T          amboy.JobType
 	dep        dependency.Manager
 	priority   int
@@ -54,7 +54,7 @@ func (j *JobTest) ID() string {
 }
 
 func (j *JobTest) Run() {
-	j.complete = true
+	j.status.Completed = true
 }
 
 func (j *JobTest) Error() error {
@@ -63,10 +63,6 @@ func (j *JobTest) Error() error {
 	}
 
 	return nil
-}
-
-func (j *JobTest) Completed() bool {
-	return j.complete
 }
 
 func (j *JobTest) Type() amboy.JobType {
@@ -87,4 +83,13 @@ func (j *JobTest) Priority() int {
 
 func (j *JobTest) SetPriority(p int) {
 	j.priority = p
+}
+
+func (j *JobTest) Status() amboy.JobStatusInfo {
+	return j.status
+}
+
+func (j *JobTest) SetStatus(s amboy.JobStatusInfo) {
+	j.status = s
+
 }

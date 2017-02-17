@@ -62,15 +62,15 @@ func (s *JobGroupSuite) TestAllJobsAreCompleteAfterRunningGroup() {
 	s.Len(s.job.Jobs, len(names))
 
 	s.job.Run()
-	s.True(s.job.Completed())
+	s.True(s.job.Status().Completed)
 	s.NoError(s.job.Error())
 
 	for _, interchange := range s.job.Jobs {
-		s.True(interchange.Completed)
+		s.True(interchange.Status.Completed)
 
 		job, err := registry.ConvertToJob(interchange)
 		s.NoError(err)
-		s.True(job.Completed())
+		s.True(job.Status().Completed)
 		s.IsType(&ShellJob{}, job)
 	}
 }
@@ -88,10 +88,10 @@ func (s *JobGroupSuite) TestJobResultsPersistAfterGroupRuns() {
 	s.Len(s.job.Jobs, 2)
 
 	s.job.Run()
-	s.True(s.job.Completed())
+	s.True(s.job.Status().Completed)
 	s.Error(s.job.Error())
 
-	s.False(fail.Completed())
+	s.False(fail.Status().Completed)
 	failEnvName, ok := fail.Env["name"]
 	s.True(ok)
 	s.Equal("fail", failEnvName)
@@ -100,7 +100,7 @@ func (s *JobGroupSuite) TestJobResultsPersistAfterGroupRuns() {
 	s.True(exists)
 	job, err := registry.ConvertToJob(interchange)
 	s.NoError(err)
-	s.False(job.Completed())
+	s.False(job.Status().Completed)
 	s.IsType(&ShellJob{}, job)
 }
 

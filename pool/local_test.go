@@ -91,13 +91,13 @@ func (s *LocalWorkersSuite) TestPoolStartsAndProcessesJobs() {
 
 	counter := 0
 	for j := range s.queue.Results() {
-		s.True(j.Completed())
+		s.True(j.Status().Completed)
 		counter++
 	}
 	s.Equal(counter, len(jobs))
 
 	for _, job := range jobs {
-		s.True(job.Completed())
+		s.True(job.Status().Completed)
 	}
 }
 

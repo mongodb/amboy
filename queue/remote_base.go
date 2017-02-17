@@ -132,7 +132,7 @@ func (q *remoteBase) Results() <-chan amboy.Job {
 	go func() {
 		defer close(output)
 		for j := range q.driver.Jobs() {
-			if j.Completed() {
+			if j.Status().Completed {
 				output <- j
 			}
 

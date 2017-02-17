@@ -164,13 +164,13 @@ func (s *UnorderedGroupSuite) TestPoolStartsAndProcessesJobs() {
 	amboy.Wait(queueOne)
 
 	for _, job := range jobsOne {
-		s.True(job.Completed(), fmt.Sprintf("%T\n\t%+v", job, job))
+		s.True(job.Status().Completed, fmt.Sprintf("%T\n\t%+v", job, job))
 		s.NoError(job.Error())
 	}
 	s.T().SkipNow()
 
 	for _, job := range jobsTwo {
-		s.True(job.Completed(), fmt.Sprintf("%T\n\t%+v", job, job))
+		s.True(job.Status().Completed, fmt.Sprintf("%T\n\t%+v", job, job))
 		s.NoError(job.Error())
 	}
 }

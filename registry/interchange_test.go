@@ -34,7 +34,7 @@ func (s *JobInterchangeSuite) TestConversionToInterchangeMaintainsMetaDataFideli
 		s.Equal(s.job.ID(), i.Name)
 		s.Equal(s.job.Type().Name, i.Type)
 		s.Equal(s.job.Type().Version, i.Version)
-		s.Equal(s.job.Completed(), i.Completed)
+		s.Equal(s.job.Status(), i.Status)
 	}
 }
 
@@ -52,7 +52,7 @@ func (s *JobInterchangeSuite) TestConversionFromInterchangeMaintainsFidelity() {
 
 		s.Equal(s.job.Name, new.Name)
 		s.Equal(s.job.Content, new.Content)
-		s.Equal(s.job.complete, new.complete)
+		s.Equal(s.job.Status, new.Status)
 		s.Equal(s.job.shouldFail, new.shouldFail)
 		s.Equal(s.job.T, new.T)
 	}

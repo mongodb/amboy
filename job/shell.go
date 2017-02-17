@@ -84,7 +84,6 @@ func (j *ShellJob) Run() {
 	defer j.Unlock()
 
 	j.Output = strings.TrimSpace(string(output))
-	j.IsComplete = true
 }
 
 func (j *ShellJob) getEnVars() []string {

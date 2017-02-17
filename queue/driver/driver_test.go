@@ -194,7 +194,7 @@ func (s *DriverSuite) TestStatsCallReportsCompletedJobs() {
 	s.Equal(0, s.driver.Stats().Locked)
 	s.Equal(0, s.driver.Stats().Complete)
 
-	j.IsComplete = true
+	j.MarkComplete()
 	s.NoError(s.driver.Save(j))
 	s.Equal(1, s.driver.Stats().Total)
 	s.Equal(0, s.driver.Stats().Locked)
@@ -227,7 +227,7 @@ func (s *DriverSuite) TestNextMethodReturnsJob() {
 
 func (s *DriverSuite) TestNextMethodSkipsCompletedJos() {
 	j := job.NewShellJob("echo foo", "")
-	j.IsComplete = true
+	j.MarkComplete()
 
 	s.NoError(s.driver.Put(j))
 	s.Equal(1, s.driver.Stats().Total)

@@ -49,7 +49,7 @@ func (s *Service) getJobStatusResponse(name string) (*jobStatusResponse, error) 
 	}
 
 	resp.Exists = true
-	resp.Completed = j.Completed()
+	resp.Completed = j.Status().Completed
 	resp.Job = j
 
 	return resp, nil

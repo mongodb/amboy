@@ -33,7 +33,7 @@ func (s *PriorityStorage) Push(j amboy.Job) {
 	name := j.ID()
 	priority := j.Priority()
 	item, ok := s.table[name]
-	if ok && !item.job.Completed() {
+	if ok && !item.job.Status().Completed {
 		s.pq.update(item, priority)
 		return
 	}

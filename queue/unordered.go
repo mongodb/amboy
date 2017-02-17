@@ -165,7 +165,7 @@ func (q *LocalUnordered) Results() <-chan amboy.Job {
 		q.tasks.RLock()
 		defer q.tasks.RUnlock()
 		for _, job := range q.tasks.m {
-			if job.Completed() {
+			if job.Status().Completed {
 				output <- job
 			}
 		}

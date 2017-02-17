@@ -9,7 +9,12 @@ import (
 // the content of the Queue. The amboy/job package contains several
 // general purpose and example implementations. Jobs are responsible,
 // primarily via their Dependency property, for determining: if they
-// need to run, and what Jobs they depend on.
+// need to run, and what Jobs they depend on. Actual use of the
+// dependency system is the responsibility of the Queue implementation.
+//
+// In most cases, applications only need to implement the Run()
+// method, all additional functionality is provided by the job.Base type,
+// which can be embedded anonymously in implementations of the Job.
 type Job interface {
 	// Provides a unique identifier for a job. Queues may error if
 	// two jobs have different IDs.
@@ -19,10 +24,6 @@ type Job interface {
 	// completed state for the job.
 	Run()
 
-	// Returns true if the job has been completed. Jobs that
-	// encountered errors are, often, also complete.
-	Completed() bool
-
 	// Returns a pointer to a JobType object that Queue
 	// implementations can use to de-serialize tasks.
 	Type() JobType
@@ -31,15 +32,20 @@ type Job interface {
 	// allows queues to override a dependency (e.g. in a force
 	// build state, or as part of serializing dependency objects
 	// with jobs.)
-	SetDependency(dependency.Manager)
 	Dependency() dependency.Manager
+	SetDependency(dependency.Manager)
+
+	// Provides access to the JobStatusInfo object for the job,
+	// which reports the current state.
+	Status() JobStatusInfo
+	SetStatus(JobStatusInfo)
 
 	// Provides access to the job's priority value, which some
 	// queues may use to order job dispatching. Most Jobs
 	// implement these values by composing the
 	// amboy/priority.Value type.
-	SetPriority(int)
 	Priority() int
+	SetPriority(int)
 
 	// Error returns an error object if the task was an
 	// error. Typically if the job has not run, this is nil.
@@ -54,6 +60,16 @@ type JobType struct {
 	Name    string `json:"name" bson:"name" yaml:"name"`
 	Version int    `json:"version" bson:"version" yaml:"version"`
 	Format  Format `json:"format" bson:"format" yaml:"format"`
+}
+
+// JobStatusInfo contains information about the current status of a
+// job and is reported by the Status and set by the SetStatus methods
+// in the Job interface.e
+type JobStatusInfo struct {
+	Owner        string `bson:"owner" json:"owner" yaml:"owner"`
+	Modification int    `bson:"mod_count" json:"mod_count" yaml:"mod_count"`
+	Completed    bool   `bson:"completed" json:"completed" yaml:"completed"`
+	InProgress   bool   `bson:"in_prog" json:"in_progress" yaml:"in_progress"`
 }
 
 // Queue describes a very simple Job queue interface that allows users

@@ -89,7 +89,7 @@ func (s *LocalQueueSuite) TestResultsChannelProducesPointersToConsistentJobObjec
 	defer cancel()
 
 	job := job.NewShellJob("true", "")
-	s.False(job.Completed())
+	s.False(job.Status().Completed)
 
 	s.NoError(s.queue.Start(ctx))
 	s.NoError(s.queue.Put(job))
@@ -99,7 +99,7 @@ func (s *LocalQueueSuite) TestResultsChannelProducesPointersToConsistentJobObjec
 	result, ok := <-s.queue.Results()
 	s.True(ok)
 	s.Equal(job.ID(), result.ID())
-	s.True(result.Completed())
+	s.True(result.Status().Completed)
 }
 
 func (s *LocalQueueSuite) TestJobsChannelProducesJobObjects() {

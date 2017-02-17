@@ -72,7 +72,8 @@ func startWorkerServer(ctx context.Context, q amboy.Queue) <-chan amboy.Job {
 				if job == nil {
 					continue
 				}
-				if job.Completed() {
+
+				if job.Status().Completed {
 					grip.Debugf("job '%s' was dispatched from the queue but was completed",
 						job.ID())
 					continue

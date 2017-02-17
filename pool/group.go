@@ -105,7 +105,7 @@ func (r *Group) startMerger(ctx context.Context) <-chan *workUnit {
 					continue
 				}
 
-				if job.Completed() {
+				if job.Status().Completed {
 					continue
 				}
 

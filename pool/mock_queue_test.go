@@ -119,7 +119,7 @@ func (q *QueueTester) Results() <-chan amboy.Job {
 
 	go func(m map[string]amboy.Job) {
 		for _, job := range m {
-			if job.Completed() {
+			if job.Status().Completed {
 				output <- job
 			}
 		}

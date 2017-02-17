@@ -120,7 +120,7 @@ func (d *Internal) Save(j amboy.Job) error {
 
 	d.locks.Lock()
 	defer d.locks.Unlock()
-	if _, ok := d.locks.m[name]; ok && j.Completed() {
+	if _, ok := d.locks.m[name]; ok && j.Status().Completed {
 		delete(d.locks.m, name)
 	}
 
@@ -196,7 +196,7 @@ func (d *Internal) Next() amboy.Job {
 			continue
 		}
 
-		if job.Completed() {
+		if job.Status().Completed {
 			d.jobs.dispatched[name] = struct{}{}
 			continue
 		}
@@ -221,7 +221,7 @@ func (d *Internal) Stats() Stats {
 	stats.Total = len(d.jobs.m)
 	for name := range d.jobs.m {
 		j := d.jobs.m[name]
-		if j.Completed() {
+		if j.Status().Completed {
 			stats.Complete++
 		} else {
 			stats.Pending++

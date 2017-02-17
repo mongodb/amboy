@@ -29,7 +29,7 @@ func (s *BaseCheckSuite) SetupTest() {
 }
 
 func (s *BaseCheckSuite) TestInitialValuesOfBaseObject() {
-	s.False(s.base.IsComplete)
+	s.False(s.base.status.Completed)
 	s.Len(s.base.Errors, 0)
 }
 
@@ -74,10 +74,9 @@ func (s *BaseCheckSuite) TestSetDependencyAcceptsAndPersistsChangesToDependencyT
 }
 
 func (s *BaseCheckSuite) TestMarkCompleteHelperSetsCompleteState() {
-	s.False(s.base.IsComplete)
-	s.False(s.base.Completed())
+	s.False(s.base.status.Completed)
+	s.False(s.base.Status().Completed)
 	s.base.MarkComplete()
 
-	s.True(s.base.IsComplete)
-	s.True(s.base.Completed())
+	s.True(s.base.status.Completed)
 }

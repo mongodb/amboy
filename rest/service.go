@@ -139,8 +139,3 @@ func (s *Service) App() *gimlet.APIApp {
 
 	return s.app
 }
-
-// Run starts the REST service. All errors are logged.
-func (s *Service) Run() {
-	grip.CatchAlert(s.App().Run())
-}
