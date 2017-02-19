@@ -1,17 +1,21 @@
 package driver
 
 import (
-	"sync"
+	"fmt"
+	"os"
 	"time"
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/registry"
 	"github.com/pkg/errors"
+	uuid "github.com/satori/go.uuid"
 	"github.com/tychoish/grip"
 	"golang.org/x/net/context"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )
+
+const lockTimeout = 5 * time.Minute
 
 // MongoDB is a type that represents and wraps a queues
 // persistence of jobs *and* locks to a MongoDB instance.
@@ -21,11 +25,10 @@ type MongoDB struct {
 	dbName     string
 	session    *mgo.Session
 	canceler   context.CancelFunc
+	instanceID string
 	priority   bool
-	locks      struct {
-		cache map[string]*MongoDBJobLock
-		mutex sync.RWMutex
-	}
+
+	*LockManager
 }
 
 // MongoDBOptions is a struct passed to the NewMongoDB constructor to
@@ -54,13 +57,16 @@ func DefaultMongoDBOptions() MongoDBOptions {
 // NewMongoDB creates a driver object given a name, which
 // serves as a prefix for collection names, and a MongoDB connection
 func NewMongoDB(name string, opts MongoDBOptions) *MongoDB {
+	host, _ := os.Hostname()
 	d := &MongoDB{
 		name:       name,
 		dbName:     opts.DB,
 		mongodbURI: opts.URI,
 		priority:   opts.Priority,
+		instanceID: fmt.Sprintf("%s.%s.%s", name, host, uuid.NewV4()),
 	}
-	d.locks.cache = make(map[string]*MongoDBJobLock)
+
+	d.LockManager = NewLockManager(d.instanceID, d)
 
 	return d
 }
@@ -81,6 +87,9 @@ func (d *MongoDB) Open(ctx context.Context) error {
 	d.canceler = cancel
 	d.session = session
 
+	session.SetSafe(&mgo.Safe{WMode: "majority"})
+	d.LockManager.Open(ctx)
+
 	go func() {
 		<-dCtx.Done()
 		d.session.Close()
@@ -92,12 +101,6 @@ func (d *MongoDB) Open(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-func (d *MongoDB) getLocksCollection() (*mgo.Session, *mgo.Collection) {
-	session := d.session.Copy()
-
-	return session, session.DB(d.dbName).C(d.name + ".locks")
 }
 
 func (d *MongoDB) getJobsCollection() (*mgo.Session, *mgo.Collection) {
@@ -112,15 +115,10 @@ func (d *MongoDB) setupDB() error {
 	defer session.Close()
 
 	if d.priority {
-		catcher.Add(jobs.EnsureIndexKey("status.completed", "dispatched", "priority"))
+		catcher.Add(jobs.EnsureIndexKey("status.completed", "status.in_prog", "priority"))
 	} else {
-		catcher.Add(jobs.EnsureIndexKey("status.completed", "dispatched"))
+		catcher.Add(jobs.EnsureIndexKey("status.completed", "status.in_prog"))
 	}
-
-	session, locks := d.getLocksCollection()
-	defer session.Close()
-
-	catcher.Add(locks.EnsureIndexKey("locked"))
 
 	return errors.Wrap(catcher.Resolve(), "problem building indexes")
 }
@@ -130,25 +128,6 @@ func (d *MongoDB) Close() {
 	if d.canceler != nil {
 		d.canceler()
 	}
-}
-
-// Put saves a job object to the persistence layer, and returns an
-// error from the MongoDB driver as needed.
-func (d *MongoDB) Put(j amboy.Job) error {
-	i, err := registry.MakeJobInterchange(j)
-	if err != nil {
-		return errors.Wrap(err, "problem converting job to interchange format")
-	}
-
-	session, jobs := d.getJobsCollection()
-	defer session.Close()
-
-	if err = jobs.Insert(i); err != nil {
-		return errors.Wrap(err,
-			"problem inserting document into collection during PUT")
-	}
-
-	return nil
 }
 
 // Get takes the name of a job and returns an amboy.Job object from
@@ -175,24 +154,30 @@ func (d *MongoDB) Get(name string) (amboy.Job, error) {
 	return output, nil
 }
 
-// Reload takes am amboy.Job object and returns. This operation logs
-// errors, but will return the original document if it encounters an
-// error reloading a document.
-func (d *MongoDB) Reload(j amboy.Job) amboy.Job {
-	newJob, err := d.Get(j.ID())
-	if err != nil {
-		grip.Warningf("encountered error reloading job %s: %s",
-			j.ID(), err.Error())
-		return j
-	}
+func (d *MongoDB) getAtomicQuery(jobName string, stat amboy.JobStatusInfo) bson.M {
+	timeoutTs := time.Now().Add(-lockTimeout)
 
-	return newJob
+	return bson.M{
+		"_id": jobName,
+		"$or": []bson.M{
+			// if there is no owner, then there can be no lock,
+			bson.M{"status.owner": ""},
+			// owner and modcount should match, which
+			// means there's an active lock but we own it.
+			bson.M{
+				"status.owner":     d.instanceID,
+				"status.mod_count": stat.ModificationCount,
+				"status.mod_ts":    bson.M{"$lte": timeoutTs},
+			},
+			// modtime is older than the lock timeout,
+			// regardless of what the other data is,
+			bson.M{"status.mod_ts": bson.M{"$gt": timeoutTs}},
+		},
+	}
 }
 
 // Save takes a job object and updates that job in the persistence
-// layer. This operation is based on an update, and an existing job
-// with the same "ID()" property must exist. Use "Put()" to insert a
-// new job into the database.
+// layer. Replaces or updates an existing job with the same ID
 func (d *MongoDB) Save(j amboy.Job) error {
 	name := j.ID()
 	job, err := registry.MakeJobInterchange(j)
@@ -203,20 +188,30 @@ func (d *MongoDB) Save(j amboy.Job) error {
 	session, jobs := d.getJobsCollection()
 	defer session.Close()
 
-	if err = jobs.UpdateId(name, job); err != nil {
-		return errors.Wrapf(err, "problem updating ")
+	info, err := jobs.Upsert(d.getAtomicQuery(j.ID(), j.Status()), job)
+	if err != nil {
+		err = errors.Wrapf(err, "problem updating %s: %+v", name, info)
+		grip.Warning(err)
+		return err
 	}
 
-	d.locks.mutex.Lock()
-	defer d.locks.mutex.Unlock()
-
-	if _, ok := d.locks.cache[name]; ok && j.Status().Completed {
-		delete(d.locks.cache, name)
-	}
-
-	grip.Debugf("saved job '%s'", name)
+	grip.Debugf("saved job '%s': %+v", name, info)
 
 	return nil
+}
+
+// SaveStatus persists only the status document in the job in the
+// persistence layer. If the job does not exist, or the underlying
+// status document has changed incompatibly this operation produces
+// an error.
+func (d *MongoDB) SaveStatus(j amboy.Job, stat amboy.JobStatusInfo) error {
+	session, jobs := d.getJobsCollection()
+	defer session.Close()
+
+	err := jobs.Update(d.getAtomicQuery(j.ID(), j.Status()),
+		bson.M{"$set": bson.M{"status": stat}})
+
+	return errors.Wrapf(err, "problem updating status document for %s", j.ID())
 }
 
 // Jobs returns a channel containing all jobs persisted by this
@@ -254,7 +249,7 @@ func (d *MongoDB) Next() amboy.Job {
 
 	j := &registry.JobInterchange{}
 
-	query := jobs.Find(bson.M{"status.completed": false, "dispatched": false})
+	query := jobs.Find(bson.M{"status.completed": false, "status.in_prog": false})
 	if d.priority {
 		query = query.Sort("-priority")
 	}
@@ -263,13 +258,6 @@ func (d *MongoDB) Next() amboy.Job {
 	if err != nil {
 		grip.DebugWhenln(err.Error() != "not found",
 			"could not find a job ready for processing:", err.Error())
-		return nil
-	}
-
-	j.Dispatched = true
-	err = jobs.UpdateId(j.Name, j)
-	if err != nil {
-		grip.Errorf("problem marking job %s dispatched: %+v", j.Name, err.Error())
 		return nil
 	}
 
@@ -287,9 +275,7 @@ func (d *MongoDB) Next() amboy.Job {
 // performs a number of asynchronous queries to collect data, and in
 // an active system with a number of active queues, stats may report
 // incongruous data.
-func (d *MongoDB) Stats() Stats {
-	stats := Stats{}
-
+func (d *MongoDB) Stats() amboy.QueueStats {
 	session, jobs := d.getJobsCollection()
 	defer session.Close()
 
@@ -297,51 +283,20 @@ func (d *MongoDB) Stats() Stats {
 	grip.ErrorWhenf(err != nil,
 		"problem getting count from jobs collection (%s): %+v ",
 		jobs.Name, err)
-	stats.Total = numJobs
 
-	numIncomplete, err := jobs.Find(bson.M{"status.completed": false}).Count()
+	completed, err := jobs.Find(bson.M{"status.completed": true}).Count()
 	grip.ErrorWhenf(err != nil, "problem getting count of pending jobs (%s): %+v ",
 		jobs.Name, err)
-	stats.Pending = numIncomplete
 
-	numLocked, err := jobs.Find(bson.M{"locked": true}).Count()
+	numLocked, err := jobs.Find(bson.M{"status.in_prog": true}).Count()
 	grip.ErrorWhenf(err != nil,
 		"problem getting count of locked Jobs (%s): %+v",
 		jobs.Name, err)
-	stats.Locked = numLocked
 
-	// computed stats
-	stats.Complete = stats.Total - stats.Pending
-	stats.Unlocked = stats.Total - stats.Locked
-
-	return stats
-}
-
-// GetLock takes the name of a job and returns, creating if necessary,
-// if the job exists, a MongoDBJobLock instance for that job.
-func (d *MongoDB) GetLock(ctx context.Context, job amboy.Job) (JobLock, error) {
-	name := job.ID()
-	start := time.Now()
-
-	if ctx.Err() != nil {
-		return nil, errors.New("job canceled before getting lock")
+	return amboy.QueueStats{
+		Total:     numJobs,
+		Pending:   numJobs - completed,
+		Completed: completed,
+		Running:   numLocked,
 	}
-
-	d.locks.mutex.Lock()
-	defer d.locks.mutex.Unlock()
-
-	lock, ok := d.locks.cache[name]
-	if ok {
-		grip.Debugf("found cached lock (%s): duration = %s", name, time.Since(start))
-		return lock, nil
-	}
-
-	lock, err := NewMongoDBJobLock(ctx, name, d.dbName, d.name+".locks", d.session.Clone())
-	if err != nil {
-		return nil, err
-	}
-
-	d.locks.cache[name] = lock
-	grip.Debugf("created new lock (%s): duration = %s", name, time.Since(start))
-	return lock, nil
 }

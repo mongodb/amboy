@@ -160,6 +160,9 @@ func (b *Base) SetPriority(p int) {
 	b.PriorityValue = p
 }
 
+// Status returns the current state of the job including information
+// useful for locking for compatibility with remote queues that
+// require managing exclusive access to a job.
 func (b *Base) Status() amboy.JobStatusInfo {
 	b.mutex.RLock()
 	defer b.mutex.RUnlock()
@@ -167,6 +170,8 @@ func (b *Base) Status() amboy.JobStatusInfo {
 	return b.status
 }
 
+// SetStatus resets the Status object of a Job document without. It is
+// part of the Job interface and used by remote queues.
 func (b *Base) SetStatus(s amboy.JobStatusInfo) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()

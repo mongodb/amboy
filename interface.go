@@ -1,6 +1,8 @@
 package amboy
 
 import (
+	"time"
+
 	"github.com/mongodb/amboy/dependency"
 	"golang.org/x/net/context"
 )
@@ -66,10 +68,11 @@ type JobType struct {
 // job and is reported by the Status and set by the SetStatus methods
 // in the Job interface.e
 type JobStatusInfo struct {
-	Owner        string `bson:"owner" json:"owner" yaml:"owner"`
-	Modification int    `bson:"mod_count" json:"mod_count" yaml:"mod_count"`
-	Completed    bool   `bson:"completed" json:"completed" yaml:"completed"`
-	InProgress   bool   `bson:"in_prog" json:"in_progress" yaml:"in_progress"`
+	Owner             string    `bson:"owner" json:"owner" yaml:"owner"`
+	Completed         bool      `bson:"completed" json:"completed" yaml:"completed"`
+	InProgress        bool      `bson:"in_prog" json:"in_progress" yaml:"in_progress"`
+	ModificationTime  time.Time `bson:"mod_ts" json:"mod_time" yaml:"mod_time"`
+	ModificationCount int       `bson:"mod_count" json:"mod_count" yaml:"mod_count"`
 }
 
 // Queue describes a very simple Job queue interface that allows users

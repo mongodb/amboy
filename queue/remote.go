@@ -43,23 +43,23 @@ func (q *RemoteUnordered) Next(ctx context.Context) amboy.Job {
 		case <-ctx.Done():
 			return nil
 		case job := <-q.channel:
-			lock, err := q.driver.GetLock(ctx, job)
+			err := q.driver.Lock(job)
 			if err != nil {
 				grip.Warning(err)
 				continue
 			}
 
-			if lock.IsLocked(ctx) {
+			job, err = q.driver.Get(job.ID())
+			if err != nil {
+				grip.CatchNotice(q.driver.Unlock(job))
+				grip.Warning(err)
 				continue
 			}
 
-			lock.Lock(ctx)
-			q.driver.Reload(job)
-
 			grip.Debugf("returning job from remote source, count = %d; duration = %s",
 				count, time.Since(start))
+
 			return job
 		}
 	}
-
 }

@@ -86,7 +86,10 @@ func (q *LocalOrdered) Put(j amboy.Job) error {
 	}
 
 	if _, ok := q.tasks.m[name]; ok {
-		return fmt.Errorf("cannot add %s, because a job exists with that name", name)
+		id := q.tasks.ids[name]
+		q.tasks.m[name] = j
+		q.tasks.nodes[id] = j
+		return nil
 	}
 
 	id := q.tasks.graph.NewNodeID()

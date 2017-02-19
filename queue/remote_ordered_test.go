@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -30,7 +31,7 @@ type SimpleRemoteOrderedSuite struct {
 	suite.Suite
 }
 
-func TestSimpleRemoteOrderedSuite(t *testing.T) {
+func TestSimpleRemoteOrderedSuiteMongoDB(t *testing.T) {
 	suite.Run(t, new(SimpleRemoteOrderedSuite))
 }
 
@@ -44,16 +45,12 @@ func (s *SimpleRemoteOrderedSuite) SetupSuite() {
 	s.tearDown = func() error {
 		session, err := mgo.Dial(uri)
 		defer session.Close()
+
 		if err != nil {
 			return err
 		}
 
 		err = session.DB("amboy").C(name + ".jobs").DropCollection()
-		if err != nil {
-			return err
-		}
-
-		err = session.DB("amboy").C(name + ".locks").DropCollection()
 		if err != nil {
 			return err
 		}
@@ -86,7 +83,7 @@ func (s *SimpleRemoteOrderedSuite) TestQueueSkipsCompletedJobs() {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	j.MarkComplete()
-	s.True(j.Completed())
+	s.True(j.Status().Completed)
 
 	s.NoError(s.queue.Start(ctx))
 	s.NoError(s.queue.Put(j))
@@ -95,15 +92,15 @@ func (s *SimpleRemoteOrderedSuite) TestQueueSkipsCompletedJobs() {
 
 	stat := s.queue.Stats()
 
-	s.Equal(stat.Total, 1)
-	s.Equal(stat.Completed, 1)
+	s.Equal(1, stat.Total)
+	s.Equal(1, stat.Completed)
 }
 
 func (s *SimpleRemoteOrderedSuite) TestQueueSkipsUnresolvedJobs() {
 	j := job.NewShellJob("echo hello", "")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	s.False(j.Completed())
+	s.False(j.Status().Completed)
 	mockDep := dependency.NewMock()
 	mockDep.Response = dependency.Unresolved
 	s.Equal(mockDep.State(), dependency.Unresolved)
@@ -116,15 +113,15 @@ func (s *SimpleRemoteOrderedSuite) TestQueueSkipsUnresolvedJobs() {
 
 	stat := s.queue.Stats()
 
-	s.Equal(stat.Total, 1)
-	s.Equal(stat.Completed, 0)
+	s.Equal(1, stat.Total, fmt.Sprintf("%+v", stat))
+	s.Equal(0, stat.Completed, fmt.Sprintf("%+v", stat))
 }
 
 func (s *SimpleRemoteOrderedSuite) TestQueueSkipsBlockedJobsWithNoEdges() {
 	j := job.NewShellJob("echo hello", "")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	s.False(j.Completed())
+	s.False(j.Status().Completed)
 	mockDep := dependency.NewMock()
 	mockDep.Response = dependency.Blocked
 	s.Equal(mockDep.State(), dependency.Blocked)
@@ -138,15 +135,15 @@ func (s *SimpleRemoteOrderedSuite) TestQueueSkipsBlockedJobsWithNoEdges() {
 
 	stat := s.queue.Stats()
 
-	s.Equal(stat.Total, 1)
-	s.Equal(stat.Completed, 0)
+	s.Equal(stat.Total, 1, fmt.Sprintf("%+v", stat))
+	s.Equal(stat.Completed, 0, fmt.Sprintf("%+v", stat))
 }
 
 func (s *SimpleRemoteOrderedSuite) TestQueueSkipsBlockedJobsWithManyEdges() {
 	j := job.NewShellJob("echo hello", "")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	s.False(j.Completed())
+	s.False(j.Status().Completed)
 	mockDep := dependency.NewMock()
 	mockDep.Response = dependency.Blocked
 	s.NoError(mockDep.AddEdge("foo"))
@@ -171,7 +168,7 @@ func (s *SimpleRemoteOrderedSuite) TestQueueSkipsBlockedJobsWithOneEdge() {
 	j := job.NewShellJob("echo hello", "")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	s.False(j.Completed())
+	s.False(j.Status().Completed)
 	mockDep := dependency.NewMock()
 	mockDep.Response = dependency.Blocked
 	s.NoError(mockDep.AddEdge("foo"))

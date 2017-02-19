@@ -5,7 +5,6 @@ package queue
 // consistent behavior of this implementation
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/mongodb/amboy"
@@ -134,7 +133,6 @@ func (s *ShuffledQueueSuite) TestGetMethodRetrieves() {
 func (s *ShuffledQueueSuite) TestResultsOperationReturnsEmptyChannelIfQueueIsNotStarted() {
 	s.False(s.queue.Started())
 	count := 0
-	fmt.Printf("%+v", s.queue)
 
 	for range s.queue.Results() {
 		count++

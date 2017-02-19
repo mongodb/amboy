@@ -32,14 +32,13 @@ func (s *InternalSuite) TestInternalImplementsDriverInterface() {
 
 func (s *InternalSuite) TestInternalInitialValues() {
 	stats := s.driver.Stats()
-	s.Equal(0, stats.Complete)
-	s.Equal(0, stats.Locked)
+	s.Equal(0, stats.Completed)
+	s.Equal(0, stats.Blocked)
+	s.Equal(0, stats.Pending)
 	s.Equal(0, stats.Total)
-	s.Equal(0, stats.Unlocked)
 
 	s.Len(s.driver.jobs.m, 0)
 	s.Len(s.driver.jobs.dispatched, 0)
-	s.Len(s.driver.locks.m, 0)
 }
 
 func (s *InternalSuite) TestOpenShouldReturnNil() {

@@ -4,13 +4,12 @@ import (
 	"testing"
 	"time"
 
-	"gopkg.in/mgo.v2"
-
 	"github.com/satori/go.uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/tychoish/grip"
 	"golang.org/x/net/context"
+	"gopkg.in/mgo.v2"
 )
 
 type MongoDBDriverSuite struct {

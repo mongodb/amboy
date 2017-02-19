@@ -53,23 +53,21 @@ func (q *SimpleRemoteOrdered) Next(ctx context.Context) amboy.Job {
 		case <-ctx.Done():
 			return nil
 		case job := <-q.channel:
-			lock, err := q.driver.GetLock(ctx, job)
+			err := q.driver.Lock(job)
 			if err != nil {
 				grip.Warning(err)
 				continue
 			}
 
-			if lock.IsLocked(ctx) {
-				grip.Infof("task '%s' is locked, skipping", job.ID())
+			job, err = q.driver.Get(job.ID())
+			if err != nil {
+				grip.CatchNotice(q.driver.Unlock(job))
+				grip.Warning(err)
 				continue
 			}
 
-			lock.Lock(ctx)
-			q.driver.Reload(job)
-
 			if job.Status().Completed {
-				grip.Infof("task '%s' is completed, skipping (but may be misfiled)", job.ID())
-				lock.Unlock(ctx)
+				grip.CatchWarning(q.driver.Unlock(job))
 				continue
 			}
 
@@ -89,8 +87,8 @@ func (q *SimpleRemoteOrdered) Next(ctx context.Context) amboy.Job {
 				count++
 				return job
 			case dependency.Passed:
+				grip.CatchWarning(q.driver.Unlock(job))
 				q.addBlocked(job.ID())
-				lock.Unlock(ctx)
 				continue
 			case dependency.Unresolved:
 				grip.Warning(message.MakeFieldsMessage("detected a dependency error",
@@ -99,33 +97,37 @@ func (q *SimpleRemoteOrdered) Next(ctx context.Context) amboy.Job {
 						"edges": dep.Edges(),
 						"dep":   dep.Type(),
 					}))
-				lock.Unlock(ctx)
-				grip.Infof("job %s is unresolved", job.ID())
+				grip.CatchWarning(q.driver.Unlock(job))
+				q.addBlocked(job.ID())
 				continue
 			case dependency.Blocked:
 				// this is just an optimization; if there's one dependency its easy
 				// to move that job *up* in the queue by submitting it here. there's a
 				// chance, however, that it's already in progress and we'll end up
 				// running it twice.
-				lock.Unlock(ctx)
+				grip.CatchWarning(q.driver.Unlock(job))
 
 				edges := dep.Edges()
-				grip.Infof("job %s is blocked. eep! [%v]", job.ID(), edges)
+				grip.Debugf("job %s is blocked. eep! [%v]", job.ID(), edges)
 				if len(edges) == 1 {
 					dj, ok := q.Get(edges[0])
 					if ok {
 						// might need to make this non-blocking.
 						q.channel <- dj
+						continue
 					}
 				} else if len(edges) == 0 {
-					grip.Criticalf("blocked task %s has no edges", job.ID())
+					grip.Debugf("blocked task %s has no edges", job.ID())
 				} else {
-					grip.Infof("job '%s' has %d dependencies, passing for now",
+					grip.Debugf("job '%s' has %d dependencies, passing for now",
 						job.ID(), len(edges))
 				}
+
+				q.addBlocked(job.ID())
+
 				continue
 			default:
-				lock.Unlock(ctx)
+				grip.CatchWarning(q.driver.Unlock(job))
 				grip.Warning(message.MakeFieldsMessage("detected invalid dependency",
 					message.Fields{
 						"job":   job.ID(),

@@ -26,10 +26,6 @@ func (s QueueStats) isComplete() bool {
 		return true
 	}
 
-	// if s.Running > 0 {
-	// 	return false
-	// }
-
 	if s.Total <= s.Completed+s.Blocked {
 		return true
 	}

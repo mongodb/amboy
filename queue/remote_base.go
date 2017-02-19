@@ -8,7 +8,6 @@ import (
 	"github.com/mongodb/amboy/queue/driver"
 	"github.com/pkg/errors"
 	"github.com/tychoish/grip"
-	"github.com/tychoish/grip/message"
 	"golang.org/x/net/context"
 )
 
@@ -32,7 +31,7 @@ func newRemoteBase() *remoteBase {
 // same job to a queue more than once, but this depends on the
 // implementation of the underlying driver.
 func (q *remoteBase) Put(j amboy.Job) error {
-	return q.driver.Put(j)
+	return q.driver.Save(j)
 }
 
 // Get retrieves a job from the queue's storage. The second value
@@ -53,6 +52,8 @@ func (q *remoteBase) Get(name string) (amboy.Job, bool) {
 }
 
 func (q *remoteBase) jobServer(ctx context.Context) {
+	grip.Info("starting queue job server for remote queue")
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -61,6 +62,11 @@ func (q *remoteBase) jobServer(ctx context.Context) {
 			job := q.driver.Next()
 
 			if job == nil {
+				continue
+			}
+			stat := job.Status()
+
+			if stat.InProgress || stat.Completed {
 				continue
 			}
 
@@ -93,33 +99,22 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
 		case <-ctx.Done():
 			return
 		case <-timer.C:
-			lock, err := q.driver.GetLock(ctx, j)
+			err := q.driver.Lock(j)
 			if err != nil {
-				grip.Debugf("problem getting lock for job '%s': %+v", j.ID(), err)
-				timer.Reset(retryInterval)
+				grip.Warning(err)
 				continue
 			}
-
-			if lock.IsLockedElsewhere(ctx) {
-				timer.Reset(retryInterval)
-				continue
-			}
-
-			if !lock.IsLocked(ctx) {
-				lock.Lock(ctx)
-			}
-
-			if ctx.Err() != nil {
-				return
-			}
+			stat := j.Status()
+			stat.InProgress = false
+			j.SetStatus(stat)
 
 			if err = q.driver.Save(j); err != nil {
-				grip.Debugf("problem persisting job '%s', %+v", j.ID(), err)
+				grip.Warningf("problem persisting job '%s', %+v", j.ID(), err)
 				timer.Reset(retryInterval)
 				continue
 			}
 
-			lock.Unlock(ctx)
+			grip.CatchWarning(q.driver.Unlock(j))
 			return
 		}
 
@@ -144,26 +139,10 @@ func (q *remoteBase) Results() <-chan amboy.Job {
 // Stats returns a amboy.QueueStats object that reflects the progress
 // jobs in the queue.
 func (q *remoteBase) Stats() amboy.QueueStats {
-	dStats := q.driver.Stats()
-	output := amboy.QueueStats{
-		Running:   dStats.Locked,
-		Completed: dStats.Complete,
-		Pending:   dStats.Pending,
-		Total:     dStats.Total,
-	}
+	output := q.driver.Stats()
 
 	q.mutex.RLock()
 	defer q.mutex.RUnlock()
-
-	grip.Debug(message.Fields{
-		"msg":       "remote queue stats",
-		"running":   dStats.Locked,
-		"completed": dStats.Complete,
-		"pending":   dStats.Pending,
-		"total":     dStats.Total,
-		"blocked":   len(q.blocked),
-	})
-
 	output.Blocked = len(q.blocked)
 
 	return output

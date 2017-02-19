@@ -16,7 +16,6 @@ type JobInterchange struct {
 	Type       string                 `json:"type" bson:"type" yaml:"type"`
 	Version    int                    `json:"version" bson:"version" yaml:"version"`
 	Priority   int                    `bson:"priority" json:"priority" yaml:"priority"`
-	Dispatched bool                   `bson:"dispatched" json:"dispatched" yaml:"dispatched"`
 	Job        []byte                 `json:"job,omitempty" bson:"job,omitempty" yaml:"job,omitempty"`
 	Dependency *DependencyInterchange `json:"dependency,omitempty" bson:"dependency,omitempty" yaml:"dependency,omitempty"`
 	Status     amboy.JobStatusInfo    `bson:"status" json:"status" yaml:"status"`

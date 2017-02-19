@@ -3,8 +3,8 @@
 package queue
 
 import (
-	"fmt"
 	"testing"
+	"time"
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/dependency"
@@ -132,8 +132,12 @@ func (s *OrderedQueueSuite) TearDownSuite() {
 func (s *OrderedQueueSuite) TestPutReturnsErrorForDuplicateNameTasks() {
 	j := job.NewShellJob("true", "")
 
+	s.Equal(0, s.queue.Stats().Total)
 	s.NoError(s.queue.Put(j))
-	s.Error(s.queue.Put(j))
+	s.Equal(1, s.queue.Stats().Total)
+	s.NoError(s.queue.Put(j))
+	s.Equal(1, s.queue.Stats().Total)
+
 }
 
 func (s *OrderedQueueSuite) TestPuttingAJobIntoAQueueImpactsStats() {
@@ -163,20 +167,8 @@ func (s *OrderedQueueSuite) TestPuttingAJobIntoAQueueImpactsStats() {
 	s.Equal(0, stats.Completed)
 }
 
-func (s *OrderedQueueSuite) TestPuttingJobIntoQueueAfterStartingReturnsError() {
-	j := job.NewShellJob("true", "")
-	s.NoError(s.queue.Put(j))
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	s.NoError(s.queue.Start(ctx))
-	s.Error(s.queue.Put(j))
-}
-
 func (s *OrderedQueueSuite) TestInternalRunnerCanBeChangedBeforeStartingTheQueue() {
 	newRunner := pool.NewLocalWorkers(2, s.queue)
-	fmt.Printf("%T %+v\n", s.queue, s.queue)
 	originalRunner := s.queue.Runner()
 	s.NotEqual(originalRunner, newRunner)
 
@@ -211,9 +203,10 @@ func (s *OrderedQueueSuite) TestResultsChannelProducesPointersToConsistentJobObj
 	amboy.Wait(s.queue)
 
 	result, ok := <-s.queue.Results()
-	s.True(ok)
-	s.Equal(job.ID(), result.ID())
-	s.True(result.Status().Completed)
+	if s.True(ok) {
+		s.Equal(job.ID(), result.ID())
+		s.True(result.Status().Completed)
+	}
 }
 
 func (s *OrderedQueueSuite) TestQueueCanOnlyBeStartedOnce() {
@@ -242,8 +235,8 @@ func (s *OrderedQueueSuite) TestPassedIsCompletedButDoesNotRun() {
 	s.Equal(j1.Dependency().State(), dependency.Passed)
 	s.Equal(j2.Dependency().State(), dependency.Ready)
 
-	s.False(j1.Completed())
-	s.False(j2.Completed())
+	s.False(j1.Status().Completed)
+	s.False(j2.Status().Completed)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -252,13 +245,13 @@ func (s *OrderedQueueSuite) TestPassedIsCompletedButDoesNotRun() {
 
 	s.NoError(s.queue.Start(ctx))
 
-	amboy.Wait(s.queue)
+	amboy.WaitCtxInterval(ctx, s.queue, 250*time.Millisecond)
 	j1Refreshed, ok1 := s.queue.Get(j1.ID())
 	j2Refreshed, ok2 := s.queue.Get(j2.ID())
 	s.True(ok1)
 	s.True(ok2)
-	s.False(j1Refreshed.Completed())
-	s.True(j2Refreshed.Completed())
+	s.False(j1Refreshed.Status().Completed)
+	s.True(j2Refreshed.Status().Completed)
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -337,4 +330,15 @@ func (s *LocalOrderedSuite) TestQueueFailsToStartIfTaskGraphIsCyclic() {
 	defer cancel()
 
 	s.Error(s.queue.Start(ctx))
+}
+
+func (s *LocalOrderedSuite) TestPuttingJobIntoQueueAfterStartingReturnsError() {
+	j := job.NewShellJob("true", "")
+	s.NoError(s.queue.Put(j))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	s.NoError(s.queue.Start(ctx))
+	s.Error(s.queue.Put(j))
 }

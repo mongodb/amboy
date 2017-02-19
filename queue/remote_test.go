@@ -81,11 +81,6 @@ func TestRemoteUnorderedMongoDBSuite(t *testing.T) {
 			grip.Error(err)
 			return
 		}
-		err = session.DB("amboy").C(name + ".locks").DropCollection()
-		if err != nil {
-			grip.Error(err)
-			return
-		}
 	}
 
 	suite.Run(t, tests)
@@ -273,34 +268,37 @@ func (s *RemoteUnorderedSuite) TestStartMethodCanBeCalledMultipleTimes() {
 
 func (s *RemoteUnorderedSuite) TestNextMethodSkipsLockedJobs() {
 	s.require.NoError(s.queue.SetDriver(s.driver))
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
+
 	numLocked := 0
-	testJobs := make(map[string]*job.ShellJob)
-	testLocks := make(map[string]driver.JobLock)
-	s.queue.started = true
+	lockedJobs := map[string]struct{}{}
 
-	s.require.NoError(s.queue.Start(ctx))
-	go s.queue.jobServer(ctx)
-
+	created := 0
 	for i := 0; i < 30; i++ {
 		cmd := fmt.Sprintf("echo 'foo: %d'", i)
 		j := job.NewShellJob(cmd, "")
-		testJobs[j.ID()] = j
 
-		s.NoError(s.queue.Put(j))
+		if s.NoError(s.queue.Put(j)) {
+			created++
+		}
 
 		if i%3 == 0 {
 			numLocked++
-			lock, err := s.driver.GetLock(ctx, j)
-			if !s.NoError(err) {
-				continue
-			}
-			testLocks[j.ID()] = lock
-			lock.Lock(ctx)
-		}
+			err := s.driver.Lock(j)
+			s.NoError(err)
 
+			stat := j.Status()
+			stat.Owner = "elsewhere"
+			stat.Completed = false
+			j.SetStatus(stat)
+			lockedJobs[j.ID()] = struct{}{}
+		}
 	}
+
+	s.queue.started = true
+	s.require.NoError(s.queue.Start(ctx))
+	go s.queue.jobServer(ctx)
 
 	observed := 0
 checkResults:
@@ -311,19 +309,22 @@ checkResults:
 		default:
 			work := s.queue.Next(ctx)
 			if work == nil {
-				break checkResults
+				continue checkResults
 			}
-
-			s.queue.Complete(ctx, work)
-
-			_, ok := testLocks[work.ID()]
-			s.False(ok)
 			observed++
 
-			if observed == len(testJobs)-len(testLocks) {
+			_, ok := lockedJobs[work.ID()]
+			s.False(ok, fmt.Sprintf("%s\n\tjob: %+v\n\tqueue: %+v",
+				work.ID(), work.Status(), s.queue.Stats()))
+
+			if observed == created || observed+numLocked == created {
 				break checkResults
 			}
 		}
 	}
-	s.Equal(observed, len(testJobs)-len(testLocks))
+	qStat := s.queue.Stats()
+	s.True(qStat.Running >= numLocked)
+	s.True(qStat.Total == created)
+	s.True(qStat.Completed <= observed, fmt.Sprintf("%d <= %d", qStat.Completed, observed))
+	s.Equal(created-numLocked, observed, fmt.Sprintf("%+v", s.queue.Stats()))
 }

@@ -44,9 +44,11 @@ func WaitCtx(ctx context.Context, q Queue) bool {
 			return false
 		}
 
-		if q.Stats().isComplete() {
+		stat := q.Stats()
+		if stat.isComplete() {
 			return true
 		}
+
 	}
 }
 
