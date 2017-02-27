@@ -71,6 +71,19 @@ func NewMongoDB(name string, opts MongoDBOptions) *MongoDB {
 	return d
 }
 
+// OpenNewMongoDB constructs and opens a new MongoDB driver instance
+// using the specified session. It is equivalent to calling
+// NewMongoDB() and calling *MongoDB.Open().
+func OpenNewMongoDB(ctx context.Context, name string, opts MongoDBOptions, session *mgo.Session) (*MongoDB, error) {
+	d := NewMongoDB(name, opts)
+
+	if err := d.start(ctx, session.Copy()); err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	return d, nil
+}
+
 // Open creates a connection to MongoDB, and returns an error if
 // there's a problem connecting.
 func (d *MongoDB) Open(ctx context.Context) error {
@@ -83,6 +96,10 @@ func (d *MongoDB) Open(ctx context.Context) error {
 		return errors.Wrapf(err, "problem opening connection to mongodb at '%s", d.mongodbURI)
 	}
 
+	return errors.WithStack(d.start(ctx, session))
+}
+
+func (d *MongoDB) start(ctx context.Context, session *mgo.Session) error {
 	dCtx, cancel := context.WithCancel(ctx)
 	d.canceler = cancel
 	d.session = session
