@@ -65,10 +65,10 @@ func (s *ShellJobSuite) TestShellJobNameConstructedFromCommandNames() {
 	job := NewShellJob("foo", "bar")
 	s.Equal(job.ID(), job.Base.TaskID)
 
-	s.True(strings.HasPrefix(job.ID(), "foo"))
+	s.True(strings.HasSuffix(job.ID(), "foo"), job.ID())
 
 	job = NewShellJob("touch foo bar", "baz")
-	s.True(strings.HasPrefix(job.ID(), "touch"))
+	s.True(strings.HasSuffix(job.ID(), "touch"), job.ID())
 }
 
 func (s *ShellJobSuite) TestRunTrivialCommandReturnsWithoutError() {
