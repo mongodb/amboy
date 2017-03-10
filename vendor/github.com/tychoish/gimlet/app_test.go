@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	"github.com/tychoish/grip"
-	"github.com/tychoish/grip/level"
+	"github.com/mongodb/grip"
+	"github.com/mongodb/grip/level"
 )
 
 // APIAppSuite contains tests of the APIApp system. Tests of the route

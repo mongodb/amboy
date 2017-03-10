@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/tychoish/grip"
+	"github.com/mongodb/grip"
 )
 
 // APIRoute is a object that represents each route in the application

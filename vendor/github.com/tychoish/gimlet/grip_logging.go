@@ -4,7 +4,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/tychoish/grip"
+	"github.com/mongodb/grip"
+	"github.com/mongodb/grip/logging"
 	"github.com/urfave/negroni"
 )
 
@@ -23,10 +24,7 @@ type AppLogging struct {
 // with Negroni. Sets the logging configuration to be the same as the
 // default global grip logging object.
 func NewAppLogger() *AppLogging {
-	l := &AppLogging{grip.NewJournaler("gimlet")}
-
-	// use the default sender for grip's standard logger.
-	l.SetSender(grip.GetSender())
+	l := &AppLogging{&logging.Grip{grip.GetSender()}}
 
 	return l
 }
@@ -35,10 +33,12 @@ func NewAppLogger() *AppLogging {
 // the duration upon completion and the status of the response.
 func (l *AppLogging) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	start := time.Now()
-	l.Infof("Started %s %s", r.Method, r.URL.Path)
+	id := getNumber()
+	l.Infof("[id=%d] started %s %s", id, r.Method, r.URL.Path)
 
 	next(rw, r)
 
 	res := rw.(negroni.ResponseWriter)
-	l.Infof("Completed %v %s in %v", res.Status(), http.StatusText(res.Status()), time.Since(start))
+	l.Infof("[id=%d] completed %v %s in %v", id, res.Status(),
+		http.StatusText(res.Status()), time.Since(start))
 }

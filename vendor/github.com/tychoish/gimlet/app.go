@@ -19,7 +19,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/phyber/negroni-gzip/gzip"
-	"github.com/tychoish/grip"
+	"github.com/mongodb/grip"
 	"github.com/tylerb/graceful"
 	"github.com/urfave/negroni"
 )

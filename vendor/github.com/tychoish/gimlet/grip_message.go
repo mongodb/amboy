@@ -19,9 +19,10 @@ func NewJSONMessage(data interface{}) *JSONMessage {
 	return &JSONMessage{data}
 }
 
-// Resolve returns a string form of the message. Part of the Composer
+// Resolve
+// String returns a string form of the message. Part of the Composer
 // interface.
-func (m *JSONMessage) Resolve() string {
+func (m *JSONMessage) String() string {
 	out, err := json.Marshal(m.data)
 	if err != nil {
 		return fmt.Sprintf("problem marshaling message. Error: %+v", err)

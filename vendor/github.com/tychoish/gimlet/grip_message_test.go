@@ -52,12 +52,12 @@ func (s *GripLoggingSuite) TestMarshalPrettyHelperAlwaysProduceNewLineTerminated
 
 func (s *GripLoggingSuite) TestResolveMethodReturnsErrorWhenPassingNonMarshalableData() {
 	m := NewJSONMessage(make(chan struct{}))
-	out := m.Resolve()
+	out := m.String()
 	s.True(strings.HasPrefix(out, "problem marshaling message."))
 }
 
 func (s *GripLoggingSuite) TestResolveMethodReturnsJsonFormatedString() {
 	m := NewJSONMessage(map[string]int{"a": 1})
-	out := m.Resolve()
+	out := m.String()
 	s.Equal("{\"a\":1}", out)
 }

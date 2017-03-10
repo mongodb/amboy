@@ -5,5 +5,9 @@ import:
 - package: github.com/phyber/negroni-gzip
   subpackages:
   - gzip
-- package: github.com/tychoish/grip
+- package: github.com/mongodb/grip
 - package: github.com/tylerb/graceful
+- package: github.com/stretchr/testify
+- package: github.com/stretchr/objx
+- package: github.com/pmezard/go-difflib
+- package: github.com/davecgh/go-spew

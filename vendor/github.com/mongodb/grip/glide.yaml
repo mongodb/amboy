@@ -1,0 +1,16 @@
+package: .
+import:
+- package: github.com/coreos/go-systemd
+  version: ^9.0.0
+  subpackages:
+  - journal
+- package: github.com/bluele/slack
+- package: github.com/mattn/go-xmpp
+- package: github.com/shirou/gopsutil
+- package: github.com/shirou/w32
+- package: github.com/StackExchange/wmi
+- package: github.com/go-ole/go-ole
+- package: github.com/stretchr/testify
+- package: github.com/stretchr/objx
+- package: github.com/pmezard/go-difflib
+- package: github.com/davecgh/go-spew
