@@ -78,7 +78,7 @@ func OpenNewMongoDB(ctx context.Context, name string, opts MongoDBOptions, sessi
 	d := NewMongoDB(name, opts)
 
 	if err := d.start(ctx, session.Copy()); err != nil {
-		return nil, errors.WithStack(err)
+		return nil, errors.Wrap(err, "problem starting driver")
 	}
 
 	return d, nil
@@ -96,7 +96,7 @@ func (d *MongoDB) Open(ctx context.Context) error {
 		return errors.Wrapf(err, "problem opening connection to mongodb at '%s", d.mongodbURI)
 	}
 
-	return errors.WithStack(d.start(ctx, session))
+	return errors.Wrap(d.start(ctx, session), "problem starting driver")
 }
 
 func (d *MongoDB) start(ctx context.Context, session *mgo.Session) error {
@@ -113,7 +113,7 @@ func (d *MongoDB) start(ctx context.Context, session *mgo.Session) error {
 		grip.Info("closing session for mongodb driver")
 	}()
 
-	if err = d.setupDB(); err != nil {
+	if err := d.setupDB(); err != nil {
 		return errors.Wrap(err, "problem setting up database")
 	}
 
