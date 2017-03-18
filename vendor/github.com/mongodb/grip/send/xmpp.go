@@ -25,9 +25,9 @@ type XMPPConnectionInfo struct {
 }
 
 const (
-	xmppHostEnvVar     = "GRIP_XMMP_HOSTNAME"
-	xmppUsernameEnvVar = "GRIP_XMMP_USERNAME"
-	xmppPasswordEnvVar = "GRIP_XMMP_PASSWORD"
+	xmppHostEnvVar     = "GRIP_XMPP_HOSTNAME"
+	xmppUsernameEnvVar = "GRIP_XMPP_USERNAME"
+	xmppPasswordEnvVar = "GRIP_XMPP_PASSWORD"
 )
 
 // GetXMPPConnectionInfo builds an XMPPConnectionInfo structure
