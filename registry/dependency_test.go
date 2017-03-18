@@ -6,8 +6,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/mongodb/amboy/dependency"
-	"github.com/tychoish/grip"
-	"github.com/tychoish/grip/level"
+	"github.com/mongodb/grip"
+	"github.com/mongodb/grip/level"
 )
 
 type AmboyDependencyRegistrySuite struct {

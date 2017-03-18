@@ -1,8 +1,8 @@
 package amboy
 
 import (
-	"github.com/tychoish/grip"
-	"github.com/tychoish/grip/sometimes"
+	"github.com/mongodb/grip"
+	"github.com/mongodb/grip/sometimes"
 )
 
 // QueueStats is a simple structure that the Stats() method in the

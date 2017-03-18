@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/tychoish/grip"
+	"github.com/mongodb/grip"
 )
 
 // Private implementation of the types registry. Public methods for

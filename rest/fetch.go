@@ -5,7 +5,7 @@ import (
 
 	"github.com/mongodb/amboy/registry"
 	"github.com/tychoish/gimlet"
-	"github.com/tychoish/grip"
+	"github.com/mongodb/grip"
 )
 
 // Fetch is an http handler that writes a job interchange object to a

@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/mongodb/amboy"
-	"github.com/tychoish/grip"
+	"github.com/mongodb/grip"
 )
 
 // CappedResultStorage provides a fixed size storage structure for

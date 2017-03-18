@@ -13,7 +13,7 @@ import (
 	"github.com/mongodb/amboy/queue/driver"
 	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/suite"
-	"github.com/tychoish/grip"
+	"github.com/mongodb/grip"
 	"golang.org/x/net/context"
 	mgo "gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"

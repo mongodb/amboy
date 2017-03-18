@@ -4,8 +4,8 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/tychoish/grip"
-	"github.com/tychoish/grip/message"
+	"github.com/mongodb/grip"
+	"github.com/mongodb/grip/message"
 	"golang.org/x/net/context"
 )
 

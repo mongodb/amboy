@@ -15,7 +15,7 @@ import (
 	"github.com/mongodb/amboy/job"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/tychoish/grip"
+	"github.com/mongodb/grip"
 	"golang.org/x/net/context"
 )
 

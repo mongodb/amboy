@@ -17,9 +17,9 @@ import (
 	"github.com/mongodb/amboy/queue/driver"
 	"github.com/satori/go.uuid"
 	"github.com/stretchr/testify/assert"
-	"github.com/tychoish/grip"
-	"github.com/tychoish/grip/level"
-	"github.com/tychoish/grip/send"
+	"github.com/mongodb/grip"
+	"github.com/mongodb/grip/level"
+	"github.com/mongodb/grip/send"
 	"golang.org/x/net/context"
 	"gopkg.in/mgo.v2"
 )

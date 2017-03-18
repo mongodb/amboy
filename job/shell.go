@@ -8,7 +8,7 @@ import (
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/dependency"
-	"github.com/tychoish/grip"
+	"github.com/mongodb/grip"
 )
 
 // ShellJob is an amboy.Job implementation that runs shell commands in

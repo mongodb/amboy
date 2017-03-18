@@ -5,7 +5,7 @@ import (
 
 	"github.com/mongodb/amboy"
 	"github.com/pkg/errors"
-	"github.com/tychoish/grip"
+	"github.com/mongodb/grip"
 	"golang.org/x/net/context"
 )
 

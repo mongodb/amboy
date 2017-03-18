@@ -3,7 +3,7 @@ package job
 import (
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/registry"
-	"github.com/tychoish/grip"
+	"github.com/mongodb/grip"
 )
 
 // RegisterDefaultJobs registers all default job types in the amboy

@@ -26,7 +26,7 @@ import (
 	"github.com/mongodb/amboy/dependency"
 	"github.com/mongodb/amboy/pool"
 	"github.com/pkg/errors"
-	"github.com/tychoish/grip"
+	"github.com/mongodb/grip"
 	"golang.org/x/net/context"
 )
 

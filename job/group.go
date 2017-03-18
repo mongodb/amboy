@@ -8,7 +8,7 @@ import (
 	"github.com/mongodb/amboy/dependency"
 	"github.com/mongodb/amboy/registry"
 	"github.com/pkg/errors"
-	"github.com/tychoish/grip"
+	"github.com/mongodb/grip"
 )
 
 // Group is a structure for running collections of Job objects at the

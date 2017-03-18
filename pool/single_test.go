@@ -7,8 +7,8 @@ import (
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/job"
 	"github.com/stretchr/testify/suite"
-	"github.com/tychoish/grip"
-	"github.com/tychoish/grip/level"
+	"github.com/mongodb/grip"
+	"github.com/mongodb/grip/level"
 	"golang.org/x/net/context"
 )
 

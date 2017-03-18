@@ -9,7 +9,7 @@ import (
 	"github.com/mongodb/amboy/registry"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
-	"github.com/tychoish/grip"
+	"github.com/mongodb/grip"
 	"golang.org/x/net/context"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"

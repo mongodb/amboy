@@ -6,7 +6,7 @@ import (
 
 	"github.com/mongodb/amboy"
 	"github.com/tychoish/gimlet"
-	"github.com/tychoish/grip"
+	"github.com/mongodb/grip"
 	"golang.org/x/net/context"
 )
 

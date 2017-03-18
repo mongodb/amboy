@@ -1,7 +1,7 @@
 package amboy
 
 import (
-	"github.com/tychoish/grip"
+	"github.com/mongodb/grip"
 	"golang.org/x/net/context"
 )
 

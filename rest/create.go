@@ -5,7 +5,7 @@ import (
 
 	"github.com/mongodb/amboy/registry"
 	"github.com/tychoish/gimlet"
-	"github.com/tychoish/grip"
+	"github.com/mongodb/grip"
 )
 
 type createResponse struct {
