@@ -36,9 +36,7 @@ func (s *AlwaysRebuildSuite) TestHasComposedJobEdgesInstance() {
 	s.IsType(s.dep.JobEdges, &JobEdges{})
 
 	var ok bool
-	var dep interface{}
-
-	dep = s.dep
+	var dep interface{} = s.dep
 
 	_, ok = dep.(interface {
 		Edges() []string

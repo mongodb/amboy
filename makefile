@@ -13,7 +13,7 @@ projectPath := $(orgPath)/$(name)
 #   vendorize all of these dependencies.
 lintDeps := github.com/alecthomas/gometalinter
 #   include test files and give linters 40s to run to avoid timeouts
-lintArgs := --tests --deadline=10m --vendor --concurrency=4
+lintArgs := --tests --deadline=5m --vendor
 #   gotype produces false positives because it reads .a files which
 #   are rarely up to date.
 lintArgs += --disable="gotype" --disable="gas"
@@ -30,6 +30,8 @@ lintArgs += --exclude="file is not goimported" # test files aren't imported
 lintArgs += --exclude="package comment should be of the form \"Package .* \(golint\)"
 #  no need to check the error of closer read operations in defer cases
 lintArgs += --exclude="error return value not checked \(defer.*"
+lintArgs += --exclude="should check returned error before deferring .*\.Close"
+
 # end lint suppressions
 
 

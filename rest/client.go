@@ -9,9 +9,9 @@ import (
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/registry"
+	"github.com/mongodb/grip"
 	"github.com/pkg/errors"
 	"github.com/tychoish/gimlet"
-	"github.com/mongodb/grip"
 	"golang.org/x/net/context"
 	"golang.org/x/net/context/ctxhttp"
 )
@@ -61,9 +61,7 @@ func (c *Client) Copy() *Client {
 }
 
 func (c *Client) initClient(host string, port int, prefix string) (*Client, error) {
-	var err error
-
-	err = c.SetHost(host)
+	err := c.SetHost(host)
 	if err != nil {
 		return nil, err
 	}

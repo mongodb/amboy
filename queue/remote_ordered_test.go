@@ -12,9 +12,9 @@ import (
 	"github.com/mongodb/amboy/job"
 	"github.com/mongodb/amboy/queue/driver"
 	"github.com/mongodb/amboy/registry"
+	"github.com/mongodb/grip"
 	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/suite"
-	"github.com/mongodb/grip"
 	"golang.org/x/net/context"
 )
 
@@ -50,12 +50,7 @@ func (s *SimpleRemoteOrderedSuite) SetupSuite() {
 			return err
 		}
 
-		err = session.DB("amboy").C(name + ".jobs").DropCollection()
-		if err != nil {
-			return err
-		}
-
-		return nil
+		return session.DB("amboy").C(name + ".jobs").DropCollection()
 	}
 }
 
