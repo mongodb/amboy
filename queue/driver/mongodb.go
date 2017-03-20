@@ -7,9 +7,9 @@ import (
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/registry"
+	"github.com/mongodb/grip"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
-	"github.com/mongodb/grip"
 	"golang.org/x/net/context"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
@@ -109,7 +109,10 @@ func (d *MongoDB) start(ctx context.Context, session *mgo.Session) error {
 
 	go func() {
 		<-dCtx.Done()
-		d.session.Close()
+		if d.session != nil {
+			d.session.Close()
+			d.session = nil
+		}
 		grip.Info("closing session for mongodb driver")
 	}()
 
@@ -262,6 +265,9 @@ func (d *MongoDB) Jobs() <-chan amboy.Job {
 // Next returns one job, not marked complete from the database.
 func (d *MongoDB) Next() amboy.Job {
 	session, jobs := d.getJobsCollection()
+	if session == nil || jobs == nil {
+		return nil
+	}
 	defer session.Close()
 
 	j := &registry.JobInterchange{}
