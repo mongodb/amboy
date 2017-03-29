@@ -3,6 +3,7 @@ package driver
 import (
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/mongodb/amboy"
@@ -27,7 +28,7 @@ type MongoDB struct {
 	canceler   context.CancelFunc
 	instanceID string
 	priority   bool
-
+	mu         sync.RWMutex
 	*LockManager
 }
 
@@ -102,17 +103,17 @@ func (d *MongoDB) Open(ctx context.Context) error {
 func (d *MongoDB) start(ctx context.Context, session *mgo.Session) error {
 	dCtx, cancel := context.WithCancel(ctx)
 	d.canceler = cancel
-	d.session = session
 
 	session.SetSafe(&mgo.Safe{WMode: "majority"})
+
+	d.mu.Lock()
+	d.session = session
+	d.mu.Unlock()
+
 	d.LockManager.Open(ctx)
 
 	go func() {
 		<-dCtx.Done()
-		if d.session != nil {
-			d.session.Close()
-			d.session = nil
-		}
 		grip.Info("closing session for mongodb driver")
 	}()
 
@@ -124,9 +125,21 @@ func (d *MongoDB) start(ctx context.Context, session *mgo.Session) error {
 }
 
 func (d *MongoDB) getJobsCollection() (*mgo.Session, *mgo.Collection) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
 	session := d.session.Copy()
 
 	return session, session.DB(d.dbName).C(d.name + ".jobs")
+}
+
+func (d *MongoDB) unsetSession() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if d.session != nil {
+		d.session.Close()
+		d.session = nil
+	}
 }
 
 func (d *MongoDB) setupDB() error {
