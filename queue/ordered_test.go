@@ -3,6 +3,8 @@
 package queue
 
 import (
+	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -11,9 +13,9 @@ import (
 	"github.com/mongodb/amboy/job"
 	"github.com/mongodb/amboy/pool"
 	"github.com/mongodb/amboy/queue/driver"
+	"github.com/mongodb/grip"
 	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/suite"
-	"github.com/mongodb/grip"
 	"golang.org/x/net/context"
 	mgo "gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
@@ -227,9 +229,11 @@ func (s *OrderedQueueSuite) TestQueueCanOnlyBeStartedOnce() {
 }
 
 func (s *OrderedQueueSuite) TestPassedIsCompletedButDoesNotRun() {
+	cwd := GetDirectoryOfFile()
+
 	j1 := job.NewShellJob("echo foo", "")
 	j2 := job.NewShellJob("true", "")
-	j1.SetDependency(dependency.NewCreatesFile("ordered_test.go"))
+	j1.SetDependency(dependency.NewCreatesFile(filepath.Join(cwd, "ordered_test.go")))
 	s.NoError(j1.Dependency().AddEdge(j2.ID()))
 
 	s.Equal(j1.Dependency().State(), dependency.Passed)
@@ -341,4 +345,10 @@ func (s *LocalOrderedSuite) TestPuttingJobIntoQueueAfterStartingReturnsError() {
 
 	s.NoError(s.queue.Start(ctx))
 	s.Error(s.queue.Put(j))
+}
+
+func GetDirectoryOfFile() string {
+	_, file, _, _ := runtime.Caller(1)
+
+	return filepath.Dir(file)
 }

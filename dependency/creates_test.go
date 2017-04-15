@@ -1,10 +1,19 @@
 package dependency
 
 import (
+	"fmt"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
 )
+
+func GetDirectoryOfFile() string {
+	_, file, _, _ := runtime.Caller(1)
+
+	return filepath.Dir(file)
+}
 
 // CreatesFileSuite tests the dependency.Manager
 // implementation that checks for the existence of a file. If the file
@@ -56,11 +65,13 @@ func (s *CreatesFileSuite) TestDependencyWithoutFileSetReportsReady() {
 }
 
 func (s *CreatesFileSuite) TestAmboyPackageDirectoriesExistAndReportPassedState() {
-	for _, dir := range s.packages {
-		dep := NewCreatesFile("../" + dir)
-		s.Equal(dep.State(), Passed, dir)
-	}
+	cwd := filepath.Dir(GetDirectoryOfFile())
 
+	for _, dir := range s.packages {
+		p := filepath.Join(cwd, dir)
+		dep := NewCreatesFile(p)
+		s.Equal(dep.State(), Passed, fmt.Sprintln(dep.State(), p))
+	}
 }
 
 func (s *CreatesFileSuite) TestCreatesDependencyTestReportsExpectedType() {

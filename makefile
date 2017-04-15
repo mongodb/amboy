@@ -16,11 +16,9 @@ lintDeps := github.com/alecthomas/gometalinter
 lintArgs := --tests --deadline=5m --vendor
 #   gotype produces false positives because it reads .a files which
 #   are rarely up to date.
-lintArgs += --disable="gotype" --disable="gas"
+lintArgs += --disable="gotype" --disable="gas" --enable="goimports"
 lintArgs += --skip="$(buildDir)" --skip="buildscripts"
 #  add and configure additional linters
-lintArgs += --enable="goimports"
-lintArgs += --linter='misspell:misspell ./*.go:PATH:LINE:COL:MESSAGE' --enable=misspell
 lintArgs += --line-length=100 --dupl-threshold=175 --cyclo-over=17
 #  two similar functions triggered the duplicate warning, but they're not.
 lintArgs += --exclude="duplicate of registry.go"
@@ -31,7 +29,6 @@ lintArgs += --exclude="package comment should be of the form \"Package .* \(goli
 #  no need to check the error of closer read operations in defer cases
 lintArgs += --exclude="error return value not checked \(defer.*"
 lintArgs += --exclude="should check returned error before deferring .*\.Close"
-
 # end lint suppressions
 
 
@@ -50,21 +47,24 @@ gopath := $(shell go env GOPATH)
 lintDeps := $(addprefix $(gopath)/src/,$(lintDeps))
 srcFiles := makefile $(shell find . -name "*.go" -not -path "./$(buildDir)/*" -not -name "*_test.go")
 testSrcFiles := makefile $(shell find . -name "*.go" -not -path "./$(buildDir)/*")
-testOutput := $(subst -,/,$(foreach target,$(packages),$(buildDir)/test.$(target).out))
-raceOutput := $(subst -,/,$(foreach target,$(packages),$(buildDir)/race.$(target).out))
-coverageOutput := $(subst -,/,$(foreach target,$(packages),$(buildDir)/coverage.$(target).out))
-coverageHtmlOutput := $(subst -,/,$(foreach target,$(packages),$(buildDir)/coverage.$(target).html))
+testBin := $(foreach target,$(packages),$(buildDir)/test.$(target))
+raceBin := $(foreach target,$(packages),$(buildDir)/race.$(target))
+testOutput := $(foreach target,$(packages),$(buildDir)/output.$(target).test)
+raceOutput := $(foreach target,$(packages),$(buildDir)/output.$(target).race)
+coverageOutput := $(foreach target,$(packages),$(buildDir)/output.$(target).coverage)
+coverageHtmlOutput := $(foreach target,$(packages),$(buildDir)/output.$(target).coverage.html)
 $(gopath)/src/%:
 	@-[ ! -d $(gopath) ] && mkdir -p $(gopath) || true
 	go get $(subst $(gopath)/src/,,$@)
+$(buildDir)/run-linter:buildscripts/run-linter.go $(buildDir)/.lintSetup
+	$(vendorGopath) go build -o $@ $<
+$(buildDir)/.lintSetup:$(lintDeps)
+	@-$(gopath)/bin/gometalinter --install >/dev/null && touch $@
 # end dependency installation tools
 
 
 # userfacing targets for basic build and development operations
-lint:$(lintDeps)
-	@-$(gopath)/bin/gometalinter --install >/dev/null
-	$(gopath)/bin/gometalinter $(lintArgs) ./...
-lint-deps:$(lintDeps)
+lint:$(buildDir)/output.lint
 build:$(deps) $(srcFiles) $(gopath)/src/$(projectPath)
 	$(vendorGopath) go build $(subst $(name),,$(subst -,/,$(foreach pkg,$(packages),./$(pkg))))
 build-race:$(deps) $(srcFiles) $(gopath)/src/$(projectPath)
@@ -74,8 +74,11 @@ race:$(raceOutput)
 coverage:$(coverageOutput)
 coverage-html:$(coverageHtmlOutput)
 phony := lint build build-race race test coverage coverage-html
-phony += deps test-deps lint-deps
-.PRECIOUS: $(testOutput) $(raceOutput) $(coverageOutput) $(coverageHtmlOutput)
+.PRECIOUS:$(testOutput) $(raceOutput) $(coverageOutput) $(coverageHtmlOutput)
+.PRECIOUS:$(foreach target,$(packages),$(buildDir)/test.$(target))
+.PRECIOUS:$(foreach target,$(packages),$(buildDir)/race.$(target))
+.PRECIOUS:$(foreach target,$(packages),$(buildDir)/output.$(target).lint)
+.PRECIOUS:$(buildDir)/output.lint
 # end front-ends
 
 
@@ -96,17 +99,16 @@ $(buildDir)/$(name).race:$(gopath)/src/$(projectPath) $(srcFiles) $(deps)
 
 # convenience targets for runing tests and coverage tasks on a
 # specific package.
-makeArgs := --no-print-directory
-race-%:
-	@$(MAKE) $(makeArgs) $(buildDir)/race.$(subst -,/,$*).out
-	@grep -e "^PASS" $(buildDir)/race.$(subst /,-,$*).out
-test-%:
-	@$(MAKE) $(makeArgs) $(buildDir)/test.$(subst -,/,$*).out
-	@grep -e "^PASS" $(buildDir)/test.$(subst /,-,$*).out
-coverage-%:
-	@$(MAKE) $(makeArgs) $(buildDir)/coverage.$(subst /,-,$*).out
-html-coverage-%:
-	@$(MAKE) $(makeArgs) $(buildDir)/coverage.$(subst /,-,$*).html
+race-%:$(buildDir)/output.%.race
+	@grep -s -q -e "^PASS" $< && ! grep -s -q "^WARNING: DATA RACE" $<
+test-%:$(buildDir)/output.%.test
+	@grep -s -q -e "^PASS" $<
+coverage-%:$(buildDir)/output.%.coverage
+	@grep -s -q -e "^PASS" $(subst coverage,test,$<)
+html-coverage-%:$(buildDir)/output.%.coverage $(buildDir)/output.%.coverage.html
+	@grep -s -q -e "^PASS" $(subst coverage,test,$<)
+lint-%:$(buildDir)/output.%.lint
+	@grep -v -s -q "^--- FAIL" $<
 # end convienence targets
 
 
@@ -114,26 +116,40 @@ html-coverage-%:
 #    tests have compile and runtime deps. This varable has everything
 #    that the tests actually need to run. (The "build" target is
 #    intentional and makes these targets rerun as expected.)
-testRunDeps := $(testSrcFiles) build
-testArgs := -v --timeout=10m
+testArgs := -test.v --test.timeout=15m
+ifneq (,$(RUN_TEST))
+testArgs += -test.run='$(RUN_TEST)'
+endif
+#    to avoid vendoring the coverage tool, install it as needed
+coverDeps := golang.org/x/tools/cmd/cover
+coverDeps := $(addprefix $(gopath)/src/,$(coverDeps))
 #    implementation for package coverage and test running,mongodb to produce
 #    and save test output.
-$(buildDir)/coverage.%.html:$(buildDir)/coverage.%.out
-	go tool cover -html=$(buildDir)/coverage.$(subst /,-,$*).out -o $(buildDir)/coverage.$(subst /,-,$*).html
-$(buildDir)/coverage.%.out:$(testRunDeps)
-	$(vendorGopath) go test $(testArgs) -covermode=count -coverprofile=$(buildDir)/coverage.$(subst /,-,$*).out $(projectPath)/$(subst -,/,$*)
-	@-[ -f $(buildDir)/coverage.$(subst /,-,$*).out ] && go tool cover -func=$(buildDir)/coverage.$(subst /,-,$*).out | sed 's%$(projectPath)/%%' | column -t
-$(buildDir)/coverage.$(name).out:$(testRunDeps)
-	$(vendorGopath) go test -covermode=count -coverprofile=$@ $(projectPath)
+$(buildDir)/test.%:$(testSrcFiles) $(coverDeps)
+	$(vendorGopath) go test $(if $(DISABLE_COVERAGE),,-covermode=count) -c -o $@ ./$(subst -,/,$*)
+$(buildDir)/race.%:$(testSrcFiles)
+	$(vendorGopath) go test -race -c -o $@ ./$(subst -,/,$*)
+#  targets to run any tests in the top-level package
+$(buildDir)/test.$(name):$(testSrcFiles) $(coverDeps)
+	$(vendorGopath) go test $(if $(DISABLE_COVERAGE),,-covermode=count) -c -o $@ ./
+$(buildDir)/race.$(name):$(testSrcFiles)
+	$(vendorGopath) go test -race -c -o $@ ./
+#  targets to run the tests and report the output
+$(buildDir)/output.%.test:$(buildDir)/test.% .FORCE
+	$(testRunEnv) ./$< $(testArgs) 2>&1 | tee $@
+$(buildDir)/output.%.race:$(buildDir)/race.% .FORCE
+	$(testRunEnv) ./$< $(testArgs) 2>&1 | tee $@
+#  targets to generate gotest output from the linter.
+$(buildDir)/output.%.lint:$(buildDir)/run-linter $(testSrcFiles) .FORCE
+	@./$< --output=$@ --lintArgs='$(lintArgs)' --packages='$*'
+$(buildDir)/output.lint:$(buildDir)/run-linter .FORCE
+	@./$< --output="$@" --lintArgs='$(lintArgs)' --packages="$(packages)"
+#  targets to process and generate coverage reports
+$(buildDir)/output.%.coverage:$(buildDir)/test.% .FORCE $(coverDeps)
+	$(testRunEnv) ./$< $(testArgs) -test.coverprofile=$@ | tee $(subst coverage,test,$@)
 	@-[ -f $@ ] && go tool cover -func=$@ | sed 's%$(projectPath)/%%' | column -t
-$(buildDir)/test.%.out:$(testRunDeps)
-	$(vendorGopath) go test $(testArgs) ./$(subst -,/,$*) | tee $(buildDir)/test.$(subst /,-,$*).out
-$(buildDir)/race.%.out:$(testRunDeps)
-	$(vendorGopath) go test $(testArgs) -race ./$(subst -,/,$*) | tee $(buildDir)/race.$(subst /,-,$*).out
-$(buildDir)/test.$(name).out:$(testRunDeps)
-	$(vendorGopath) go test $(testArgs) ./ | tee $@
-$(buildDir)/race.$(name).out:$(testRunDeps)
-	$(vendorGopath) go test $(testArgs) -race ./ | tee $@
+$(buildDir)/output.%.coverage.html:$(buildDir)/output.%.coverage $(coverDeps)
+	$(vendorGopath) go tool cover -html=$< -o $@
 # end test and coverage artifacts
 
 
@@ -196,4 +212,5 @@ phony += clean
 # end dependency targets
 
 # configure phony targets
+.FORCE:
 .PHONY:$(phony)

@@ -115,17 +115,6 @@ functions:
          # Run make, called with proper environment variables set,
          # running the target.
          ${build_env} make vendor ${target}
-  upload-coverage:
-    command: s3.put
-    params:
-      aws_key: ${aws_key}
-      aws_secret: ${aws_secret}
-      local_file: gopath/src/github.com/mongodb/amboy/build/coverage.${name}.html
-      remote_file: amboy/${task_id}/${name}-coverage.html
-      bucket: mciuploads
-      content_type: text/html
-      permissions: public-read
-      display_name: coverage-${name}
   set-up-mongodb:
     # TODO replace this configuration with something more robust.
     # Current version is borrowed directly rom the Evergreen self tests.
@@ -178,30 +167,16 @@ tasks:
 
   # The coverage task is less generic.
   - name: coverage
-    depends_on:
-      - name: build
+    tags: [ "report" ]
     commands:
       - command: git.get_project
         params:
           directory: gopath/src/github.com/mongodb/amboy
       - func: setup-credentials
-      - func: set-up-mongodb
       - func: run-make
-        vars: { target: "coverage-html"}
-      - func: upload-coverage
-        vars: { name: "dependency"}
-      - func: upload-coverage
-        vars: { name: "job"}
-      - func: upload-coverage
-        vars: { name: "registry"}
-      - func: upload-coverage
-        vars: { name: "pool"}
-      - func: upload-coverage
-        vars: { name: "queue"}
-      - func: upload-coverage
-        vars: { name: "queue-driver"}
-      - func: upload-coverage
-        vars: { name: "rest"}
+        vars:
+          target: "coverage-html"
+          make_args: "-k"
 
   # define tasks for all test suites (modules)
   - <<: *run-go-test-suite
@@ -256,11 +231,34 @@ post:
       files:
         - "gopath/src/github.com/mongodb/amboy/build/test.*.out"
         - "gopath/src/github.com/mongodb/amboy/build/race.*.out"
+        - "gopath/src/github.com/mongodb/amboy/build/output.*"
   - command: shell.exec
     params:
       script: |
         rm -rf amboy
         rm -rf ~/.aws
+  - command: s3.put
+    type: system
+    params:
+      aws_key: ${aws_key}
+      aws_secret: ${aws_secret}
+      local_files_include_filter: ["gopath/src/github.com/mongodb/amboy/build/output.*.coverage.html"]
+      remote_file: evergreen/${task_id}/
+      bucket: mciuploads
+      content_type: text/html
+      permissions: public-read
+      display_name: "(html) coverage:"
+  - command: s3.put
+    type: system
+    params:
+      aws_key: ${aws_key}
+      aws_secret: ${aws_secret}
+      local_files_include_filter: ["gopath/src/github.com/mongodb/amboy/build/output.*.coverage"]
+      remote_file: evergreen/${task_id}/
+      bucket: mciuploads
+      content_type: text/plain
+      permissions: public-read
+      display_name: "(txt) coverage:"
 
 
 #######################################

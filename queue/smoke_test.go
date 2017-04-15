@@ -15,11 +15,11 @@ import (
 	"github.com/mongodb/amboy/job"
 	"github.com/mongodb/amboy/pool"
 	"github.com/mongodb/amboy/queue/driver"
-	"github.com/satori/go.uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/mongodb/grip"
 	"github.com/mongodb/grip/level"
 	"github.com/mongodb/grip/send"
+	"github.com/satori/go.uuid"
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/net/context"
 	"gopkg.in/mgo.v2"
 )
@@ -27,7 +27,7 @@ import (
 func init() {
 	grip.SetThreshold(level.Info)
 	grip.SetName("amboy.queue.tests")
-	grip.CatchError(grip.SetSender(send.MakeCallSiteConsoleLogger(3)))
+	grip.CatchError(grip.SetSender(send.MakeNative()))
 	job.RegisterDefaultJobs()
 }
 
