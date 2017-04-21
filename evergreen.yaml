@@ -41,44 +41,6 @@ variables:
       - func: run-make
         vars: { target: "${task_name}" }
 
-  # Task lists for build variants. Some (known) duplication between
-  # these lists and the task definitions below.
-  - &test-tasks
-      # this should be build+all test suite names. to add a new test you
-      # must additionally add the test suite name to the dev-tasks list
-      # bellow and the task list, using the run-go-suite template
-      - name: build
-      - name: test-dependency
-      - name: test-job
-      - name: test-registry
-      - name: test-pool
-      - name: test-queue
-      - name: test-queue-driver
-      - name: test-rest
-  - &dev-tasks
-      # dev tasks contains all the test suites plus coverage and
-      # linting. Only need/want to run lint/coverage on one builder.
-      - name: build
-      - name: lint
-      - name: test-dependency
-      - name: test-job
-      - name: test-registry
-      - name: test-pool
-      - name: test-queue
-      - name: test-queue-driver
-      - name: test-rest
-      - name: coverage
-  - &race-detector-tasks
-      - name: build-race
-      - name: race-dependency
-      - name: race-job
-      - name: race-registry
-      - name: race-pool
-      - name: race-queue
-      - name: race-queue-driver
-      - name: race-rest
-
-
 #######################################
 #              Functions              #
 #######################################
@@ -159,10 +121,10 @@ tasks:
   # the build (with and without the race detector) and lint tasks use
   # a template that does not include test result parsing.
   - <<: *run-build
+    tags: ["dist"]
     name: build
   - <<: *run-build
-    name: build-race
-  - <<: *run-build
+    tags: ["report"]
     name: lint
 
   # The coverage task is less generic.
@@ -181,46 +143,63 @@ tasks:
   # define tasks for all test suites (modules)
   - <<: *run-go-test-suite
     name: test-dependency
+    tags: ["test"]
   - <<: *run-go-test-suite
     name: test-job
+    tags: ["test"]
   - <<: *run-go-test-suite
     name: test-registry
+    tags: ["test"]
   - <<: *run-go-test-suite
     name: test-pool
+    tags: ["test"]
   - <<: *run-go-test-suite
     name: test-rest
+    tags: ["test"]
   - <<: *run-go-test-suite-with-mongodb
     name: test-queue
+    tags: ["test"]
   - <<: *run-go-test-suite-with-mongodb
     name: test-queue-driver
+    tags: ["test"]
 
   # run the suites with the race detector (one variant only)
+  - <<: *run-build
+    tags: ["race"]
+    name: build-race
   - <<: *run-go-test-suite
     name: race-dependency
+    tags: ["race"]
     depends_on:
       - name: build-race
   - <<: *run-go-test-suite
     name: race-job
+    tags: ["race"]
     depends_on:
       - name: build-race
   - <<: *run-go-test-suite
     name: race-rest
+    tags: ["race"]
     depends_on:
       - name: build-race
   - <<: *run-go-test-suite
     name: race-registry
+    tags: ["race"]
     depends_on:
       - name: build-race
   - <<: *run-go-test-suite
     name: race-pool
+    tags: ["race"]
     depends_on:
       - name: build-race
   - <<: *run-go-test-suite-with-mongodb
     name: race-queue
+    tags: ["race"]
     depends_on:
       - name: build-race
   - <<: *run-go-test-suite-with-mongodb
     name: race-queue-driver
+    tags: ["race"]
     depends_on:
       - name: build-race
 
@@ -272,7 +251,8 @@ buildvariants:
     run_on:
       - archlinux-test
     tasks:
-      *dev-tasks
+      - ".dist"
+      - ".test"
 
   - name: race-detector
     display_name: Race Detector (Arch Linux)
@@ -281,7 +261,8 @@ buildvariants:
     run_on:
       - archlinux-test
     tasks:
-      *race-detector-tasks
+      - ".race"
+      - ".report"
 
   - name: rhel70
     display_name: RHEL 7.0
@@ -291,26 +272,19 @@ buildvariants:
     run_on:
       - rhel70
     tasks:
-      *test-tasks
+      - ".dist"
+      - ".test"
 
-  - name: rhel62
-    display_name: RHEL 6.2
+  - name: rhel62-gccgo
+    display_name: RHEL 6.2 (gccgo)
     expansions:
       mongodb_url: https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-rhel62-3.2.9.tgz
+      build_env: "PATH=/opt/mongodbtoolchain/v2/bin:$PATH"
     run_on:
       - rhel62-test
     tasks:
-      *test-tasks
-
-  - name: rhel55
-    display_name: RHEL 5.5 (gccgo)
-    expansions:
-      mongodb_url: http://fastdl.mongodb.org/linux/mongodb-linux-x86_64-rhel55-3.2.9.tgz
-      build_env: "LD_LIBRARY_PATH=/opt/openssl/lib64 PATH=/opt/mongodbtoolchain/v2/bin:$PATH"
-    run_on:
-      - rhel55-test
-    tasks:
-      *test-tasks
+      - ".dist"
+      - ".test"
 
   - name: debian81
     display_name: Debian 8.1
@@ -320,7 +294,8 @@ buildvariants:
     run_on:
       - debian81-test
     tasks:
-      *test-tasks
+      - ".dist"
+      - ".test"
 
   - name: osx
     display_name: OS X 10.10
@@ -330,4 +305,5 @@ buildvariants:
     run_on:
       - osx-1010
     tasks:
-      *test-tasks
+      - ".dist"
+      - ".test"

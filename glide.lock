@@ -12,7 +12,7 @@ imports:
 - name: github.com/gonum/floats
   version: 3818baedee3067cb265df0d4aab6d72ae2fdc1fa
 - name: github.com/gonum/graph
-  version: 31ba9e80e42315c6128b25f1afc06de017f22343
+  version: 50b27dea7ebbfb052dfaf91681afc6fde28d8796
   subpackages:
   - simple
   - topo
