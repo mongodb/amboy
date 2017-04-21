@@ -1,4 +1,4 @@
-// +build cgo,!gccgo
+// +build go1.6
 
 package queue
 
@@ -53,9 +53,7 @@ func TestRemoteMongoDBOrderedQueueSuiteTwoWorkers(t *testing.T) {
 
 	session, err := mgo.Dial(uri)
 	if err != nil {
-		if !s.NoError(err) {
-			return
-		}
+		t.Fatal("problem configuring connection to:", uri)
 	}
 	defer session.Close()
 

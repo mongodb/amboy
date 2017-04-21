@@ -12,6 +12,8 @@ By default, LocalOrdered uses the amboy/pool.Workers implementation of
 amboy.Runner interface.
 */
 
+// +build go1.6
+
 package queue
 
 import (
@@ -25,8 +27,8 @@ import (
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/dependency"
 	"github.com/mongodb/amboy/pool"
-	"github.com/pkg/errors"
 	"github.com/mongodb/grip"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
