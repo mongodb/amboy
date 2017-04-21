@@ -7,8 +7,6 @@ package simple
 import (
 	"fmt"
 
-	"golang.org/x/tools/container/intsets"
-
 	"github.com/gonum/graph"
 )
 
@@ -19,8 +17,7 @@ type UndirectedGraph struct {
 
 	self, absent float64
 
-	freeIDs intsets.Sparse
-	usedIDs intsets.Sparse
+	maxUsed int
 }
 
 // NewUndirectedGraph returns an UndirectedGraph with the specified self and absent
@@ -41,22 +38,22 @@ func (g *UndirectedGraph) NewNodeID() int {
 	if len(g.nodes) == 0 {
 		return 0
 	}
+
 	if len(g.nodes) == maxInt {
 		panic(fmt.Sprintf("simple: cannot allocate node: no slot"))
 	}
 
-	var id int
-	if g.freeIDs.Len() != 0 && g.freeIDs.TakeMin(&id) {
-		return id
+	if len(g.nodes) == g.maxUsed {
+		g.maxUsed++
+		return g.maxUsed
 	}
-	if id = g.usedIDs.Max(); id < maxInt {
-		return id + 1
-	}
-	for id = 0; id < maxInt; id++ {
-		if !g.usedIDs.Has(id) {
-			return id
+
+	for i := 0; i <= len(g.nodes); i++ {
+		if _, ok := g.nodes[i]; !ok {
+			return i
 		}
 	}
+
 	panic("unreachable")
 }
 
@@ -67,9 +64,6 @@ func (g *UndirectedGraph) AddNode(n graph.Node) {
 	}
 	g.nodes[n.ID()] = n
 	g.edges[n.ID()] = make(map[int]graph.Edge)
-
-	g.freeIDs.Remove(n.ID())
-	g.usedIDs.Insert(n.ID())
 }
 
 // RemoveNode removes n from the graph, as well as any edges attached to it. If the node
@@ -84,10 +78,6 @@ func (g *UndirectedGraph) RemoveNode(n graph.Node) {
 		delete(g.edges[from], n.ID())
 	}
 	delete(g.edges, n.ID())
-
-	g.freeIDs.Insert(n.ID())
-	g.usedIDs.Remove(n.ID())
-
 }
 
 // SetEdge adds e, an edge from one node to another. If the nodes do not exist, they are added.

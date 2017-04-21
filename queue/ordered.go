@@ -12,8 +12,6 @@ By default, LocalOrdered uses the amboy/pool.Workers implementation of
 amboy.Runner interface.
 */
 
-// +build go1.6
-
 package queue
 
 import (
