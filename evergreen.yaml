@@ -135,6 +135,7 @@ tasks:
         params:
           directory: gopath/src/github.com/mongodb/amboy
       - func: setup-credentials
+      - func: set-up-mongodb
       - func: run-make
         vars:
           target: "coverage-html"
