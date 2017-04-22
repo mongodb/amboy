@@ -785,6 +785,10 @@ func TestSmokeRemoteOrderedWithWorkerPoolsAndMongoDB(t *testing.T) {
 }
 
 func TestSmokeRemoteOrderedWithWorkerPoolsAndLocalDriver(t *testing.T) {
+	if runtime.Compiler == "gccgo" {
+		t.Skip("local driver not supported on gccgo.")
+	}
+
 	assert := assert.New(t)
 
 	for _, poolSize := range []int{2, 4, 8, 16, 32, 64} {

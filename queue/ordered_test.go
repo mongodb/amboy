@@ -84,6 +84,10 @@ func TestRemoteMongoDBOrderedQueueSuiteTwoWorkers(t *testing.T) {
 }
 
 func TestRemoteLocalOrderedQueueSuite(t *testing.T) {
+	if runtime.Compiler == "gccgo" {
+		t.Skip("local driver not supported on gccgo.")
+	}
+
 	s := &OrderedQueueSuite{}
 	ctx, cancel := context.WithCancel(context.Background())
 
