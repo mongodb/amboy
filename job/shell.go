@@ -91,8 +91,7 @@ func (j *ShellJob) getEnVars() []string {
 		return []string{}
 	}
 
-	output := make([]string, len(j.Env))
-
+	output := []string{}
 	for k, v := range j.Env {
 		output = append(output, strings.Join([]string{k, v}, "="))
 	}

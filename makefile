@@ -121,7 +121,7 @@ ifneq (,$(RUN_TEST))
 testArgs += -test.run='$(RUN_TEST)'
 endif
 #    to avoid vendoring the coverage tool, install it as needed
-coverDeps := golang.org/x/tools/cmd/cover
+coverDeps := $(if $(DISABLE_COVERAGE),,golang.org/x/tools/cmd/cover)
 coverDeps := $(addprefix $(gopath)/src/,$(coverDeps))
 #    implementation for package coverage and test running,mongodb to produce
 #    and save test output.
