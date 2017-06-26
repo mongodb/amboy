@@ -283,13 +283,13 @@ buildvariants:
       - ".dist"
       - ".test"
 
-  - name: osx
-    display_name: OS X 10.10
+  - name: macos
+    display_name: macOS 10.12
     expansions:
       mongodb_url: https://fastdl.mongodb.org/osx/mongodb-osx-ssl-x86_64-3.2.9.tgz
       build_env: "PATH=/usr/local/go/bin:$PATH"
     run_on:
-      - osx-1010
+      - macos-1012
     tasks:
       - ".dist"
       - ".test"
