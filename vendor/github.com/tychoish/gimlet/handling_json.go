@@ -2,11 +2,8 @@ package gimlet
 
 import (
 	"encoding/json"
-	"io"
-	"io/ioutil"
 	"net/http"
 
-	"github.com/gorilla/mux"
 	"github.com/mongodb/grip"
 )
 
@@ -14,24 +11,14 @@ import (
 // request, setting the return status of to 500 if the JSON
 // seralization process encounters an error, otherwise return
 func WriteJSONResponse(w http.ResponseWriter, code int, data interface{}) {
-	j := &JSONMessage{data: data}
-
-	out, err := j.MarshalPretty()
-
+	response, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		grip.CatchDebug(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	grip.Debug(j)
-
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(code)
-	size, err := w.Write(out)
-	if err != nil {
-		grip.Warningf("encountered error %s writing a %d response", err.Error(), size)
-	}
+	writeResponse(JSON, w, code, append(response, []byte("\n")...))
 }
 
 // WriteJSON is a helper method to write JSON data to the body of an
@@ -53,27 +40,4 @@ func WriteErrorJSON(w http.ResponseWriter, data interface{}) {
 func WriteInternalErrorJSON(w http.ResponseWriter, data interface{}) {
 	// 500
 	WriteJSONResponse(w, http.StatusInternalServerError, data)
-}
-
-// GetJSON parses JSON from a io.ReadCloser (e.g. http/*Request.Body
-// or http/*Response.Body) into an object specified by the
-// request. Used in handler functiosn to retreve and parse data
-// submitted by the client.
-func GetJSON(r io.ReadCloser, data interface{}) error {
-	defer r.Close()
-
-	bytes, err := ioutil.ReadAll(r)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(bytes, data)
-}
-
-// GetVars is a helper method that processes an http.Request and
-// returns a map of strings to decoded strings for all arguments
-// passed to the method in the URL. Use this helper function when
-// writing handler functions.
-func GetVars(r *http.Request) map[string]string {
-	return mux.Vars(r)
 }

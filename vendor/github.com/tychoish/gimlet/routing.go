@@ -33,10 +33,20 @@ func (a *APIApp) AddRoute(r string) *APIRoute {
 	return route
 }
 
-// IsValid checks if a route has is valid. Current implementation only
-// makes sure that the version of the route is method.
+// IsValid checks if a route has is valid and populated.
 func (r *APIRoute) IsValid() bool {
-	return r.version >= 0
+	switch {
+	case r.version < 0:
+		return false
+	case len(r.methods) == 0:
+		return false
+	case r.handler == nil:
+		return false
+	case r.route == "":
+		return false
+	default:
+		return true
+	}
 }
 
 // Version allows you to specify an integer for the version of this
@@ -44,9 +54,9 @@ func (r *APIRoute) IsValid() bool {
 func (r *APIRoute) Version(version int) *APIRoute {
 	if version < 0 {
 		grip.Warningf("%d is not a valid version", version)
-	} else {
-		r.version = version
 	}
+
+	r.version = version
 	return r
 }
 
@@ -58,7 +68,29 @@ func (r *APIRoute) Version(version int) *APIRoute {
 // without relying on either global state *or* running into complex
 // typing issues.
 func (r *APIRoute) Handler(h http.HandlerFunc) *APIRoute {
+	if r.handler != nil {
+		grip.Warningf("called Handler more than once for route %s", r.route)
+	} else if h == nil {
+		grip.Alertf("adding nil route handler will prorobably result in runtime panics for '%s'", r.route)
+	}
+
 	r.handler = h
+
+	return r
+}
+
+// RouteHandler defines a handler defined using the RouteHandler
+// interface, which provides additional infrastructure for defining
+// handlers, to separate input parsing, business logic, and response
+// generation.
+func (r *APIRoute) RouteHandler(h RouteHandler) *APIRoute {
+	if r.handler != nil {
+		grip.Warningf("called Handler more than once for route %s", r.route)
+	} else if h == nil {
+		grip.Alertf("adding nil route handler will prorobably result in runtime panics for '%s'", r.route)
+	}
+
+	r.handler = handleHandler(h)
 
 	return r
 }
@@ -66,34 +98,34 @@ func (r *APIRoute) Handler(h http.HandlerFunc) *APIRoute {
 // Get is a chainable method to add a handler for the GET method to
 // the current route. Routes may specify multiple methods.
 func (r *APIRoute) Get() *APIRoute {
-	r.methods = append(r.methods, GET)
+	r.methods = append(r.methods, get)
 	return r
 }
 
 // Put is a chainable method to add a handler for the PUT method to
 // the current route. Routes may specify multiple methods.
 func (r *APIRoute) Put() *APIRoute {
-	r.methods = append(r.methods, PUT)
+	r.methods = append(r.methods, put)
 	return r
 }
 
 // Post is a chainable method to add a handler for the POST method to
 // the current route. Routes may specify multiple methods.
 func (r *APIRoute) Post() *APIRoute {
-	r.methods = append(r.methods, POST)
+	r.methods = append(r.methods, post)
 	return r
 }
 
 // Delete is a chainable method to add a handler for the DELETE method
 // to the current route. Routes may specify multiple methods.
 func (r *APIRoute) Delete() *APIRoute {
-	r.methods = append(r.methods, DELETE)
+	r.methods = append(r.methods, delete)
 	return r
 }
 
 // Patch is a chainable method to add a handler for the PATCH method
 // to the current route. Routes may specify multiple methods.
 func (r *APIRoute) Patch() *APIRoute {
-	r.methods = append(r.methods, PATCH)
+	r.methods = append(r.methods, patch)
 	return r
 }

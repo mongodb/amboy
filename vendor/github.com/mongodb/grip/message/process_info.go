@@ -1,12 +1,13 @@
 package message
 
 import (
+	"fmt"
 	"os"
 
+	"github.com/mongodb/grip/level"
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/net"
 	"github.com/shirou/gopsutil/process"
-	"github.com/mongodb/grip/level"
 )
 
 // ProcessInfo holds the data for per-process statistics (e.g. cpu,
@@ -69,13 +70,7 @@ func CollectProcessInfoWithChildren(pid int32) []Composer {
 	parentMsg.populate(parent)
 	results = append(results, parentMsg)
 
-	children, err := parent.Children()
-	parentMsg.saveError(err)
-	if err != nil {
-		return results
-	}
-
-	for _, child := range children {
+	for _, child := range getChildrenRecursively(parent) {
 		cm := &ProcessInfo{}
 		cm.loggable = true
 		cm.populate(child)
@@ -83,6 +78,22 @@ func CollectProcessInfoWithChildren(pid int32) []Composer {
 	}
 
 	return results
+}
+
+func getChildrenRecursively(proc *process.Process) []*process.Process {
+	var out []*process.Process
+
+	children, err := proc.Children()
+	if len(children) == 0 || err != nil {
+		return out
+	}
+
+	for _, p := range children {
+		out = append(out, p)
+		out = append(out, getChildrenRecursively(p)...)
+	}
+
+	return out
 }
 
 // NewProcessInfo constructs a fully configured and populated
@@ -94,12 +105,12 @@ func NewProcessInfo(priority level.Priority, pid int32, message string) Composer
 	}
 
 	if err := p.SetPriority(priority); err != nil {
-		p.saveError(err)
+		p.saveError("priority", err)
 		return p
 	}
 
 	proc, err := process.NewProcess(pid)
-	p.saveError(err)
+	p.saveError("process", err)
 	if err != nil {
 		return p
 	}
@@ -147,49 +158,48 @@ func (p *ProcessInfo) populate(proc *process.Process) {
 		p.Pid = proc.Pid
 	}
 	parentPid, err := proc.Ppid()
-	p.saveError(err)
+	p.saveError("parent_pid", err)
 	if err == nil {
 		p.Parent = parentPid
 	}
 
 	memInfo, err := proc.MemoryInfo()
-	p.saveError(err)
+	p.saveError("meminfo", err)
 	if err == nil && memInfo != nil {
 		p.Memory = *memInfo
 	}
 
 	memInfoEx, err := proc.MemoryInfoEx()
-	p.saveError(err)
+	p.saveError("meminfo_extended", err)
 	if err == nil && memInfoEx != nil {
 		p.MemoryPlatform = *memInfoEx
 	}
 
 	threads, err := proc.NumThreads()
 	p.Threads = int(threads)
-	p.saveError(err)
+	p.saveError("num_threads", err)
 
 	p.NetStat, err = proc.NetIOCounters(false)
-	p.saveError(err)
+	p.saveError("netstat", err)
 
 	p.Command, err = proc.Cmdline()
-	p.saveError(err)
+	p.saveError("cmd args", err)
 
 	cpuTimes, err := proc.Times()
-	p.saveError(err)
+	p.saveError("cpu_times", err)
 	if err == nil && cpuTimes != nil {
 		p.CPU = *cpuTimes
 	}
 
 	ioStat, err := proc.IOCounters()
-	p.saveError(err)
+	p.saveError("iostat", err)
 	if err == nil && ioStat != nil {
 		p.IoStat = *ioStat
 	}
-
 }
 
-func (p *ProcessInfo) saveError(err error) {
+func (p *ProcessInfo) saveError(stat string, err error) {
 	if shouldSaveError(err) {
-		p.Errors = append(p.Errors, err.Error())
+		p.Errors = append(p.Errors, fmt.Sprintf("%s: %v", stat, err))
 	}
 }

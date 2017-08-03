@@ -2,10 +2,15 @@ package message
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/mongodb/grip/level"
 )
+
+// FieldsMsgName is the name of the default "message" field in the
+// fields structure.
+const FieldsMsgName = "message"
 
 type fieldMessage struct {
 	message      string
@@ -14,8 +19,9 @@ type fieldMessage struct {
 	Base
 }
 
-// A convince type that wraps map[string]interface{} and is used for
-// attaching structured metadata to a build request. For example:
+// Fields is a convince type that wraps map[string]interface{} and is
+// used for attaching structured metadata to a build request. For
+// example:
 //
 //     message.Fields{"key0", <value>, "key1", <value>}
 type Fields map[string]interface{}
@@ -40,34 +46,75 @@ func NewFields(p level.Priority, f Fields) Composer {
 	return m
 }
 
-// NewFields constructs a fields Composer from a message string and
+// MakeFieldsMessage constructs a fields Composer from a message string and
 // Fields object, without specifying the priority of the message.
 func MakeFieldsMessage(message string, f Fields) Composer {
-	return &fieldMessage{message: message, fields: f}
+	m := &fieldMessage{message: message, fields: f}
+	m.setup()
+
+	return m
+}
+
+func (m *fieldMessage) setup() {
+	_ = m.Collect()
+
+	if _, ok := m.fields[FieldsMsgName]; !ok && m.message != "" {
+		m.fields[FieldsMsgName] = m.message
+	}
+
+	if _, ok := m.fields["metadata"]; !ok {
+		m.fields["metadata"] = &m.Base
+	}
 }
 
 // MakeFields creates a composer interface from *just* a Fields instance.
-func MakeFields(f Fields) Composer { return &fieldMessage{fields: f} }
+func MakeFields(f Fields) Composer {
+	m := &fieldMessage{fields: f}
+	m.setup()
+	return m
+}
 
-func (m *fieldMessage) Loggable() bool { return m.message != "" || len(m.fields) > 0 }
+func (m *fieldMessage) Loggable() bool {
+	if m.message == "" && len(m.fields) == 0 {
+		return false
+	}
+
+	if len(m.fields) == 1 {
+		if _, ok := m.fields["metadata"]; ok {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (m *fieldMessage) String() string {
+	if !m.Loggable() {
+		return ""
+	}
+
 	if m.cachedOutput == "" {
 		const tmpl = "%s='%v'"
 		out := []string{}
 		if m.message != "" {
-			out = append(out, fmt.Sprintf(tmpl, "msg", m.message))
+			out = append(out, fmt.Sprintf(tmpl, FieldsMsgName, m.message))
 		}
 
 		for k, v := range m.fields {
-			if k == "msg" && v == m.message {
+			if k == FieldsMsgName && v == m.message {
 				continue
 			}
 			if k == "time" {
 				continue
 			}
+			if k == "metadata" {
+				continue
+			}
 
 			out = append(out, fmt.Sprintf(tmpl, k, v))
 		}
+
+		sort.Sort(sort.StringSlice(out))
 
 		m.cachedOutput = fmt.Sprintf("[%s]", strings.Join(out, " "))
 	}
@@ -75,14 +122,4 @@ func (m *fieldMessage) String() string {
 	return m.cachedOutput
 }
 
-func (m *fieldMessage) Raw() interface{} {
-	_ = m.Collect()
-	if _, ok := m.fields["msg"]; !ok {
-		m.fields["msg"] = m.message
-	}
-	if _, ok := m.fields["time"]; !ok {
-		m.fields["time"] = m.Time
-	}
-
-	return m.fields
-}
+func (m *fieldMessage) Raw() interface{} { return m.fields }

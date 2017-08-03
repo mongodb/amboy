@@ -143,6 +143,7 @@ Aqui está uma lista atual de Middleware Compatíveis com Negroni. Sinta se livr
 
 | Middleware | Autor | Descrição |
 | -----------|--------|-------------|
+| [authz](https://github.com/casbin/negroni) | [Yang Luo](https://github.com/hsluoyz) | ACL, RBAC, ABAC Authorization middlware based on [Casbin](https://github.com/casbin/casbin) |
 | [Graceful](https://github.com/stretchr/graceful) | [Tyler Bunnell](https://github.com/tylerb) | Graceful HTTP Shutdown |
 | [secure](https://github.com/unrolled/secure) | [Cory Jacobsen](https://github.com/unrolled) |  Implementa rapidamente itens de segurança.|
 | [binding](https://github.com/mholt/binding) | [Matt Holt](https://github.com/mholt) | Handler para mapeamento/validação de um request a estrutura. |
@@ -159,7 +160,7 @@ Aqui está uma lista atual de Middleware Compatíveis com Negroni. Sinta se livr
 [Alexander Rødseth](https://github.com/xyproto) criou [mooseware](https://github.com/xyproto/mooseware), uma estrutura para escrever um handler middleware Negroni.
 
 ## Servidor com autoreload?
-[gin](https://github.com/urfave/gin) e [fresh](https://github.com/pilu/fresh) são aplicativos para autoreload do Negroni.
+[gin](https://github.com/codegangsta/gin) e [fresh](https://github.com/pilu/fresh) são aplicativos para autoreload do Negroni.
 
 ## Leitura Essencial para Iniciantes em Go & Negroni
 * [Usando um contexto para passar informação de um middleware para o manipulador final](http://elithrar.github.io/article/map-string-interface/)

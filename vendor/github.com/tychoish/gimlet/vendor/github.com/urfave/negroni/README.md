@@ -2,6 +2,7 @@
 [![GoDoc](https://godoc.org/github.com/urfave/negroni?status.svg)](http://godoc.org/github.com/urfave/negroni)
 [![Build Status](https://travis-ci.org/urfave/negroni.svg?branch=master)](https://travis-ci.org/urfave/negroni)
 [![codebeat](https://codebeat.co/badges/47d320b1-209e-45e8-bd99-9094bc5111e2)](https://codebeat.co/projects/github-com-urfave-negroni)
+[![codecov](https://codecov.io/gh/urfave/negroni/branch/master/graph/badge.svg)](https://codecov.io/gh/urfave/negroni)
 
 **Notice:** This is the library formerly known as
 `github.com/codegangsta/negroni` -- Github will automatically redirect requests
@@ -63,6 +64,13 @@ go run server.go
 ```
 
 You will now have a Go `net/http` webserver running on `localhost:3000`.
+
+### Packaging
+
+If you are on Debian, `negroni` is also available as [a
+package](https://packages.debian.org/sid/golang-github-urfave-negroni-dev) that
+you can install via `apt install golang-github-urfave-negroni-dev` (at the time
+of writing, it is in the `sid` repositories).
 
 ## Is Negroni a Framework?
 
@@ -144,6 +152,26 @@ n.UseHandler(mux)
 http.ListenAndServe(":3000", n)
 ```
 
+## `With()`
+
+Negroni has a convenience function called `With`. `With` takes one or more
+`Handler` instances and returns a new `Negroni` with the combination of the
+receiver's handlers and the new handlers.
+
+```go
+// middleware we want to reuse
+common := negroni.New()
+common.Use(MyMiddleware1)
+common.Use(MyMiddleware2)
+
+// `specific` is a new negroni with the handlers from `common` combined with the
+// the handlers passed in
+specific := common.With(
+	SpecificMiddleware1,
+	SpecificMiddleware2
+)
+```
+
 ## `Run()`
 
 Negroni has a convenience function called `Run`. `Run` takes an addr string
@@ -162,6 +190,9 @@ func main() {
   n.Run(":8080")
 }
 ```
+If no address is provided, the `PORT` environment variable is used instead.
+If the `PORT`environment variable is not defined, the default address will be used. 
+See [Run](https://godoc.org/github.com/urfave/negroni#Negroni.Run) for a complete description.
 
 In general, you will want to use `net/http` methods and pass `negroni` as a
 `Handler`, as this is more flexible, e.g.:
@@ -231,6 +262,36 @@ router.PathPrefix("/subpath").Handler(negroni.New(
   Middleware1,
   Middleware2,
   negroni.Wrap(subRouter),
+))
+```
+
+`With()` can be used to eliminate redundancy for middlewares shared across
+routes.
+
+``` go
+router := mux.NewRouter()
+apiRoutes := mux.NewRouter()
+// add api routes here
+webRoutes := mux.NewRouter()
+// add web routes here
+
+// create common middleware to be shared across routes
+common := negroni.New(
+	Middleware1,
+	Middleware2,
+)
+
+// create a new negroni for the api middleware
+// using the common middleware as a base
+router.PathPrefix("/api").Handler(common.With(
+  APIMiddleware1,
+  negroni.Wrap(apiRoutes),
+))
+// create a new negroni for the web middleware
+// using the common middleware as a base
+router.PathPrefix("/web").Handler(common.With(
+  WebMiddleware1,
+  negroni.Wrap(webRoutes),
 ))
 ```
 
@@ -394,6 +455,7 @@ linking your middleware if you have built one:
 
 | Middleware | Author | Description |
 | -----------|--------|-------------|
+| [authz](https://github.com/casbin/negroni-authz) | [Yang Luo](https://github.com/hsluoyz) | ACL, RBAC, ABAC Authorization middlware based on [Casbin](https://github.com/casbin/casbin) |
 | [binding](https://github.com/mholt/binding) | [Matt Holt](https://github.com/mholt) | Data binding from HTTP requests into structs |
 | [cloudwatch](https://github.com/cvillecsteele/negroni-cloudwatch) | [Colin Steele](https://github.com/cvillecsteele) | AWS cloudwatch metrics middleware |
 | [cors](https://github.com/rs/cors) | [Olivier Poitrey](https://github.com/rs) | [Cross Origin Resource Sharing](http://www.w3.org/TR/cors/) (CORS) support |
@@ -417,12 +479,15 @@ linking your middleware if you have built one:
 | [VanGoH](https://github.com/auroratechnologies/vangoh) | [Taylor Wrobel](https://github.com/twrobel3) | Configurable [AWS-Style](http://docs.aws.amazon.com/AmazonS3/latest/dev/RESTAuthentication.html) HMAC authentication middleware |
 | [xrequestid](https://github.com/pilu/xrequestid) | [Andrea Franz](https://github.com/pilu) | Middleware that assigns a random X-Request-Id header to each request |
 | [mgo session](https://github.com/joeljames/nigroni-mgo-session) | [Joel James](https://github.com/joeljames) | Middleware that handles creating and closing mgo sessions per request |
+| [digits](https://github.com/bamarni/digits) | [Bilal Amarni](https://github.com/bamarni) | Middleware that handles [Twitter Digits](https://get.digits.com/) authentication |
 
 ## Examples
 
 [Alexander Rødseth](https://github.com/xyproto) created
 [mooseware](https://github.com/xyproto/mooseware), a skeleton for writing a
 Negroni middleware handler.
+
+[Prasanga Siripala](https://github.com/pjebs) created an effective skeleton structure for web-based Go/Negroni projects: [Go-Skeleton](https://github.com/pjebs/go-skeleton) 
 
 ## Live code reload?
 

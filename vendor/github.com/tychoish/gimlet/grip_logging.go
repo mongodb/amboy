@@ -6,6 +6,7 @@ import (
 
 	"github.com/mongodb/grip"
 	"github.com/mongodb/grip/logging"
+	"github.com/mongodb/grip/message"
 	"github.com/urfave/negroni"
 )
 
@@ -34,11 +35,27 @@ func NewAppLogger() *AppLogging {
 func (l *AppLogging) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	start := time.Now()
 	id := getNumber()
-	l.Infof("[id=%d] started %s %s", id, r.Method, r.URL.Path)
+
+	l.Info(message.Fields{
+		"action":  "started",
+		"method":  r.Method,
+		"remote":  r.RemoteAddr,
+		"request": id,
+		"path":    r.URL.Path,
+	})
 
 	next(rw, r)
 
 	res := rw.(negroni.ResponseWriter)
-	l.Infof("[id=%d] completed %v %s in %v", id, res.Status(),
-		http.StatusText(res.Status()), time.Since(start))
+	l.Info(message.Fields{
+		"method":   r.Method,
+		"remote":   r.RemoteAddr,
+		"request":  id,
+		"path":     r.URL.Path,
+		"duration": time.Since(start),
+		"action":   "completed",
+		"status":   res.Status(),
+		"outcome":  http.StatusText(res.Status()),
+		"span":     time.Since(start).String(),
+	})
 }

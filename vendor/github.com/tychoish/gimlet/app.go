@@ -13,13 +13,12 @@ package gimlet
 import (
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/phyber/negroni-gzip/gzip"
 	"github.com/mongodb/grip"
+	"github.com/phyber/negroni-gzip/gzip"
 	"github.com/tylerb/graceful"
 	"github.com/urfave/negroni"
 )
@@ -28,10 +27,12 @@ import (
 type APIApp struct {
 	StrictSlash    bool
 	isResolved     bool
+	prefix         string
 	defaultVersion int
 	port           int
 	router         *mux.Router
 	address        string
+	subApps        []*APIApp
 	routes         []*APIRoute
 	middleware     []negroni.Handler
 }
@@ -66,8 +67,8 @@ func (a *APIApp) SetDefaultVersion(version int) {
 	}
 }
 
-// Router is the getter for an APIApp's router object. If the
-// application isn't resloved, then the error return value is non-nil.
+// Router is the getter for an APIApp's router object. If thetr
+// application isn't resolved, then the error return value is non-nil.
 func (a *APIApp) Router() (*mux.Router, error) {
 	if a.isResolved {
 		return a.router, nil
@@ -85,28 +86,7 @@ func (a *APIApp) AddApp(app *APIApp) error {
 		return errors.New("cannot merge an app into a resolved app")
 	}
 
-	// this is a weird case, so worth a warning, but not worth exiting
-	if app.isResolved {
-		grip.Warningln("merging a resolved app into an unresolved app may be an error.",
-			"Continuing cautiously.")
-	}
-	// this is incredibly straightforward, just add the added routes to our routes list.
-	if app.defaultVersion == a.defaultVersion {
-		a.routes = append(a.routes, app.routes...)
-		return nil
-	}
-
-	// This makes sure that instance default versions are
-	// respected in routes when merging instances. This covers the
-	// case where you assemble v1 and v2 of an api in different
-	// places in your code and want to merge them in later.
-	for _, route := range app.routes {
-		if route.version == -1 {
-			route.Version(app.defaultVersion)
-		}
-		a.routes = append(a.routes, route)
-	}
-
+	a.subApps = append(a.subApps, app)
 	return nil
 }
 
@@ -120,14 +100,14 @@ func (a *APIApp) AddMiddleware(m negroni.Handler) {
 // all routes and creats a mux.Router object for the application
 // instance.
 func (a *APIApp) Resolve() error {
+	catcher := grip.NewCatcher()
+
 	a.router = mux.NewRouter().StrictSlash(a.StrictSlash)
 
-	var hasErrs bool
 	for _, route := range a.routes {
 		if !route.IsValid() {
-			hasErrs = true
-			grip.Errorf("%d is an invalid api version. not adding route for %s",
-				route.version, route.route)
+			catcher.Add(fmt.Errorf("%d is an invalid api version. not adding route for %s",
+				route.version, route.route))
 			continue
 		}
 
@@ -137,12 +117,13 @@ func (a *APIApp) Resolve() error {
 		}
 
 		if route.version > 0 {
-			versionedRoute := fmt.Sprintf("/v%d%s", route.version, route.route)
+			versionedRoute := getVersionedRoute(a.prefix, route.version, route.route)
 			a.router.HandleFunc(versionedRoute, route.handler).Methods(methods...)
 			grip.Debugln("added route for:", versionedRoute)
 		}
 
-		if route.version == a.defaultVersion || route.version == 0 {
+		if route.version == a.defaultVersion {
+			route.route = getDefaultRoute(a.prefix, route.route)
 			a.router.HandleFunc(route.route, route.handler).Methods(methods...)
 			grip.Debugln("added route for:", route.route)
 		}
@@ -150,11 +131,25 @@ func (a *APIApp) Resolve() error {
 
 	a.isResolved = true
 
-	if hasErrs {
-		return errors.New("encountered errors resolving routes")
+	return catcher.Resolve()
+}
+
+func getVersionedRoute(prefix string, version int, route string) string {
+	if strings.HasPrefix(route, prefix) {
+		if prefix == "" {
+			return fmt.Sprintf("/v%d%s", version, route)
+		}
+		route = route[len(prefix):]
 	}
 
-	return nil
+	return fmt.Sprintf("%s/v%d%s", prefix, version, route)
+}
+
+func getDefaultRoute(prefix, route string) string {
+	if strings.HasPrefix(route, prefix) {
+		return route
+	}
+	return prefix + route
 }
 
 // ResetMiddleware removes *all* middleware handlers from the current
@@ -163,27 +158,51 @@ func (a *APIApp) ResetMiddleware() {
 	a.middleware = []negroni.Handler{}
 }
 
-// Run configured API service on the configured port. If you Registers
-// middlewear for gziped responses and graceful shutdown with a 10
-// second timeout.
-func (a *APIApp) Run() error {
-	var err error
-	if !a.isResolved {
-		err = a.Resolve()
+// getHander internal helper resolves the negorni middleware for the
+// application and returns it in the form of a http.Handler for use in
+// stitching together applicationstr
+func (a *APIApp) getNegroni() (*negroni.Negroni, error) {
+	if err := a.Resolve(); err != nil {
+		return nil, err
 	}
 
-	n := negroni.New()
-	for _, m := range a.middleware {
-		n.Use(m)
-	}
-
+	catcher := grip.NewCatcher()
+	n := negroni.New(a.middleware...)
 	n.UseHandler(a.router)
+	for _, app := range a.subApps {
+		if !strings.HasPrefix(app.prefix, a.prefix) {
+			app.prefix = a.prefix + app.prefix
+		}
+		catcher.Add(app.Resolve())
 
-	listenOn := strings.Join([]string{a.address, strconv.Itoa(a.port)}, ":")
-	grip.Noticeln("starting app on:", listenOn)
+		subNegroni, err := app.getNegroni()
+		if err != nil {
+			catcher.Add(err)
+		}
 
-	graceful.Run(listenOn, 10*time.Second, n)
-	return err
+		n.UseHandler(subNegroni)
+	}
+
+	if catcher.HasErrors() {
+		return nil, catcher.Resolve()
+	}
+
+	return n, nil
+}
+
+// Run configured API service on the configured port. Before running
+// the application, Run also resolves any sub-apps, and adds all
+// routes.
+func (a *APIApp) Run() error {
+	n, err := a.getNegroni()
+	if err != nil {
+		return err
+	}
+
+	grip.Noticef("starting app on: %s:$d", a.address, a.port)
+	graceful.Run(fmt.Sprintf("%s:%d", a.address, a.port), 10*time.Second, n)
+
+	return nil
 }
 
 // SetPort allows users to configure a default port for the API
@@ -223,4 +242,14 @@ func (a *APIApp) SetHost(name string) error {
 	a.address = name
 
 	return nil
+}
+
+// SetPrefix sets the route prefix, adding a leading slash, "/", if
+// neccessary.
+func (a *APIApp) SetPrefix(p string) {
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+
+	a.prefix = p
 }

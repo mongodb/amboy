@@ -4,7 +4,7 @@ var jobIDSource <-chan int
 
 func init() {
 	jobIDSource = func() <-chan int {
-		out := make(chan int, 10)
+		out := make(chan int, 50)
 		go func() {
 			var jobID int
 			for {
