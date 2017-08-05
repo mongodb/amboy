@@ -70,7 +70,7 @@ func (s *LimitedSizeQueueSuite) TestCallingStartMultipleTimesDoesNotImpactState(
 }
 
 func (s *LimitedSizeQueueSuite) TestCannotSetRunnerAfterQueueIsOpened() {
-	secondRunner := pool.NewSingleRunner()
+	secondRunner := pool.NewSingle()
 	runner := s.queue.runner
 
 	s.False(s.queue.Started())

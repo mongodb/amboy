@@ -6,14 +6,14 @@ import (
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/job"
-	"github.com/stretchr/testify/suite"
 	"github.com/mongodb/grip"
 	"github.com/mongodb/grip/level"
+	"github.com/stretchr/testify/suite"
 	"golang.org/x/net/context"
 )
 
 type SingleRunnerSuite struct {
-	pool  *SingleRunner
+	pool  *single
 	queue *QueueTester
 	suite.Suite
 }
@@ -27,7 +27,7 @@ func (s *SingleRunnerSuite) SetupSuite() {
 }
 
 func (s *SingleRunnerSuite) SetupTest() {
-	s.pool = NewSingleRunner()
+	s.pool = NewSingle().(*single)
 	s.queue = NewQueueTester(s.pool)
 }
 

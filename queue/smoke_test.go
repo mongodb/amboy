@@ -217,7 +217,7 @@ func TestUnorderedSingleThreadedSingleRunner(t *testing.T) {
 
 	q := NewLocalUnordered(1)
 
-	runner := pool.NewSingleRunner()
+	runner := pool.NewSingle()
 	assert.NoError(runner.SetQueue(q))
 	assert.NoError(q.SetRunner(runner))
 
@@ -231,6 +231,42 @@ func TestSmokeUnorderedWorkerPools(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 
 		q := NewLocalUnordered(poolSize)
+		runUnorderedSmokeTest(ctx, q, poolSize, assert)
+
+		cancel()
+	}
+}
+
+func TestSmokeRateLimitedSimplePoolUnorderedQueue(t *testing.T) {
+	assert := assert.New(t)
+
+	for _, poolSize := range []int{2, 4, 8, 16} {
+		ctx, cancel := context.WithCancel(context.Background())
+
+		q := NewLocalUnordered(poolSize)
+		runner, err := pool.NewSimpleRateLimitedWorkers(poolSize, 10*time.Millisecond, q)
+		assert.NoError(err)
+		assert.NotNil(runner)
+		assert.NoError(q.SetRunner(runner))
+
+		runUnorderedSmokeTest(ctx, q, poolSize, assert)
+
+		cancel()
+	}
+}
+
+func TestSmokeRateLimitedAveragePoolUnorderedQueue(t *testing.T) {
+	assert := assert.New(t)
+
+	for _, poolSize := range []int{2, 4, 8, 16} {
+		ctx, cancel := context.WithCancel(context.Background())
+
+		q := NewLocalUnordered(poolSize)
+		runner, err := pool.NewMovingAverageRateLimitedWorkers(poolSize, 100, 10*time.Second, q)
+		assert.NoError(err)
+		assert.NotNil(runner)
+		assert.NoError(q.SetRunner(runner))
+
 		runUnorderedSmokeTest(ctx, q, poolSize, assert)
 
 		cancel()
@@ -305,7 +341,7 @@ func TestSmokeRemoteUnorderedSingleRunnerWithMongoDBDriver(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	q := NewRemoteUnordered(1)
 
-	runner := pool.NewSingleRunner()
+	runner := pool.NewSingle()
 	assert.NoError(runner.SetQueue(q))
 	assert.NoError(q.SetRunner(runner))
 
@@ -357,7 +393,7 @@ func TestSmokePriorityQueueWithSingleWorker(t *testing.T) {
 	defer cancel()
 
 	q := NewLocalPriorityQueue(1)
-	runner := pool.NewSingleRunner()
+	runner := pool.NewSingle()
 	assert.NoError(runner.SetQueue(q))
 
 	assert.NoError(q.SetRunner(runner))
@@ -396,7 +432,7 @@ func TestSmokePriorityDriverWithRemoteQueueSingleWorker(t *testing.T) {
 
 	q := NewRemoteUnordered(1)
 
-	runner := pool.NewSingleRunner()
+	runner := pool.NewSingle()
 	assert.NoError(runner.SetQueue(q))
 	assert.NoError(q.SetRunner(runner))
 
@@ -550,7 +586,7 @@ func TestSmokeLimitedSizeQueueWithSingleWorker(t *testing.T) {
 	defer cancel()
 
 	q := NewLocalLimitedSize(1, 150)
-	runner := pool.NewSingleRunner()
+	runner := pool.NewSingle()
 	assert.NoError(runner.SetQueue(q))
 
 	assert.NoError(q.SetRunner(runner))
@@ -580,7 +616,7 @@ func TestSmokeShuffledQueueWithSingleWorker(t *testing.T) {
 	defer cancel()
 
 	q := &LocalShuffled{}
-	runner := pool.NewSingleRunner()
+	runner := pool.NewSingle()
 	assert.NoError(runner.SetQueue(q))
 
 	assert.NoError(q.SetRunner(runner))
@@ -687,7 +723,7 @@ func TestSmokeSimpleRemoteOrderedWithSingleRunnerAndMongoDBDriver(t *testing.T) 
 	ctx, cancel := context.WithCancel(context.Background())
 	q := NewSimpleRemoteOrdered(1)
 
-	runner := pool.NewSingleRunner()
+	runner := pool.NewSingle()
 	assert.NoError(runner.SetQueue(q))
 	assert.NoError(q.SetRunner(runner))
 
@@ -730,7 +766,7 @@ func TestSmokeSimpleRemoteOrderedWithSingleRunnerAndInternalDriver(t *testing.T)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	q := NewSimpleRemoteOrdered(1)
-	runner := pool.NewSingleRunner()
+	runner := pool.NewSingle()
 	assert.NoError(runner.SetQueue(q))
 	assert.NoError(q.SetRunner(runner))
 
@@ -760,7 +796,7 @@ func TestSmokeLocalOrderedQueueWithSingleWorker(t *testing.T) {
 	defer cancel()
 
 	q := NewLocalOrdered(1)
-	runner := pool.NewSingleRunner()
+	runner := pool.NewSingle()
 	assert.NoError(runner.SetQueue(q))
 	assert.NoError(q.SetRunner(runner))
 

@@ -15,20 +15,11 @@ import (
 	"golang.org/x/net/context"
 )
 
-// LocalWorkers is a very minimal implementation of a worker pool, and
-// supports a configurable number of workers to process Job tasks.
-type LocalWorkers struct {
-	size     int
-	started  bool
-	queue    amboy.Queue
-	canceler context.CancelFunc
-}
-
-// NewLocalWorkers is a constructor for LocalWorkers objects, and
-// takes arguments for the number of worker processes and a amboy.Queue
-// object.
-func NewLocalWorkers(numWorkers int, q amboy.Queue) *LocalWorkers {
-	r := &LocalWorkers{
+// NewLocalWorkers is a constructor for pool of worker processes that
+// execute jobs from a queue locally, and takes arguments for
+// the number of worker processes and a amboy.Queue object.
+func NewLocalWorkers(numWorkers int, q amboy.Queue) amboy.Runner {
+	r := &localWorkers{
 		queue: q,
 		size:  numWorkers,
 	}
@@ -41,10 +32,19 @@ func NewLocalWorkers(numWorkers int, q amboy.Queue) *LocalWorkers {
 	return r
 }
 
+// localWorkers is a very minimal implementation of a worker pool, and
+// supports a configurable number of workers to process Job tasks.
+type localWorkers struct {
+	size     int
+	started  bool
+	queue    amboy.Queue
+	canceler context.CancelFunc
+}
+
 // SetQueue allows callers to inject alternate amboy.Queue objects into
 // constructed Runner objects. Returns an error if the Runner has
 // started.
-func (r *LocalWorkers) SetQueue(q amboy.Queue) error {
+func (r *localWorkers) SetQueue(q amboy.Queue) error {
 	if r.started {
 		return errors.New("cannot add new queue after starting a runner")
 	}
@@ -54,8 +54,8 @@ func (r *LocalWorkers) SetQueue(q amboy.Queue) error {
 }
 
 // Started returns true when the Runner has begun executing tasks. For
-// LocalWorkers this means that workers are running.
-func (r *LocalWorkers) Started() bool {
+// localWorkers this means that workers are running.
+func (r *localWorkers) Started() bool {
 	return r.started
 }
 
@@ -101,7 +101,7 @@ func worker(ctx context.Context, jobs <-chan amboy.Job, q amboy.Queue) {
 
 // Start initializes all worker process, and returns an error if the
 // Runner has already started.
-func (r *LocalWorkers) Start(ctx context.Context) error {
+func (r *localWorkers) Start(ctx context.Context) error {
 	if r.started {
 		return nil
 	}
@@ -128,7 +128,7 @@ func (r *LocalWorkers) Start(ctx context.Context) error {
 }
 
 // Close terminates all worker processes as soon as possible.
-func (r *LocalWorkers) Close() {
+func (r *localWorkers) Close() {
 	if r.canceler != nil {
 		r.canceler()
 	}

@@ -43,7 +43,7 @@ func (s *LocalQueueSuite) TestDefaultStateOfQueueObjectIsExpected() {
 
 	s.Len(s.queue.tasks.m, 0)
 
-	s.IsType(s.queue.runner, &pool.LocalWorkers{})
+	s.NotNil(s.queue.runner)
 }
 
 func (s *LocalQueueSuite) TestPutReturnsErrorForDuplicateNameTasks() {

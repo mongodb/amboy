@@ -45,7 +45,7 @@ func (s *ShuffledQueueSuite) TestCannotStartQueueWithNilRunner() {
 	s.False(s.queue.Started())
 
 	// now validate the inverse
-	s.NoError(s.queue.SetRunner(pool.NewSingleRunner()))
+	s.NoError(s.queue.SetRunner(pool.NewSingle()))
 	s.NotNil(s.queue.runner)
 	s.NoError(s.queue.Start(ctx))
 	s.True(s.queue.Started())
@@ -58,7 +58,7 @@ func (s *ShuffledQueueSuite) TestPutFailsWithUnstartedQueue() {
 	// now validate the inverse
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	s.NoError(s.queue.SetRunner(pool.NewSingleRunner()))
+	s.NoError(s.queue.SetRunner(pool.NewSingle()))
 	s.NoError(s.queue.Start(ctx))
 	s.True(s.queue.Started())
 
@@ -68,7 +68,7 @@ func (s *ShuffledQueueSuite) TestPutFailsWithUnstartedQueue() {
 func (s *ShuffledQueueSuite) TestPutFailsIfJobIsTracked() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	s.NoError(s.queue.SetRunner(pool.NewSingleRunner()))
+	s.NoError(s.queue.SetRunner(pool.NewSingle()))
 	s.NoError(s.queue.Start(ctx))
 
 	j := job.NewShellJob("echo 1", "")
@@ -92,11 +92,11 @@ func (s *ShuffledQueueSuite) TestStatsShouldReturnNilObjectifQueueIsNotRunning()
 func (s *ShuffledQueueSuite) TestSetRunnerReturnsErrorIfRunnerHasStarted() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	s.NoError(s.queue.SetRunner(pool.NewSingleRunner()))
+	s.NoError(s.queue.SetRunner(pool.NewSingle()))
 	s.NoError(s.queue.Start(ctx))
 	origRunner := s.queue.Runner()
 
-	s.Error(s.queue.SetRunner(pool.NewSingleRunner()))
+	s.Error(s.queue.SetRunner(pool.NewSingle()))
 
 	s.Exactly(origRunner, s.queue.Runner())
 }
@@ -111,7 +111,7 @@ func (s *ShuffledQueueSuite) TestGetMethodRetrieves() {
 	s.False(ok)
 	s.Nil(jReturn)
 
-	s.NoError(s.queue.SetRunner(pool.NewSingleRunner()))
+	s.NoError(s.queue.SetRunner(pool.NewSingle()))
 	s.NoError(s.queue.Start(ctx))
 
 	jReturn, ok = s.queue.Get(j.ID())
@@ -144,7 +144,7 @@ func (s *ShuffledQueueSuite) TestResultsOperationReturnsEmptyChannelIfQueueIsNot
 func (s *ShuffledQueueSuite) TestCompleteReturnsIfContextisCanceled() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	s.NoError(s.queue.SetRunner(pool.NewSingleRunner()))
+	s.NoError(s.queue.SetRunner(pool.NewSingle()))
 	s.NoError(s.queue.Start(ctx))
 
 	ctx2, cancel2 := context.WithCancel(ctx)

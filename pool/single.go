@@ -2,37 +2,33 @@ package pool
 
 import (
 	"github.com/mongodb/amboy"
-	"github.com/pkg/errors"
 	"github.com/mongodb/grip"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
-// SingleRunner is an implementation of of the amboy.Runner interface
-// that hosts runs all tasks on one, and only one worker. Useful for
+// single is an implementation of of the amboy.Runner interface
+// that runs all tasks on one, and only one worker. Useful for
 // testing the system with a different task executor.
-type SingleRunner struct {
-	closer   chan struct{}
+type single struct {
 	canceler context.CancelFunc
 	queue    amboy.Queue
 }
 
-// NewSingleRunner returns a new single-worker pool.
-func NewSingleRunner() *SingleRunner {
-	return &SingleRunner{
-		closer: make(chan struct{}),
-	}
-}
+// NewSingle returns an amboy.Runner implementation with single-worker
+// in the pool.
+func NewSingle() amboy.Runner { return &single{} }
 
 // Started returns true when the Runner has begun executing tasks. For
 // LocalWorkers this means that workers are running.
-func (r *SingleRunner) Started() bool {
+func (r *single) Started() bool {
 	return r.canceler != nil
 }
 
 // SetQueue allows callers to inject alternate amboy.Queue objects into
 // constructed Runner objects. Returns an error if the Runner has
 // started.
-func (r *SingleRunner) SetQueue(q amboy.Queue) error {
+func (r *single) SetQueue(q amboy.Queue) error {
 	if r.canceler != nil {
 		return errors.New("cannot add new queue after starting a runner")
 	}
@@ -46,7 +42,7 @@ func (r *SingleRunner) SetQueue(q amboy.Queue) error {
 // canceling the context, or with the close method. Returns an error
 // if the queue is not set. If the Runner is already running, Start is
 // a no-op.
-func (r *SingleRunner) Start(ctx context.Context) error {
+func (r *single) Start(ctx context.Context) error {
 	if r.canceler != nil {
 		return nil
 	}
@@ -62,9 +58,6 @@ func (r *SingleRunner) Start(ctx context.Context) error {
 
 	go func() {
 		worker(workerCtx, jobs, r.queue)
-		r.closer <- struct{}{}
-		close(r.closer)
-
 		grip.Info("worker process complete")
 	}()
 
@@ -76,9 +69,8 @@ func (r *SingleRunner) Start(ctx context.Context) error {
 // Close terminates the work on the Runner. If a job is executing, the
 // job will complete and the process will terminate before beginning a
 // new job. If the queue has not started, Close is a no-op.
-func (r *SingleRunner) Close() {
+func (r *single) Close() {
 	if r.canceler != nil {
 		r.canceler()
-		<-r.closer
 	}
 }
