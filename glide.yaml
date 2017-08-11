@@ -16,6 +16,7 @@ import:
 - package: golang.org/x/net
 - package: gopkg.in/mgo.v2
 - package: gopkg.in/yaml.v2
+- package: github.com/VividCortex/ewma
 - package: golang.org/x/net
   subpackages:
   - context
