@@ -60,8 +60,6 @@ func (q *QueueTester) Complete(ctx context.Context, j amboy.Job) {
 	defer q.mutex.Unlock()
 
 	q.numComplete++
-
-	return
 }
 
 func (q *QueueTester) Stats() amboy.QueueStats {
@@ -127,11 +125,4 @@ func (q *QueueTester) Results() <-chan amboy.Job {
 	}(q.storage)
 
 	return output
-}
-
-func (q *QueueTester) isComplete() bool {
-	q.mutex.RLock()
-	defer q.mutex.RUnlock()
-
-	return len(q.storage) == q.numComplete
 }

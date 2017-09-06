@@ -173,10 +173,11 @@ func (r *Group) Start(ctx context.Context) error {
 
 		go func(name string) {
 			grip.Debugf("worker (%s) waiting for jobs", name)
+		workLoop:
 			for unit := range work {
 				select {
 				case <-ctx.Done():
-					break
+					break workLoop
 				default:
 					unit.j.Run()
 					unit.q.Complete(ctx, unit.j)

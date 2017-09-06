@@ -132,16 +132,6 @@ func (d *MongoDB) getJobsCollection() (*mgo.Session, *mgo.Collection) {
 	return session, session.DB(d.dbName).C(d.name + ".jobs")
 }
 
-func (d *MongoDB) unsetSession() {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	if d.session != nil {
-		d.session.Close()
-		d.session = nil
-	}
-}
-
 func (d *MongoDB) setupDB() error {
 	catcher := grip.NewCatcher()
 	session, jobs := d.getJobsCollection()

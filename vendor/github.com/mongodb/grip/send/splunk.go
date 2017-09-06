@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	hec "github.com/fuyufjh/splunk-hec-go"
 	"github.com/mongodb/grip/level"
@@ -46,24 +47,27 @@ func GetSplunkConnectionInfo() SplunkConnectionInfo {
 	}
 }
 
+// Populated validates a SplunkConnectionInfo, and returns false if
+// there is missing data.
 func (info SplunkConnectionInfo) Populated() bool {
 	return info.ServerURL != "" && info.Token != ""
 }
 
 func (s *splunkLogger) Send(m message.Composer) {
-	if s.level.ShouldLog(m) {
+	if s.Level().ShouldLog(m) {
 		g, ok := m.(*message.GroupComposer)
 		if ok {
 			batch := []*hec.Event{}
+			level := s.Level()
 			for _, c := range g.Messages() {
-				if s.level.ShouldLog(c) {
+				if level.ShouldLog(c) {
 					e := hec.NewEvent(c.Raw())
 					e.SetHost(s.hostname)
 					batch = append(batch, e)
 				}
 			}
 			if err := s.client.WriteBatch(batch); err != nil {
-				s.errHandler(err, m)
+				s.ErrorHandler(err, m)
 			}
 			return
 		}
@@ -71,8 +75,7 @@ func (s *splunkLogger) Send(m message.Composer) {
 		e := hec.NewEvent(m.Raw())
 		e.SetHost(s.hostname)
 		if err := s.client.WriteEvent(e); err != nil {
-			fmt.Println(s.info.ServerURL)
-			s.errHandler(err, m)
+			s.ErrorHandler(err, m)
 		}
 	}
 }
@@ -141,11 +144,23 @@ type splunkClientImpl struct {
 
 func (c *splunkClientImpl) Create(serverURL string, token string, channel string) error {
 	c.HEC = hec.NewClient(serverURL, token)
-	c.HEC.SetHTTPClient(&http.Client{Transport: &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}})
 	if channel != "" {
 		c.HEC.SetChannel(channel)
 	}
+
+	c.HEC.SetKeepAlive(false)
+	c.HEC.SetMaxRetry(0)
+	c.HEC.SetHTTPClient(&http.Client{
+		Transport: &http.Transport{
+			Proxy:               http.ProxyFromEnvironment,
+			DisableKeepAlives:   true,
+			TLSHandshakeTimeout: 5 * time.Second,
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		},
+		Timeout: 5 * time.Second,
+	})
+
 	return nil
 }

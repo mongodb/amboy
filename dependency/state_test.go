@@ -37,13 +37,13 @@ func (s *StatesSuite) TestStringerProducesValidStrings() {
 	for i := 0; i < 4; i++ {
 		state := State(i)
 
-		s.False(strings.HasPrefix(fmt.Sprintf("%s", state), "%s"))
-		s.False(strings.HasPrefix(fmt.Sprintf("%s", state), "State("))
+		s.False(strings.HasPrefix(state.String(), "%s"))
+		s.False(strings.HasPrefix(state.String(), "State("))
 	}
 
 }
 
 func (s *StatesSuite) TestStringerResturnsDefaultValueForOutOfBoundsStates() {
-	s.True(strings.HasPrefix(fmt.Sprintf("%s", State(-1)), "State("))
-	s.True(strings.HasPrefix(fmt.Sprintf("%s", State(5)), "State("))
+	s.True(strings.HasPrefix(State(-1).String(), "State("))
+	s.True(strings.HasPrefix(State(5).String(), "State("))
 }

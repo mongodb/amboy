@@ -46,12 +46,8 @@ imports:
   version: 792786c7400a136282c1664665ae0a8db921c6c2
 
 - name: github.com/mongodb/grip
-  version: dd0a2c479652bd858db82525ad2db2ac87663571
-  subpackages:
-  - level
-  - logging
-  - send
-  - message
+  version: 12ffd76df22398938c74a01d4d237be9631bc1f0
+
 - name: github.com/tychoish/gimlet
   version: efde070a6840e91815e554de155dd8cec5f10ce8
 - name: github.com/pkg/errors

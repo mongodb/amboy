@@ -4,8 +4,8 @@ import (
 	"net/http"
 
 	"github.com/mongodb/amboy/registry"
-	"github.com/tychoish/gimlet"
 	"github.com/mongodb/grip"
+	"github.com/tychoish/gimlet"
 )
 
 type createResponse struct {
@@ -67,5 +67,4 @@ func (s *Service) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	gimlet.WriteJSON(w, resp)
-	return
 }
