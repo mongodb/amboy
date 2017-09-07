@@ -113,10 +113,10 @@ func PeriodicQueueOperation(ctx context.Context, q Queue, interval time.Duration
 	}()
 }
 
-// IntevalQueueOperation runs a queue scheduling operation on a
+// IntervalQueueOperation runs a queue scheduling operation on a
 // regular interval, starting at specific time. Use this method to
 // schedule jobs every hour, or similar use-cases.
-func IntevalQueueOperation(ctx context.Context, q Queue, interval time.Duration, startAt time.Time, ignoreErrors bool, op QueueOperation) {
+func IntervalQueueOperation(ctx context.Context, q Queue, interval time.Duration, startAt time.Time, ignoreErrors bool, op QueueOperation) {
 	go func() {
 		initialWait := time.Now().Sub(startAt)
 		if initialWait > 0 {
