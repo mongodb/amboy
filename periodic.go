@@ -3,9 +3,9 @@ package amboy
 import (
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/mongodb/grip"
 	"github.com/mongodb/grip/message"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
@@ -81,7 +81,7 @@ func GroupQueueOperationFactory(first QueueOperation, ops ...QueueOperation) Que
 // *not* interrupt the background process. Otherwise, the background
 // process will exit if a QueueOperation fails. Use the context to
 // terminate the background process.
-func PeriodicQueueOperation(ctx context.Context, q Queue, op QueueOperation, interval time.Duration, ignoreErrors bool) {
+func PeriodicQueueOperation(ctx context.Context, q Queue, interval time.Duration, ignoreErrors bool, op QueueOperation) {
 	go func() {
 		timer := time.NewTimer(0)
 		defer timer.Stop()
@@ -91,7 +91,7 @@ func PeriodicQueueOperation(ctx context.Context, q Queue, op QueueOperation, int
 			select {
 			case <-ctx.Done():
 				grip.Info(message.Fields{
-					"msg":        "exiting periodic job scheduler",
+					"message":    "exiting periodic job scheduler",
 					"numPeriods": count,
 				})
 				return
@@ -108,6 +108,45 @@ func PeriodicQueueOperation(ctx context.Context, q Queue, op QueueOperation, int
 
 				count++
 				timer.Reset(interval)
+			}
+		}
+	}()
+}
+
+// IntervalQueueOperation runs a queue scheduling operation on a
+// regular interval, starting at specific time. Use this method to
+// schedule jobs every hour, or similar use-cases.
+func IntevalQueueOperation(ctx context.Context, q Queue, interval time.Duration, startAt time.Time, ignoreErrors bool, op QueueOperation) {
+	go func() {
+		initalWait := time.Now().Sub(startAt)
+		if initialWait > 0 {
+			grip.Infof("waiting %s to start scheduling an interval job", initalWait)
+			time.Sleep(initalWait)
+		}
+
+		count := 0
+		ticker := time.NewTicker(interval)
+		defer timer.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				grip.Info(message.Fields{
+					"message":      "exiting interval job scheduler",
+					"numIntervals": count,
+				})
+				return
+			case <-ticker.C:
+				err := errors.Wrap(op(q), "problem encountered during periodic job scheduling")
+				if err != nil {
+					if ignoreErrors {
+						grip.Warning(err)
+					} else {
+						grip.Critical(err)
+						return
+					}
+				}
+
+				count++
 			}
 		}
 	}()
