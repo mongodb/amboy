@@ -96,14 +96,8 @@ func PeriodicQueueOperation(ctx context.Context, q Queue, interval time.Duration
 				})
 				return
 			case <-timer.C:
-				err := errors.Wrap(op(q), "problem encountered by queue producer")
-				if err != nil {
-					if ignoreErrors {
-						grip.Warning(err)
-					} else {
-						grip.Critical(err)
-						return
-					}
+				if err := scheduleOp(q, op, ignoreErrors); err != nil {
+					return
 				}
 
 				count++
@@ -119,9 +113,13 @@ func PeriodicQueueOperation(ctx context.Context, q Queue, interval time.Duration
 func IntervalQueueOperation(ctx context.Context, q Queue, interval time.Duration, startAt time.Time, ignoreErrors bool, op QueueOperation) {
 	go func() {
 		initialWait := time.Now().Sub(startAt)
-		if initialWait > 0 {
+		if initialWait > time.Second {
 			grip.Infof("waiting %s to start scheduling an interval job", initialWait)
 			time.Sleep(initialWait)
+		}
+
+		if err := scheduleOp(q, op, ignoreErrors); err != nil {
+			return
 		}
 
 		count := 0
@@ -136,18 +134,25 @@ func IntervalQueueOperation(ctx context.Context, q Queue, interval time.Duration
 				})
 				return
 			case <-ticker.C:
-				err := errors.Wrap(op(q), "problem encountered during periodic job scheduling")
-				if err != nil {
-					if ignoreErrors {
-						grip.Warning(err)
-					} else {
-						grip.Critical(err)
-						return
-					}
+				if err := scheduleOp(q, op, ignoreErrors); err != nil {
+					return
 				}
 
 				count++
 			}
 		}
 	}()
+}
+
+func scheduleOp(q Queue, op QueueOperation, ignoreErrors bool) error {
+	if err := errors.Wrap(op(q), "problem encountered during periodic job scheduling"); err != nil {
+		if ignoreErrors {
+			grip.Warning(err)
+		} else {
+			grip.Critical(err)
+			return err
+		}
+	}
+
+	return nil
 }
