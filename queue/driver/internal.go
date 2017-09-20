@@ -4,9 +4,9 @@ import (
 	"sync"
 
 	"github.com/mongodb/amboy"
+	"github.com/mongodb/grip"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
-	"github.com/mongodb/grip"
 	"golang.org/x/net/context"
 )
 
