@@ -79,11 +79,11 @@ func (q *SimpleRemoteOrdered) Next(ctx context.Context) amboy.Job {
 			//
 			// The local version of this queue reads all jobs in and builds a DAG, which
 			// it then sorts and executes in order. This takes a more rudimentary approach.
+			id := job.ID()
 			switch dep.State() {
 			case dependency.Ready:
-				grip.Debugf("returning job from remote source, count = %d; duration = %s",
-					count, time.Since(start))
-
+				grip.Debugf("returning job %s from remote source, count = %d; duration = %s",
+					id, count, time.Since(start))
 				count++
 				return job
 			case dependency.Passed:
@@ -93,7 +93,7 @@ func (q *SimpleRemoteOrdered) Next(ctx context.Context) amboy.Job {
 			case dependency.Unresolved:
 				grip.Warning(message.MakeFieldsMessage("detected a dependency error",
 					message.Fields{
-						"job":   job.ID(),
+						"job":   id,
 						"edges": dep.Edges(),
 						"dep":   dep.Type(),
 					}))
@@ -108,7 +108,7 @@ func (q *SimpleRemoteOrdered) Next(ctx context.Context) amboy.Job {
 				grip.CatchWarning(q.driver.Unlock(job))
 
 				edges := dep.Edges()
-				grip.Debugf("job %s is blocked. eep! [%v]", job.ID(), edges)
+				grip.Debugf("job %s is blocked. eep! [%v]", id, edges)
 				if len(edges) == 1 {
 					dj, ok := q.Get(edges[0])
 					if ok {
@@ -117,20 +117,20 @@ func (q *SimpleRemoteOrdered) Next(ctx context.Context) amboy.Job {
 						continue
 					}
 				} else if len(edges) == 0 {
-					grip.Debugf("blocked task %s has no edges", job.ID())
+					grip.Debugf("blocked task %s has no edges", id)
 				} else {
 					grip.Debugf("job '%s' has %d dependencies, passing for now",
-						job.ID(), len(edges))
+						id, len(edges))
 				}
 
-				q.addBlocked(job.ID())
+				q.addBlocked(id)
 
 				continue
 			default:
 				grip.CatchWarning(q.driver.Unlock(job))
 				grip.Warning(message.MakeFieldsMessage("detected invalid dependency",
 					message.Fields{
-						"job":   job.ID(),
+						"job":   id,
 						"edges": dep.Edges(),
 						"dep":   dep.Type(),
 						"state": message.Fields{

@@ -6,24 +6,26 @@ import (
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/queue/driver"
-	"github.com/pkg/errors"
 	"github.com/mongodb/grip"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
 type remoteBase struct {
-	started bool
-	driver  driver.Driver
-	channel chan amboy.Job
-	blocked map[string]struct{}
-	runner  amboy.Runner
-	mutex   sync.RWMutex
+	started    bool
+	driver     driver.Driver
+	channel    chan amboy.Job
+	blocked    map[string]struct{}
+	dispatched map[string]struct{}
+	runner     amboy.Runner
+	mutex      sync.RWMutex
 }
 
 func newRemoteBase() *remoteBase {
 	return &remoteBase{
-		channel: make(chan amboy.Job),
-		blocked: make(map[string]struct{}),
+		channel:    make(chan amboy.Job),
+		blocked:    make(map[string]struct{}),
+		dispatched: make(map[string]struct{}),
 	}
 }
 
@@ -60,12 +62,11 @@ func (q *remoteBase) jobServer(ctx context.Context) {
 			return
 		default:
 			job := q.driver.Next()
-
-			if job == nil {
+			if !q.canDispatch(job) {
 				continue
 			}
-			stat := job.Status()
 
+			stat := job.Status()
 			if stat.InProgress || stat.Completed {
 				continue
 			}
@@ -90,8 +91,10 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
 	timer := time.NewTimer(0)
 	defer timer.Stop()
 
+	id := j.ID()
 	q.mutex.Lock()
-	delete(q.blocked, j.ID())
+	delete(q.blocked, id)
+	delete(q.dispatched, id)
 	q.mutex.Unlock()
 
 	for {
@@ -99,16 +102,11 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
 		case <-ctx.Done():
 			return
 		case <-timer.C:
-			err := q.driver.Lock(j)
-			if err != nil {
-				grip.Warning(err)
-				continue
-			}
 			stat := j.Status()
 			stat.InProgress = false
 			j.SetStatus(stat)
 
-			if err = q.driver.Save(j); err != nil {
+			if err := q.driver.Save(j); err != nil {
 				grip.Warningf("problem persisting job '%s', %+v", j.ID(), err)
 				timer.Reset(retryInterval)
 				continue
@@ -227,4 +225,21 @@ func (q *remoteBase) addBlocked(n string) {
 	defer q.mutex.Unlock()
 
 	q.blocked[n] = struct{}{}
+}
+
+func (q *remoteBase) canDispatch(j amboy.Job) bool {
+	if j == nil {
+		return false
+	}
+
+	id := j.ID()
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
+	if _, ok := q.dispatched[id]; ok {
+		return false
+	}
+
+	q.dispatched[id] = struct{}{}
+	return true
 }

@@ -43,7 +43,7 @@ func TestLocalOrderedQueueSuiteThreeWorker(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func TestRemoteMongoDBOrderedQueueSuiteTwoWorkers(t *testing.T) {
+func TestRemoteMongoDBOrderedQueueSuiteFourWorkers(t *testing.T) {
 	s := &OrderedQueueSuite{}
 	name := "test-" + uuid.NewV4().String()
 	uri := "mongodb://localhost"
@@ -193,19 +193,21 @@ func (s *OrderedQueueSuite) TestInternalRunnerCannotBeChangedAfterStartingAQueue
 }
 
 func (s *OrderedQueueSuite) TestResultsChannelProducesPointersToConsistentJobObjects() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	job := job.NewShellJob("true", "")
+	job := job.NewShellJob("echo true", "")
 	s.False(job.Status().Completed)
 
 	s.NoError(s.queue.Put(job))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	s.NoError(s.queue.Start(ctx))
 
-	amboy.Wait(s.queue)
+	grip.Critical(s.queue.Stats())
+	amboy.WaitCtxInterval(ctx, s.queue, 250*time.Millisecond)
+	grip.Critical(s.queue.Stats())
 
 	result, ok := <-s.queue.Results()
-	if s.True(ok) {
+	if s.True(ok, "%+v", s.queue.Stats()) {
 		s.Equal(job.ID(), result.ID())
 		s.True(result.Status().Completed)
 	}
@@ -232,7 +234,7 @@ func (s *OrderedQueueSuite) TestPassedIsCompletedButDoesNotRun() {
 	cwd := GetDirectoryOfFile()
 
 	j1 := job.NewShellJob("echo foo", "")
-	j2 := job.NewShellJob("true", "")
+	j2 := job.NewShellJob("echo true", "")
 	j1.SetDependency(dependency.NewCreatesFile(filepath.Join(cwd, "ordered_test.go")))
 	s.NoError(j1.Dependency().AddEdge(j2.ID()))
 
@@ -242,20 +244,25 @@ func (s *OrderedQueueSuite) TestPassedIsCompletedButDoesNotRun() {
 	s.False(j1.Status().Completed)
 	s.False(j2.Status().Completed)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	s.NoError(s.queue.Put(j1))
 	s.NoError(s.queue.Put(j2))
+	s.NoError(s.queue.Put(j1))
 
 	s.NoError(s.queue.Start(ctx))
 
+	grip.Critical(s.queue.Stats())
 	amboy.WaitCtxInterval(ctx, s.queue, 250*time.Millisecond)
+	grip.Critical(s.queue.Stats())
+
 	j1Refreshed, ok1 := s.queue.Get(j1.ID())
 	j2Refreshed, ok2 := s.queue.Get(j2.ID())
-	s.True(ok1)
-	s.True(ok2)
-	s.False(j1Refreshed.Status().Completed)
-	s.True(j2Refreshed.Status().Completed)
+	if s.True(ok1) {
+		s.False(j1Refreshed.Status().Completed)
+	}
+	if s.True(ok2) {
+		s.True(j2Refreshed.Status().Completed, "%+v", j2Refreshed.Status())
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////

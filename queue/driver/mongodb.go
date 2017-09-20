@@ -39,8 +39,6 @@ type MongoDBOptions struct {
 	URI      string
 	DB       string
 	Priority bool
-
-	// TODO it might be good to set lock timeouts here.
 }
 
 // DefaultMongoDBOptions constructs a new options object with default
