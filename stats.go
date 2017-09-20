@@ -1,6 +1,8 @@
 package amboy
 
 import (
+	"fmt"
+
 	"github.com/mongodb/grip"
 	"github.com/mongodb/grip/sometimes"
 )
@@ -15,6 +17,11 @@ type QueueStats struct {
 	Pending   int `bson:"pending" json:"pending" yaml:"pending"`
 	Blocked   int `bson:"blocked" json:"blocked" yaml:"blocked"`
 	Total     int `bson:"total" json:"total" yaml:"total"`
+}
+
+func (s QueueStats) String() string {
+	return fmt.Sprintf("running='%d', completed='%d', pending='%d', blocked='%d', total='%d'",
+		s.Running, s.Completed, s.Pending, s.Blocked, s.Total)
 }
 
 func (s QueueStats) isComplete() bool {
