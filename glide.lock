@@ -1,14 +1,8 @@
 hash: 8ee8e1a14968cf6c24ca5741992e229bd8d88f06ec31ba649860cdd240102a9d
 updated: 2016-06-16T13:39:28.50048459-04:00
 imports:
-- name: github.com/gonum/graph
-  version: 50b27dea7ebbfb052dfaf91681afc6fde28d8796
-- name: github.com/gonum/matrix
-  version: da86d6b623f6fd46365c53526c9df6138513cc41
-- name: github.com/gonum/blas
-  version: 37e82626499e1df7c54aeaba0959fd6e7e8dc1e4
-- name: github.com/gonum/floats
-  version: f74b330d45c56584a6ea7a27f5c64ea2900631e9
+- name: gonum.org/v1/gonum
+  version: aff0e10c44138b1247d90efb9117f68ba7c76f0c
 
 - name: golang.org/x/tools
   version: 9deed8c6c1c89e0b6d68d727f215de8e851d1064
