@@ -2,9 +2,8 @@ package: github.com/mongodb/amboy
 import:
 - package: github.com/VividCortex/ewma
 - package: github.com/davecgh/go-spew
-- package: github.com/gonum/blas 
-- package: github.com/gonum/floats
 - package: github.com/gonum/graph
+- package: github.com/gonum/matrix
 - package: github.com/mongodb/grip
 - package: github.com/pkg/errors
 - package: github.com/pmezard/go-difflib
@@ -15,4 +14,4 @@ import:
 - package: golang.org/x/net
 - package: gopkg.in/mgo.v2
 - package: gopkg.in/yaml.v2
-- package: github.com/VividCortex/ewma
+- package: github.com/gonum/blas

@@ -3,6 +3,19 @@ updated: 2016-06-16T13:39:28.50048459-04:00
 imports:
 - name: github.com/gonum/graph
   version: 50b27dea7ebbfb052dfaf91681afc6fde28d8796
+- name: github.com/gonum/matrix
+  version: da86d6b623f6fd46365c53526c9df6138513cc41
+- name: github.com/gonum/blas
+  version: 37e82626499e1df7c54aeaba0959fd6e7e8dc1e4
+- name: github.com/gonum/floats
+  version: f74b330d45c56584a6ea7a27f5c64ea2900631e9
+
+- name: golang.org/x/tools
+  version: 9deed8c6c1c89e0b6d68d727f215de8e851d1064
+  subpackages:
+    - container/intsets
+- name: github.com/satori/go.uuid
+  version: 879c5887cd475cd7864858769793b2ceb0d44feb
 
 - name: github.com/pkg/errors
   version: a22138067af1c4942683050411a841ade67fe1eb
@@ -12,7 +25,7 @@ imports:
 - name: github.com/stretchr/objx
   version: 1a9d0bb9f541897e62256577b352fdbc1fb4fd94
 - name: github.com/stretchr/testify
-  version: 890a5c3458b43e6104ff5da8dfa139d013d77544y
+  version: 890a5c3458b43e6104ff5da8dfa139d013d77544
 - name: github.com/pmezard/go-difflib
   version: 792786c7400a136282c1664665ae0a8db921c6c2
 
