@@ -90,6 +90,25 @@ func (d *Internal) Save(j amboy.Job) error {
 	return nil
 }
 
+func (d *Internal) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
+	d.jobs.RLock()
+	defer d.jobs.RUnlock()
+	out := make(chan amboy.JobStatusInfo, len(d.jobs.m))
+	defer close(out)
+
+	for _, job := range d.jobs.m {
+		if ctx.Err() != nil {
+			return out
+		}
+
+		status := job.Status()
+		status.ID = job.ID()
+		out <- status
+	}
+
+	return out
+}
+
 // SaveStatus persists only the status document in the job in the
 // persistence layer. If the job does not exist, this method produces
 // an error.
@@ -114,14 +133,11 @@ func (d *Internal) Jobs() <-chan amboy.Job {
 	defer d.jobs.RUnlock()
 	output := make(chan amboy.Job, len(d.jobs.m))
 
-	go func() {
-		d.jobs.RLock()
-		defer d.jobs.RUnlock()
-		for _, job := range d.jobs.m {
-			output <- job
-		}
-		close(output)
-	}()
+	for _, job := range d.jobs.m {
+		output <- job
+	}
+
+	close(output)
 
 	return output
 }
