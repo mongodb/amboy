@@ -27,7 +27,7 @@ func (s *GripInternalSuite) SetupSuite() {
 	s.name = "test"
 	s.grip = NewGrip(s.name)
 	s.Equal(s.grip.Name(), s.name)
-	s.grip.SetThreshold(level.Trace)
+	s.NoError(s.grip.SetThreshold(level.Trace))
 }
 
 func (s *GripInternalSuite) SetupTest() {
@@ -65,7 +65,7 @@ func (s *GripInternalSuite) TestSetSenderErrorsForNil() {
 }
 
 func (s *GripInternalSuite) TestPanicSenderRespectsTThreshold() {
-	s.grip.SetThreshold(level.Notice)
+	s.NoError(s.grip.SetThreshold(level.Notice))
 	s.True(level.Debug < s.grip.ThresholdLevel())
 
 	// test that there is a no panic if the message isn't "logabble"
@@ -88,17 +88,17 @@ func (s *GripInternalSuite) TestConditionalSend() {
 	msgTwo := message.NewLineMessage(level.Notice, "bar")
 
 	// when the conditional argument is true, it should work
-	s.grip.conditionalSend(true, msg)
+	s.grip.sendConditional(true, msg)
 	s.Equal(sink.GetMessage().Message, msg)
 
 	// when the conditional argument is true, it should work, and the channel is fifo
-	s.grip.conditionalSend(false, msgTwo)
-	s.grip.conditionalSend(true, msg)
+	s.grip.sendConditional(false, msgTwo)
+	s.grip.sendConditional(true, msg)
 	s.Equal(sink.GetMessage().Message, msg)
 
 	// change the order
-	s.grip.conditionalSend(true, msg)
-	s.grip.conditionalSend(false, msgTwo)
+	s.grip.sendConditional(true, msg)
+	s.grip.sendConditional(false, msgTwo)
 	s.Equal(sink.GetMessage().Message, msg)
 }
 

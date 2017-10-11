@@ -12,7 +12,7 @@ import (
 	"net/url"
 	"testing"
 
-	"golang.org/x/net/context"
+	"context"
 )
 
 func TestRegisterBrokenAuthHeaderProvider(t *testing.T) {

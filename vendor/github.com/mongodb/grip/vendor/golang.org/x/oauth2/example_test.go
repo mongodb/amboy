@@ -5,8 +5,8 @@
 package oauth2_test
 
 import (
+	"context"
 	"fmt"
-	"golang.org/x/net/context"
 	"log"
 	"net/http"
 	"time"

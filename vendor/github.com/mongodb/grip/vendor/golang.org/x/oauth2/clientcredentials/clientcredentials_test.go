@@ -5,7 +5,7 @@
 package clientcredentials
 
 import (
-	"golang.org/x/net/context"
+	"context"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"

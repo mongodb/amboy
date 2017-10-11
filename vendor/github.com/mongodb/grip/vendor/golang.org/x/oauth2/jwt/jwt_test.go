@@ -5,9 +5,9 @@
 package jwt
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
-	"golang.org/x/net/context"
 	"net/http"
 	"net/http/httptest"
 	"strings"

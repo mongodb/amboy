@@ -12,21 +12,17 @@ imports:
 - name: github.com/stretchr/objx
   version: 1a9d0bb9f541897e62256577b352fdbc1fb4fd94
 - name: github.com/stretchr/testify
-  version: 890a5c3458b43e6104ff5da8dfa139d013d77544
+  version: 890a5c3458b43e6104ff5da8dfa139d013d77544y
 - name: github.com/pmezard/go-difflib
   version: 792786c7400a136282c1664665ae0a8db921c6c2
 
 - name: github.com/mongodb/grip
-  version: 12ffd76df22398938c74a01d4d237be9631bc1f0
+  version: 4beebb80a809873037c5d9b370a9235f33cd3096
 
 - name: github.com/tychoish/gimlet
-  version: efde070a6840e91815e554de155dd8cec5f10ce8
+  version: 47913accb7804b3a72b1c0ad3e44ff94d9447f03
 - name: github.com/pkg/errors
   version: 17b591df37844cde689f4d5813e5cea0927d8dd2
-- name: golang.org/x/net
-  version: 1358eff22f0dd0c54fc521042cc607f6ff4b531a
-  subpackages:
-  - context
 - name: gopkg.in/mgo.v2
   version: 3f83fa5005286a7fe593b055f0d7771a7dce4655
   subpackages:

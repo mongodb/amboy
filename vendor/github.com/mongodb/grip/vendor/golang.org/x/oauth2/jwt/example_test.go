@@ -5,7 +5,7 @@
 package jwt_test
 
 import (
-	"golang.org/x/net/context"
+	"context"
 	"golang.org/x/oauth2/jwt"
 )
 

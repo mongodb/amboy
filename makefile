@@ -178,7 +178,6 @@ vendor-clean:
 	rm -rf vendor/github.com/mongodb/grip/vendor/github.com/davecgh/
 	rm -rf vendor/github.com/mongodb/grip/vendor/github.com/stretchr/
 	rm -rf vendor/github.com/mongodb/grip/vendor/github.com/pmezard/
-	rm -rf vendor/github.com/mongodb/grip/vendor/golang.org/x/net/
 	find vendor/ -name "*.gif" -o -name "*.gz" -o -name "*.png" -o -name "*.ico" -o -name "*.dat" -o -name "*testdata" | xargs rm -rf
 #   define dependencies for buildscripts
 phony += vendor-deps vendor-clean
