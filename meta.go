@@ -13,7 +13,7 @@ import (
 func ResolveErrors(ctx context.Context, q Queue) error {
 	catcher := grip.NewCatcher()
 
-	for result := range q.Results() {
+	for result := range q.Results(ctx) {
 		if err := ctx.Err(); err != nil {
 			catcher.Add(err)
 			break

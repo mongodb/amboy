@@ -143,7 +143,7 @@ func (q *LocalOrdered) Next(ctx context.Context) amboy.Job {
 // closed when all results have been exhausted, even if there are more
 // results pending. Other implementations may have different semantics
 // for this method.
-func (q *LocalOrdered) Results() <-chan amboy.Job {
+func (q *LocalOrdered) Results(ctx context.Context) <-chan amboy.Job {
 	q.mutex.RLock()
 	output := make(chan amboy.Job, len(q.tasks.completed))
 	q.mutex.RUnlock()
@@ -151,14 +151,34 @@ func (q *LocalOrdered) Results() <-chan amboy.Job {
 	go func() {
 		q.mutex.RLock()
 		defer q.mutex.RUnlock()
+		defer close(output)
 		for _, job := range q.tasks.m {
+			if ctx.Err() != nil {
+				return
+			}
+
 			if job.Status().Completed {
 				output <- job
 			}
 		}
-		close(output)
 	}()
 
+	return output
+}
+
+func (q *LocalOrdered) JobStatus(ctx context.Context) <-chan amboy.JobStatusInfo {
+	output := make(chan amboy.JobStatusInfo)
+	go func() {
+		q.mutex.RLock()
+		defer q.mutex.RUnlock()
+		defer close(output)
+		for _, job := range q.tasks.m {
+			if ctx.Err() != nil {
+				return
+			}
+			output <- job.Status()
+		}
+	}()
 	return output
 }
 
