@@ -172,19 +172,18 @@ func (r *Group) Start(ctx context.Context) error {
 		name := fmt.Sprintf("worker-%d", w)
 
 		go func(name string) {
+			defer r.wg.Done()
 			grip.Debugf("worker (%s) waiting for jobs", name)
-		workLoop:
 			for unit := range work {
 				select {
 				case <-ctx.Done():
-					break workLoop
+					return
 				default:
 					unit.j.Run()
 					unit.q.Complete(ctx, unit.j)
 				}
 			}
 			grip.Debugf("worker (%s) exiting", name)
-			r.wg.Done()
 		}(name)
 	}
 
