@@ -144,9 +144,7 @@ func (q *LocalOrdered) Next(ctx context.Context) amboy.Job {
 // results pending. Other implementations may have different semantics
 // for this method.
 func (q *LocalOrdered) Results(ctx context.Context) <-chan amboy.Job {
-	q.mutex.RLock()
-	output := make(chan amboy.Job, len(q.tasks.completed))
-	q.mutex.RUnlock()
+	output := make(chan amboy.Job)
 
 	go func() {
 		q.mutex.RLock()
@@ -166,6 +164,8 @@ func (q *LocalOrdered) Results(ctx context.Context) <-chan amboy.Job {
 	return output
 }
 
+// JobStatus returns job status documents for all jobs tracked by the
+// queue. This implementation returns status for jobs in a random order.
 func (q *LocalOrdered) JobStatus(ctx context.Context) <-chan amboy.JobStatusInfo {
 	output := make(chan amboy.JobStatusInfo)
 	go func() {
@@ -176,7 +176,9 @@ func (q *LocalOrdered) JobStatus(ctx context.Context) <-chan amboy.JobStatusInfo
 			if ctx.Err() != nil {
 				return
 			}
-			output <- job.Status()
+			s := job.Status()
+			s.ID = job.ID()
+			output <- s
 		}
 	}()
 	return output

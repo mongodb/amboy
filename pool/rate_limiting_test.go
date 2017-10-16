@@ -41,12 +41,13 @@ func TestSimpleRateLimitingConstructor(t *testing.T) {
 }
 
 func TestAverageRateLimitingConstructor(t *testing.T) {
+	assert := assert.New(t) // nolint
+
 	var (
 		runner amboy.Runner
 		err    error
 	)
 
-	assert := assert.New(t)
 	queue := &QueueTester{
 		toProcess: make(chan amboy.Job),
 		storage:   make(map[string]amboy.Job),
@@ -71,7 +72,7 @@ func TestAverageRateLimitingConstructor(t *testing.T) {
 }
 
 func TestAvergeTimeCalculator(t *testing.T) {
-	assert := assert.New(t)
+	assert := assert.New(t) // nolint
 
 	p := ewmaRateLimiting{
 		ewma:   ewma.NewMovingAverage(),

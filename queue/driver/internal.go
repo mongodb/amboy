@@ -90,6 +90,7 @@ func (d *Internal) Save(j amboy.Job) error {
 	return nil
 }
 
+// JobStats returns job status documents for all jobs in the storage layer.
 func (d *Internal) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 	d.jobs.RLock()
 	defer d.jobs.RUnlock()

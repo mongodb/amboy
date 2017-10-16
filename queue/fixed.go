@@ -107,6 +107,9 @@ func (q *LocalLimitedSize) Results(ctx context.Context) <-chan amboy.Job {
 	return q.results.Contents(ctx)
 }
 
+// JobStatus returns an iterator for job status documents for all jobs
+// in the queue. For this queue implementation *queued* jobs are returned
+// first.
 func (q *LocalLimitedSize) JobStatus(ctx context.Context) <-chan amboy.JobStatusInfo {
 	out := make(chan amboy.JobStatusInfo)
 
@@ -127,7 +130,9 @@ func (q *LocalLimitedSize) JobStatus(ctx context.Context) <-chan amboy.JobStatus
 		}
 
 		for j := range q.results.Contents(ctx) {
-			out <- j.Status()
+			s := j.Status()
+			s.ID = j.ID()
+			out <- s
 		}
 	}()
 	return out

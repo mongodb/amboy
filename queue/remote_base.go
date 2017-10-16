@@ -120,11 +120,14 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
 }
 
 // Results provides a generator that iterates all completed jobs.
-func (q *remoteBase) Results() <-chan amboy.Job {
+func (q *remoteBase) Results(ctx context.Context) <-chan amboy.Job {
 	output := make(chan amboy.Job)
 	go func() {
 		defer close(output)
 		for j := range q.driver.Jobs() {
+			if ctx.Err() != nil {
+				return
+			}
 			if j.Status().Completed {
 				output <- j
 			}
@@ -132,6 +135,10 @@ func (q *remoteBase) Results() <-chan amboy.Job {
 		}
 	}()
 	return output
+}
+
+func (q *remoteBase) JobStatus(ctx context.Context) <-chan amboy.JobStatusInfo {
+	return q.driver.JobStats(ctx)
 }
 
 // Stats returns a amboy.QueueStats object that reflects the progress

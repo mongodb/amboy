@@ -97,6 +97,7 @@ func (p *Priority) Jobs() <-chan amboy.Job {
 	return p.storage.Contents()
 }
 
+// JobStats returns job status documents for all jobs in the storage layer.
 func (p *Priority) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 	out := make(chan amboy.JobStatusInfo)
 	go func() {

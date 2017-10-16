@@ -264,6 +264,9 @@ func (d *MongoDB) Jobs() <-chan amboy.Job {
 	return output
 }
 
+// JobStats returns job status documents for all jobs in the storage layer.
+//
+// This implementation returns documents in reverse modification time.
 func (d *MongoDB) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 	output := make(chan amboy.JobStatusInfo)
 	go func() {
