@@ -93,6 +93,21 @@ func (s *DriverSuite) TestInitialValues() {
 	s.Equal(0, stats.Total)
 }
 
+func (s *DriverSuite) TestPutJobDoesNotAllowDuplicateIds() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s.NoError(s.driver.Open(ctx))
+
+	j := job.NewShellJob("echo foo", "")
+
+	err := s.driver.Put(j)
+	s.NoError(err)
+
+	for i := 0; i < 10; i++ {
+		s.Error(s.driver.Put(j))
+	}
+}
+
 func (s *DriverSuite) TestSaveJobPersistsJobInDriver() {
 	j := job.NewShellJob("echo foo", "")
 

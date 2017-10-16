@@ -13,6 +13,7 @@ type Driver interface {
 	Close()
 
 	Get(string) (amboy.Job, error)
+	Put(amboy.Job) error
 	Save(amboy.Job) error
 	SaveStatus(amboy.Job, amboy.JobStatusInfo) error
 

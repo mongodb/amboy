@@ -42,9 +42,7 @@ func NewLocalPriorityQueue(workers int) *LocalPriorityQueue {
 // this operation updates it in the queue, potentially reordering the
 // queue accordingly.
 func (q *LocalPriorityQueue) Put(j amboy.Job) error {
-	q.storage.Push(j)
-
-	return nil
+	return q.storage.Insert(j)
 }
 
 // Get takes the name of a job and returns the job from the queue that

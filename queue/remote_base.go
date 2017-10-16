@@ -32,9 +32,7 @@ func newRemoteBase() *remoteBase {
 // Put adds a Job to the queue. It is generally an error to add the
 // same job to a queue more than once, but this depends on the
 // implementation of the underlying driver.
-func (q *remoteBase) Put(j amboy.Job) error {
-	return q.driver.Save(j)
-}
+func (q *remoteBase) Put(j amboy.Job) error { return q.driver.Put(j) }
 
 // Get retrieves a job from the queue's storage. The second value
 // reflects the existence of a job of that name in the queue's

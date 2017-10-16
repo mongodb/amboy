@@ -52,7 +52,8 @@ func runUnorderedSmokeTest(ctx context.Context, q amboy.Queue, size int, assert 
 		go func(num int) {
 			for _, name := range testNames {
 				cmd := fmt.Sprintf("echo %s.%d", name, num)
-				assert.NoError(q.Put(job.NewShellJob(cmd, "")),
+				j := job.NewShellJob(cmd, "")
+				assert.NoError(q.Put(j),
 					fmt.Sprintf("with %d workers", num))
 			}
 			wg.Done()
@@ -89,6 +90,7 @@ func runMultiQueueSingleBackEndSmokeTest(ctx context.Context, qOne, qTwo amboy.Q
 				j := job.NewShellJob(cmd, "")
 				if i%2 == 0 {
 					assert.NoError(qOne.Put(j))
+					assert.Error(qOne.Put(j))
 					continue
 				}
 				assert.NoError(qTwo.Put(j))
