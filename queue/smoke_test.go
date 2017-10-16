@@ -71,7 +71,7 @@ func runUnorderedSmokeTest(ctx context.Context, q amboy.Queue, size int, assert 
 	}
 
 	statCounter := 0
-	for stat := range q.JobStatus(ctx) {
+	for stat := range q.JobStats(ctx) {
 		statCounter++
 		assert.True(stat.ID != "")
 	}
@@ -200,7 +200,7 @@ func runOrderedSmokeTest(ctx context.Context, q amboy.Queue, size int, startBefo
 	}
 
 	statCounter := 0
-	for stat := range q.JobStatus(ctx) {
+	for stat := range q.JobStats(ctx) {
 		statCounter++
 		assert.True(stat.ID != "")
 	}

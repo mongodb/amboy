@@ -164,11 +164,11 @@ func (q *LocalShuffled) Results(ctx context.Context) <-chan amboy.Job {
 	return output
 }
 
-// JobStatus returns JobStatusInfo objects for all jobs tracked by the
+// JobStats returns JobStatusInfo objects for all jobs tracked by the
 // queue. The operation returns jobs first that have been dispatched
 // (e.g. currently working,) then pending (queued for dispatch,) and
 // finally completed.
-func (q *LocalShuffled) JobStatus(ctx context.Context) <-chan amboy.JobStatusInfo {
+func (q *LocalShuffled) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 	out := make(chan amboy.JobStatusInfo)
 
 	q.operations <- func(pending map[string]amboy.Job,

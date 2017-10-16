@@ -94,9 +94,9 @@ func (q *LocalPriorityQueue) Results(ctx context.Context) <-chan amboy.Job {
 	return output
 }
 
-// JobStatus returns a job status for every job stored in the
+// JobStats returns a job status for every job stored in the
 // queue. Does not include currently in progress tasks.
-func (q *LocalPriorityQueue) JobStatus(ctx context.Context) <-chan amboy.JobStatusInfo {
+func (q *LocalPriorityQueue) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 	out := make(chan amboy.JobStatusInfo)
 
 	go func() {

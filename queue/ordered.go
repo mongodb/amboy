@@ -164,9 +164,9 @@ func (q *LocalOrdered) Results(ctx context.Context) <-chan amboy.Job {
 	return output
 }
 
-// JobStatus returns job status documents for all jobs tracked by the
+// JobStats returns job status documents for all jobs tracked by the
 // queue. This implementation returns status for jobs in a random order.
-func (q *LocalOrdered) JobStatus(ctx context.Context) <-chan amboy.JobStatusInfo {
+func (q *LocalOrdered) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 	output := make(chan amboy.JobStatusInfo)
 	go func() {
 		q.mutex.RLock()

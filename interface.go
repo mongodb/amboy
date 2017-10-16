@@ -107,7 +107,9 @@ type Queue interface {
 	// Returns a channel that produces completed Job objects.
 	Results(context.Context) <-chan Job
 
-	JobStatus(context.Context) <-chan JobStatusInfo
+	// Returns a channel that produces the status objects for all
+	// jobs in the queue, completed and otherwise.
+	JobStats(context.Context) <-chan JobStatusInfo
 
 	// Returns an object that contains statistics about the
 	// current state of the Queue.

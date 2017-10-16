@@ -179,9 +179,9 @@ func (q *LocalUnordered) Results(ctx context.Context) <-chan amboy.Job {
 	return output
 }
 
-// JobStatus returns JobStatusInfo objects for all jobs tracked by the
+// JobStats returns JobStatusInfo objects for all jobs tracked by the
 // queue, in no particular order.
-func (q *LocalUnordered) JobStatus(ctx context.Context) <-chan amboy.JobStatusInfo {
+func (q *LocalUnordered) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 	out := make(chan amboy.JobStatusInfo)
 
 	go func() {

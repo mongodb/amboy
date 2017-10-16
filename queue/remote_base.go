@@ -137,7 +137,7 @@ func (q *remoteBase) Results(ctx context.Context) <-chan amboy.Job {
 	return output
 }
 
-func (q *remoteBase) JobStatus(ctx context.Context) <-chan amboy.JobStatusInfo {
+func (q *remoteBase) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 	return q.driver.JobStats(ctx)
 }
 

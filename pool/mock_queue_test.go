@@ -131,7 +131,7 @@ func (q *QueueTester) Results(ctx context.Context) <-chan amboy.Job {
 	return output
 }
 
-func (q *QueueTester) JobStatus(ctx context.Context) <-chan amboy.JobStatusInfo {
+func (q *QueueTester) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 	output := make(chan amboy.JobStatusInfo)
 	go func() {
 		defer close(output)
