@@ -97,6 +97,25 @@ func (p *Priority) Jobs() <-chan amboy.Job {
 	return p.storage.Contents()
 }
 
+// JobStats returns job status documents for all jobs in the storage layer.
+func (p *Priority) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
+	out := make(chan amboy.JobStatusInfo)
+	go func() {
+		defer close(out)
+		for job := range p.storage.Contents() {
+			if ctx.Err() != nil {
+				return
+
+			}
+			status := job.Status()
+			status.ID = job.ID()
+			out <- status
+		}
+	}()
+
+	return out
+}
+
 // Next returns the next, highest priority Job from the Driver's
 // backing storage. If there are no queued jobs, the job object is
 // nil.

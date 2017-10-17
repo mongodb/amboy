@@ -112,17 +112,39 @@ func (q *QueueTester) Start(ctx context.Context) error {
 	return nil
 }
 
-func (q *QueueTester) Results() <-chan amboy.Job {
+func (q *QueueTester) Results(ctx context.Context) <-chan amboy.Job {
 	output := make(chan amboy.Job)
 
-	go func(m map[string]amboy.Job) {
-		for _, job := range m {
+	go func() {
+		defer close(output)
+		for _, job := range q.storage {
+			if ctx.Err() != nil {
+				return
+			}
+
 			if job.Status().Completed {
 				output <- job
 			}
 		}
-		close(output)
-	}(q.storage)
+	}()
+
+	return output
+}
+
+func (q *QueueTester) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
+	output := make(chan amboy.JobStatusInfo)
+	go func() {
+		defer close(output)
+		for _, job := range q.storage {
+			if ctx.Err() != nil {
+				return
+
+			}
+			status := job.Status()
+			status.ID = job.ID()
+			output <- status
+		}
+	}()
 
 	return output
 }

@@ -206,7 +206,7 @@ func (s *OrderedQueueSuite) TestResultsChannelProducesPointersToConsistentJobObj
 	amboy.WaitCtxInterval(ctx, s.queue, 250*time.Millisecond)
 	grip.Critical(s.queue.Stats())
 
-	result, ok := <-s.queue.Results()
+	result, ok := <-s.queue.Results(ctx)
 	if s.True(ok, "%+v", s.queue.Stats()) {
 		s.Equal(job.ID(), result.ID())
 		s.True(result.Status().Completed)

@@ -140,6 +140,7 @@ func (d *MongoDB) setupDB() error {
 	} else {
 		catcher.Add(jobs.EnsureIndexKey("status.completed", "status.in_prog"))
 	}
+	catcher.Add(jobs.EnsureIndexKey("status.mod_ts"))
 
 	return errors.Wrap(catcher.Resolve(), "problem building indexes")
 }
@@ -247,8 +248,8 @@ func (d *MongoDB) Jobs() <-chan amboy.Job {
 		session, jobs := d.getJobsCollection()
 		defer session.Close()
 
-		results := jobs.Find(nil).Iter()
-		defer grip.CatchError(results.Close())
+		results := jobs.Find(nil).Sort("-status.mod_ts").Iter()
+		defer results.Close()
 		j := &registry.JobInterchange{}
 		for results.Next(j) {
 			job, err := registry.ConvertToJob(j)
@@ -259,6 +260,35 @@ func (d *MongoDB) Jobs() <-chan amboy.Job {
 			output <- job
 		}
 		grip.CatchError(results.Err())
+	}()
+	return output
+}
+
+// JobStats returns job status documents for all jobs in the storage layer.
+//
+// This implementation returns documents in reverse modification time.
+func (d *MongoDB) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
+	output := make(chan amboy.JobStatusInfo)
+	go func() {
+		defer close(output)
+		session, jobs := d.getJobsCollection()
+		defer session.Close()
+
+		results := jobs.Find(nil).Select(bson.M{
+			"_id":    1,
+			"status": 1,
+		}).Sort("-status.mod_ts").Iter()
+		defer results.Close()
+
+		j := &registry.JobInterchange{}
+		for results.Next(j) {
+			if ctx.Err() != nil {
+				return
+			}
+
+			j.Status.ID = j.Name
+			output <- j.Status
+		}
 	}()
 	return output
 }

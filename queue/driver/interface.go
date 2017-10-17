@@ -20,6 +20,7 @@ type Driver interface {
 	Next() amboy.Job
 
 	Stats() amboy.QueueStats
+	JobStats(context.Context) <-chan amboy.JobStatusInfo
 
 	// The Lock and Unlock methods are typically provided by the
 	// LockManager type.
