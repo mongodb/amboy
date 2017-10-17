@@ -128,3 +128,29 @@ func TestAvergeTimeCalculator(t *testing.T) {
 	assert.Equal(p.getNextTime(time.Hour), time.Duration(0))
 
 }
+
+func TestSimpleRateLimitingWorkerHandlesPanicingJobs(t *testing.T) {
+	assert := assert.New(t) // nolint
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	p := &simpleRateLimited{}
+	p.queue = &QueueTester{
+		toProcess: make(chan amboy.Job),
+		storage:   make(map[string]amboy.Job),
+	}
+	assert.NotPanics(func() { p.worker(ctx, jobsChanWithPanicingJobs(ctx, 10)) })
+}
+
+func TestEWMARateLimitingWorkerHandlesPanicingJobs(t *testing.T) {
+	assert := assert.New(t) // nolint
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	p := &ewmaRateLimiting{}
+	p.queue = &QueueTester{
+		toProcess: make(chan amboy.Job),
+		storage:   make(map[string]amboy.Job),
+	}
+	assert.NotPanics(func() { p.worker(ctx, jobsChanWithPanicingJobs(ctx, 10)) })
+}

@@ -97,9 +97,14 @@ func worker(ctx context.Context, jobs <-chan amboy.Job, q amboy.Queue) {
 	defer func() {
 		// if we hit a panic we want to add an error to the job;
 		err = recovery.HandlePanicWithError(recover(), nil, "worker process encountered error")
-		job.AddError(err)
-		// start a replacement worker.
-		worker(ctx, jobs, q)
+		if err != nil {
+			if job != nil {
+				job.AddError(err)
+				q.Complete(ctx, job)
+			}
+			// start a replacement worker.
+			go worker(ctx, jobs, q)
+		}
 	}()
 
 	for {
