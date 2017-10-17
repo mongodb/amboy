@@ -70,9 +70,14 @@ func (p *Priority) Get(name string) (amboy.Job, error) {
 // storage. If the job is not tracked by the Driver, this operation is
 // an error.
 func (p *Priority) Save(j amboy.Job) error {
-	p.storage.Push(j)
+	p.storage.Save(j)
 
 	return nil
+}
+
+// Put saves a new job returning an error if that job already exists.
+func (p *Priority) Put(j amboy.Job) error {
+	return errors.WithStack(p.storage.Insert(j))
 }
 
 // SaveStatus persists only the status document in the job in the

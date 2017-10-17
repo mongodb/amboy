@@ -82,14 +82,11 @@ func (q *LocalOrdered) Put(j amboy.Job) error {
 	defer q.mutex.Unlock()
 
 	if q.started {
-		return fmt.Errorf("cannot add %s because ordered task dispatching has begun", name)
+		return errors.Errorf("cannot add %s because ordered task dispatching has begun", name)
 	}
 
 	if _, ok := q.tasks.m[name]; ok {
-		id := q.tasks.ids[name]
-		q.tasks.m[name] = j
-		q.tasks.nodes[id] = j
-		return nil
+		return errors.Errorf("cannot add %s because duplicate job ids are not allowed", name)
 	}
 
 	node := q.tasks.graph.NewNode()

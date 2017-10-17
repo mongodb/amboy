@@ -198,15 +198,35 @@ func (d *MongoDB) getAtomicQuery(jobName string, stat amboy.JobStatusInfo) bson.
 	}
 }
 
-// Save takes a job object and updates that job in the persistence
-// layer. Replaces or updates an existing job with the same ID
-func (d *MongoDB) Save(j amboy.Job) error {
-	name := j.ID()
+// Put inserts the job into the collection, returning an error when that job already exists.
+func (d *MongoDB) Put(j amboy.Job) error {
 	job, err := registry.MakeJobInterchange(j)
 	if err != nil {
-		return errors.Wrap(err, "problem converting error to interchange format")
+		return errors.Wrap(err, "problem converting job to interchange format")
 	}
 
+	name := j.ID()
+	session, jobs := d.getJobsCollection()
+	defer session.Close()
+
+	if err = jobs.Insert(job); err != nil {
+		return errors.Wrapf(err, "problem saving new job %s", name)
+	}
+
+	grip.Debugf("saved job '%s'", name)
+
+	return nil
+}
+
+// Save takes a job object and updates that job in the persistence
+// layer. Replaces or updates an existing job with the same ID.
+func (d *MongoDB) Save(j amboy.Job) error {
+	job, err := registry.MakeJobInterchange(j)
+	if err != nil {
+		return errors.Wrap(err, "problem converting job to interchange format")
+	}
+
+	name := j.ID()
 	session, jobs := d.getJobsCollection()
 	defer session.Close()
 

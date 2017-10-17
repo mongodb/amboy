@@ -98,6 +98,7 @@ func runMultiQueueSingleBackEndSmokeTest(ctx context.Context, qOne, qTwo amboy.Q
 				j := job.NewShellJob(cmd, "")
 				if i%2 == 0 {
 					assert.NoError(qOne.Put(j))
+					assert.Error(qOne.Put(j))
 					continue
 				}
 				assert.NoError(qTwo.Put(j))
