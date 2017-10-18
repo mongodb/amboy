@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/mongodb/amboy"
+	"github.com/mongodb/amboy/job"
 	"github.com/pkg/errors"
 )
 
@@ -147,4 +148,37 @@ func (q *QueueTester) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 	}()
 
 	return output
+}
+
+type jobThatPanics struct {
+	job.Base
+}
+
+func (j *jobThatPanics) Run() {
+	defer j.MarkComplete()
+
+	panic("panic err")
+}
+
+func jobsChanWithPanicingJobs(ctx context.Context, num int) <-chan amboy.Job {
+	out := make(chan amboy.Job)
+
+	go func() {
+		defer close(out) // nolint
+		count := 0
+		for {
+			if count >= num {
+				return
+			}
+
+			select {
+			case <-ctx.Done():
+				return
+			case out <- &jobThatPanics{}:
+				count++
+			}
+		}
+	}()
+
+	return out
 }
