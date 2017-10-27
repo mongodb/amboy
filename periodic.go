@@ -87,12 +87,16 @@ func PeriodicQueueOperation(ctx context.Context, q Queue, interval time.Duration
 		var err error
 
 		defer func() {
-			if ignoreErrors {
-				err = nil
-			}
+			err = recovery.HandlePanicWithError(recover(), err, "periodic background scheduler error")
+			if err != nil {
+				if !ignoreErrors {
+					return
+				}
 
-			err = recovery.HandlePanicWithError(recover(), err, "worker process encountered error")
-			if err != nil && ctx.Err() == nil {
+				if ctx.Err() != nil {
+					return
+				}
+
 				PeriodicQueueOperation(ctx, q, interval, ignoreErrors, op)
 			}
 		}()
@@ -129,12 +133,17 @@ func IntervalQueueOperation(ctx context.Context, q Queue, interval time.Duration
 		var err error
 
 		defer func() {
-			if ignoreErrors {
-				err = nil
-			}
+			err = recovery.HandlePanicWithError(recover(), err, "interval background job scheduler")
 
-			err = recovery.HandlePanicWithError(recover(), err, "worker process encountered error")
-			if err != nil && ctx.Err() == nil {
+			if err != nil {
+				if !ignoreErrors {
+					return
+				}
+
+				if ctx.Err() != nil {
+					return
+				}
+
 				IntervalQueueOperation(ctx, q, interval, startAt, ignoreErrors, op)
 			}
 		}()
