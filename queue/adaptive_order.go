@@ -19,6 +19,13 @@ type localAdaptiveOrdering struct {
 	runner     amboy.Runner
 }
 
+// NewAdaptiveOrderedLocalQueue provides a queue implementation that
+// stores jobs in memory, and dispatches tasks based on the dependency
+// information.
+//
+// Use this implementation rather than LocalOrderedQueue when you need
+// to add jobs *after* starting the queue, and when you want to avoid
+// the higher potential overhead of the remote-backed queues.
 func NewAdaptiveOrderedLocalQueue(workers int) amboy.Queue {
 	q := &localAdaptiveOrdering{}
 	r := pool.NewLocalWorkers(workers, q)

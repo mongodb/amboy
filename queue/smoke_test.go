@@ -815,7 +815,7 @@ func TestSmokeRemoteOrderedWithWorkerPoolsAndMongoDB(t *testing.T) {
 
 		runOrderedSmokeTest(ctx, q, poolSize, true, assert)
 		cancel()
-		cleanupMongoDB(name, opts)
+		grip.CatchError(cleanupMongoDB(name, opts))
 	}
 
 }
