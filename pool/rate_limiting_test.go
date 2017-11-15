@@ -168,7 +168,7 @@ func TestMultipleWorkers(t *testing.T) {
 		}
 		for i := 0; i < 10; i++ {
 			next := ema.getNextTime(time.Millisecond)
-			assert.InDelta(t, time.Duration(workers)*time.Second, next, float64(time.Millisecond))
+			assert.InDelta(t, time.Duration(workers)*time.Second, next, float64(time.Millisecond), "testing for %d workers", workers)
 		}
 	}
 }
