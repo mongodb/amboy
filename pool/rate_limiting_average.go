@@ -100,8 +100,11 @@ func (p *ewmaRateLimiting) getNextTime(dur time.Duration) time.Duration {
 
 	// therefore, there's excess time, which means we should sleep
 	// for a fraction of that time before running the next job.
-	excessTime := p.period - runtimePerPeriod
-	return excessTime / time.Duration(p.target)
+	//
+	// we multiply by size here so that the interval/sleep time
+	// scales as we add workers.
+	excessTime := (p.period - runtimePerPeriod) * time.Duration(p.size)
+	return (excessTime / time.Duration(p.target))
 }
 
 func (p *ewmaRateLimiting) Started() bool { return p.canceler != nil }

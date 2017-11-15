@@ -159,7 +159,7 @@ func TestEWMARateLimitingWorkerHandlesPanicingJobs(t *testing.T) {
 
 func TestMultipleWorkers(t *testing.T) {
 	assert := assert.New(t) // nolint
-	for workers := time.Duration(1); workers <= 5; workers++ {
+	for workers := time.Duration(1); workers <= 10; workers++ {
 		ema := ewmaRateLimiting{
 			period: time.Minute,
 			target: 60,
@@ -167,14 +167,18 @@ func TestMultipleWorkers(t *testing.T) {
 			queue:  nil,
 			ewma:   ewma.NewMovingAverage(),
 		}
-		for i := 0; i < 10; i++ {
+		for i := 0; i < 100; i++ {
 			next := ema.getNextTime(time.Millisecond)
-
 			if !assert.True(next*workers > 750*time.Millisecond) || !assert.True(next < workers*time.Second) {
 				grip.Errorf("workers=%d, iter=%d, next=%s", workers, i, next)
 			}
 
-			assert.InDelta(time.Duration(workers)*time.Second, float64(next), float64(workers*time.Second),
+			// sam's test
+			assert.InDelta(time.Duration(workers)*time.Second, float64(next), float64(workers*10*time.Millisecond),
+				"next=%s, workers=%d, iter=%d", next, workers, i)
+
+			// brian's test:
+			assert.InDelta(time.Duration(workers)*time.Second, next, float64(100*time.Millisecond),
 				"next=%s, workers=%d, iter=%d", next, workers, i)
 		}
 	}
