@@ -157,6 +157,7 @@ func TestEWMARateLimitingWorkerHandlesPanicingJobs(t *testing.T) {
 }
 
 func TestMultipleWorkers(t *testing.T) {
+	assert := assert.New(t) // nolint
 	for workers := 1; workers < 5; workers = workers * 2 {
 		ema := ewmaRateLimiting{
 			period: time.Minute,
@@ -167,7 +168,8 @@ func TestMultipleWorkers(t *testing.T) {
 		}
 		for i := 0; i < 10; i++ {
 			next := ema.getNextTime(time.Millisecond)
-			assert.InDelta(t, time.Duration(workers)*time.Second, next, float64(time.Millisecond), "testing for %d workers", workers)
+			assert.InDelta(time.Duration(workers)*time.Second, next, float64(time.Millisecond),
+				"workers=%d, iter=%d, next=%s", workers, i, next)
 		}
 	}
 }
