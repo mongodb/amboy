@@ -8,6 +8,7 @@ import (
 	"github.com/VividCortex/ewma"
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/job"
+	"github.com/mongodb/grip"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -158,7 +159,7 @@ func TestEWMARateLimitingWorkerHandlesPanicingJobs(t *testing.T) {
 
 func TestMultipleWorkers(t *testing.T) {
 	assert := assert.New(t) // nolint
-	for workers := 1; workers < 5; workers = workers * 2 {
+	for workers := 1; workers <= 100; workers++ {
 		ema := ewmaRateLimiting{
 			period: time.Minute,
 			target: 60,
@@ -166,10 +167,12 @@ func TestMultipleWorkers(t *testing.T) {
 			queue:  nil,
 			ewma:   ewma.NewMovingAverage(),
 		}
-		for i := 0; i < 10; i++ {
+		for i := 0; i < 100; i++ {
 			next := ema.getNextTime(time.Millisecond)
-			assert.InDelta(time.Duration(workers)*time.Second, next, float64(time.Millisecond),
-				"workers=%d, iter=%d, next=%s", workers, i, next)
+
+			if !assert.True(next > 750*time.Millisecond) || !assert.True(next < time.Second) {
+				grip.Errorf("workers=%d, iter=%d, next=%s", workers, i, next)
+			}
 		}
 	}
 }

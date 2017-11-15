@@ -72,22 +72,36 @@ func (p *ewmaRateLimiting) getNextTime(dur time.Duration) time.Duration {
 
 	p.ewma.Add(float64(dur))
 
-	// averageRuntime is the ema it takes to run one job
+	// find the average runtime of a recent job using or weighted moving average
 	averageRuntime := time.Duration(math.Ceil(p.ewma.Value()))
-	// runtimeOfTargetNumber is how long running targetNum jobs will take
-	runtimeOfTargetNumber := averageRuntime * time.Duration(p.target) / time.Duration(p.size)
 
-	// if jobs will finish in the period, we should do the following:
-	// 1. figure out how much extra time there is in the period (p.period - runtimeOfTargetNumber)
-	// 2. divide this by the number of targets to find wait time per target
-	// 3. multiply by the number of workers, since each worker should wait (waitTimePerTarget * numWorkers)
-	if runtimeOfTargetNumber < p.period {
-		return (p.period - runtimeOfTargetNumber) / time.Duration(p.target) * time.Duration(p.size)
+	// find number of tasks per period, given the average runtime
+	tasksPerPeriod := p.period / averageRuntime
+
+	// the capacity of the pool is the size of the pool and the
+	// target number of tasks
+	capacity := time.Duration(p.target * p.size)
+
+	// if the average runtime
+	// of a task is such that the pool will run fewer than this
+	// number of tasks, then no sleeping is necessary
+	if tasksPerPeriod*capacity >= p.period {
+		return time.Duration(0)
 	}
 
-	// if the expected runtime of the target number of tasks is
-	// greater than or equal to the stated period, return 0
-	return time.Duration(0)
+	// if the average runtime times the capcity of the pool
+	// (e.g. the theoretical max) is larger than the specified
+	// period, no sleeping is required, because runtime is the
+	// limiting factor.
+	runtimePerPeriod := capacity * averageRuntime
+	if runtimePerPeriod >= p.period {
+		return time.Duration(0)
+	}
+
+	// therefore, there's excess time, which means we should sleep
+	// for a fraction of that time before running the next job.
+	excessTime := p.period - runtimePerPeriod
+	return excessTime / time.Duration(p.target)
 }
 
 func (p *ewmaRateLimiting) Started() bool { return p.canceler != nil }
