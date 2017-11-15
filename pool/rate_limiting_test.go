@@ -83,11 +83,10 @@ func TestAvergeTimeCalculator(t *testing.T) {
 	// average is uninitialized by default
 	assert.Equal(p.ewma.Value(), float64(0))
 
-	// some initial setup, guesses at actual values
+	// some initial setup, sanity check an actual value
 	result := p.getNextTime(time.Millisecond)
-	assert.True(result < 6*time.Second, "%s", result)
+	assert.InDelta(12*time.Second, result, float64(time.Millisecond))
 	result = p.getNextTime(time.Minute)
-	assert.True(result < time.Second, "%s", result)
 
 	// priming the average and watching the return value of the
 	// function increase:

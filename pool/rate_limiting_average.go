@@ -72,18 +72,17 @@ func (p *ewmaRateLimiting) getNextTime(dur time.Duration) time.Duration {
 
 	p.ewma.Add(float64(dur))
 
-	adjustedRuntime := time.Duration(math.Ceil(p.ewma.Value())) * time.Duration(p.size)
-	runtimeOfTargetNumber := adjustedRuntime * time.Duration(p.target)
+	// averageRuntime is the ema it takes to run one job
+	averageRuntime := time.Duration(math.Ceil(p.ewma.Value()))
+	// runtimeOfTargetNumber is how long running targetNum jobs will take
+	runtimeOfTargetNumber := averageRuntime * time.Duration(p.target) / time.Duration(p.size)
 
-	// if the expected runtime of the target number of tasks
-	// (adjisted for the size of the pool) is less than the stated
-	// period, return the difference between the total expected
-	// runtime of the tasks (adjusted) and the period, divided by
-	// the target number of tasks
-
+	// if jobs will finish in the period, we should do the following:
+	// 1. figure out how much extra time there is in the period (p.period - runtimeOfTargetNumber)
+	// 2. divide this by the number of targets to find wait time per target
+	// 3. multiply by the number of workers, since each worker should wait (waitTimePerTarget * numWorkers)
 	if runtimeOfTargetNumber < p.period {
-		workerRestingTime := p.period - runtimeOfTargetNumber
-		return workerRestingTime / time.Duration(p.target)
+		return (p.period - runtimeOfTargetNumber) / time.Duration(p.target) * time.Duration(p.size)
 	}
 
 	// if the expected runtime of the target number of tasks is
