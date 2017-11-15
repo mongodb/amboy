@@ -174,6 +174,8 @@ func TestMultipleWorkers(t *testing.T) {
 				grip.Errorf("workers=%d, iter=%d, next=%s", workers, i, next)
 			}
 
+			assert.InDelta(time.Duration(workers)*time.Second, float64(next), float64(workers*time.Second),
+				"next=%s, workers=%d, iter=%d", next, workers, i)
 		}
 	}
 }
