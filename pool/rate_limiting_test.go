@@ -156,3 +156,19 @@ func TestEWMARateLimitingWorkerHandlesPanicingJobs(t *testing.T) {
 	}
 	assert.NotPanics(func() { p.worker(ctx, jobsChanWithPanicingJobs(ctx, 10)) })
 }
+
+func TestMultipleWorkers(t *testing.T) {
+	for workers := 1; workers < 5; workers = workers * 2 {
+		ema := ewmaRateLimiting{
+			period: time.Minute,
+			target: 60,
+			size:   workers,
+			queue:  nil,
+			ewma:   ewma.NewMovingAverage(),
+		}
+		for i := 0; i < 10; i++ {
+			next := ema.getNextTime(time.Millisecond)
+			assert.InDelta(t, time.Duration(workers)*time.Second, next, float64(time.Millisecond))
+		}
+	}
+}
