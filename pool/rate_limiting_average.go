@@ -72,7 +72,7 @@ func (p *ewmaRateLimiting) getNextTime(dur time.Duration) time.Duration {
 
 	p.ewma.Add(float64(dur))
 
-	adjustedRuntime := time.Duration(math.Ceil(p.ewma.Value())) / time.Duration(p.size)
+	adjustedRuntime := time.Duration(math.Ceil(p.ewma.Value())) * time.Duration(p.size)
 	runtimeOfTargetNumber := adjustedRuntime * time.Duration(p.target)
 
 	// if the expected runtime of the target number of tasks

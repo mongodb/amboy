@@ -84,8 +84,10 @@ func TestAvergeTimeCalculator(t *testing.T) {
 	assert.Equal(p.ewma.Value(), float64(0))
 
 	// some initial setup, guesses at actual values
-	assert.True(5*time.Second-p.getNextTime(time.Millisecond) < 100*time.Millisecond)
-	assert.True(4*time.Second-p.getNextTime(time.Minute) < 100*time.Millisecond)
+	result := p.getNextTime(time.Millisecond)
+	assert.True(result < 6*time.Second, "%s", result)
+	result = p.getNextTime(time.Minute)
+	assert.True(result < time.Second, "%s", result)
 
 	// priming the average and watching the return value of the
 	// function increase:
@@ -97,9 +99,9 @@ func TestAvergeTimeCalculator(t *testing.T) {
 	// means the values are going up in this function.
 	var last time.Duration
 	for i := 0; i < 100; i++ {
-		result := p.getNextTime(time.Second)
+		result = p.getNextTime(time.Second)
 
-		assert.True(last < result)
+		assert.True(last <= result, "%d:%s<=%s", i, last, result)
 		last = result
 	}
 
