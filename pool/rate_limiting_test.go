@@ -86,8 +86,9 @@ func TestAvergeTimeCalculator(t *testing.T) {
 
 	// some initial setup, sanity check an actual value
 	result := p.getNextTime(time.Millisecond)
-	assert.InDelta(5*time.Second, result, float64(time.Second), "actual:%s", result)
+	assert.InDelta(10*time.Second, result, float64(2*time.Second), "actual:%s", result)
 	result = p.getNextTime(time.Minute)
+	assert.Equal(result, time.Duration(0))
 
 	// priming the average and watching the return value of the
 	// function increase:
