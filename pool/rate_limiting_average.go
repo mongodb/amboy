@@ -2,7 +2,6 @@ package pool
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"strings"
 	"sync"
@@ -92,7 +91,6 @@ func (p *ewmaRateLimiting) getNextTime(dur time.Duration) time.Duration {
 	// of a task is such that the pool will run fewer than this
 	// number of tasks, then no sleeping is necessary
 	if tasksPerPeriod*capacity >= p.period {
-		fmt.Println("taskCapacity:", tasksPerPeriod*capacity, "period:", p.period)
 		return time.Duration(0)
 	}
 
@@ -102,7 +100,6 @@ func (p *ewmaRateLimiting) getNextTime(dur time.Duration) time.Duration {
 	// limiting factor.
 	runtimePerPeriod := capacity * averageRuntime
 	if runtimePerPeriod >= p.period {
-		fmt.Println("runtimePerPeriod", runtimePerPeriod, "period", p.period)
 		return time.Duration(0)
 	}
 
