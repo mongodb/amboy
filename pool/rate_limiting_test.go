@@ -193,7 +193,7 @@ func TestWeightedAverageGrowthLargeSample(t *testing.T) {
 		storage:   make(map[string]amboy.Job),
 	}
 
-	pool, err := NewMovingAverageRateLimitedWorkers(2, 10, 15*time.Hour, queue)
+	pool, err := NewMovingAverageRateLimitedWorkers(2, 10, 20*time.Hour, queue)
 	assert.NoError(err)
 	impl := pool.(*ewmaRateLimiting)
 
@@ -202,23 +202,17 @@ func TestWeightedAverageGrowthLargeSample(t *testing.T) {
 		dur := i * 5 * time.Second
 
 		out := impl.getNextTime(dur)
-
-		if i != 1 {
-			assert.True(out < last, "%d: %s<%s", i, out, last)
+		if i <= 11 {
+			last = out
+			continue
 		}
 
-		// at a certian point, the "duration" of the last op
-		// is bigger than the average given the number of
-		// iterations
-		if i > 443 {
-			assert.True(dur > out, "%d:%s>%s", i, dur, out)
-		} else {
-			assert.True(dur < out, "%d:%s>%s", i, dur, out)
-		}
+		assert.True(out < last, "%d: %s < %s", i, out, last)
+		assert.True(out > dur, "%d: %s > %s", i, out, dur)
 
-		assert.True(out < 3*time.Hour, "%d:%s", i, out)
-		assert.True(out > 15*time.Minute, "%d:%s", i, out)
+		assert.True(out < 5*time.Hour, "%d: %s", i, out)
+		assert.True(out > 15*time.Minute, "%d: %s", i, out)
+
 		last = out
 	}
-
 }

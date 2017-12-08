@@ -51,7 +51,7 @@ func NewMovingAverageRateLimitedWorkers(size, targetNum int, period time.Duratio
 		target: targetNum,
 		size:   size,
 		queue:  q,
-		ewma:   ewma.NewMovingAverage(),
+		ewma:   ewma.NewMovingAverage(period.Minutes()),
 	}
 
 	return p, nil
