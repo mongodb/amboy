@@ -2,6 +2,7 @@ package pool
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"strings"
 	"sync"
@@ -10,6 +11,7 @@ import (
 	"github.com/VividCortex/ewma"
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/grip"
+	"github.com/mongodb/grip/message"
 	"github.com/mongodb/grip/recovery"
 	"github.com/pkg/errors"
 )
@@ -75,6 +77,10 @@ func (p *ewmaRateLimiting) getNextTime(dur time.Duration) time.Duration {
 	// find the average runtime of a recent job using or weighted moving average
 	averageRuntime := time.Duration(math.Ceil(p.ewma.Value()))
 
+	if averageRuntime == 0 {
+		return time.Duration(0)
+	}
+
 	// find number of tasks per period, given the average runtime
 	tasksPerPeriod := p.period / averageRuntime
 
@@ -86,6 +92,7 @@ func (p *ewmaRateLimiting) getNextTime(dur time.Duration) time.Duration {
 	// of a task is such that the pool will run fewer than this
 	// number of tasks, then no sleeping is necessary
 	if tasksPerPeriod*capacity >= p.period {
+		fmt.Println("taskCapacity:", tasksPerPeriod*capacity, "period:", p.period)
 		return time.Duration(0)
 	}
 
@@ -95,6 +102,7 @@ func (p *ewmaRateLimiting) getNextTime(dur time.Duration) time.Duration {
 	// limiting factor.
 	runtimePerPeriod := capacity * averageRuntime
 	if runtimePerPeriod >= p.period {
+		fmt.Println("runtimePerPeriod", runtimePerPeriod, "period", p.period)
 		return time.Duration(0)
 	}
 
@@ -170,8 +178,11 @@ func (p *ewmaRateLimiting) runJob(ctx context.Context, j amboy.Job) time.Duratio
 
 	interval := p.getNextTime(duration)
 
-	grip.Debugf("task %s completed in %s, next job in %s",
-		j.ID(), duration, interval)
+	grip.Debug(message.Fields{
+		"id":       j.ID(),
+		"duration": duration,
+		"interval": interval,
+	})
 
 	return interval
 }

@@ -2,6 +2,7 @@ package pool
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -183,4 +184,26 @@ func TestMultipleWorkers(t *testing.T) {
 				"next=%s, workers=%d, iter=%d", next, workers, i)
 		}
 	}
+}
+
+func TestWeightedAverageGrowthLargeSample(t *testing.T) {
+	assert := assert.New(t) // nolint
+
+	queue := &QueueTester{
+		toProcess: make(chan amboy.Job),
+		storage:   make(map[string]amboy.Job),
+	}
+
+	pool, err := NewMovingAverageRateLimitedWorkers(2, 10, 1000*time.Hour, queue)
+	assert.NoError(err)
+	impl := pool.(*ewmaRateLimiting)
+
+	for i := time.Duration(1); i <= 10000; i++ {
+		dur := i * time.Second
+
+		out := impl.getNextTime(dur)
+		assert.True(dur > out)
+		fmt.Println(out)
+	}
+
 }
