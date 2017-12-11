@@ -2,6 +2,7 @@ package pool
 
 import (
 	"context"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -183,4 +184,73 @@ func TestMultipleWorkers(t *testing.T) {
 				"next=%s, workers=%d, iter=%d", next, workers, i)
 		}
 	}
+}
+
+func TestWeightedAverageGrowthLargeSample(t *testing.T) {
+	assert := assert.New(t) // nolint
+
+	queue := &QueueTester{
+		toProcess: make(chan amboy.Job),
+		storage:   make(map[string]amboy.Job),
+	}
+
+	pool, err := NewMovingAverageRateLimitedWorkers(2, 10, 20*time.Hour, queue)
+	assert.NoError(err)
+	impl := pool.(*ewmaRateLimiting)
+
+	var last time.Duration
+	for i := time.Duration(1); i <= 500; i++ {
+		dur := i * 5 * time.Second
+
+		out := impl.getNextTime(dur)
+		if i <= 11 {
+			last = out
+			continue
+		}
+
+		assert.True(out < last, "%d: %s < %s", i, out, last)
+		assert.True(out > dur, "%d: %s > %s", i, out, dur)
+
+		assert.True(out < 5*time.Hour, "%d: %s", i, out)
+		assert.True(out > 15*time.Minute, "%d: %s", i, out)
+
+		last = out
+	}
+}
+
+func TestWeightedAverageSmallSample(t *testing.T) {
+	rand.Seed(time.Now().Unix())
+
+	assert := assert.New(t) // nolint
+
+	queue := &QueueTester{
+		toProcess: make(chan amboy.Job),
+		storage:   make(map[string]amboy.Job),
+	}
+
+	pool, err := NewMovingAverageRateLimitedWorkers(2, 10, time.Minute, queue)
+	assert.NoError(err)
+	impl := pool.(*ewmaRateLimiting)
+
+	var last time.Duration
+	total := 500
+	zeroCount := 0
+	sum := time.Duration(0)
+	for i := 0; i < total; i++ {
+		randTime := rand.Int63n(int64(5 * time.Second))
+		dur := time.Duration(randTime)
+
+		out := impl.getNextTime(dur)
+
+		if out == 0 {
+			zeroCount++
+			continue
+		}
+
+		last = out
+		sum += out
+	}
+	assert.InDelta(6*time.Second, sum/time.Duration(total), float64(3*time.Second))
+	assert.True(total/2 > zeroCount)
+	grip.Infof("after %d iterations, %d were 0s. last value=%s", total, zeroCount, last)
 }
