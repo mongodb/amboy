@@ -176,6 +176,7 @@ func (p *ewmaRateLimiting) runJob(ctx context.Context, j amboy.Job) time.Duratio
 	interval := p.getNextTime(duration)
 
 	grip.Debug(message.Fields{
+		"message":  "rate limiting pool job stats",
 		"id":       j.ID(),
 		"duration": duration,
 		"interval": interval,
