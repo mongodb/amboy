@@ -218,6 +218,38 @@ func TestWeightedAverageGrowthLargeSample(t *testing.T) {
 	}
 }
 
+type smokeResults struct {
+	total   int
+	zero    int
+	nonZero int
+	last    time.Duration
+	sum     time.Duration
+}
+
+func runSmokeTest(impl *ewmaRateLimiting, total int, cap time.Duration) smokeResults {
+	results := smokeResults{
+		total: total,
+	}
+
+	for i := 0; i < total; i++ {
+		randTime := rand.Int63n(int64(cap))
+		dur := time.Duration(randTime)
+
+		out := impl.getNextTime(dur)
+
+		if out == 0 {
+			results.zero++
+			continue
+		}
+
+		results.nonZero++
+		results.last = out
+		results.sum += out
+	}
+
+	return results
+}
+
 func TestWeightedAverageSmallSample(t *testing.T) {
 	rand.Seed(time.Now().Unix())
 
@@ -232,25 +264,47 @@ func TestWeightedAverageSmallSample(t *testing.T) {
 	assert.NoError(err)
 	impl := pool.(*ewmaRateLimiting)
 
-	var last time.Duration
-	total := 500
-	zeroCount := 0
-	sum := time.Duration(0)
-	for i := 0; i < total; i++ {
-		randTime := rand.Int63n(int64(5 * time.Second))
-		dur := time.Duration(randTime)
+	results := runSmokeTest(impl, 500, 5*time.Second)
 
-		out := impl.getNextTime(dur)
+	assert.InDelta(6*time.Second, results.sum/time.Duration(results.total), float64(3*time.Second))
+	assert.True(results.total/2 > results.zero)
+	grip.Infof("after %d iterations, %d were 0s. last value=%s", results.total, results.zero, results.last)
+}
 
-		if out == 0 {
-			zeroCount++
-			continue
-		}
+func TestWeightedAverageLargeWorkerPoolLongDuration(t *testing.T) {
+	assert := assert.New(t) // nolint
 
-		last = out
-		sum += out
+	queue := &QueueTester{
+		toProcess: make(chan amboy.Job),
+		storage:   make(map[string]amboy.Job),
 	}
-	assert.InDelta(6*time.Second, sum/time.Duration(total), float64(3*time.Second))
-	assert.True(total/2 > zeroCount)
-	grip.Infof("after %d iterations, %d were 0s. last value=%s", total, zeroCount, last)
+
+	pool, err := NewMovingAverageRateLimitedWorkers(256, 10, time.Minute, queue)
+	assert.NoError(err)
+	impl := pool.(*ewmaRateLimiting)
+
+	results := runSmokeTest(impl, 750, 10*time.Millisecond)
+
+	assert.InDelta(30*time.Second, results.sum/time.Duration(results.total), float64(30*time.Minute))
+	assert.True(results.total/3 > results.zero, "zero:%s", results.zero)
+	grip.Infof("after %d iterations, %d were 0s. last value=%s", results.total, results.zero, results.last)
+}
+
+func TestWeightedAverageLargeWorkerPoolShortDuration(t *testing.T) {
+	assert := assert.New(t) // nolint
+
+	queue := &QueueTester{
+		toProcess: make(chan amboy.Job),
+		storage:   make(map[string]amboy.Job),
+	}
+
+	pool, err := NewMovingAverageRateLimitedWorkers(256, 60, time.Minute, queue)
+	assert.NoError(err)
+	impl := pool.(*ewmaRateLimiting)
+
+	results := runSmokeTest(impl, 750, 10*time.Millisecond)
+
+	assert.InDelta(30*time.Second, results.sum/time.Duration(results.total), float64(10*time.Minute))
+	assert.True(float64(results.total)/1.5 > float64(results.zero), "zero:%s", results.zero)
+	grip.Infof("after %d iterations, %d were 0s. last value=%s", results.total, results.zero, results.last)
 }
