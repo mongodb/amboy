@@ -1,12 +1,34 @@
 package recovery
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 func panicString(p interface{}) string {
-	panicMsg, ok := p.(string)
-	if !ok {
-		panicMsg = fmt.Sprintf("%+v", panicMsg)
+	switch panicMesg := p.(type) {
+	case string:
+		return panicMesg
+	case error:
+		return panicMesg.Error()
+	case fmt.Stringer:
+		return panicMesg.String()
+	case nil:
+		return ""
+	default:
+		return fmt.Sprintf("%+v", panicMesg)
+	}
+}
+
+func panicError(p interface{}) error {
+	if p == nil {
+		return nil
 	}
 
-	return panicMsg
+	ps := panicString(p)
+	if ps == "" {
+		ps = fmt.Sprintf("non-nil panic [%T] encountered with no string representation", p)
+	}
+
+	return errors.New(ps)
 }

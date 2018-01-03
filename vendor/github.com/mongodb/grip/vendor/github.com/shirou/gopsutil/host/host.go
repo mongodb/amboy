@@ -6,10 +6,7 @@ import (
 	"github.com/shirou/gopsutil/internal/common"
 )
 
-var (
-	invoke         common.Invoker
-	cachedBootTime = uint64(0)
-)
+var invoke common.Invoker
 
 func init() {
 	invoke = common.Invoke{}
@@ -39,6 +36,11 @@ type UserStat struct {
 	Started  int    `json:"started" bson:"started,omitempty"`
 }
 
+type TemperatureStat struct {
+	SensorKey   string  `json:"sensorKey" bson:"sensorKey,omitempty"`
+	Temperature float64 `json:"sensorTemperature" bson:"sensorTemperature,omitempty"`
+}
+
 func (h InfoStat) String() string {
 	s, _ := json.Marshal(h)
 	return string(s)
@@ -46,5 +48,10 @@ func (h InfoStat) String() string {
 
 func (u UserStat) String() string {
 	s, _ := json.Marshal(u)
+	return string(s)
+}
+
+func (t TemperatureStat) String() string {
+	s, _ := json.Marshal(t)
 	return string(s)
 }

@@ -26,6 +26,7 @@ type Process struct {
 	gids           []int32
 	numThreads     int32
 	memInfo        *MemoryInfoStat
+	sigInfo        *SignalInfoStat
 
 	lastCPUTimes *cpu.TimesStat
 	lastCPUTime  time.Time
@@ -37,15 +38,27 @@ type OpenFilesStat struct {
 }
 
 type MemoryInfoStat struct {
-	RSS  uint64 `json:"rss" bson:"rss,omitempty"`   // bytes
-	VMS  uint64 `json:"vms" bson:"vms,omitempty"`   // bytes
-	Swap uint64 `json:"swap" bson:"swap,omitempty"` // bytes
+	RSS    uint64 `json:"rss" bson:"rss,omitempty"`       // bytes
+	VMS    uint64 `json:"vms" bson:"vms,omitempty"`       // bytes
+	Data   uint64 `json:"data" bson:"data,omitempty"`     // bytes
+	Stack  uint64 `json:"stack" bson:"stack,omitempty"`   // bytes
+	Locked uint64 `json:"locked" bson:"locked,omitempty"` // bytes
+	Swap   uint64 `json:"swap" bson:"swap,omitempty"`     // bytes
+}
+
+type SignalInfoStat struct {
+	PendingProcess uint64 `json:"pending_process" bson:"pending_process,omitempty"`
+	PendingThread  uint64 `json:"pending_thread" bson:"pending_thread,omitempty"`
+	Blocked        uint64 `json:"blocked" bson:"blocked,omitempty"`
+	Ignored        uint64 `json:"ignored" bson:"ignored,omitempty"`
+	Caught         uint64 `json:"caught" bson:"caught,omitempty"`
 }
 
 type RlimitStat struct {
-	Resource int32 `json:"resource" bson:"resource,omitempty"`
-	Soft     int32 `json:"soft" bson:"soft,omitempty"`
-	Hard     int32 `json:"hard" bson:"hard,omitempty"`
+	Resource int32  `json:"resource" bson:"resource,omitempty"`
+	Soft     int32  `json:"soft" bson:"soft,omitempty"` //TODO too small. needs to be uint64
+	Hard     int32  `json:"hard" bson:"hard,omitempty"` //TODO too small. needs to be uint64
+	Used     uint64 `json:"used" bson:"used,omitempty"`
 }
 
 type IOCountersStat struct {
@@ -59,6 +72,27 @@ type NumCtxSwitchesStat struct {
 	Voluntary   int64 `json:"voluntary" bson:"voluntary,omitempty"`
 	Involuntary int64 `json:"involuntary" bson:"involuntary,omitempty"`
 }
+
+// Resource limit constants are from /usr/include/x86_64-linux-gnu/bits/resource.h
+// from libc6-dev package in Ubuntu 16.10
+const (
+	RLIMIT_CPU        int32 = 0
+	RLIMIT_FSIZE      int32 = 1
+	RLIMIT_DATA       int32 = 2
+	RLIMIT_STACK      int32 = 3
+	RLIMIT_CORE       int32 = 4
+	RLIMIT_RSS        int32 = 5
+	RLIMIT_NPROC      int32 = 6
+	RLIMIT_NOFILE     int32 = 7
+	RLIMIT_MEMLOCK    int32 = 8
+	RLIMIT_AS         int32 = 9
+	RLIMIT_LOCKS      int32 = 10
+	RLIMIT_SIGPENDING int32 = 11
+	RLIMIT_MSGQUEUE   int32 = 12
+	RLIMIT_NICE       int32 = 13
+	RLIMIT_RTPRIO     int32 = 14
+	RLIMIT_RTTIME     int32 = 15
+)
 
 func (p Process) String() string {
 	s, _ := json.Marshal(p)
@@ -164,4 +198,25 @@ func (p *Process) MemoryPercent() (float32, error) {
 	used := processMemory.RSS
 
 	return (100 * float32(used) / float32(total)), nil
+}
+
+// CPU_Percent returns how many percent of the CPU time this process uses
+func (p *Process) CPUPercent() (float64, error) {
+	crt_time, err := p.CreateTime()
+	if err != nil {
+		return 0, err
+	}
+
+	cput, err := p.Times()
+	if err != nil {
+		return 0, err
+	}
+
+	created := time.Unix(0, crt_time*int64(time.Millisecond))
+	totalTime := time.Since(created).Seconds()
+	if totalTime <= 0 {
+		return 0, nil
+	}
+
+	return 100 * cput.Total() / totalTime, nil
 }

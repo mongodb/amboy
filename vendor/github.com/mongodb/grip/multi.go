@@ -34,10 +34,12 @@ import (
 // for most error implementations.)
 type Catcher interface {
 	Add(error)
+	Extend([]error)
 	Len() int
 	HasErrors() bool
 	String() string
 	Resolve() error
+	Errors() []error
 }
 
 // multiCatcher provides an interface to collect and coalesse error
@@ -58,18 +60,26 @@ type baseCatcher struct {
 // documentation for the Catcher interface for most implementations.
 func NewCatcher() Catcher { return NewExtendedCatcher() }
 
+// NewBasicCatcher collects error messages and formats them using a
+// new-line separated string of the output of error.Error()
 func NewBasicCatcher() Catcher {
 	c := &baseCatcher{}
 	c.Stringer = &basicCatcher{c}
 	return c
 }
 
+// NewSimpleCatcher collects error messages and formats them using a
+// new-line separated string of the string format of the error message
+// (e.g. %s).
 func NewSimpleCatcher() Catcher {
 	c := &baseCatcher{}
 	c.Stringer = &simpleCatcher{c}
 	return c
 }
 
+// NewExtendedCatcher collects error messages and formats them using a
+// new-line separated string of the extended string format of the
+// error message (e.g. %+v).
 func NewExtendedCatcher() Catcher {
 	c := &baseCatcher{}
 	c.Stringer = &extendedCatcher{c}
@@ -104,6 +114,35 @@ func (c *baseCatcher) HasErrors() bool {
 	return len(c.errs) > 0
 }
 
+// Extend adds all non-nil errors, passed as arguments to the catcher.
+func (c *baseCatcher) Extend(errs []error) {
+	if len(errs) == 0 {
+		return
+	}
+
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	for _, err := range errs {
+		if err == nil {
+			continue
+		}
+
+		c.errs = append(c.errs, err)
+	}
+}
+
+func (c *baseCatcher) Errors() []error {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	out := make([]error, len(c.errs))
+
+	copy(out, c.errs)
+
+	return out
+}
+
 // Resolve returns a final error object for the Catcher. If there are
 // no errors, it returns nil, and returns an error object with the
 // string form of all error objects in the collector.
@@ -117,7 +156,7 @@ func (c *baseCatcher) Resolve() error {
 
 ////////////////////////////////////////////////////////////////////////
 //
-// seperate implementations of grip.Catcher with different string formatting options.
+// separate implementations of grip.Catcher with different string formatting options.
 
 type extendedCatcher struct{ *baseCatcher }
 
