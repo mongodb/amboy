@@ -24,9 +24,13 @@ import (
 )
 
 func init() {
-	grip.CatchError(grip.SetThreshold(level.Info))
 	grip.SetName("amboy.queue.tests")
 	grip.CatchError(grip.SetSender(send.MakeNative()))
+
+	lvl := grip.GetSender().Level()
+	lvl.Threshold = level.Emergency
+	_ = grip.GetSender().SetLevel(lvl)
+
 	job.RegisterDefaultJobs()
 }
 
@@ -320,7 +324,8 @@ func TestSmokeRemoteUnorderedWorkerPoolsWithInternalDriver(t *testing.T) {
 
 func TestSmokeRemoteUnorderedSingleThreadedWithMongoDBDriver(t *testing.T) {
 	assert := assert.New(t) // nolint
-	name := uuid.NewV4().String()
+	name := strings.Replace(uuid.NewV4().String(), "-", ".", -1)
+
 	opts := DefaultMongoDBOptions()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -338,7 +343,8 @@ func TestSmokeRemoteUnorderedSingleThreadedWithMongoDBDriver(t *testing.T) {
 
 func TestSmokeRemoteUnorderedSingleRunnerWithMongoDBDriver(t *testing.T) {
 	assert := assert.New(t) // nolint
-	name := uuid.NewV4().String()
+	name := strings.Replace(uuid.NewV4().String(), "-", ".", -1)
+
 	opts := DefaultMongoDBOptions()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -368,7 +374,7 @@ func TestSmokeRemoteUnorderedWorkerPoolsWithMongoDBDriver(t *testing.T) {
 		start := time.Now()
 		grip.Infof("running mongodb queue smoke test with %d jobs", poolSize)
 		q := NewRemoteUnordered(poolSize)
-		name := uuid.NewV4().String()
+		name := strings.Replace(uuid.NewV4().String(), "-", ".", -1)
 
 		ctx, cancel := context.WithCancel(baseCtx)
 		d := NewMongoDBDriver(name, opts)
@@ -458,7 +464,8 @@ func TestSmokeMultipleMongoDBBackedRemoteUnorderedQueuesWithTheSameName(t *testi
 	assert := assert.New(t) // nolint
 	ctx, cancel := context.WithCancel(context.Background())
 
-	name := uuid.NewV4().String()
+	name := strings.Replace(uuid.NewV4().String(), "-", ".", -1)
+
 	opts := DefaultMongoDBOptions()
 
 	// create queues with two runners, mongodb backed drivers, and
@@ -500,7 +507,8 @@ func TestSmokeMultipleMongoDBBackedRemoteOrderedQueuesWithTheSameName(t *testing
 	assert := assert.New(t) // nolint
 	ctx, cancel := context.WithCancel(context.Background())
 
-	name := uuid.NewV4().String()
+	name := strings.Replace(uuid.NewV4().String(), "-", ".", -1)
+
 	opts := DefaultMongoDBOptions()
 
 	// create queues with two runners, mongodb backed drivers, and
@@ -621,7 +629,7 @@ func TestSmokeSimpleRemoteOrderedWorkerPoolsWithMongoDBDriver(t *testing.T) {
 		start := time.Now()
 		grip.Infof("running mongodb simple ordered queue smoke test with %d jobs", poolSize)
 		q := NewSimpleRemoteOrdered(poolSize)
-		name := uuid.NewV4().String()
+		name := strings.Replace(uuid.NewV4().String(), "-", ".", -1)
 
 		ctx, cancel := context.WithCancel(baseCtx)
 		d := NewMongoDBDriver(name, opts)
@@ -657,7 +665,8 @@ func TestSmokeSimpleRemoteOrderedWorkerPoolsWithInternalDriver(t *testing.T) {
 
 func TestSmokeSimpleRemoteOrderedWithSingleThreadedAndMongoDBDriver(t *testing.T) {
 	assert := assert.New(t) // nolint
-	name := uuid.NewV4().String()
+	name := strings.Replace(uuid.NewV4().String(), "-", ".", -1)
+
 	opts := DefaultMongoDBOptions()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -675,7 +684,8 @@ func TestSmokeSimpleRemoteOrderedWithSingleThreadedAndMongoDBDriver(t *testing.T
 
 func TestSmokeSimpleRemoteOrderedWithSingleRunnerAndMongoDBDriver(t *testing.T) {
 	assert := assert.New(t) // nolint
-	name := uuid.NewV4().String()
+	name := strings.Replace(uuid.NewV4().String(), "-", ".", -1)
+
 	opts := DefaultMongoDBOptions()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -806,7 +816,7 @@ func TestSmokeRemoteOrderedWithWorkerPoolsAndMongoDB(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		q := NewSimpleRemoteOrdered(poolSize)
 
-		name := uuid.NewV4().String()
+		name := strings.Replace(uuid.NewV4().String(), "-", ".", -1)
 		driver := NewMongoDBDriver(name, opts)
 		assert.NoError(q.SetDriver(driver))
 

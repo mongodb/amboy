@@ -20,7 +20,8 @@ type ShellJob struct {
 	Env        map[string]string `bson:"env" json:"env" yaml:"env"`
 
 	*Base `bson:"job_base" json:"job_base" yaml:"job_base"`
-	sync.RWMutex
+
+	mutex sync.RWMutex
 }
 
 // NewShellJob takes the command, as a string along with the name of a
@@ -70,9 +71,9 @@ func (j *ShellJob) Run() {
 
 	args := strings.Split(j.Command, " ")
 
-	j.RLock()
+	j.mutex.RLock()
 	cmd := exec.Command(args[0], args[1:]...)
-	j.RUnlock()
+	j.mutex.RUnlock()
 
 	cmd.Dir = j.WorkingDir
 	cmd.Env = j.getEnVars()
@@ -80,8 +81,8 @@ func (j *ShellJob) Run() {
 	output, err := cmd.CombinedOutput()
 	j.AddError(err)
 
-	j.Lock()
-	defer j.Unlock()
+	j.mutex.Lock()
+	defer j.mutex.Unlock()
 
 	j.Output = strings.TrimSpace(string(output))
 }

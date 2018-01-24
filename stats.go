@@ -6,6 +6,7 @@ import (
 	"github.com/mongodb/grip"
 	"github.com/mongodb/grip/level"
 	"github.com/mongodb/grip/sometimes"
+	"github.com/pkg/errors"
 )
 
 // QueueStats is a simple structure that the Stats() method in the
@@ -52,5 +53,5 @@ func (s *QueueStats) SetPriority(l level.Priority) error {
 		s.priority = l
 		return nil
 	}
-	return fmt.Errorf("%s (%d) is not a valid level", l, l)
+	return errors.Errorf("%s (%d) is not a valid level", l, l)
 }

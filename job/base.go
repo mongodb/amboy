@@ -42,7 +42,6 @@ type Base struct {
 	status amboy.JobStatusInfo
 	dep    dependency.Manager
 	mutex  sync.RWMutex
-	// adds common priority tracking.
 }
 
 ////////////////////////////////////////////////////////////////////////
