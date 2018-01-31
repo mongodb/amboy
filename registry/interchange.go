@@ -18,6 +18,7 @@ type JobInterchange struct {
 	Job        *rawJob                `json:"job,omitempty" bson:"job,omitempty" yaml:"job,omitempty"`
 	Dependency *DependencyInterchange `json:"dependency,omitempty" bson:"dependency,omitempty" yaml:"dependency,omitempty"`
 	Status     amboy.JobStatusInfo    `bson:"status" json:"status" yaml:"status"`
+	TimeInfo   amboy.JobTimeInfo      `bson:"time_info" json:"time_info" yaml:"time_info"`
 }
 
 // MakeJobInterchange changes a Job interface into a JobInterchange
@@ -45,6 +46,7 @@ func MakeJobInterchange(j amboy.Job) (*JobInterchange, error) {
 		Version:  typeInfo.Version,
 		Priority: j.Priority(),
 		Status:   j.Status(),
+		TimeInfo: j.TimeInfo(),
 		Job: &rawJob{
 			Body: data,
 			Type: typeInfo.Name,
@@ -88,6 +90,7 @@ func ConvertToJob(j *JobInterchange) (amboy.Job, error) {
 	job.SetDependency(dep)
 	job.SetPriority(j.Priority)
 	job.SetStatus(j.Status)
+	job.UpdateTimeInfo(j.TimeInfo)
 
 	return job, nil
 }

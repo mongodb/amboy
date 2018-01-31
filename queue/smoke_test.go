@@ -28,7 +28,7 @@ func init() {
 	grip.CatchError(grip.SetSender(send.MakeNative()))
 
 	lvl := grip.GetSender().Level()
-	lvl.Threshold = level.Emergency
+	lvl.Threshold = level.Alert
 	_ = grip.GetSender().SetLevel(lvl)
 
 	job.RegisterDefaultJobs()
@@ -73,6 +73,11 @@ func runUnorderedSmokeTest(ctx context.Context, q amboy.Queue, size int, assert 
 	assert.Equal(numJobs, q.Stats().Completed, fmt.Sprintf("%+v", q.Stats()))
 	for result := range q.Results(ctx) {
 		assert.True(result.Status().Completed, fmt.Sprintf("with %d workers", size))
+
+		// assert that we had valid time info persisted
+		ti := result.TimeInfo()
+		assert.NotZero(ti.Start)
+		assert.NotZero(ti.End)
 	}
 
 	statCounter := 0

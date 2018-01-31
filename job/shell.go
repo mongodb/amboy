@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
-	"sync"
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/dependency"
@@ -19,9 +18,7 @@ type ShellJob struct {
 	WorkingDir string            `bson:"working_dir" json:"working_dir" yaml:"working_dir"`
 	Env        map[string]string `bson:"env" json:"env" yaml:"env"`
 
-	*Base `bson:"job_base" json:"job_base" yaml:"job_base"`
-
-	mutex sync.RWMutex
+	Base `bson:"job_base" json:"job_base" yaml:"job_base"`
 }
 
 // NewShellJob takes the command, as a string along with the name of a
@@ -49,7 +46,7 @@ func NewShellJob(cmd string, creates string) *ShellJob {
 func NewShellJobInstance() *ShellJob {
 	j := &ShellJob{
 		Env: make(map[string]string),
-		Base: &Base{
+		Base: Base{
 			JobType: amboy.JobType{
 				Name:    "shell",
 				Version: 1,
