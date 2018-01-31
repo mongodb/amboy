@@ -195,12 +195,12 @@ func (b *Base) UpdateTimeInfo(i amboy.JobTimeInfo) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
-	if !i.StartTime.IsZero() {
-		b.TaskTimeInfo.StarTime = i.StartTime
+	if !i.Start.IsZero() {
+		b.TaskTimeInfo.Start = i.Start
 	}
 
-	if !i.EndTime.IsZero() {
-		b.TaskTimeInfo.EndTime = i.EndTime
+	if !i.End.IsZero() {
+		b.TaskTimeInfo.End = i.End
 	}
 
 	if !i.WaitUntil.IsZero() {

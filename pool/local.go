@@ -123,11 +123,11 @@ func worker(ctx context.Context, jobs <-chan amboy.Job, q amboy.Queue, wg *sync.
 			}
 
 			ti := amboy.JobTimeInfo{
-				StarAt: time.Now(),
+				Start: time.Now(),
 			}
 
 			job.Run()
-			ti.EndAt = time.Now()
+			ti.End = time.Now()
 			job.UpdateTimeInfo(ti)
 
 			q.Complete(ctx, job)

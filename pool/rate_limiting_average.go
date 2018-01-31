@@ -173,11 +173,11 @@ func (p *ewmaRateLimiting) worker(ctx context.Context, jobs <-chan amboy.Job) {
 func (p *ewmaRateLimiting) runJob(ctx context.Context, j amboy.Job) time.Duration {
 	start := time.Now()
 	ti := amboy.JobTimeInfo{
-		StarAt: start,
+		Start: start,
 	}
 
 	j.Run()
-	ti.EndAt = time.Now()
+	ti.End = time.Now()
 	j.UpdateTimeInfo(ti)
 
 	p.queue.Complete(ctx, j)

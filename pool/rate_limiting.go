@@ -117,11 +117,11 @@ func (p *simpleRateLimited) worker(ctx context.Context, jobs <-chan amboy.Job) {
 				return
 			case job := <-jobs:
 				ti := amboy.JobTimeInfo{
-					StarAt: time.Now(),
+					Start: time.Now(),
 				}
 
 				job.Run()
-				ti.EndAt = time.Now()
+				ti.End = time.Now()
 				job.UpdateTimeInfo(ti)
 
 				p.queue.Complete(ctx, job)
