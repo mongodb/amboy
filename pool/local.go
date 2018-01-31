@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/grip"
@@ -121,7 +122,14 @@ func worker(ctx context.Context, jobs <-chan amboy.Job, q amboy.Queue, wg *sync.
 				continue
 			}
 
+			ti := amboy.JobTimeInfo{
+				StarAt: time.Now(),
+			}
+
 			job.Run()
+			ti.EndAt = time.Now()
+			job.UpdateTimeInfo(ti)
+
 			q.Complete(ctx, job)
 		}
 	}

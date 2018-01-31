@@ -34,10 +34,11 @@ import (
 // an implementation of most common Job methods which most jobs
 // need not implement themselves.
 type Base struct {
-	TaskID        string        `bson:"name" json:"name" yaml:"name"`
-	JobType       amboy.JobType `bson:"job_type" json:"job_type" yaml:"job_type"`
-	Errors        []string      `bson:"errors" json:"errors" yaml:"errors"`
-	PriorityValue int           `bson:"priority" json:"priority" yaml:"priority"`
+	TaskID        string            `bson:"name" json:"name" yaml:"name"`
+	JobType       amboy.JobType     `bson:"job_type" json:"job_type" yaml:"job_type"`
+	Errors        []string          `bson:"errors" json:"errors" yaml:"errors"`
+	PriorityValue int               `bson:"priority" json:"priority" yaml:"priority"`
+	TaskTimeInfo  amboy.JobTimeInfo `bson:"time_info,omitempty" json:"time_info,omitempty" yaml:"time_info,omitempty"`
 
 	status amboy.JobStatusInfo
 	dep    dependency.Manager
@@ -177,4 +178,32 @@ func (b *Base) SetStatus(s amboy.JobStatusInfo) {
 
 	b.status = s
 
+}
+
+// TimeInfo returns the job's TimeInfo object. The runner
+// implementations are responsible for updating these values.
+func (b *Base) TimeInfo() amboy.JobTimeInfo {
+	b.mutex.RLock()
+	defer b.mutex.RUnlock()
+
+	return b.TaskTimeInfo
+}
+
+// UpdateTimeInfo updates the stored value of time in the job, but
+// does *not* modify fields that are unset in the input document.
+func (b *Base) UpdateTimeInfo(i amboy.JobTimeInfo) {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	if !i.StartTime.IsZero() {
+		b.TaskTimeInfo.StarTime = i.StartTime
+	}
+
+	if !i.EndTime.IsZero() {
+		b.TaskTimeInfo.EndTime = i.EndTime
+	}
+
+	if !i.WaitUntil.IsZero() {
+		b.TaskTimeInfo.WaitUntil = i.WaitUntil
+	}
 }
