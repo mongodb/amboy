@@ -231,7 +231,7 @@ func (d *mongoDB) Save(j amboy.Job) error {
 	info, err := jobs.Upsert(d.getAtomicQuery(j.ID(), j.Status()), job)
 	if err != nil {
 		err = errors.Wrapf(err, "problem updating %s: %+v", name, info)
-		grip.Warning(err)
+		grip.Alert(err)
 		return err
 	}
 

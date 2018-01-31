@@ -129,7 +129,6 @@ func worker(ctx context.Context, jobs <-chan amboy.Job, q amboy.Queue, wg *sync.
 			job.Run()
 			ti.End = time.Now()
 			job.UpdateTimeInfo(ti)
-
 			q.Complete(ctx, job)
 		}
 	}

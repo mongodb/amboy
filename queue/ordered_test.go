@@ -176,7 +176,7 @@ func (s *OrderedQueueSuite) TestPuttingAJobIntoAQueueImpactsStats() {
 	jReturn, ok := s.queue.Get(j.ID())
 	s.True(ok)
 
-	base := &job.Base{}
+	base := job.Base{}
 	jActual := jReturn.(*job.ShellJob)
 	jActual.Base = base
 	j.Base = base

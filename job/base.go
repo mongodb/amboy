@@ -38,7 +38,7 @@ type Base struct {
 	JobType       amboy.JobType     `bson:"job_type" json:"job_type" yaml:"job_type"`
 	Errors        []string          `bson:"errors" json:"errors" yaml:"errors"`
 	PriorityValue int               `bson:"priority" json:"priority" yaml:"priority"`
-	TaskTimeInfo  amboy.JobTimeInfo `bson:"time_info,omitempty" json:"time_info,omitempty" yaml:"time_info,omitempty"`
+	TaskTimeInfo  amboy.JobTimeInfo `bson:"time_info" json:"time_info" yaml:"time_info"`
 
 	status amboy.JobStatusInfo
 	dep    dependency.Manager
