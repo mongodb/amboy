@@ -1,6 +1,7 @@
 package job
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -45,7 +46,7 @@ func (s *BaseCheckSuite) TestAddErrorWithNilObjectDoesNotChangeErrorState() {
 
 func (s *BaseCheckSuite) TestAddErrorsPersistsErrorsInJob() {
 	for i := 1; i <= 100; i++ {
-		s.base.AddError(erbrors.New("foo"))
+		s.base.AddError(errors.New("foo"))
 		s.Error(s.base.Error())
 		s.Len(s.base.Errors, i)
 		s.True(s.base.HasErrors())
