@@ -92,9 +92,9 @@ type JobStatusInfo struct {
 // data to delay execution of a job when WaitUntil refers to a time
 // in the future.
 type JobTimeInfo struct {
-	Start     time.Time `bson:"start,omitempty" json:"start,omitempty" yaml:"start,omitempty"`
-	End       time.Time `bson:"end,omitempty" json:"end,omitempty" yaml:"end,omitempty"`
-	WaitUntil time.Time `bson:"wait_until,omitempty" json:"wait_until,omitempty" yaml:"wait_until,omitempty"`
+	Start     time.Time `bson:"start" json:"start,omitempty" yaml:"start,omitempty"`
+	End       time.Time `bson:"end" json:"end,omitempty" yaml:"end,omitempty"`
+	WaitUntil time.Time `bson:"wait_until" json:"wait_until,omitempty" yaml:"wait_until,omitempty"`
 }
 
 // Duration is a convenience function to return a duration for a job.
