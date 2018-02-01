@@ -219,6 +219,70 @@ func runOrderedSmokeTest(ctx context.Context, q amboy.Queue, size int, startBefo
 
 }
 
+func runWaitUntilSmokeTest(ctx context.Context, q amboy.Queue, size int, assert *assert.Assertions) {
+	if err := q.Start(ctx); !assert.NoError(err) {
+		return
+	}
+
+	testNames := []string{"test", "second", "workers", "forty-two", "true", "false", ""}
+	numJobs := size * len(testNames)
+
+	wg := &sync.WaitGroup{}
+
+	for i := 0; i < size; i++ {
+		wg.Add(1)
+		go func(num int) {
+			for _, name := range testNames {
+				cmd := fmt.Sprintf("echo %s.%d.a", name, num)
+				j := job.NewShellJob(cmd, "")
+				ti := j.TimeInfo()
+				assert.Zero(ti.WaitUntil)
+				assert.NoError(q.Put(j),
+					fmt.Sprintf("(a) with %d workers", num))
+				_, ok := q.Get(j.ID())
+				assert.True(ok)
+
+				cmd = fmt.Sprintf("echo %s.%d.b", name, num)
+				j = job.NewShellJob(cmd, "")
+				j.UpdateTimeInfo(amboy.JobTimeInfo{
+					WaitUntil: time.Now().Add(time.Hour),
+				})
+				ti = j.TimeInfo()
+				assert.NotZero(ti.WaitUntil)
+				assert.NoError(q.Put(j),
+					fmt.Sprintf("(b) with %d workers", num))
+				_, ok = q.Get(j.ID())
+				assert.True(ok)
+			}
+			wg.Done()
+		}(i)
+	}
+	wg.Wait()
+
+	assert.Equal(numJobs*2, q.Stats().Total, fmt.Sprintf("with %d workers", size))
+
+	// wait for things to finish
+	time.Sleep(time.Second)
+
+	completed := 0
+	for result := range q.Results(ctx) {
+		status := result.Status()
+		ti := result.TimeInfo()
+
+		if status.Completed {
+			completed++
+			assert.Zero(ti.WaitUntil)
+			continue
+		}
+
+		assert.NotZero(ti.WaitUntil)
+	}
+
+	assert.Equal(numJobs, q.Stats().Completed, "%+v", q.Stats())
+
+	grip.Infof("completed wait until results for %d worker smoke test", size)
+}
+
 //////////////////////////////////////////////////////////////////////
 //
 // Integration tests with different queue and driver implementations
@@ -827,6 +891,40 @@ func TestSmokeRemoteOrderedWithWorkerPoolsAndMongoDB(t *testing.T) {
 
 		runOrderedSmokeTest(ctx, q, poolSize, true, assert)
 		cancel()
+		grip.CatchError(cleanupMongoDB(name, opts))
+	}
+
+}
+
+func TestSmokeWaitUntilAdaptiveOrerQueuePools(t *testing.T) {
+	assert := assert.New(t) // nolint
+
+	for _, poolSize := range []int{1, 2} {
+		ctx, cancel := context.WithCancel(context.Background())
+		q := NewAdaptiveOrderedLocalQueue(poolSize)
+		runWaitUntilSmokeTest(ctx, q, poolSize, assert)
+		cancel()
+	}
+}
+
+func TestSmokeWaitUntilMongoDBQueue(t *testing.T) {
+	assert := assert.New(t) // nolint
+	opts := DefaultMongoDBOptions()
+	opts.CheckWaitUntil = true
+
+	for _, poolSize := range []int{1, 2} {
+		ctx, cancel := context.WithCancel(context.Background())
+
+		q := NewSimpleRemoteOrdered(poolSize)
+
+		name := strings.Replace(uuid.NewV4().String(), "-", ".", -1)
+		driver := NewMongoDBDriver(name, opts)
+		assert.NoError(driver.Open(ctx))
+		assert.NoError(q.SetDriver(driver))
+
+		runWaitUntilSmokeTest(ctx, q, poolSize, assert)
+		cancel()
+		driver.Close()
 		grip.CatchError(cleanupMongoDB(name, opts))
 	}
 
