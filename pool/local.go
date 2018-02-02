@@ -65,8 +65,8 @@ func (r *localWorkers) Started() bool {
 
 func startWorkerServer(ctx context.Context, q amboy.Queue, wg *sync.WaitGroup) <-chan amboy.Job {
 	output := make(chan amboy.Job)
+	wg.Add(1)
 	go func() {
-		wg.Add(1)
 		defer wg.Done()
 		for {
 			select {
