@@ -179,7 +179,7 @@ func (d *mongoDB) Get(name string) (amboy.Job, error) {
 
 	err := jobs.FindId(name).One(j)
 	grip.Debug(message.WrapError(err, message.Fields{
-		"operation": "GET",
+		"operation": "get job",
 		"name":      name,
 		"id":        d.instanceID,
 		"service":   "amboy.queue.mongodb",
@@ -394,9 +394,10 @@ func (d *mongoDB) Next(ctx context.Context) amboy.Job {
 					continue
 				}
 				grip.Warning(message.WrapError(err, message.Fields{
-					"id":      d.instanceID,
-					"service": "amboy.queue.mongodb",
-					"message": "problem retreiving jobs from MongoDB",
+					"id":        d.instanceID,
+					"service":   "amboy.queue.mongodb",
+					"message":   "problem retreiving jobs from MongoDB",
+					"operation": "next job",
 				}))
 				return nil
 			}
@@ -404,9 +405,10 @@ func (d *mongoDB) Next(ctx context.Context) amboy.Job {
 			job, err := registry.ConvertToJob(j)
 			if err != nil {
 				grip.Warning(message.WrapError(err, message.Fields{
-					"id":      d.instanceID,
-					"service": "amboy.queue.mongodb",
-					"message": "problem converting job object from mongodb",
+					"id":        d.instanceID,
+					"service":   "amboy.queue.mongodb",
+					"operation": "next job",
+					"message":   "problem converting job object from mongodb",
 				}))
 				timer.Reset(time.Duration(misses * rand.Int63n(int64(time.Second))))
 				continue
