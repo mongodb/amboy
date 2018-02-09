@@ -37,16 +37,21 @@ type lockManager struct {
 // thread. The name *must* be unique per driver/queue combination, to
 // ensure that each driver/queue can have exclusive locks over jobs.
 func NewLockManager(ctx context.Context, name string, d Driver) LockManager {
-	l := &lockManager{
+	l := newLockManager(name, d)
+	l.start(ctx)
+	return l
+}
+
+func newLockManager(name string, d Driver) *lockManager {
+	return &lockManager{
 		name:    name,
 		d:       d,
 		ops:     make(chan func(lockPings)),
 		timeout: lockTimeout,
 	}
-	go l.lockPinger(ctx)
-
-	return l
 }
+
+func (l *lockManager) start(ctx context.Context) { go l.lockPinger(ctx) }
 
 func (l *lockManager) lockPinger(ctx context.Context) {
 	activeLocks := lockPings{}

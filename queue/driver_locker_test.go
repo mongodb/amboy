@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/job"
@@ -33,7 +34,9 @@ func (s *LockManagerSuite) SetupSuite() {
 func (s *LockManagerSuite) SetupTest() {
 	var ctx context.Context
 	ctx, s.testCancel = context.WithCancel(context.Background())
-	s.lm = NewLockManager(ctx, "test", s.driver).(*lockManager)
+	s.lm = newLockManager("test", s.driver)
+	s.lm.timeout = time.Second
+	s.lm.start(ctx)
 }
 
 func (s *LockManagerSuite) TearDownTest() {
@@ -85,6 +88,12 @@ func (s *LockManagerSuite) TestLocksArePerJob() {
 	s.NoError(s.lm.Lock(jtwo))
 }
 
-func (s *LockManagerSuite) TestFook() {
+func (s *LockManagerSuite) TestLockReachesTimeout() {
+	j := job.NewShellJob("echo hello", "")
+	s.NoError(s.driver.Put(j))
 
+	s.NoError(s.lm.Lock(j))
+	time.Sleep(s.lm.timeout * 2)
+	s.NoError(s.lm.Lock(j))
+	s.Error(s.lm.Lock(j))
 }
