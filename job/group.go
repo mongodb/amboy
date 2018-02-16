@@ -38,7 +38,6 @@ func newGroupInstance() *Group {
 			JobType: amboy.JobType{
 				Name:    "group",
 				Version: 1,
-				Format:  amboy.BSON,
 			},
 		},
 	}

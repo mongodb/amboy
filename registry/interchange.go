@@ -18,7 +18,7 @@ type JobInterchange struct {
 	Job        *rawJob                `json:"job,omitempty" bson:"job,omitempty" yaml:"job,omitempty"`
 	Dependency *DependencyInterchange `json:"dependency,omitempty" bson:"dependency,omitempty" yaml:"dependency,omitempty"`
 	Status     amboy.JobStatusInfo    `bson:"status" json:"status" yaml:"status"`
-	TimeInfo   amboy.JobTimeInfo      `bson:"time_info" json:"time_info" yaml:"time_info"`
+	TimeInfo   amboy.JobTimeInfo      `bson:"time_info,omitempty" json:"time_info,omitempty" yaml:"time_info,omitempty"`
 }
 
 // MakeJobInterchange changes a Job interface into a JobInterchange
@@ -30,7 +30,7 @@ func MakeJobInterchange(j amboy.Job, f amboy.Format) (*JobInterchange, error) {
 		return nil, errors.New("cannot use jobs with versions less than 0 with job interchange")
 	}
 
-	dep, err := makeDependencyInterchange(j.Dependency(), f)
+	dep, err := makeDependencyInterchange(f, j.Dependency())
 	if err != nil {
 		return nil, err
 	}
@@ -48,9 +48,9 @@ func MakeJobInterchange(j amboy.Job, f amboy.Format) (*JobInterchange, error) {
 		Status:   j.Status(),
 		TimeInfo: j.TimeInfo(),
 		Job: &rawJob{
-			Body:     data,
-			typeName: typeInfo.Name,
-			job:      j,
+			Body: data,
+			Type: typeInfo.Name,
+			job:  j,
 		},
 		Dependency: dep,
 	}
@@ -70,8 +70,6 @@ func ConvertToJob(j *JobInterchange, f amboy.Format) (amboy.Job, error) {
 		return nil, err
 	}
 
-	j.Job.typeName = j.Type
-
 	job := factory()
 
 	if job.Type().Version != j.Version {
@@ -79,7 +77,7 @@ func ConvertToJob(j *JobInterchange, f amboy.Format) (amboy.Job, error) {
 			j.Name, j.Version, job.Type().Version, j.Type)
 	}
 
-	dep, err := convertToDependency(j.Dependency, f)
+	dep, err := convertToDependency(f, j.Dependency)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -112,7 +110,7 @@ type DependencyInterchange struct {
 
 // MakeDependencyInterchange converts a dependency.Manager document to
 // its DependencyInterchange format.
-func makeDependencyInterchange(d dependency.Manager, f amboy.Format) (*DependencyInterchange, error) {
+func makeDependencyInterchange(f amboy.Format, d dependency.Manager) (*DependencyInterchange, error) {
 	typeInfo := d.Type()
 
 	data, err := amboy.ConvertTo(f, d)
@@ -125,9 +123,9 @@ func makeDependencyInterchange(d dependency.Manager, f amboy.Format) (*Dependenc
 		Version: typeInfo.Version,
 		Edges:   d.Edges(),
 		Dependency: &rawDependency{
-			Body:     data,
-			typeName: typeInfo.Name,
-			dep:      d,
+			Body: data,
+			Type: typeInfo.Name,
+			dep:  d,
 		},
 	}
 
@@ -137,12 +135,11 @@ func makeDependencyInterchange(d dependency.Manager, f amboy.Format) (*Dependenc
 // convertToDependency uses the registry to convert a
 // DependencyInterchange object to the correct dependnecy.Manager
 // type.
-func convertToDependency(d *DependencyInterchange, f amboy.Format) (dependency.Manager, error) {
+func convertToDependency(f amboy.Format, d *DependencyInterchange) (dependency.Manager, error) {
 	factory, err := GetDependencyFactory(d.Type)
 	if err != nil {
 		return nil, err
 	}
-	d.Dependency.typeName = d.Type
 
 	dep := factory()
 

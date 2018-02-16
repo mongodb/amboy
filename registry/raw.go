@@ -1,82 +1,81 @@
 package registry
 
 import (
+	"encoding/json"
+
 	"github.com/mongodb/amboy"
 	"github.com/pkg/errors"
 	"gopkg.in/mgo.v2/bson"
 )
 
 type rawJob struct {
-	Body     []byte `bson:"body" json:"body" yaml:"body"`
-	typeName string
-	job      interface{}
+	Body json.RawMessage `bson:"body" json:"body" yaml:"body"`
+	Type string          `bson:"type" json:"type" yaml:"type"`
+	job  interface{}
 }
 
-// Set == Unmarshal
 func (j *rawJob) SetBSON(r bson.Raw) error { j.Body = r.Data; return nil }
-
-// Get == Marshal
-func (j *rawJob) GetBSON() (interface{}, error) {
+func (j *rawJob) GetBSON() (interface{}, error) { // Get ~= Marshal
 	if j.job != nil {
 		return j.job, nil
 	}
 
-	factory, err := GetJobFactory(j.typeName)
+	factory, err := GetJobFactory(j.Type)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
 	job := factory()
-
 	if err = amboy.ConvertFrom(amboy.BSON, j.Body, job); err != nil {
 		return nil, errors.WithStack(err)
 	}
-
 	j.job = job
+
 	return j.job, nil
 }
 
 func (j *rawJob) UnmasrhalJSON(data []byte) error { j.Body = data; return nil }
-func (j *rawJob) MarshalJSON() ([]byte, error) {
-	if len(j.Body) > 0 {
-		return j.Body, nil
+
+func (j *rawJob) MarshalYAML() (interface{}, error) {
+	if j.job != nil {
+		return j.job, nil
 	}
 
-	if j.job == nil {
-		return nil, errors.New("no job defined")
-	}
-
-	body, err := amboy.ConvertTo(amboy.JSON, j.job)
+	factory, err := GetJobFactory(j.Type)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
-	j.Body = body
+	job := factory()
+	if err = amboy.ConvertFrom(amboy.YAML, j.Body, job); err != nil {
+		return nil, errors.WithStack(err)
+	}
+	j.job = job
 
-	return j.Body, nil
+	return j.job, nil
 }
 
-func (j *rawJob) UnmasrhalYAML(data []byte) error { j.Body = data; return nil }
-func (j *rawJob) MarshalYAML() ([]byte, error)    { return j.Body, nil }
+func (j *rawJob) UnmasrhalYAML(unmarshaler func(interface{}) error) error {
+
+	return unmarshaler(j.job)
+
+}
 
 ////////////////////////////////////////////////////////////////////////
 
 type rawDependency struct {
-	Body     []byte `bson:"body" json:"body" yaml:"body"`
-	typeName string
-	dep      interface{}
+	Body []byte `bson:"body" json:"body" yaml:"body"`
+	Type string `bson:"type" json:"type" yaml:"type"`
+	dep  interface{}
 }
 
-// Set == Unmarshal
 func (d *rawDependency) SetBSON(r bson.Raw) error { d.Body = r.Data; return nil }
-
-// Get == Marshal
-func (d *rawDependency) GetBSON() (interface{}, error) {
+func (d *rawDependency) GetBSON() (interface{}, error) { // Get ~= Marshal
 	if d.dep != nil {
 		return d.dep, nil
 	}
 
-	factory, err := GetDependencyFactory(d.typeName)
+	factory, err := GetDependencyFactory(d.Type)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -93,26 +92,22 @@ func (d *rawDependency) GetBSON() (interface{}, error) {
 }
 
 func (d *rawDependency) UnmasrhalJSON(data []byte) error { d.Body = data; return nil }
-func (d *rawDependency) MarshalJSON() ([]byte, error) {
-	if len(d.Body) > 0 {
-		return d.Body, nil
+
+func (d *rawDependency) MarshalYAML() (interface{}, error) {
+	if d.dep != nil {
+		return d.dep, nil
 	}
 
-	if d.dep == nil {
-		return nil, errors.New("no dependency defined")
-	}
-
-	body, err := amboy.ConvertTo(amboy.JSON, d.dep)
-
+	factory, err := GetDependencyFactory(d.Type)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
-	d.Body = body
+	dep := factory()
+	if err = amboy.ConvertFrom(amboy.YAML, d.Body, dep); err != nil {
+		return nil, errors.WithStack(err)
+	}
+	d.dep = dep
 
-	return d.Body, nil
-
+	return d.dep, nil
 }
-
-func (d *rawDependency) UnmasrhalYAML(data []byte) error { d.Body = data; return nil }
-func (d *rawDependency) MarshalYAML() ([]byte, error)    { return d.Body, nil }
