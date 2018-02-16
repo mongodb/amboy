@@ -38,7 +38,7 @@ func (j *rawJob) GetBSON() (interface{}, error) {
 
 func (j *rawJob) UnmasrhalJSON(data []byte) error { j.Body = data; return nil }
 func (j *rawJob) MarshalJSON() ([]byte, error) {
-	if j.Body != nil {
+	if len(j.Body) > 0 {
 		return j.Body, nil
 	}
 

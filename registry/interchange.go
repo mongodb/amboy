@@ -70,6 +70,8 @@ func ConvertToJob(j *JobInterchange, f amboy.Format) (amboy.Job, error) {
 		return nil, err
 	}
 
+	j.Job.typeName = j.Type
+
 	job := factory()
 
 	if job.Type().Version != j.Version {
@@ -82,7 +84,6 @@ func ConvertToJob(j *JobInterchange, f amboy.Format) (amboy.Job, error) {
 		return nil, errors.WithStack(err)
 	}
 
-	j.Job.typeName = j.Type
 	err = amboy.ConvertFrom(f, j.Job.Body, job)
 	if err != nil {
 		return nil, errors.Wrap(err, "converting job body")
@@ -141,6 +142,7 @@ func convertToDependency(d *DependencyInterchange, f amboy.Format) (dependency.M
 	if err != nil {
 		return nil, err
 	}
+	d.Dependency.typeName = d.Type
 
 	dep := factory()
 
@@ -148,7 +150,6 @@ func convertToDependency(d *DependencyInterchange, f amboy.Format) (dependency.M
 		return nil, errors.Errorf("dependency '%s' (version=%d) does not match the current version (%d) for the dependency type '%s'",
 			d.Type, d.Version, dep.Type().Version, dep.Type().Name)
 	}
-	d.Dependency.typeName = d.Type
 
 	// this works, because we want to use all the data from the
 	// interchange object, but want to use the type information
