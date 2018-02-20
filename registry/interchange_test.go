@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -44,6 +45,21 @@ func (s *JobInterchangeSuite) SetupTest() {
 	s.job = NewTestJob("interchange-test")
 }
 
+func (s *JobInterchangeSuite) TestRoundTrip() {
+	i, err := MakeJobInterchange(s.job, s.format)
+	s.NoError(err)
+	out, err := amboy.ConvertTo(s.format, i)
+	s.NoError(err)
+
+	fmt.Println(string(out))
+	i2 := &JobInterchange{}
+	err = amboy.ConvertFrom(s.format, out, i2)
+
+	s.NoError(err)
+
+	s.Equal(i, i2)
+}
+
 func (s *JobInterchangeSuite) TestConversionToInterchangeMaintainsMetaDataFidelity() {
 	i, err := MakeJobInterchange(s.job, s.format)
 	if s.NoError(err) {
@@ -61,6 +77,7 @@ func (s *JobInterchangeSuite) TestConversionFromInterchangeMaintainsFidelity() {
 	}
 
 	j, err := ConvertToJob(i, s.format)
+
 	if s.NoError(err) {
 		s.IsType(s.job, j)
 

@@ -34,8 +34,6 @@ func (j *rawJob) GetBSON() (interface{}, error) { // Get ~= Marshal
 	return j.job, nil
 }
 
-func (j *rawJob) UnmasrhalJSON(data []byte) error { j.Body = data; return nil }
-
 func (j *rawJob) MarshalYAML() (interface{}, error) {
 	if j.job != nil {
 		return j.job, nil
@@ -55,10 +53,8 @@ func (j *rawJob) MarshalYAML() (interface{}, error) {
 	return j.job, nil
 }
 
-func (j *rawJob) UnmasrhalYAML(unmarshaler func(interface{}) error) error {
-
-	return unmarshaler(j.job)
-
+func (j *rawJob) UnmarshalYAML(unmarshaler func(interface{}) error) error {
+	return unmarshaler(&j.job)
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -91,8 +87,6 @@ func (d *rawDependency) GetBSON() (interface{}, error) { // Get ~= Marshal
 	return d.dep, nil
 }
 
-func (d *rawDependency) UnmasrhalJSON(data []byte) error { d.Body = data; return nil }
-
 func (d *rawDependency) MarshalYAML() (interface{}, error) {
 	if d.dep != nil {
 		return d.dep, nil
@@ -110,4 +104,8 @@ func (d *rawDependency) MarshalYAML() (interface{}, error) {
 	d.dep = dep
 
 	return d.dep, nil
+}
+
+func (d *rawDependency) UnmarshalYAML(unmarshaler func(interface{}) error) error {
+	return unmarshaler(&d.dep)
 }

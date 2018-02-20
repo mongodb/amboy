@@ -15,13 +15,13 @@ func init() {
 }
 
 type JobTest struct {
-	Name       string
-	Content    string
+	Name       string        `bson:"name" json:"name" yaml:"name"`
+	Content    string        `bson:"content" json:"content" yaml:"content"`
+	T          amboy.JobType `bson:"type" json:"type" yaml:"type"`
 	shouldFail bool
 	hadError   bool
 	status     amboy.JobStatusInfo
 	timeInfo   amboy.JobTimeInfo
-	T          amboy.JobType
 	dep        dependency.Manager
 	priority   int
 }
