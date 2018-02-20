@@ -362,23 +362,28 @@ func (d *mongoDB) Next(ctx context.Context) amboy.Job {
 		return nil
 	}
 	defer session.Close()
+
 	j := &registry.JobInterchange{}
 
-	qd := bson.M{"status.completed": false, "status.in_prog": false}
-
-	if d.respectWaitUntil {
-		qd["time_info.wait_until"] = bson.M{"$lt": time.Now()}
-	}
-
-	query := jobs.Find(bson.M{
+	qd := bson.M{
 		"$or": []bson.M{
-			qd,
+			bson.M{
+				"status.completed": false,
+				"status.in_prog":   false,
+			},
 			bson.M{
 				"status.in_prog": true,
 				"status.mod_ts":  bson.M{"$lte": time.Now().Add(-lockTimeout)},
 			},
 		},
-	})
+	}
+
+	if d.respectWaitUntil {
+		qd["time_info.wait_until"] = bson.M{"$lte": time.Now()}
+	}
+
+	query := jobs.Find(qd)
+
 	if d.priority {
 		query = query.Sort("-priority")
 	}
@@ -393,21 +398,26 @@ func (d *mongoDB) Next(ctx context.Context) amboy.Job {
 			return nil
 		case <-timer.C:
 			if err := query.One(j); err != nil {
-				if misses < 30 {
-					misses++
-				}
+				misses++
 
-				if err == mgo.ErrNotFound {
+				if err == mgo.ErrNotFound || misses < 30 {
 					timer.Reset(time.Duration(misses * rand.Int63n(int64(time.Second))))
 					continue
 				}
+
 				grip.Warning(message.WrapError(err, message.Fields{
 					"id":        d.instanceID,
 					"service":   "amboy.queue.mongodb",
 					"message":   "problem retreiving jobs from MongoDB",
 					"operation": "next job",
 				}))
+
 				return nil
+			}
+
+			if j == nil {
+				timer.Reset(time.Duration(misses * rand.Int63n(int64(time.Second))))
+				continue
 			}
 
 			job, err := registry.ConvertToJob(j, amboy.BSON)
