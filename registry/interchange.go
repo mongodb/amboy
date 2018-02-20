@@ -18,7 +18,7 @@ type JobInterchange struct {
 	Job        *rawJob                `json:"job,omitempty" bson:"job,omitempty" yaml:"job,omitempty"`
 	Dependency *DependencyInterchange `json:"dependency,omitempty" bson:"dependency,omitempty" yaml:"dependency,omitempty"`
 	Status     amboy.JobStatusInfo    `bson:"status" json:"status" yaml:"status"`
-	TimeInfo   amboy.JobTimeInfo      `bson:"time_info,omitempty" json:"time_info,omitempty" yaml:"time_info,omitempty"`
+	TimeInfo   amboy.JobTimeInfo      `bson:"time_info" json:"time_info,omitempty" yaml:"time_info,omitempty"`
 }
 
 // MakeJobInterchange changes a Job interface into a JobInterchange
