@@ -370,7 +370,15 @@ func (d *mongoDB) Next(ctx context.Context) amboy.Job {
 		qd["time_info.wait_until"] = bson.M{"$lt": time.Now()}
 	}
 
-	query := jobs.Find(qd)
+	query := jobs.Find(bson.M{
+		"$or": []bson.M{
+			qd,
+			bson.M{
+				"status.in_prog": true,
+				"status.mod_ts":  bson.M{"$lte": time.Now().Add(-lockTimeout)},
+			},
+		},
+	})
 	if d.priority {
 		query = query.Sort("-priority")
 	}
