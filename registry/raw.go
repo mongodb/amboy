@@ -14,11 +14,7 @@ type rawJob struct {
 	job  interface{}
 }
 
-func (j *rawJob) SetBSON(r bson.Raw) error {
-	j.Body = r.Data
-
-	return nil
-}
+func (j *rawJob) SetBSON(r bson.Raw) error { j.Body = r.Data; return nil }
 func (j *rawJob) GetBSON() (interface{}, error) { // Get ~= Marshal
 	if j.job != nil {
 		return j.job, nil
