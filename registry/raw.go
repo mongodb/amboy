@@ -14,7 +14,11 @@ type rawJob struct {
 	job  interface{}
 }
 
-func (j *rawJob) SetBSON(r bson.Raw) error { j.Body = r.Data; return nil }
+func (j *rawJob) SetBSON(r bson.Raw) error {
+	j.Body = r.Data
+
+	return nil
+}
 func (j *rawJob) GetBSON() (interface{}, error) { // Get ~= Marshal
 	if j.job != nil {
 		return j.job, nil
@@ -34,6 +38,28 @@ func (j *rawJob) GetBSON() (interface{}, error) { // Get ~= Marshal
 	return j.job, nil
 }
 
+func (j *rawJob) UnmarshalYAML(um func(interface{}) error) error {
+	factory, err := GetJobFactory(j.Type)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	job := factory()
+
+	err = um(job)
+	if err != nil {
+		return err
+	}
+
+	j.job = job
+
+	j.Body, err = amboy.ConvertTo(amboy.YAML, job)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
 func (j *rawJob) MarshalYAML() (interface{}, error) {
 	if j.job != nil {
 		return j.job, nil
@@ -53,8 +79,25 @@ func (j *rawJob) MarshalYAML() (interface{}, error) {
 	return j.job, nil
 }
 
-func (j *rawJob) UnmarshalYAML(unmarshaler func(interface{}) error) error {
-	return unmarshaler(&j.job)
+func (j *rawJob) UnmarshalJSON(in []byte) error { j.Body = in; return nil }
+func (j *rawJob) MarshalJSON() ([]byte, error) {
+	if j.Body != nil {
+		return j.Body, nil
+	}
+
+	if j.job == nil {
+		return nil, errors.New("nil job defined")
+	}
+
+	var err error
+
+	j.Body, err = amboy.ConvertTo(amboy.JSON, j.job)
+
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	return j.Body, nil
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -87,6 +130,27 @@ func (d *rawDependency) GetBSON() (interface{}, error) { // Get ~= Marshal
 	return d.dep, nil
 }
 
+func (d *rawDependency) UnmarshalYAML(um func(interface{}) error) error {
+	factory, err := GetDependencyFactory(d.Type)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	dep := factory()
+	if err = um(dep); err != nil {
+		return errors.WithStack(err)
+	}
+
+	d.dep = dep
+
+	d.Body, err = amboy.ConvertTo(amboy.YAML, dep)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return nil
+}
+
 func (d *rawDependency) MarshalYAML() (interface{}, error) {
 	if d.dep != nil {
 		return d.dep, nil
@@ -106,6 +170,22 @@ func (d *rawDependency) MarshalYAML() (interface{}, error) {
 	return d.dep, nil
 }
 
-func (d *rawDependency) UnmarshalYAML(unmarshaler func(interface{}) error) error {
-	return unmarshaler(&d.dep)
+func (d *rawDependency) UnmarshalJSON(in []byte) error { d.Body = in; return nil }
+func (d *rawDependency) MarshalJSON() ([]byte, error) {
+	if d.Body != nil {
+		return d.Body, nil
+	}
+
+	if d.dep == nil {
+		return nil, errors.New("nil dependency defined")
+	}
+
+	var err error
+	d.Body, err = amboy.ConvertTo(amboy.JSON, d.dep)
+
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	return d.Body, nil
 }
