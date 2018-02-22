@@ -31,6 +31,7 @@ type mongoDB struct {
 	instanceID       string
 	priority         bool
 	respectWaitUntil bool
+	useNewQuery      bool
 	mu               sync.RWMutex
 	LockManager
 }
@@ -67,6 +68,7 @@ func NewMongoDBDriver(name string, opts MongoDBOptions) Driver {
 		mongodbURI:       opts.URI,
 		priority:         opts.Priority,
 		respectWaitUntil: opts.CheckWaitUntil,
+		useNewQuery:      false,
 		instanceID:       fmt.Sprintf("%s.%s.%s", name, host, uuid.NewV4()),
 	}
 }
@@ -365,17 +367,23 @@ func (d *mongoDB) Next(ctx context.Context) amboy.Job {
 
 	j := &registry.JobInterchange{}
 
-	qd := bson.M{
-		"$or": []bson.M{
-			bson.M{
-				"status.completed": false,
-				"status.in_prog":   false,
+	var qd bson.M
+
+	if d.useNewQuery {
+		qd = bson.M{
+			"$or": []bson.M{
+				bson.M{
+					"status.completed": false,
+					"status.in_prog":   false,
+				},
+				bson.M{
+					"status.mod_ts":  bson.M{"$lte": time.Now().Add(-lockTimeout)},
+					"status.in_prog": true,
+				},
 			},
-			bson.M{
-				"status.in_prog": true,
-				"status.mod_ts":  bson.M{"$lte": time.Now().Add(-lockTimeout)},
-			},
-		},
+		}
+	} else {
+		qd = bson.M{"status.completed": false, "status.in_prog": false}
 	}
 
 	if d.respectWaitUntil {
@@ -400,7 +408,7 @@ func (d *mongoDB) Next(ctx context.Context) amboy.Job {
 			if err := query.One(j); err != nil {
 				misses++
 
-				if err == mgo.ErrNotFound || misses < 30 {
+				if err == mgo.ErrNotFound {
 					timer.Reset(time.Duration(misses * rand.Int63n(int64(time.Second))))
 					continue
 				}
