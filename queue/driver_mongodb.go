@@ -12,6 +12,7 @@ import (
 	"github.com/mongodb/amboy/registry"
 	"github.com/mongodb/grip"
 	"github.com/mongodb/grip/message"
+	"github.com/mongodb/grip/sometimes"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	"gopkg.in/mgo.v2"
@@ -409,6 +410,13 @@ func (d *mongoDB) Next(ctx context.Context) amboy.Job {
 				misses++
 
 				if err == mgo.ErrNotFound {
+					grip.DebugWhen(sometimes.Percent(10), message.Fields{
+						"id":        d.instanceID,
+						"misses":    misses,
+						"operation": "next job",
+						"new_query": d.useNewQuery,
+						"outcome":   "no documents found",
+					})
 					timer.Reset(time.Duration(misses * rand.Int63n(int64(time.Second))))
 					continue
 				}
@@ -418,6 +426,8 @@ func (d *mongoDB) Next(ctx context.Context) amboy.Job {
 					"service":   "amboy.queue.mongodb",
 					"message":   "problem retreiving jobs from MongoDB",
 					"operation": "next job",
+					"misses":    misses,
+					"new_query": d.useNewQuery,
 				}))
 
 				return nil
@@ -435,6 +445,8 @@ func (d *mongoDB) Next(ctx context.Context) amboy.Job {
 					"service":   "amboy.queue.mongodb",
 					"operation": "next job",
 					"message":   "problem converting job object from mongodb",
+					"misses":    misses,
+					"new_query": d.useNewQuery,
 				}))
 				timer.Reset(time.Duration(misses * rand.Int63n(int64(time.Second))))
 				continue
