@@ -87,6 +87,13 @@ func OpenNewMongoDBDriver(ctx context.Context, name string, opts MongoDBOptions,
 	return d, nil
 }
 
+func (d *mongoDB) ID() string {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	return d.instanceID
+}
+
 // Open creates a connection to mongoDB, and returns an error if
 // there's a problem connecting.
 func (d *mongoDB) Open(ctx context.Context) error {
@@ -103,7 +110,7 @@ func (d *mongoDB) Open(ctx context.Context) error {
 }
 
 func (d *mongoDB) start(ctx context.Context, session *mgo.Session) error {
-	d.LockManager = NewLockManager(ctx, d.name, d)
+	d.LockManager = NewLockManager(ctx, d)
 
 	dCtx, cancel := context.WithCancel(ctx)
 	d.canceler = cancel
