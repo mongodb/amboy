@@ -1,6 +1,7 @@
 package message
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/mongodb/grip/level"
@@ -43,6 +44,9 @@ func (g *GroupComposer) String() string {
 
 	out := []string{}
 	for _, m := range g.messages {
+		if m == nil {
+			continue
+		}
 		if m.Loggable() {
 			out = append(out, m.String())
 		}
@@ -60,6 +64,9 @@ func (g *GroupComposer) Raw() interface{} {
 
 	out := []interface{}{}
 	for _, m := range g.messages {
+		if m == nil {
+			continue
+		}
 		if m.Loggable() {
 			out = append(out, m.Raw())
 		}
@@ -72,6 +79,9 @@ func (g *GroupComposer) Raw() interface{} {
 // is loggable.
 func (g *GroupComposer) Loggable() bool {
 	for _, m := range g.messages {
+		if m == nil {
+			continue
+		}
 		if m.Loggable() {
 			return true
 		}
@@ -85,6 +95,9 @@ func (g *GroupComposer) Priority() level.Priority {
 	var highest level.Priority
 
 	for _, m := range g.messages {
+		if m == nil {
+			continue
+		}
 		pri := m.Priority()
 		if pri > highest {
 			highest = pri
@@ -94,11 +107,21 @@ func (g *GroupComposer) Priority() level.Priority {
 	return highest
 }
 
-// SetPriority sets the priority of all constituent Composers,
-// returning an error after encountering a single error.
+// SetPriority sets the priority of all constituent Composers *only*
+// if the existing level is unset, and does not propogate an error,
+// but will *not* unset the level of the compser and will return an error
+// in this case.
 func (g *GroupComposer) SetPriority(l level.Priority) error {
+	if l == level.Invalid {
+		return fmt.Errorf("cannot set priority to an invalid setting")
+	}
+
 	for _, m := range g.messages {
-		if m.Priority() == 0 {
+		if m == nil {
+			continue
+		}
+
+		if m.Priority() == level.Invalid {
 			_ = m.SetPriority(l)
 		}
 	}
@@ -109,4 +132,18 @@ func (g *GroupComposer) SetPriority(l level.Priority) error {
 // Messages returns a the underlying collection of messages.
 func (g *GroupComposer) Messages() []Composer {
 	return g.messages
+}
+
+// Annotate calls the Annotate method of every non-nil component
+// Composer *but does not propogate
+func (g *GroupComposer) Annotate(k string, v interface{}) error {
+	for _, m := range g.messages {
+		if m == nil {
+			continue
+		}
+
+		_ = m.Annotate(k, v)
+	}
+
+	return nil
 }

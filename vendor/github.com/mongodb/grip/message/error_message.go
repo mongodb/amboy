@@ -40,7 +40,7 @@ func NewErrorWrap(err error, base string, args ...interface{}) Composer {
 }
 
 // WrapError wraps an error and creates a composer converting the
-// arguement into a composer in the same manner as the front end logging methods.
+// argument into a composer in the same manner as the front end logging methods.
 func WrapError(err error, m interface{}) Composer {
 	return NewErrorWrappedComposer(err, ConvertToComposer(level.Priority(0), m))
 }
@@ -75,7 +75,14 @@ func (m *errorComposerWrap) Raw() interface{} {
 	}
 
 	if m.Composer.Loggable() {
-		out["context"] = m.Composer.Raw()
+		// special handling for fields - merge keys in with output keys
+		switch t := m.Composer.(type) {
+		case *fieldMessage:
+			t.fields["error"] = errStr
+			out = t.fields
+		default:
+			out["context"] = m.Composer.Raw()
+		}
 	}
 
 	ext := fmt.Sprintf("%+v", m.err)
@@ -84,4 +91,8 @@ func (m *errorComposerWrap) Raw() interface{} {
 	}
 
 	return out
+}
+
+func (m *errorComposerWrap) Annotate(k string, v interface{}) error {
+	return m.Composer.Annotate(k, v)
 }
