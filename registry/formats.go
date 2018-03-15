@@ -40,7 +40,7 @@ func convertTo(f amboy.Format, v interface{}) ([]byte, error) {
 }
 
 // ConvertFrom takes a Format type, a byte sequence, and an interface
-// and attempts to serialize that data into the interface object as
+// and attempts to deserialize that data into the interface object as
 // indicated by the Format specifier.
 func convertFrom(f amboy.Format, data []byte, v interface{}) error {
 	switch f {
