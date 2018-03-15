@@ -28,9 +28,15 @@ func TestJobInterchangeSuiteJSON(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func TestJobInterchangeSuiteBSON(t *testing.T) {
+func TestJobInterchangeSuiteLegacyBSON(t *testing.T) {
 	s := new(JobInterchangeSuite)
 	s.format = amboy.BSON
+	suite.Run(t, s)
+}
+
+func TestJobInterchangeSuiteBSON(t *testing.T) {
+	s := new(JobInterchangeSuite)
+	s.format = amboy.BSON2
 	suite.Run(t, s)
 }
 
@@ -51,7 +57,7 @@ func (s *JobInterchangeSuite) TestRoundTripHighLevel() {
 	outJob, err := i.Resolve(s.format)
 	s.NoError(err)
 
-	if s.format == amboy.BSON {
+	if s.format == amboy.BSON || s.format == amboy.BSON2 {
 		// mgo/bson seems to unset/nil the private map in the
 		// implementation of the dependency. It's not material
 		// to this test so we fake it out
@@ -70,11 +76,10 @@ func (s *JobInterchangeSuite) TestRoundTripLowLevel() {
 
 	j2, err := i.Resolve(s.format)
 
-	j2.SetDependency(dependency.NewAlways())
-
-	s.NoError(err)
-
-	s.Equal(s.job, j2)
+	if s.NoError(err) {
+		j2.SetDependency(dependency.NewAlways())
+		s.Equal(s.job, j2)
+	}
 }
 
 func (s *JobInterchangeSuite) TestConversionToInterchangeMaintainsMetaDataFidelity() {
