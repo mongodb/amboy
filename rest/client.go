@@ -3,6 +3,7 @@ package rest
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -219,7 +220,12 @@ func (c *Client) SubmitJob(ctx context.Context, j amboy.Job) (string, error) {
 		return "", err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, c.getURL("/v1/job/create"), bytes.NewBuffer(ji.Raw()))
+	b, err := json.Marshal(ji)
+	if err != nil {
+		return "", err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, c.getURL("/v1/job/create"), bytes.NewBuffer(b))
 	if err != nil {
 		return "", err
 	}
