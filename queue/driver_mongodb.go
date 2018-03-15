@@ -199,7 +199,7 @@ func (d *mongoDB) Get(name string) (amboy.Job, error) {
 		return nil, errors.Wrapf(err, "GET problem fetching '%s'", name)
 	}
 
-	output, err := registry.ConvertToJob(j, amboy.BSON)
+	output, err := j.Resolve(amboy.BSON)
 	if err != nil {
 		return nil, errors.Wrapf(err,
 			"GET problem converting '%s' to job object", name)
@@ -313,7 +313,7 @@ func (d *mongoDB) Jobs() <-chan amboy.Job {
 		defer results.Close()
 		j := &registry.JobInterchange{}
 		for results.Next(j) {
-			job, err := registry.ConvertToJob(j, amboy.BSON)
+			job, err := j.Resolve(amboy.BSON)
 			if err != nil {
 				grip.Warning(message.WrapError(err, message.Fields{
 					"id":        d.instanceID,
@@ -445,7 +445,7 @@ func (d *mongoDB) Next(ctx context.Context) amboy.Job {
 				continue
 			}
 
-			job, err := registry.ConvertToJob(j, amboy.BSON)
+			job, err := j.Resolve(amboy.BSON)
 			if err != nil {
 				grip.Warning(message.WrapError(err, message.Fields{
 					"id":        d.instanceID,

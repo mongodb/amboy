@@ -219,12 +219,7 @@ func (c *Client) SubmitJob(ctx context.Context, j amboy.Job) (string, error) {
 		return "", err
 	}
 
-	b, err := amboy.ConvertTo(amboy.JSON, ji)
-	if err != nil {
-		return "", err
-	}
-
-	req, err := http.NewRequest(http.MethodPost, c.getURL("/v1/job/create"), bytes.NewBuffer(b))
+	req, err := http.NewRequest(http.MethodPost, c.getURL("/v1/job/create"), bytes.NewBuffer(ji.Raw()))
 	if err != nil {
 		return "", err
 	}
@@ -270,7 +265,7 @@ func (c *Client) FetchJob(ctx context.Context, name string) (amboy.Job, error) {
 		return nil, err
 	}
 
-	j, err := registry.ConvertToJob(ji, amboy.JSON)
+	j, err := ji.Resolve(amboy.JSON)
 	if err != nil {
 		return nil, err
 	}
