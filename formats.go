@@ -3,8 +3,9 @@ package amboy
 import (
 	"encoding/json"
 
+	"github.com/mongodb/mongo-go-driver/bson"
 	"github.com/pkg/errors"
-	"gopkg.in/mgo.v2/bson"
+	legacyBSON "gopkg.in/mgo.v2/bson"
 	"gopkg.in/yaml.v2"
 )
 
@@ -21,6 +22,7 @@ const (
 	BSON Format = iota
 	YAML
 	JSON
+	BSON2
 )
 
 // String implements fmt.Stringer and pretty prints the format name.
@@ -28,7 +30,7 @@ func (f Format) String() string {
 	switch f {
 	case JSON:
 		return "json"
-	case BSON:
+	case BSON, BSON2:
 		return "bson"
 	case YAML:
 		return "yaml"
@@ -49,9 +51,11 @@ func ConvertTo(f Format, v interface{}) ([]byte, error) {
 	case JSON:
 		output, err = json.Marshal(v)
 	case BSON:
-		output, err = bson.Marshal(v)
+		output, err = legacyBSON.Marshal(v)
 	case YAML:
 		output, err = yaml.Marshal(v)
+	case BSON2:
+		output, err = bson2.Marshal(v)
 	default:
 		return nil, errors.New("no support for specified serialization format")
 	}
@@ -72,7 +76,9 @@ func ConvertFrom(f Format, data []byte, v interface{}) error {
 	case JSON:
 		return errors.Wrap(json.Unmarshal(data, v), "problem serializing data from json")
 	case BSON:
-		return errors.Wrap(bson.Unmarshal(data, v), "problem serializing data from bson")
+		return errors.Wrap(legacyBSON.Unmarshal(data, v), "problem serializing data from bson")
+	case BSON2:
+		return errors.Wrap(bson.Unmarshal(data, v), "problem serializing data from bson (new)")
 	case YAML:
 		return errors.Wrap(yaml.Unmarshal(data, v), "problem serializing data from yaml")
 	default:
