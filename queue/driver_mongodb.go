@@ -12,7 +12,6 @@ import (
 	"github.com/mongodb/amboy/registry"
 	"github.com/mongodb/grip"
 	"github.com/mongodb/grip/message"
-	"github.com/mongodb/grip/sometimes"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	"gopkg.in/mgo.v2"
@@ -69,7 +68,7 @@ func NewMongoDBDriver(name string, opts MongoDBOptions) Driver {
 		mongodbURI:       opts.URI,
 		priority:         opts.Priority,
 		respectWaitUntil: opts.CheckWaitUntil,
-		useNewQuery:      false,
+		useNewQuery:      true,
 		instanceID:       fmt.Sprintf("%s.%s.%s", name, host, uuid.NewV4()),
 	}
 }
@@ -398,7 +397,7 @@ func (d *mongoDB) Next(ctx context.Context) amboy.Job {
 		qd["time_info.wait_until"] = bson.M{"$lte": time.Now()}
 	}
 
-	query := jobs.Find(qd)
+	query := jobs.Find(qd).Batch(4)
 
 	if d.priority {
 		query = query.Sort("-priority")
@@ -408,40 +407,29 @@ func (d *mongoDB) Next(ctx context.Context) amboy.Job {
 	defer timer.Stop()
 
 	var misses int64
+	iter := query.Iter()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-timer.C:
-			if err := query.One(j); err != nil {
+			if !iter.Next(j) {
 				misses++
-
-				if err == mgo.ErrNotFound {
-					grip.DebugWhen(sometimes.Percent(10), message.Fields{
+				if err := iter.Close(); err != nil {
+					grip.Warning(message.WrapError(err, message.Fields{
 						"id":        d.instanceID,
-						"misses":    misses,
+						"service":   "amboy.queue.mongodb",
+						"message":   "problem closing iterator",
 						"operation": "next job",
+						"misses":    misses,
 						"new_query": d.useNewQuery,
-						"outcome":   "no documents found",
-					})
-					timer.Reset(time.Duration(misses * rand.Int63n(int64(time.Second))))
-					continue
+					}))
+					return nil
 				}
 
-				grip.Warning(message.WrapError(err, message.Fields{
-					"id":        d.instanceID,
-					"service":   "amboy.queue.mongodb",
-					"message":   "problem retreiving jobs from MongoDB",
-					"operation": "next job",
-					"misses":    misses,
-					"new_query": d.useNewQuery,
-				}))
-
-				return nil
-			}
-
-			if j == nil {
 				timer.Reset(time.Duration(misses * rand.Int63n(int64(time.Second))))
+				iter = query.Iter()
 				continue
 			}
 
@@ -455,9 +443,17 @@ func (d *mongoDB) Next(ctx context.Context) amboy.Job {
 					"misses":    misses,
 					"new_query": d.useNewQuery,
 				}))
-				timer.Reset(time.Duration(misses * rand.Int63n(int64(time.Second))))
+
+				// try for the next thing in the iterator if we can
+				timer.Reset(time.Nanosecond)
 				continue
 			}
+
+			// this is crude and duplicative, but because
+			// we'll get documents in a consistent order, we
+			// generally, having the driver return a job
+			// that the queue will reject is bad we'll
+			// double check the lock here:
 
 			return job
 		}
