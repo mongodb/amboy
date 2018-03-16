@@ -374,7 +374,12 @@ func (d *mongoDB) Next(ctx context.Context) amboy.Job {
 
 	j := &registry.JobInterchange{}
 
-	var qd bson.M
+	var (
+		qd     bson.M
+		err    error
+		misses int64
+		job    amboy.Job
+	)
 
 	if d.useNewQuery {
 		qd = bson.M{
@@ -403,11 +408,9 @@ func (d *mongoDB) Next(ctx context.Context) amboy.Job {
 		query = query.Sort("-priority")
 	}
 
+	iter := query.Iter()
 	timer := time.NewTimer(0)
 	defer timer.Stop()
-
-	var misses int64
-	iter := query.Iter()
 
 	for {
 		select {
@@ -416,12 +419,12 @@ func (d *mongoDB) Next(ctx context.Context) amboy.Job {
 		case <-timer.C:
 			if !iter.Next(j) {
 				misses++
-				if err := iter.Close(); err != nil {
+				if err = iter.Close(); err != nil {
 					grip.Warning(message.WrapError(err, message.Fields{
 						"id":        d.instanceID,
 						"service":   "amboy.queue.mongodb",
 						"message":   "problem closing iterator",
-						"operation": "next job",
+						"operation": "retrieving next job",
 						"misses":    misses,
 						"new_query": d.useNewQuery,
 					}))
@@ -433,12 +436,12 @@ func (d *mongoDB) Next(ctx context.Context) amboy.Job {
 				continue
 			}
 
-			job, err := j.Resolve(amboy.BSON)
+			job, err = j.Resolve(amboy.BSON)
 			if err != nil {
 				grip.Warning(message.WrapError(err, message.Fields{
 					"id":        d.instanceID,
 					"service":   "amboy.queue.mongodb",
-					"operation": "next job",
+					"operation": "converting next job",
 					"message":   "problem converting job object from mongodb",
 					"misses":    misses,
 					"new_query": d.useNewQuery,
@@ -449,11 +452,18 @@ func (d *mongoDB) Next(ctx context.Context) amboy.Job {
 				continue
 			}
 
-			// this is crude and duplicative, but because
-			// we'll get documents in a consistent order, we
-			// generally, having the driver return a job
-			// that the queue will reject is bad we'll
-			// double check the lock here:
+			if err = iter.Close(); err != nil {
+				grip.Warning(message.WrapError(err, message.Fields{
+					"id":        d.instanceID,
+					"service":   "amboy.queue.mongodb",
+					"message":   "problem closing iterator",
+					"operation": "returning next job",
+					"misses":    misses,
+					"new_query": d.useNewQuery,
+					"job_id":    job.ID(),
+				}))
+				return nil
+			}
 
 			return job
 		}
