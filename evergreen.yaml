@@ -8,7 +8,7 @@ variables:
     name: test
     commands:
       - command: git.get_project
-        type: setup
+        type: system
         params:
           directory: gopath/src/github.com/mongodb/amboy
       - func: run-make
@@ -22,7 +22,7 @@ variables:
       - name: build
     commands:
       - command: git.get_project
-        type: setup
+        type: system
         params:
           directory: gopath/src/github.com/mongodb/amboy
       - func: setup-credentials
@@ -36,7 +36,7 @@ variables:
       - name: build
     commands:
       - command: git.get_project
-        type: setup
+        type: system
         params:
           directory: gopath/src/github.com/mongodb/amboy
       - func: setup-credentials
@@ -227,7 +227,7 @@ post:
         rm -rf amboy
         rm -rf ~/.aws
   - command: s3.put
-    type: setup
+    type: system
     params:
       aws_key: ${aws_key}
       aws_secret: ${aws_secret}
@@ -239,7 +239,7 @@ post:
       display_name: "(html) coverage:"
       optional: true
   - command: s3.put
-    type: setup
+    type: system
     params:
       aws_key: ${aws_key}
       aws_secret: ${aws_secret}
@@ -292,8 +292,6 @@ buildvariants:
     display_name: Windows
     run_on:
       - windows-64-vs2015-small
-      - windows-64-vs2013-test
-      - windows-64-vs2010-test
     expansions:
       build_env: "GOROOT=c:/go1.8/go DISABLE_COVERAGE=yes PATH=/cygdrive/c/go1.8/go/bin:$PATH"
       mongodb_url: https://fastdl.mongodb.org/win32/mongodb-win32-x86_64-2008plus-3.2.9.zip
