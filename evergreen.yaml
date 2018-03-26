@@ -47,6 +47,7 @@ variables:
 functions:
   setup-credentials:
     command: shell.exec
+    type: setup
     params:
        silent: true
        script: |
@@ -64,6 +65,7 @@ functions:
          EOF
   run-make:
     command: shell.exec
+    type: test
     params:
        script: |
          set -o errexit
@@ -86,6 +88,7 @@ functions:
     # TODO replace this configuration with something more robust.
     # Current version is borrowed directly rom the Evergreen self tests.
     - command: shell.exec
+      type: setup
       params:
         script: |
           set -o errexit
@@ -104,6 +107,7 @@ functions:
           mkdir db_files
           mkdir db_logs
     - command: shell.exec
+      type: setup
       params:
         background: true
         script: |
@@ -113,6 +117,7 @@ functions:
           ./mongod --dbpath ./db_files &
           echo "waiting for mongod to start up"
     - command: shell.exec
+      type: setup
       params:
         script: |
           cd mongodb
@@ -138,6 +143,7 @@ tasks:
     tags: [ "report" ]
     commands:
       - command: git.get_project
+        type: system
         params:
           directory: gopath/src/github.com/mongodb/amboy
       - func: setup-credentials
@@ -205,18 +211,20 @@ tasks:
 
 post:
   - command: gotest.parse_files
+    type: setup
     params:
       files:
         - "gopath/src/github.com/mongodb/amboy/build/test.*.out"
         - "gopath/src/github.com/mongodb/amboy/build/race.*.out"
         - "gopath/src/github.com/mongodb/amboy/build/output.*"
   - command: shell.exec
+    type: setup
     params:
       script: |
         rm -rf amboy
         rm -rf ~/.aws
   - command: s3.put
-    type: system
+    type: setup
     params:
       aws_key: ${aws_key}
       aws_secret: ${aws_secret}
@@ -226,8 +234,9 @@ post:
       content_type: text/html
       permissions: public-read
       display_name: "(html) coverage:"
+      optional: true
   - command: s3.put
-    type: system
+    type: setup
     params:
       aws_key: ${aws_key}
       aws_secret: ${aws_secret}
@@ -237,6 +246,7 @@ post:
       content_type: text/plain
       permissions: public-read
       display_name: "(txt) coverage:"
+      optional: true
 
 
 #######################################
