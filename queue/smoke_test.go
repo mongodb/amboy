@@ -399,7 +399,9 @@ func TestSmokeRemoteUnorderedSingleThreadedWithMongoDBDriver(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	q := NewRemoteUnordered(1)
-	d := NewMongoDBDriver(name, opts)
+	d := NewMongoDBDriver(name, opts).(*mongoDB)
+	d.useNewQuery = false
+
 	assert.NoError(d.Open(ctx))
 
 	assert.NoError(q.SetDriver(d))
@@ -423,7 +425,8 @@ func TestSmokeRemoteUnorderedSingleRunnerWithMongoDBDriver(t *testing.T) {
 	assert.NoError(runner.SetQueue(q))
 	assert.NoError(q.SetRunner(runner))
 
-	d := NewMongoDBDriver(name, opts)
+	d := NewMongoDBDriver(name, opts).(*mongoDB)
+	d.useNewQuery = false
 	assert.NoError(d.Open(ctx))
 
 	assert.NoError(q.SetDriver(d))
@@ -446,7 +449,8 @@ func TestSmokeRemoteUnorderedWorkerPoolsWithMongoDBDriver(t *testing.T) {
 		name := strings.Replace(uuid.NewV4().String(), "-", ".", -1)
 
 		ctx, cancel := context.WithCancel(baseCtx)
-		d := NewMongoDBDriver(name, opts)
+		d := NewMongoDBDriver(name, opts).(*mongoDB)
+		d.useNewQuery = false
 		assert.NoError(q.SetDriver(d))
 
 		runUnorderedSmokeTest(ctx, q, poolSize, assert)
@@ -568,9 +572,11 @@ func TestSmokeMultipleMongoDBBackedRemoteUnorderedQueuesWithTheSameName(t *testi
 	// create queues with two runners, mongodb backed drivers, and
 	// configure injectors
 	qOne := NewRemoteUnordered(runtime.NumCPU() / 2)
-	dOne := NewMongoDBDriver(name+"-one", opts)
+	dOne := NewMongoDBDriver(name+"-one", opts).(*mongoDB)
+	dOne.useNewQuery = false
 	qTwo := NewRemoteUnordered(runtime.NumCPU() / 2)
-	dTwo := NewMongoDBDriver(name+"-two", opts)
+	dTwo := NewMongoDBDriver(name+"-two", opts).(*mongoDB)
+	dTwo.useNewQuery = false
 	assert.NoError(dOne.Open(ctx))
 	assert.NoError(dTwo.Open(ctx))
 	assert.NoError(qOne.SetDriver(dOne))
@@ -649,9 +655,11 @@ func TestSmokeMultipleMongoDBBackedRemoteOrderedQueuesWithTheSameName(t *testing
 	// create queues with two runners, mongodb backed drivers, and
 	// configure injectors
 	qOne := NewSimpleRemoteOrdered(runtime.NumCPU() / 2)
-	dOne := NewMongoDBDriver(name+"-one", opts)
+	dOne := NewMongoDBDriver(name+"-one", opts).(*mongoDB)
+	dOne.useNewQuery = false
 	qTwo := NewSimpleRemoteOrdered(runtime.NumCPU() / 2)
-	dTwo := NewMongoDBDriver(name+"-two", opts)
+	dTwo := NewMongoDBDriver(name+"-two", opts).(*mongoDB)
+	dTwo.useNewQuery = false
 	assert.NoError(dOne.Open(ctx))
 	assert.NoError(dTwo.Open(ctx))
 	assert.NoError(qOne.SetDriver(dOne))
@@ -805,7 +813,8 @@ func TestSmokeSimpleRemoteOrderedWorkerPoolsWithMongoDBDriver(t *testing.T) {
 		name := strings.Replace(uuid.NewV4().String(), "-", ".", -1)
 
 		ctx, cancel := context.WithCancel(baseCtx)
-		d := NewMongoDBDriver(name, opts)
+		d := NewMongoDBDriver(name, opts).(*mongoDB)
+		d.useNewQuery = false
 		assert.NoError(q.SetDriver(d))
 
 		runUnorderedSmokeTest(ctx, q, poolSize, assert)
@@ -877,7 +886,8 @@ func TestSmokeSimpleRemoteOrderedWithSingleThreadedAndMongoDBDriver(t *testing.T
 
 	ctx, cancel := context.WithCancel(context.Background())
 	q := NewSimpleRemoteOrdered(1)
-	d := NewMongoDBDriver(name, opts)
+	d := NewMongoDBDriver(name, opts).(*mongoDB)
+	d.useNewQuery = false
 	assert.NoError(d.Open(ctx))
 
 	assert.NoError(q.SetDriver(d))
@@ -901,7 +911,8 @@ func TestSmokeSimpleRemoteOrderedWithSingleRunnerAndMongoDBDriver(t *testing.T) 
 	assert.NoError(runner.SetQueue(q))
 	assert.NoError(q.SetRunner(runner))
 
-	d := NewMongoDBDriver(name, opts)
+	d := NewMongoDBDriver(name, opts).(*mongoDB)
+	d.useNewQuery = false
 	assert.NoError(d.Open(ctx))
 
 	assert.NoError(q.SetDriver(d))
@@ -1074,7 +1085,8 @@ func TestSmokeWaitUntilMongoDBQueue(t *testing.T) {
 		q := NewSimpleRemoteOrdered(poolSize)
 
 		name := strings.Replace(uuid.NewV4().String(), "-", ".", -1)
-		driver := NewMongoDBDriver(name, opts)
+		driver := NewMongoDBDriver(name, opts).(*mongoDB)
+		driver.useNewQuery = false
 		assert.NoError(driver.Open(ctx))
 		assert.NoError(q.SetDriver(driver))
 

@@ -418,7 +418,7 @@ func (d *mongoDB) Next(ctx context.Context) amboy.Job {
 
 	}
 
-	query := jobs.Find(qd).Batch(14)
+	query := jobs.Find(qd).Batch(4)
 
 	if d.priority {
 		query = query.Sort("-priority")
