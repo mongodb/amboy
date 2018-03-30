@@ -3,6 +3,7 @@ package registry
 // This file has a mock implementation of a job. Used in other tests.
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -56,7 +57,7 @@ func (j *JobTest) ID() string {
 	return j.Name
 }
 
-func (j *JobTest) Run() {
+func (j *JobTest) Run(_ context.Context) {
 	j.Stat.Completed = true
 }
 
