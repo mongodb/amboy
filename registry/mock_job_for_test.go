@@ -27,7 +27,7 @@ type JobTest struct {
 	Stat       amboy.JobStatusInfo `bson:"status" json:"status" yaml:"status"`
 	TimingInfo amboy.JobTimeInfo   `bson:"time_info" json:"time_info" yaml:"time_info"`
 
-	dep dependency.Manager `bson:"dependency" json:"dependency" yaml:"dependency"`
+	dep dependency.Manager
 }
 
 func NewTestJob(content string) *JobTest {
