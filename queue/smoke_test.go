@@ -591,7 +591,7 @@ func TestSmokeMultipleMongoDBBackedRemoteUnorderedQueuesWithTheSameName(t *testi
 	grip.CatchError(cleanupMongoDB(name, opts))
 }
 
-func TestSmokeMultipleMongoDBBackedRemoteUnorderedQueuesWithTheSameName(t *testing.T) {
+func TestSmokeMultipleMongoDBNewQueryBackedRemoteUnorderedQueuesWithTheSameName(t *testing.T) {
 	assert := assert.New(t) // nolint
 	ctx, cancel := context.WithCancel(context.Background())
 
