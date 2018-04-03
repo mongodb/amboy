@@ -45,6 +45,8 @@ func TestSmokeRemoteQueueRunsJobsOnlyOnceWithMultipleWorkers(t *testing.T) {
 
 	// case two
 
+	mockJobCounters.Reset()
+
 	d2 := NewMongoDBDriver(name, opts)
 	q2 := NewRemoteUnordered(3).(*remoteUnordered)
 
