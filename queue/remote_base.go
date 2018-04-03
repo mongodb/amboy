@@ -140,12 +140,13 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
 				continue
 			}
 
+			grip.CatchWarning(q.driver.Unlock(j))
+
 			q.mutex.Lock()
+			defer q.mutex.Unlock()
 			delete(q.blocked, id)
 			delete(q.dispatched, id)
-			q.mutex.Unlock()
 
-			grip.CatchWarning(q.driver.Unlock(j))
 			return
 		}
 
