@@ -42,31 +42,17 @@ func TestSmokeRemoteQueueRunsJobsOnlyOnceWithMultipleWorkers(t *testing.T) {
 
 	grip.Notice(q.Stats())
 	assert.Equal(atStart+40, mockJobCounters.Count())
-}
 
-func TestSmokeMultipleRemoteQueueRunsJobsOnlyOnceWithMultipleWorkers(t *testing.T) {
-	assert := assert.New(t)
-	opts := DefaultMongoDBOptions()
-	name := uuid.NewV4().String()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	d := NewMongoDBDriver(name, opts)
-	q := NewRemoteUnordered(3).(*remoteUnordered)
+	// case two
 
 	d2 := NewMongoDBDriver(name, opts)
 	q2 := NewRemoteUnordered(3).(*remoteUnordered)
-
-	defer cleanupMongoDB(name, opts)
-	defer cancel()
-
-	assert.NoError(d.Open(ctx))
-	assert.NoError(q.SetDriver(d))
-	assert.NoError(q.Start(ctx))
 
 	assert.NoError(d2.Open(ctx))
 	assert.NoError(q2.SetDriver(d2))
 	assert.NoError(q2.Start(ctx))
 
-	atStart := mockJobCounters.Count()
+	atStart = mockJobCounters.Count()
 	wg := &sync.WaitGroup{}
 
 	for i := 0; i < 50; i++ {
