@@ -22,7 +22,7 @@ func TestSmokeRemoteQueueRunsJobsOnlyOnceWithMultipleWorkers(t *testing.T) {
 	name := uuid.NewV4().String()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	d := NewMongoDBDriver(name, opts)
-	q := NewRemoteUnordered(3).(*remoteUnordered)
+	q := NewRemoteUnordered(4).(*remoteUnordered)
 
 	defer cleanupMongoDB(name, opts)
 	defer cancel()
@@ -38,7 +38,7 @@ func TestSmokeRemoteQueueRunsJobsOnlyOnceWithMultipleWorkers(t *testing.T) {
 		assert.NoError(q.Put(j))
 	}
 
-	amboy.WaitCtxInterval(ctx, q, time.Second)
+	amboy.WaitCtxInterval(ctx, q, 10*time.Millisecond)
 
 	grip.Notice(q.Stats())
 	assert.Equal(atStart+40, mockJobCounters.Count())
@@ -48,7 +48,7 @@ func TestSmokeRemoteQueueRunsJobsOnlyOnceWithMultipleWorkers(t *testing.T) {
 	mockJobCounters.Reset()
 
 	d2 := NewMongoDBDriver(name, opts)
-	q2 := NewRemoteUnordered(3).(*remoteUnordered)
+	q2 := NewRemoteUnordered(4).(*remoteUnordered)
 
 	assert.NoError(d2.Open(ctx))
 	assert.NoError(q2.SetDriver(d2))
@@ -73,8 +73,8 @@ func TestSmokeRemoteQueueRunsJobsOnlyOnceWithMultipleWorkers(t *testing.T) {
 	wg.Wait()
 
 	grip.Notice("waiting to run jobs")
-	amboy.WaitCtxInterval(ctx, q, 100*time.Millisecond)
-	amboy.WaitCtxInterval(ctx, q2, 100*time.Millisecond)
+	amboy.WaitCtxInterval(ctx, q, 10*time.Millisecond)
+	amboy.WaitCtxInterval(ctx, q2, 10*time.Millisecond)
 
 	grip.Notice(q.Stats())
 	assert.Equal(atStart+50*20, mockJobCounters.Count())
