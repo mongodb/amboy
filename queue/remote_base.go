@@ -71,6 +71,11 @@ func (q *remoteBase) jobServer(ctx context.Context) {
 				continue
 			}
 
+			job, err := q.driver.Get(job.ID())
+			if err != nil {
+				continue
+			}
+
 			stat := job.Status()
 
 			// don't return completed jobs for any reason
@@ -115,16 +120,18 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
 			return
 		case <-timer.C:
 			stat := j.Status()
-			ti := j.TimeInfo()
 			stat.InProgress = false
 			stat.Completed = true
 			j.SetStatus(stat)
+
+			ti := j.TimeInfo()
 			j.UpdateTimeInfo(amboy.JobTimeInfo{
 				Start: ti.Start,
 				End:   time.Now(),
 			})
 
 			if err := q.driver.Save(j); err != nil {
+				fmt.Println("bar")
 				grip.Warningf("problem persisting job '%s', %+v", j.ID(), err)
 				timer.Reset(retryInterval)
 				if time.Since(startAt) > time.Minute+lockTimeout {
