@@ -46,6 +46,7 @@ func NewSimpleRemoteOrdered(size int) Remote {
 // ready. if there is only one Edge reported, blocked will attempt to
 // dispatch the dependent job.
 func (q *remoteSimpleOrdered) Next(ctx context.Context) amboy.Job {
+	var err error
 	start := time.Now()
 	count := 1
 	for {
@@ -53,20 +54,22 @@ func (q *remoteSimpleOrdered) Next(ctx context.Context) amboy.Job {
 		case <-ctx.Done():
 			return nil
 		case job := <-q.channel:
-			err := q.driver.Lock(job)
-			if err != nil {
-				grip.Warning(err)
-				continue
-			}
-
 			job, err = q.driver.Get(job.ID())
 			if err != nil {
-				grip.CatchNotice(q.driver.Unlock(job))
 				grip.Warning(err)
 				continue
 			}
 
-			if job.Status().Completed {
+			if !isDispatchable(job.Status()) {
+				continue
+			}
+
+			if err = q.driver.Lock(job); err != nil {
+				grip.Warning(err)
+				continue
+			}
+
+			if !isDispatchable(job.Status()) {
 				grip.CatchWarning(q.driver.Unlock(job))
 				continue
 			}
