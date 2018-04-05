@@ -399,14 +399,15 @@ func (d *mongoDB) Next(ctx context.Context) amboy.Job {
 
 	if d.useNewQuery {
 		qd = bson.M{
-			"status.completed": false,
 			"$or": []bson.M{
 				{
-					"status.in_prog": false,
+					"status.completed": false,
+					"status.in_prog":   false,
 				},
 				{
-					"status.mod_ts":  bson.M{"$lte": time.Now().Add(-lockTimeout)},
-					"status.in_prog": true,
+					"status.completed": false,
+					"status.mod_ts":    bson.M{"$lte": time.Now().Add(-lockTimeout)},
+					"status.in_prog":   true,
 				},
 			},
 		}

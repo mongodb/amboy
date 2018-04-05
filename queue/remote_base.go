@@ -131,7 +131,6 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
 			})
 
 			if err := q.driver.Save(j); err != nil {
-				fmt.Println("bar")
 				grip.Warningf("problem persisting job '%s', %+v", j.ID(), err)
 				timer.Reset(retryInterval)
 				if time.Since(startAt) > time.Minute+lockTimeout {
