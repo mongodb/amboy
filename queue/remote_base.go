@@ -71,21 +71,7 @@ func (q *remoteBase) jobServer(ctx context.Context) {
 				continue
 			}
 
-			job, err := q.driver.Get(job.ID())
-			if err != nil {
-				continue
-			}
-
-			stat := job.Status()
-
-			// don't return completed jobs for any reason
-			if stat.Completed {
-				continue
-			}
-
-			// don't return an inprogress job if the mod
-			// time is less than the lock timeout
-			if stat.InProgress && time.Since(stat.ModificationTime) < lockTimeout {
+			if !isDispatchable(job.Status()) {
 				continue
 			}
 
@@ -289,5 +275,20 @@ func (q *remoteBase) canDispatch(j amboy.Job) bool {
 	}
 
 	q.dispatched[id] = struct{}{}
+	return true
+}
+
+func isDispatchable(stat amboy.JobStatusInfo) bool {
+	// don't return completed jobs for any reason
+	if stat.Completed {
+		return false
+	}
+
+	// don't return an inprogress job if the mod
+	// time is less than the lock timeout
+	if stat.InProgress && time.Since(stat.ModificationTime) < lockTimeout {
+		return false
+	}
+
 	return true
 }
