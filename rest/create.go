@@ -3,10 +3,10 @@ package rest
 import (
 	"net/http"
 
+	"github.com/evergreen-ci/gimlet"
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/registry"
 	"github.com/mongodb/grip"
-	"github.com/tychoish/gimlet"
 )
 
 type createResponse struct {

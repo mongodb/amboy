@@ -11,6 +11,7 @@
 package gimlet
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -200,7 +201,7 @@ func (a *APIApp) Handler() (http.Handler, error) {
 // Run configured API service on the configured port. Before running
 // the application, Run also resolves any sub-apps, and adds all
 // routes.
-func (a *APIApp) Run() error {
+func (a *APIApp) Run(ctx context.Context) error {
 	n, err := a.getNegroni()
 	if err != nil {
 		return err
@@ -221,6 +222,11 @@ func (a *APIApp) Run() error {
 
 		grip.Noticef("starting app on: %s:$d", a.address, a.port)
 		catcher.Add(srv.ListenAndServe())
+	}()
+
+	go func() {
+		defer recovery.LogStackTraceAndContinue("server shutdown")
+		catcher.Add(srv.Shutdown(ctx))
 		close(serviceWait)
 	}()
 
