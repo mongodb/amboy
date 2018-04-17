@@ -134,7 +134,8 @@ func (p *abortablePool) worker(ctx context.Context, jobs <-chan amboy.Job) {
 }
 
 func (p *abortablePool) runJob(ctx context.Context, job amboy.Job) {
-	jctx, cancel := context.WithCancel(ctx)
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithCancel(ctx)
 	func() {
 		p.mu.Lock()
 		defer p.mu.Unlock()
@@ -149,7 +150,7 @@ func (p *abortablePool) runJob(ctx context.Context, job amboy.Job) {
 		delete(p.jobs, job.ID())
 	}()
 
-	executeJob(jctx, job, p.queue)
+	executeJob(ctx, job, p.queue)
 }
 
 func (p *abortablePool) IsRunning(id string) bool {
@@ -174,8 +175,8 @@ func (p *abortablePool) RunningJobs() []string {
 }
 
 func (p *abortablePool) Abort(id string) error {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
 	cancel, ok := p.jobs[id]
 	if !ok {
@@ -188,8 +189,8 @@ func (p *abortablePool) Abort(id string) error {
 }
 
 func (p *abortablePool) AbortAll() {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
 	for id, cancel := range p.jobs {
 		cancel()
