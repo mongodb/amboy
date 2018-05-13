@@ -32,6 +32,7 @@ func setRequestID(r *http.Request, id int) *http.Request {
 }
 
 // GetRequestID returns the unique (monotonically increaseing) ID of
+// the request since startup
 func GetRequestID(ctx context.Context) int {
 	if rv := ctx.Value(requestIDKey); rv != nil {
 		if id, ok := rv.(int); ok {

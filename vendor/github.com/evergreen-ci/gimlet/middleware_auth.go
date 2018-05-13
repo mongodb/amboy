@@ -4,66 +4,9 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/evergreen-ci/gimlet/auth"
 	"github.com/mongodb/grip"
 	"github.com/mongodb/grip/message"
-	"github.com/urfave/negroni"
 )
-
-type contextKey int
-
-const (
-	authHandlerKey contextKey = iota
-	userManagerKey
-	requestIDKey
-	loggerKey
-	startAtKey
-)
-
-func GetAuthenticator(ctx context.Context) auth.Authenticator {
-	a, ok := safeGetAuthenticator(ctx)
-	if !ok {
-		panic("authenticator not attached")
-	}
-
-	return a
-}
-
-func safeGetAuthenticator(ctx context.Context) (auth.Authenticator, bool) {
-	a := ctx.Value(authHandlerKey)
-	if a == nil {
-		return nil, false
-	}
-
-	amgr, ok := a.(auth.Authenticator)
-	if !ok {
-		return nil, false
-	}
-
-	return amgr, true
-}
-
-func GetUserManager(ctx context.Context) auth.UserManager {
-	m, ok := safeGetUserManager(ctx)
-	if !ok {
-		panic("user manager not attached")
-	}
-	return m
-}
-
-func safeGetUserManager(ctx context.Context) (auth.UserManager, bool) {
-	m := ctx.Value(userManagerKey)
-	if m == nil {
-		return nil, false
-	}
-
-	umgr, ok := m.(auth.UserManager)
-	if !ok {
-		return nil, false
-	}
-
-	return umgr, true
-}
 
 // NewAuthenticationHandler produces middleware that attaches
 // Authenticator and UserManager instances to the request context,
@@ -72,51 +15,124 @@ func safeGetUserManager(ctx context.Context) (auth.UserManager, bool) {
 // While your application can have multiple authentication mechanisms,
 // a single request can only have one authentication provider
 // associated with it.
-func NewAuthenticationHandler(a auth.Provider) negroni.Handler {
-	return &authHandler{provider: a}
+func NewAuthenticationHandler(a Authenticator, um UserManager) Middleware {
+	return &authHandler{
+		auth: a,
+		um:   um,
+	}
 }
 
 type authHandler struct {
-	provider auth.Provider
+	auth Authenticator
+	um   UserManager
 }
 
 func (a *authHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	ctx := r.Context()
-	ctx = context.WithValue(ctx, authHandlerKey, a.provider.Authenticator())
-	ctx = context.WithValue(ctx, userManagerKey, a.provider.UserManager())
+	ctx = setAuthenticator(ctx, a.auth)
+	ctx = setUserManager(ctx, a.um)
 
 	r = r.WithContext(ctx)
+
 	next(rw, r)
 }
 
-// NewAccessRequirement provides middlesware that requires a specific role to access a resource.
-func NewAccessRequirement(role string) negroni.Handler { return &requiredAccess{role: role} }
+func setAuthenticator(ctx context.Context, a Authenticator) context.Context {
+	return context.WithValue(ctx, authHandlerKey, a)
+}
 
-type requiredAccess struct {
+func setUserManager(ctx context.Context, um UserManager) context.Context {
+	return context.WithValue(ctx, userManagerKey, um)
+}
+
+func GetAuthenticator(ctx context.Context) (Authenticator, bool) {
+	a := ctx.Value(authHandlerKey)
+	if a == nil {
+		return nil, false
+	}
+
+	amgr, ok := a.(Authenticator)
+	if !ok {
+		return nil, false
+	}
+
+	return amgr, true
+}
+
+func GetUserManager(ctx context.Context) (UserManager, bool) {
+	m := ctx.Value(userManagerKey)
+	if m == nil {
+		return nil, false
+	}
+
+	umgr, ok := m.(UserManager)
+	if !ok {
+		return nil, false
+	}
+
+	return umgr, true
+}
+
+// NewRoleRequired provides middlesware that requires a specific role
+// to access a resource. This access is defined as a property of the
+// user objects.
+func NewRoleRequired(role string) Middleware { return &requiredRole{role: role} }
+
+type requiredRole struct {
 	role string
 }
 
-func (ra *requiredAccess) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+func (rr *requiredRole) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	ctx := r.Context()
 
-	authenticator, ok := safeGetAuthenticator(ctx)
+	user, ok := GetUser(ctx)
 	if !ok {
 		rw.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 
-	userMgr, ok := safeGetUserManager(ctx)
+	if !userHasRole(user, rr.role) {
+		rw.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	grip.Info(message.Fields{
+		"path":          r.URL.Path,
+		"remote":        r.RemoteAddr,
+		"request":       GetRequestID(ctx),
+		"user":          user.Username(),
+		"user_roles":    user.Roles(),
+		"required_role": rr.role,
+	})
+
+	next(rw, r)
+}
+
+// NewGroupMembershipRequired provides middleware that requires that
+// users belong to a group to gain access to a resource. This is
+// access is defined as a property of the authentication system.
+func NewGroupMembershipRequired(name string) Middleware { return &requiredGroup{group: name} }
+
+type requiredGroup struct {
+	group string
+}
+
+func (rg *requiredGroup) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+	ctx := r.Context()
+
+	authenticator, ok := GetAuthenticator(ctx)
 	if !ok {
 		rw.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 
-	user, err := authenticator.GetUserFromRequest(userMgr, r)
-	if err != nil {
-		writeResponse(TEXT, rw, http.StatusUnauthorized, []byte(err.Error()))
+	user, ok := GetUser(ctx)
+	if !ok {
+		rw.WriteHeader(http.StatusUnauthorized)
+		return
 	}
 
-	if !authenticator.CheckGroupAccess(user, ra.role) {
+	if !authenticator.CheckGroupAccess(user, rg.group) {
 		rw.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -127,7 +143,7 @@ func (ra *requiredAccess) ServeHTTP(rw http.ResponseWriter, r *http.Request, nex
 		"request":        GetRequestID(ctx),
 		"user":           user.Username(),
 		"user_roles":     user.Roles(),
-		"required_roles": ra.role,
+		"required_group": rg.group,
 	})
 
 	next(rw, r)
@@ -136,28 +152,23 @@ func (ra *requiredAccess) ServeHTTP(rw http.ResponseWriter, r *http.Request, nex
 // NewRequireAuth provides middlesware that requires that users be
 // authenticated generally to access the resource, but does no
 // validation of their access.
-func NewRequireAuthHandler() negroni.Handler { return &requireAuthHandler{} }
+func NewRequireAuthHandler() Middleware { return &requireAuthHandler{} }
 
 type requireAuthHandler struct{}
 
 func (_ *requireAuthHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	ctx := r.Context()
 
-	authenticator, ok := safeGetAuthenticator(ctx)
+	authenticator, ok := GetAuthenticator(ctx)
 	if !ok {
 		rw.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 
-	userMgr, ok := safeGetUserManager(ctx)
+	user, ok := GetUser(ctx)
 	if !ok {
 		rw.WriteHeader(http.StatusUnauthorized)
 		return
-	}
-
-	user, err := authenticator.GetUserFromRequest(userMgr, r)
-	if err != nil {
-		writeResponse(TEXT, rw, http.StatusUnauthorized, []byte(err.Error()))
 	}
 
 	if !authenticator.CheckAuthenticated(user) {
@@ -174,4 +185,49 @@ func (_ *requireAuthHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request, 
 	})
 
 	next(rw, r)
+}
+
+// NewRestrictAccessToUsers allows you to define a list of users that
+// may access certain resource. This is similar to "groups," but allows
+// you to control access centrally rather than needing to edit or
+// change user documents.
+//
+// This middleware is redundant to the "access required middleware."
+func NewRestrictAccessToUsers(userIDs []string) Middleware {
+	return &restrictedAccessHandler{ids: userIDs}
+}
+
+type restrictedAccessHandler struct {
+	ids []string
+}
+
+func (ra *restrictedAccessHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+	ctx := r.Context()
+
+	user, ok := GetUser(ctx)
+	if !ok {
+		rw.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	authenticator, ok := GetAuthenticator(ctx)
+	if !ok {
+		rw.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	if !authenticator.CheckAuthenticated(user) {
+		rw.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	id := user.Username()
+	for _, allowed := range ra.ids {
+		if id == allowed {
+			next(rw, r)
+			return
+		}
+	}
+
+	rw.WriteHeader(http.StatusUnauthorized)
 }

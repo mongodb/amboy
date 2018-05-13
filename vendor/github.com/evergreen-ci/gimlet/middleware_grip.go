@@ -29,7 +29,7 @@ type appLogging struct {
 // NewAppLogger creates an logging middlear instance suitable for use
 // with Negroni. Sets the logging configuration to be the same as the
 // default global grip logging object.
-func NewAppLogger() negroni.Handler { return &appLogging{logging.MakeGrip(grip.GetSender())} }
+func NewAppLogger() Middleware { return &appLogging{logging.MakeGrip(grip.GetSender())} }
 
 func setServiceLogger(r *http.Request, logger grip.Journaler) *http.Request {
 	return r.WithContext(context.WithValue(r.Context(), loggerKey, logger))
@@ -114,7 +114,7 @@ type appRecoveryLogger struct {
 	grip.Journaler
 }
 
-func NewRecoveryLogger() negroni.Handler { return &appRecoveryLogger{} }
+func NewRecoveryLogger() Middleware { return &appRecoveryLogger{} }
 
 func (l *appRecoveryLogger) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	r = setupLogger(l.Journaler, r)
