@@ -35,7 +35,7 @@ func (s *LockManagerSuite) SetupTest() {
 	var ctx context.Context
 	ctx, s.testCancel = context.WithCancel(context.Background())
 	s.lm = newLockManager("test", s.driver)
-	s.lm.timeout = time.Second
+	s.lm.timeout = 100 * time.Millisecond
 	s.lm.start(ctx)
 }
 
@@ -93,7 +93,7 @@ func (s *LockManagerSuite) TestLockReachesTimeout() {
 	s.NoError(s.driver.Put(j))
 
 	s.NoError(s.lm.Lock(j))
-	time.Sleep(s.lm.timeout * 2)
+	time.Sleep(s.lm.timeout * 3)
 	s.NoError(s.lm.Lock(j))
 	s.Error(s.lm.Lock(j))
 }
