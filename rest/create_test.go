@@ -62,10 +62,10 @@ func (s *CreateJobSuite) TestNilJobPayloadResultsInError() {
 
 func (s *CreateJobSuite) TestAddingAJobThatAlreadyExistsResultsInError() {
 	j := job.NewShellJob("true", "")
-	s.NoError(s.service.queue.Put(j))
-
 	payload, err := registry.MakeJobInterchange(j, amboy.JSON)
 	s.NoError(err)
+
+	s.NoError(s.service.queue.Put(j))
 
 	resp, err := s.service.createJob(payload)
 	s.Error(err, fmt.Sprintf("%+v", resp))

@@ -7,9 +7,23 @@ import (
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/job"
 	"github.com/mongodb/amboy/registry"
+	"github.com/mongodb/grip"
+	"github.com/mongodb/grip/level"
+	"github.com/mongodb/grip/send"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
+
+func init() {
+	grip.SetName("amboy.rest.tests")
+	grip.CatchError(grip.SetSender(send.MakeNative()))
+
+	lvl := grip.GetSender().Level()
+	lvl.Threshold = level.Warning
+	_ = grip.GetSender().SetLevel(lvl)
+
+	job.RegisterDefaultJobs()
+}
 
 type RestServiceSuite struct {
 	service *Service
