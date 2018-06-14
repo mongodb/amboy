@@ -264,7 +264,7 @@ buildvariants:
       - ".report"
 
   - name: ubuntu1604
-    display_name: Ubuntu 16.04
+    display_name: Ubuntu 16.04e
     run_on:
       - ubuntu1604-test
     expansions:
