@@ -199,7 +199,5 @@ func (p *simpleRateLimited) Close() {
 	// tests
 	defer func() { recover() }()
 
-	// to let workers cancel
-	time.Sleep(10 * time.Millisecond)
 	p.wg.Wait()
 }
