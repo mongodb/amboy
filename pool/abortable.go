@@ -22,6 +22,10 @@ type abortablePool struct {
 	started bool
 }
 
+// NewAbortablePool produces a simple implementation of a worker pool
+// that provides access to cancel running jobs. The cancellation
+// functions work by creating context cancelation function and then
+// canceling the contexts passed to the jobs specifically.
 func NewAbortablePool(size int, q amboy.Queue) amboy.AbortableRunner {
 	p := &abortablePool{
 		queue: q,
@@ -67,9 +71,11 @@ func (p *abortablePool) Close() {
 
 	if p.canceler != nil {
 		p.canceler()
+		p.canceler = nil
+		p.started = false
+		p.wg.Wait()
 	}
 
-	p.wg.Wait()
 }
 
 func (p *abortablePool) Start(ctx context.Context) error {
@@ -104,7 +110,10 @@ func (p *abortablePool) worker(ctx context.Context, jobs <-chan amboy.Job) {
 		job amboy.Job
 	)
 
+	p.mu.Lock()
 	p.wg.Add(1)
+	p.mu.Unlock()
+
 	defer p.wg.Done()
 	defer func() {
 		// if we hit a panic we want to add an error to the job;

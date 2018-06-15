@@ -95,14 +95,16 @@ func (s *AbortablePoolSuite) TestSingleAborterCancelsJob() {
 }
 
 func (s *AbortablePoolSuite) TestAbortAllWorks() {
-	closers := make([]cancelFuncCounter, 10)
+	closers := make([]*cancelFuncCounter, 10)
 
 	s.Len(s.pool.jobs, 0)
 	count := 0
 	seen := 0
-	for idx, c := range closers {
+	for idx := range closers {
+		closers[idx] = &cancelFuncCounter{}
+
 		seen++
-		count += c.counter
+		count += closers[idx].counter
 		s.pool.jobs[fmt.Sprint(idx)] = closers[idx].Canceler
 	}
 	s.Equal(10, seen)
@@ -122,13 +124,14 @@ func (s *AbortablePoolSuite) TestAbortAllWorks() {
 }
 
 func (s *AbortablePoolSuite) TestIntrospectionMethods() {
-
-	closers := make([]cancelFuncCounter, 10)
+	closers := make([]*cancelFuncCounter, 10)
 
 	s.Len(s.pool.jobs, 0)
 	count := 0
 	seen := 0
 	for idx := range closers {
+		closers[idx] = &cancelFuncCounter{}
+
 		seen++
 		count += closers[idx].counter
 		s.pool.jobs[fmt.Sprint(idx)] = closers[idx].Canceler

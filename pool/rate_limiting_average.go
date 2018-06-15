@@ -139,7 +139,10 @@ func (p *ewmaRateLimiting) worker(ctx context.Context, jobs <-chan amboy.Job) {
 		job amboy.Job
 	)
 
+	p.mutex.Lock()
 	p.wg.Add(1)
+	p.mutex.Unlock()
+
 	defer p.wg.Done()
 	defer func() {
 		err = recovery.HandlePanicWithError(recover(), nil, "worker process encountered error")
@@ -208,6 +211,9 @@ func (p *ewmaRateLimiting) runJob(ctx context.Context, j amboy.Job) time.Duratio
 }
 
 func (p *ewmaRateLimiting) SetQueue(q amboy.Queue) error {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
 	if p.canceler != nil {
 		return errors.New("cannot change queue on active runner")
 	}
@@ -217,9 +223,22 @@ func (p *ewmaRateLimiting) SetQueue(q amboy.Queue) error {
 }
 
 func (p *ewmaRateLimiting) Close() {
-	if p.canceler != nil {
-		p.canceler()
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	if p.canceler == nil {
+		return
 	}
+	p.canceler()
+	p.canceler = nil
 	grip.Debug("pool's context canceled, waiting for running jobs to complete")
+
+	// because of the timer+2 contexts in the worker
+	// implementation, we can end up returning earlier and because
+	// pools are restartable, end up calling wait more than once,
+	// which doesn't affect behavior but does cause this to panic in
+	// tests
+	defer func() { recover() }()
+
 	p.wg.Wait()
 }
