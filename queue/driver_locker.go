@@ -12,6 +12,9 @@ import (
 
 type lockPings map[string]time.Time
 
+// LockTimeout reflects the distributed lock timeout period.
+const LockTimeout = 5 * time.Minute
+
 // LockManager describes the component of the Driver interface that
 // handles job mutexing.
 type LockManager interface {
@@ -23,7 +26,7 @@ type LockManager interface {
 // methods to be composed by amboy/queue.Driver implementations.
 //
 // lockManagers open a single background process that updates all
-// tracked locks at an interval, less than the configured lockTimeout
+// tracked locks at an interval, less than the configured LockTimeout
 // to avoid locks growing stale.
 type lockManager struct {
 	name    string
@@ -47,7 +50,7 @@ func newLockManager(name string, d Driver) *lockManager {
 		name:    name,
 		d:       d,
 		ops:     make(chan func(lockPings)),
-		timeout: lockTimeout,
+		timeout: LockTimeout,
 	}
 }
 

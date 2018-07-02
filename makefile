@@ -1,7 +1,7 @@
 # start project configuration
 name := amboy
 buildDir := build
-packages := $(name) dependency job registry pool queue rest logger
+packages := $(name) dependency job registry pool queue rest logger reporting
 orgPath := github.com/mongodb
 projectPath := $(orgPath)/$(name)
 # end project configuration
