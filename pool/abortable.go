@@ -183,7 +183,7 @@ func (p *abortablePool) RunningJobs() []string {
 	return out
 }
 
-func (p *abortablePool) Abort(id string) error {
+func (p *abortablePool) Abort(ctx context.Context, id string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -194,15 +194,30 @@ func (p *abortablePool) Abort(id string) error {
 	cancel()
 	delete(p.jobs, id)
 
+	job, ok := p.queue.Get(id)
+	if !ok {
+		return errors.Errorf("could not find '%s' in the queue", id)
+	}
+
+	p.queue.Complete(ctx, job)
+
 	return nil
 }
 
-func (p *abortablePool) AbortAll() {
+func (p *abortablePool) AbortAll(ctx context.Context) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	for id, cancel := range p.jobs {
+		if ctx.Err() != nil {
+			break
+		}
 		cancel()
 		delete(p.jobs, id)
+		job, ok := p.queue.Get(id)
+		if !ok {
+			continue
+		}
+		p.queue.Complete(ctx, job)
 	}
 }
