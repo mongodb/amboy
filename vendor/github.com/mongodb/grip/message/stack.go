@@ -37,8 +37,7 @@ const maxLevels = 1024
 
 type stackMessage struct {
 	Composer
-	tagged bool
-	trace  stackFrames
+	trace stackFrames
 }
 
 // StackFrame captures a single item in a stack trace, and is used
@@ -51,11 +50,11 @@ type StackFrame struct {
 
 // StackTrace structs are returned by the Raw method of the stackMessage type
 type StackTrace struct {
-	Context interface{}  `bson:"context,omitempty" json:"context,omitempty" yaml:"context,omitempty"`
-	Frames  []StackFrame `bson:"frames" json:"frames" yaml:"frames"`
+	Context interface{} `bson:"context,omitempty" json:"context,omitempty" yaml:"context,omitempty"`
+	Frames  stackFrames `bson:"frames" json:"frames" yaml:"frames"`
 }
 
-func (s StackTrace) String() string { return stackFrames(s.Frames).String() }
+func (s StackTrace) String() string { return s.Frames.String() }
 
 ////////////////////////////////////////////////////////////////////////
 //
@@ -110,13 +109,13 @@ func NewStackFormatted(skip int, message string, args ...interface{}) Composer {
 ////////////////////////////////////////////////////////////////////////
 
 func (m *stackMessage) String() string {
-	return strings.Trim(strings.Join([]string{m.getTag(), m.Composer.String()}, " "), " \n\t")
+	return strings.Trim(strings.Join([]string{m.trace.String(), m.Composer.String()}, " "), " \n\t")
 }
 
 func (m *stackMessage) Raw() interface{} {
 	switch payload := m.Composer.(type) {
 	case *fieldMessage:
-		payload.fields["stack.frames"] = m.trace.String()
+		payload.fields["stack.frames"] = m.trace
 		return payload
 	default:
 		return StackTrace{
@@ -140,7 +139,7 @@ func (f stackFrames) String() string {
 		out[idx] = frame.String()
 	}
 
-	return strings.Join(out, "\n")
+	return strings.Join(out, " ")
 }
 
 func (f StackFrame) String() string {
@@ -200,13 +199,4 @@ func captureStack(skip int) []StackFrame {
 	}
 
 	return trace
-}
-
-func (m *stackMessage) getTag() string {
-	if len(m.trace) >= 1 {
-		m.tagged = true
-		return m.trace[0].String()
-	}
-
-	return ""
 }

@@ -13,16 +13,16 @@ type jiraMessage struct {
 // To see whether you have the right permissions to create an issue with certain
 // fields, check your JIRA interface on the web.
 type JiraIssue struct {
-	Project     string
-	Summary     string
-	Description string
-	Reporter    string
-	Assignee    string
-	Type        string
-	Components  []string
-	Labels      []string
+	Project     string   `bson:"project" json:"project" yaml:"project"`
+	Summary     string   `bson:"summary" json:"summary" yaml:"summary"`
+	Description string   `bson:"description" json:"description" yaml:"description"`
+	Reporter    string   `bson:"reporter" json:"reporter" yaml:"reporter"`
+	Assignee    string   `bson:"assignee" json:"assignee" yaml:"assignee"`
+	Type        string   `bson:"type" json:"type" yaml:"type"`
+	Components  []string `bson:"components" json:"components" yaml:"components"`
+	Labels      []string `bson:"labels" json:"labels" yaml:"labels"`
 	// ... other fields
-	Fields map[string]string
+	Fields map[string]interface{} `bson:"fields" json:"fields" yaml:"fields"`
 }
 
 // JiraField is a struct composed of a key-value pair.
@@ -48,7 +48,7 @@ func NewJiraMessage(project, summary string, fields ...JiraField) Composer {
 	issue := JiraIssue{
 		Project: project,
 		Summary: summary,
-		Fields:  map[string]string{},
+		Fields:  map[string]interface{}{},
 	}
 
 	// Assign given fields to jira issue fields
@@ -65,7 +65,7 @@ func NewJiraMessage(project, summary string, fields ...JiraField) Composer {
 		case "component", "Component":
 			issue.Components = f.Value.([]string)
 		default:
-			issue.Fields[f.Key] = f.Value.(string)
+			issue.Fields[f.Key] = f.Value
 		}
 	}
 
@@ -82,7 +82,7 @@ func (m *jiraMessage) Raw() interface{} { return m.issue }
 func (m *jiraMessage) Loggable() bool   { return m.issue.Summary != "" }
 func (m *jiraMessage) Annotate(k string, v interface{}) error {
 	if m.issue.Fields == nil {
-		m.issue.Fields = map[string]string{}
+		m.issue.Fields = map[string]interface{}{}
 	}
 
 	value, ok := v.(string)
