@@ -28,6 +28,6 @@ imports:
 - name: github.com/mongodb/grip
   version: 5d6dffc047e01c5553d48459d68a2d4f6c11a6ff
 - name: github.com/evergreen-ci/gimlet
-  version: c123ad223d0d7412858896fc0fe8969b81aa3f0e
+  version: 5a1909fb3929c43c7829add83def70e4ee9e650d
 
 devImports: []
