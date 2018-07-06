@@ -189,6 +189,6 @@ type AbortableRunner interface {
 
 	IsRunning(string) bool
 	RunningJobs() []string
-	Abort(string) error
-	AbortAll()
+	Abort(context.Context, string) error
+	AbortAll(context.Context)
 }

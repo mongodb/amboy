@@ -74,22 +74,28 @@ func (s *AbortablePoolSuite) TestCloserCancelsFuncs() {
 }
 
 func (s *AbortablePoolSuite) TestSingleAborterErrorsForUnknownJob() {
-	s.Error(s.pool.Abort("foo"))
-	s.Error(s.pool.Abort("DOES NOT EXIST"))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s.Error(s.pool.Abort(ctx, "foo"))
+	s.Error(s.pool.Abort(ctx, "DOES NOT EXIST"))
 }
 
 func (s *AbortablePoolSuite) TestSingleAborterCancelsJob() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	closer := &cancelFuncCounter{}
 	s.Equal(0, closer.counter)
 	s.pool.jobs["id"] = closer.Canceler
 	s.Len(s.pool.jobs, 1)
 	s.Equal(0, closer.counter)
 
-	s.Error(s.pool.Abort("foo"))
+	s.Error(s.pool.Abort(ctx, "foo"))
 	s.Len(s.pool.jobs, 1)
 	s.Equal(0, closer.counter)
 
-	s.NoError(s.pool.Abort("id"))
+	s.pool.queue = s.queue
+	_ = s.pool.Abort(ctx, "id")
 	s.Len(s.pool.jobs, 0)
 	s.Equal(1, closer.counter)
 }
@@ -112,7 +118,11 @@ func (s *AbortablePoolSuite) TestAbortAllWorks() {
 
 	s.Len(s.pool.jobs, 10)
 
-	s.pool.AbortAll()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	s.pool.queue = s.queue
+	s.pool.AbortAll(ctx)
 	s.Len(s.pool.jobs, 0)
 	seen = 0
 	for _, c := range closers {
