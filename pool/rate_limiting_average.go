@@ -203,9 +203,10 @@ func (p *ewmaRateLimiting) runJob(ctx context.Context, j amboy.Job) time.Duratio
 	}
 	if err := j.Error(); err != nil {
 		r["error"] = err.Error()
+		grip.Error(r)
+	} else {
+		grip.Debug(r)
 	}
-
-	grip.Debug(r)
 
 	return interval
 }

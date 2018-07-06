@@ -162,8 +162,10 @@ func (p *simpleRateLimited) worker(ctx context.Context, jobs <-chan amboy.Job) {
 
 				if err := job.Error(); err != nil {
 					r["error"] = err.Error()
+					grip.Error(r)
+				} else {
+					grip.Debug(r)
 				}
-				grip.Debug(r)
 
 				timer.Reset(p.interval)
 			}

@@ -49,8 +49,10 @@ func executeJob(ctx context.Context, job amboy.Job, q amboy.Queue) {
 	}
 	if err := job.Error(); err != nil {
 		r["error"] = err.Error()
+		grip.Error(r)
+	} else {
+		grip.Debug(r)
 	}
-	grip.Debug(r)
 
 }
 
