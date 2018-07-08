@@ -46,7 +46,7 @@ func (s *QueueClientSuite) SetupSuite() {
 
 	app := s.service.App()
 	s.NoError(app.Resolve())
-	router, err := s.service.app.Router()
+	router, err := s.service.App().Handler()
 	s.NoError(err)
 
 	s.server = httptest.NewServer(router)
