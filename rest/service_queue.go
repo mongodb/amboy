@@ -93,7 +93,7 @@ type QueueServiceOptions struct {
 	NumWorkers int `bson:"num_workers" json:"num_workers" yaml:"num_workers"`
 }
 
-// OpenInfo makes it possible to configure the underlying queue in a
+// OpenWithOptions makes it possible to configure the underlying queue in a
 // service. Use the Close() method on the service to terminate the queue.
 func (s *QueueService) OpenWithOptions(ctx context.Context, opts QueueServiceOptions) error {
 	if opts.NumWorkers == 0 || opts.QueueSize == 0 {
