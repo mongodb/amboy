@@ -73,6 +73,7 @@ func (c *ReportingClient) JobStatus(ctx context.Context, filter reporting.Counte
 	return out, nil
 }
 
+
 // RecentTiming returns timing data latency or duration of job run
 // time for jobs in the window defined by the duration value. You must
 // specify a timing filter (e.g. Latency or Duration) with a constant
@@ -80,7 +81,7 @@ func (c *ReportingClient) JobStatus(ctx context.Context, filter reporting.Counte
 func (c *ReportingClient) RecentTiming(ctx context.Context, dur time.Duration, filter reporting.RuntimeFilter) (*reporting.JobRuntimeReport, error) {
 	out := &reporting.JobRuntimeReport{}
 
-	path := fmt.Sprintf("/timing/%s/%d", string(filter), int64(dur.Truncate(time.Second).Seconds()))
+	path := fmt.Sprintf("/timing/%s/%d", string(filter), int64(dur..Seconds()))
 
 	if err := c.doRequest(ctx, path, out); err != nil {
 		return nil, errors.Wrap(err, "problem with request")
@@ -109,7 +110,7 @@ func (c *ReportingClient) JobIDsByState(ctx context.Context, jobType string, fil
 func (c *ReportingClient) RecentErrors(ctx context.Context, dur time.Duration, filter reporting.ErrorFilter) (*reporting.JobErrorsReport, error) {
 	out := &reporting.JobErrorsReport{}
 
-	path := fmt.Sprintf("/errors/%s/%d", string(filter), int64(dur.Truncate(time.Second).Seconds()))
+	path := fmt.Sprintf("/errors/%s/%d", string(filter), int64(dur.Seconds()))
 	if err := c.doRequest(ctx, path, out); err != nil {
 		return nil, errors.Wrap(err, "problem with request")
 	}
@@ -124,7 +125,7 @@ func (c *ReportingClient) RecentErrors(ctx context.Context, dur time.Duration, f
 func (c *ReportingClient) RecentJobErrors(ctx context.Context, jobType string, dur time.Duration, filter reporting.ErrorFilter) (*reporting.JobErrorsReport, error) {
 	out := &reporting.JobErrorsReport{}
 
-	path := fmt.Sprintf("/errors/%s/%s/%d", string(filter), jobType, int64(dur.Truncate(time.Second).Seconds()))
+	path := fmt.Sprintf("/errors/%s/%s/%d", string(filter), jobType, int64(dur.Seconds()))
 	if err := c.doRequest(ctx, path, out); err != nil {
 		return nil, errors.Wrap(err, "problem with request")
 	}
