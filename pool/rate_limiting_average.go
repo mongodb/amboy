@@ -184,6 +184,13 @@ func (p *ewmaRateLimiting) worker(ctx context.Context, jobs <-chan workUnit) {
 	}
 }
 
+func (p *ewmaRateLimiting) addCanceler(id string, cancel context.CancelFunc) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	p.jobs[id] = cancel
+}
+
 func (p *ewmaRateLimiting) runJob(ctx context.Context, j amboy.Job) time.Duration {
 	start := time.Now()
 	ti := amboy.JobTimeInfo{
@@ -193,12 +200,7 @@ func (p *ewmaRateLimiting) runJob(ctx context.Context, j amboy.Job) time.Duratio
 
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithCancel(ctx)
-	func() {
-		p.mutex.Lock()
-		defer p.mutex.Unlock()
-
-		p.jobs[j.ID()] = cancel
-	}()
+	p.addCanceler(j.ID(), cancel)
 
 	defer func() {
 		p.mutex.Lock()

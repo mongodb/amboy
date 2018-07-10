@@ -151,15 +151,18 @@ func (p *abortablePool) worker(ctx context.Context, jobs <-chan workUnit) {
 	}
 }
 
+func (p *abortablePool) addCanceler(id string, cancel context.CancelFunc) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.jobs[id] = cancel
+}
+
 func (p *abortablePool) runJob(ctx context.Context, job amboy.Job) {
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithCancel(ctx)
-	func() {
-		p.mu.Lock()
-		defer p.mu.Unlock()
 
-		p.jobs[job.ID()] = cancel
-	}()
+	p.addCanceler(job.ID(), cancel)
 
 	defer func() {
 		p.mu.Lock()
