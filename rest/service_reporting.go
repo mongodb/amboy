@@ -93,7 +93,7 @@ func (s *ReportingService) GetRecentTimings(rw http.ResponseWriter, r *http.Requ
 	}
 
 	filter := reporting.RuntimeFilter(vars["filter"])
-	if err := filter.Validate(); err != nil {
+	if err = filter.Validate(); err != nil {
 		gimlet.WriteResponse(rw, gimlet.MakeJSONErrorResponder(err))
 		return
 	}
@@ -123,7 +123,7 @@ func (s *ReportingService) GetRecentErrors(rw http.ResponseWriter, r *http.Reque
 	}
 
 	filter := reporting.ErrorFilter(vars["filter"])
-	if err := filter.Validate(); err != nil {
+	if err = filter.Validate(); err != nil {
 		gimlet.WriteResponse(rw, gimlet.MakeJSONErrorResponder(err))
 		return
 	}
@@ -152,7 +152,7 @@ func (s *ReportingService) GetRecentErrorsByType(rw http.ResponseWriter, r *http
 	}
 
 	filter := reporting.ErrorFilter(vars["filter"])
-	if err := filter.Validate(); err != nil {
+	if err = filter.Validate(); err != nil {
 		gimlet.WriteResponse(rw, gimlet.MakeJSONErrorResponder(err))
 		return
 	}
