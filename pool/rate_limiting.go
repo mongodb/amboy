@@ -97,10 +97,11 @@ func (p *simpleRateLimited) Start(ctx context.Context) error {
 	return nil
 }
 
-func (p *simpleRateLimited) worker(ctx context.Context, jobs <-chan amboy.Job) {
+func (p *simpleRateLimited) worker(ctx context.Context, jobs <-chan workUnit) {
 	var (
-		err error
-		job amboy.Job
+		err    error
+		cancel context.CancelFunc
+		job    amboy.Job
 	)
 
 	p.mu.Lock()
@@ -119,6 +120,9 @@ func (p *simpleRateLimited) worker(ctx context.Context, jobs <-chan amboy.Job) {
 			// start a replacement worker.
 			go p.worker(ctx, jobs)
 		}
+		if cancel != nil {
+			cancel()
+		}
 	}()
 
 	timer := time.NewTimer(0)
@@ -131,10 +135,12 @@ func (p *simpleRateLimited) worker(ctx context.Context, jobs <-chan amboy.Job) {
 			select {
 			case <-ctx.Done():
 				return
-			case job := <-jobs:
-				if job == nil {
+			case wu := <-jobs:
+				if wu.job == nil {
 					continue
 				}
+				job = wu.job
+				cancel = wu.cancel
 
 				ti := amboy.JobTimeInfo{
 					Start: time.Now(),
@@ -166,6 +172,8 @@ func (p *simpleRateLimited) worker(ctx context.Context, jobs <-chan amboy.Job) {
 				} else {
 					grip.Debug(r)
 				}
+
+				cancel()
 
 				timer.Reset(p.interval)
 			}

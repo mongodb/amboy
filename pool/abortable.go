@@ -104,10 +104,11 @@ func (p *abortablePool) Start(ctx context.Context) error {
 	return nil
 }
 
-func (p *abortablePool) worker(ctx context.Context, jobs <-chan amboy.Job) {
+func (p *abortablePool) worker(ctx context.Context, jobs <-chan workUnit) {
 	var (
-		err error
-		job amboy.Job
+		err    error
+		job    amboy.Job
+		cancel context.CancelFunc
 	)
 
 	p.mu.Lock()
@@ -123,8 +124,13 @@ func (p *abortablePool) worker(ctx context.Context, jobs <-chan amboy.Job) {
 				job.AddError(err)
 				p.queue.Complete(ctx, job)
 			}
+
 			// start a replacement worker.
 			go p.worker(ctx, jobs)
+		}
+
+		if cancel != nil {
+			cancel()
 		}
 	}()
 
@@ -132,25 +138,31 @@ func (p *abortablePool) worker(ctx context.Context, jobs <-chan amboy.Job) {
 		select {
 		case <-ctx.Done():
 			return
-		case job = <-jobs:
-			if job == nil {
+		case wu := <-jobs:
+			if wu.job == nil {
 				continue
 			}
 
+			job = wu.job
+			cancel = wu.cancel
 			p.runJob(ctx, job)
+			cancel()
 		}
 	}
+}
+
+func (p *abortablePool) addCanceler(id string, cancel context.CancelFunc) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.jobs[id] = cancel
 }
 
 func (p *abortablePool) runJob(ctx context.Context, job amboy.Job) {
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithCancel(ctx)
-	func() {
-		p.mu.Lock()
-		defer p.mu.Unlock()
 
-		p.jobs[job.ID()] = cancel
-	}()
+	p.addCanceler(job.ID(), cancel)
 
 	defer func() {
 		p.mu.Lock()
