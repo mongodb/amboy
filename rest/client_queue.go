@@ -21,7 +21,7 @@ const (
 	maxClientPort         = 65535
 )
 
-// Client provides an interface for interacting with a remote amboy
+// QueueClient provides an interface for interacting with a remote amboy
 // Service.
 type QueueClient struct {
 	host   string

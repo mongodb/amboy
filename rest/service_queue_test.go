@@ -76,11 +76,3 @@ func (s *RestServiceSuite) TestServiceOpenMethodInitializesResources() {
 	s.NotNil(s.service.queue)
 	s.NotNil(s.service.closer)
 }
-
-func (s *RestServiceSuite) TestIfNilAppMethodInitializesApp() {
-	s.Nil(s.service.app)
-
-	app := s.service.App()
-	s.NotNil(app)
-	s.Equal(app, s.service.app)
-}

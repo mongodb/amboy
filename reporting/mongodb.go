@@ -207,8 +207,7 @@ func (db *dbQueueStat) RecentTiming(ctx context.Context, window time.Duration, f
 		runtimes, err = db.aggregateRuntimes(
 			bson.M{"$match": bson.M{
 				"status.completed": true,
-				// TODO: make this configurable
-				"time_info.end": bson.M{"$gt": time.Now().Add(-window)},
+				"time_info.end":    bson.M{"$gt": time.Now().Add(-window)},
 			}},
 			bson.M{"$group": bson.M{
 				"_id": "$type",
@@ -223,8 +222,7 @@ func (db *dbQueueStat) RecentTiming(ctx context.Context, window time.Duration, f
 		now := time.Now()
 		runtimes, err = db.aggregateRuntimes(
 			bson.M{"$match": bson.M{
-				"status.completed": false,
-				// TODO: make this configurable
+				"status.completed":  false,
 				"time_info.created": bson.M{"$gt": now.Add(-window)},
 			}},
 			bson.M{"$group": bson.M{

@@ -72,7 +72,7 @@ func (s *JobStatusSuite) TestJobNameReturnsSuccessfulResponse() {
 }
 
 func (s *JobStatusSuite) TestRequestReturnsErrorInErrorConditions() {
-	router, err := s.service.App().Router()
+	router, err := s.service.App().Handler()
 	s.NoError(err)
 
 	for _, name := range []string{"foo", "bar", "df-df"} {
@@ -94,7 +94,7 @@ func (s *JobStatusSuite) TestRequestReturnsErrorInErrorConditions() {
 }
 
 func (s *JobStatusSuite) TestRequestValidJobStatus() {
-	router, err := s.service.App().Router()
+	router, err := s.service.App().Handler()
 	s.NoError(err)
 
 	w := httptest.NewRecorder()

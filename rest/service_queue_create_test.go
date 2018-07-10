@@ -89,7 +89,7 @@ func (s *CreateJobSuite) TestAddingJobSuccessfuly() {
 }
 
 func (s *CreateJobSuite) TestRequestWithNilPayload() {
-	router, err := s.service.App().Router()
+	router, err := s.service.App().Handler()
 	s.NoError(err)
 
 	rb, err := json.Marshal(`{}`)
@@ -109,7 +109,7 @@ func (s *CreateJobSuite) TestRequestWithNilPayload() {
 }
 
 func (s *CreateJobSuite) TestRequestToAddJobThatAlreadyExists() {
-	router, err := s.service.App().Router()
+	router, err := s.service.App().Handler()
 	s.NoError(err)
 
 	payload, err := registry.MakeJobInterchange(job.NewShellJob("true", ""), amboy.JSON)
@@ -138,7 +138,7 @@ func (s *CreateJobSuite) TestRequestToAddJobThatAlreadyExists() {
 }
 
 func (s *CreateJobSuite) TestRequestToAddNewJobRegistersJob() {
-	router, err := s.service.App().Router()
+	router, err := s.service.App().Handler()
 	s.NoError(err)
 
 	startingTotal := s.service.queue.Stats().Total
