@@ -93,10 +93,9 @@ func TestSmokeRemoteMultipleQueueRunsJobsOnlyOnceWithMultipleWorkers(t *testing.
 	wg.Wait()
 
 	grip.Notice("waiting to run jobs")
-	for i := 0; i < 10; i++ {
-		amboy.WaitCtxInterval(ctx, q, 100*time.Millisecond)
-		amboy.WaitCtxInterval(ctx, q2, 100*time.Millisecond)
-	}
+
+	amboy.WaitInterval(q, 100*time.Millisecond)
+	amboy.WaitInterval(q2, 100*time.Millisecond)
 
 	grip.Alertln("one", q.Stats())
 	grip.Alertln("two", q2.Stats())
