@@ -25,16 +25,13 @@ func TestLockManagerSuite(t *testing.T) {
 }
 
 func (s *LockManagerSuite) SetupSuite() {
-	var ctx context.Context
 	s.driver = NewPriorityDriver().(*priorityDriver)
-	ctx, s.suiteCancel = context.WithCancel(context.Background())
-	s.Require().NoError(s.driver.Open(ctx))
 }
 
 func (s *LockManagerSuite) SetupTest() {
 	s.ctx, s.testCancel = context.WithCancel(context.Background())
 	s.lm = newLockManager("test", s.driver)
-	s.lm.timeout = 100 * time.Millisecond
+	s.lm.timeout = 300 * time.Millisecond
 	s.lm.start(s.ctx)
 }
 
@@ -43,7 +40,6 @@ func (s *LockManagerSuite) TearDownTest() {
 }
 
 func (s *LockManagerSuite) TearDownSuite() {
-	s.suiteCancel()
 	s.driver.Close()
 }
 
@@ -95,4 +91,52 @@ func (s *LockManagerSuite) TestLockReachesTimeout() {
 	time.Sleep(s.lm.timeout * 3)
 	s.NoError(s.lm.Lock(s.ctx, j))
 	s.Error(s.lm.Lock(s.ctx, j))
+}
+
+func (s *LockManagerSuite) TestPanicJobIsUnlocked() {
+	j := &jobThatPanics{
+		sleep: time.Second,
+	}
+	j.SetID("foo")
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	lastMod := j.Status().ModificationCount
+	s.Equal(0, lastMod)
+	s.NoError(s.driver.Put(j))
+	lastMod = j.Status().ModificationCount
+	s.Equal(0, lastMod)
+
+	s.NoError(s.lm.Lock(ctx, j), "%+v", j)
+
+	for i := 0; i < 10; i++ {
+		s.Error(s.lm.Lock(ctx, j), "idx=%d => %+v", i, j)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	lastMod = j.Status().ModificationCount
+	s.True(lastMod >= 1)
+
+	for i := 0; i < 10; i++ {
+		s.Error(s.lm.Lock(ctx, j), "idx=%d => %+v", i, j)
+	}
+
+	s.False(j.Status().Completed)
+	cancel()
+	time.Sleep(500 * time.Millisecond)
+
+	s.NoError(s.lm.Lock(ctx, j), "%+v", j)
+
+	lastMod = j.Status().ModificationCount
+
+	time.Sleep(200 * time.Millisecond)
+	s.Equal(lastMod, j.Status().ModificationCount)
+	s.False(j.Status().Completed)
+	time.Sleep(200 * time.Millisecond)
+
+	s.NoError(s.lm.Lock(s.ctx, j))
+
+	for i := 0; i < 10; i++ {
+		s.Error(s.lm.Lock(s.ctx, j), "idx=%d => %+v", i, j)
+	}
 }

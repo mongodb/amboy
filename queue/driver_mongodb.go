@@ -203,7 +203,7 @@ func (d *mongoDB) Get(name string) (amboy.Job, error) {
 	return output, nil
 }
 
-func (d *mongoDB) getAtomicQuery(jobName string, stat amboy.JobStatusInfo) bson.M {
+func (d *mongoDB) getAtomicQuery(jobName string, modCount int) bson.M {
 	timeoutTs := time.Now().Add(-LockTimeout)
 
 	return bson.M{
@@ -215,7 +215,7 @@ func (d *mongoDB) getAtomicQuery(jobName string, stat amboy.JobStatusInfo) bson.
 			// means there's an active lock but we own it.
 			bson.M{
 				"status.owner":     d.instanceID,
-				"status.mod_count": stat.ModificationCount,
+				"status.mod_count": modCount,
 				"status.mod_ts":    bson.M{"$gt": timeoutTs},
 			},
 			// modtime is older than the lock timeout,
@@ -258,7 +258,7 @@ func (d *mongoDB) Save(j amboy.Job) error {
 	defer session.Close()
 
 	stat := j.Status()
-	query := d.getAtomicQuery(name, stat)
+	query := d.getAtomicQuery(name, stat.ModificationCount)
 	stat.ModificationCount++
 	stat.ModificationTime = time.Now()
 	j.SetStatus(stat)
@@ -270,7 +270,7 @@ func (d *mongoDB) Save(j amboy.Job) error {
 
 	info, err := jobs.Upsert(query, job)
 	if err != nil {
-		return errors.Wrapf(err, "problem updating %s: %+v", name, info)
+		return errors.Wrapf(err, "problem upserting %s: %+v", name, info)
 	}
 
 	grip.Debug(message.Fields{
@@ -293,7 +293,7 @@ func (d *mongoDB) SaveStatus(j amboy.Job, stat amboy.JobStatusInfo) error {
 	defer session.Close()
 
 	id := j.ID()
-	query := d.getAtomicQuery(id, stat)
+	query := d.getAtomicQuery(id, stat.ModificationCount)
 	stat.ModificationCount++
 	stat.ModificationTime = time.Now()
 
