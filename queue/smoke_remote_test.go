@@ -53,7 +53,7 @@ func TestSmokeRemoteMultipleQueueRunsJobsOnlyOnceWithMultipleWorkers(t *testing.
 	assert := assert.New(t) // nolint
 	opts := DefaultMongoDBOptions()
 	name := uuid.NewV4().String()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 
 	defer cleanupMongoDB(name, opts)
 	defer cancel()
@@ -94,8 +94,8 @@ func TestSmokeRemoteMultipleQueueRunsJobsOnlyOnceWithMultipleWorkers(t *testing.
 
 	grip.Notice("waiting to run jobs")
 
-	amboy.WaitInterval(q, 100*time.Millisecond)
-	amboy.WaitInterval(q2, 100*time.Millisecond)
+	amboy.WaitCtxInterval(ctx, q, 100*time.Millisecond)
+	amboy.WaitCtxInterval(ctx, q2, 100*time.Millisecond)
 
 	grip.Alertln("one", q.Stats())
 	grip.Alertln("two", q2.Stats())
