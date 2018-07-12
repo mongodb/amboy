@@ -11,11 +11,10 @@ import (
 )
 
 type LockManagerSuite struct {
-	lm          *lockManager
-	driver      *priorityDriver
-	testCancel  context.CancelFunc
-	suiteCancel context.CancelFunc
-	ctx         context.Context
+	lm         *lockManager
+	driver     *priorityDriver
+	testCancel context.CancelFunc
+	ctx        context.Context
 	suite.Suite
 }
 
