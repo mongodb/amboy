@@ -253,7 +253,7 @@ post:
 #######################################
 buildvariants:
   - name: race-detector
-    display_name: Race Detector (Arch Linux)
+    display_name: Race Detector
     expansions:
       mongodb_url: https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-3.6.4.tgz
       build_env: "RUN_COUNT=5"
@@ -261,7 +261,17 @@ buildvariants:
       - archlinux-test
     tasks:
       - ".race"
-      - ".report"
+
+  - name: report
+    display_name: Reporting
+    run_on:
+      - archlinux-test
+    expansions:
+      mongodb_url: http://fastdl.mongodb.org/linux/mongodb-linux-x86_64-3.6.4.tgz
+      test_timeout: 15m
+    tasks:
+      - name: ".report"
+        stepback: false
 
   - name: ubuntu1604
     display_name: Ubuntu 16.04
