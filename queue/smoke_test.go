@@ -438,7 +438,8 @@ func TestSmokeRemoteUnorderedSingleRunnerWithMongoDBDriver(t *testing.T) {
 func TestSmokeRemoteUnorderedWorkerPoolsWithMongoDBDriver(t *testing.T) {
 	assert := assert.New(t) // nolint
 	opts := DefaultMongoDBOptions()
-	baseCtx := context.Background()
+	baseCtx, baseCancel := context.WithCancle(context.Background())
+	defer baseCancel()
 
 	for _, poolSize := range []int{2, 4, 8, 16, 32, 64} {
 		start := time.Now()

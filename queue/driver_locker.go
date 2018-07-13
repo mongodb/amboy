@@ -143,7 +143,7 @@ func (l *lockManager) lockPinger(ctx context.Context) {
 				}
 
 				if err := l.d.SaveStatus(j, stat); err != nil {
-					grip.Debug(message.WrapErrors(err, message.Fields{
+					grip.Debug(message.WrapError(err, message.Fields{
 						"message":  "problem updating lock",
 						"job_id":   name,
 						"stat":     stat,
