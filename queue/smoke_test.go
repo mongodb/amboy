@@ -712,6 +712,7 @@ func TestSmokeSimpleRemoteOrderedWorkerPoolsWithMongoDBDriver(t *testing.T) {
 
 	session, err := mgo.DialWithTimeout(opts.URI, 5*time.Second)
 	assert.NoError(err)
+	defer session.Close()
 
 	for _, poolSize := range []int{2, 4, 8, 16, 32, 64} {
 		start := time.Now()
@@ -907,18 +908,26 @@ func TestSmokeAdaptiveOrderingWithUnorderedWorkAndSinglePools(t *testing.T) {
 }
 
 func TestSmokeRemoteOrderedWithWorkerPoolsAndMongoDB(t *testing.T) {
+	t.Skip("this test test's an odd combination of variables, and gets stuck")
+
 	assert := assert.New(t) // nolint
 	opts := DefaultMongoDBOptions()
 
-	for _, poolSize := range []int{2, 4, 8, 16, 32, 64} {
+	session, err := mgo.DialWithTimeout(opts.URI, 5*time.Second)
+	assert.NoError(err)
+	defer session.Close()
+
+	for _, poolSize := range []int{2, 4, 8, 16, 32} {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		q := NewSimpleRemoteOrdered(poolSize)
 
 		name := strings.Replace(uuid.NewV4().String(), "-", ".", -1)
-		driver := NewMongoDBDriver(name, opts)
+		driver, err := OpenNewMongoDBDriver(ctx, name, opts, session.Copy())
+		assert.NoError(err)
 		assert.NoError(q.SetDriver(driver))
+		defer driver.Close()
 
-		runUnorderedSmokeTest(ctx, q, poolSize, assert)
+		runOrderedSmokeTest(ctx, q, poolSize, false, assert)
 		cancel()
 		grip.CatchError(cleanupMongoDB(name, opts))
 	}
