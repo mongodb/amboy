@@ -262,7 +262,7 @@ func runWaitUntilSmokeTest(ctx context.Context, q amboy.Queue, size int, assert 
 	assert.Equal(numJobs*2, q.Stats().Total, fmt.Sprintf("with %d workers", size))
 
 	// wait for things to finish
-	time.Sleep(time.Second)
+	time.Sleep(2 * time.Second)
 
 	completed := 0
 	for result := range q.Results(ctx) {
@@ -951,7 +951,7 @@ func TestSmokeWaitUntilMongoDBQueue(t *testing.T) {
 	opts := DefaultMongoDBOptions()
 	opts.CheckWaitUntil = true
 
-	for _, poolSize := range []int{2, 4} {
+	for _, poolSize := range []int{4, 8} {
 		ctx, cancel := context.WithCancel(context.Background())
 
 		q := NewSimpleRemoteOrdered(poolSize)

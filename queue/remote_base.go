@@ -143,6 +143,7 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
 						"retry_count": count,
 						"message":     " after 10 retries, aborting marking job complete",
 					}))
+					return
 				}
 
 				continue
