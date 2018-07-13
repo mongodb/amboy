@@ -918,7 +918,7 @@ func TestSmokeRemoteOrderedWithWorkerPoolsAndMongoDB(t *testing.T) {
 		driver := NewMongoDBDriver(name, opts)
 		assert.NoError(q.SetDriver(driver))
 
-		runOrderedSmokeTest(ctx, q, poolSize, true, assert)
+		runUnorderedSmokeTest(ctx, q, poolSize, assert)
 		cancel()
 		grip.CatchError(cleanupMongoDB(name, opts))
 	}
