@@ -98,7 +98,29 @@ func (l *lockManager) lockPinger(ctx context.Context) {
 				}
 
 				stat := j.Status()
-				if !stat.InProgress || stat.Owner != l.name {
+				if !stat.InProgress {
+					girp.Debug(message.Fields{
+						"message":  "removing locally tracked lock",
+						"cause":    "job complete",
+						"job_id":   name,
+						"stat":     stat,
+						"job_type": j.Type().Name,
+						"service":  "amboy.queue.locker",
+					})
+
+					delete(activeLocks, name)
+					continue
+				} else if stat.Owner != l.name {
+					girp.Debug(message.Fields{
+						"message":  "removing locally tracked lock",
+						"cause":    "lock held by other service",
+						"self":     l.name,
+						"job_id":   name,
+						"stat":     stat,
+						"job_type": j.Type().Name,
+						"service":  "amboy.queue.locker",
+					})
+
 					delete(activeLocks, name)
 					continue
 				}
@@ -108,11 +130,26 @@ func (l *lockManager) lockPinger(ctx context.Context) {
 				}
 
 				if op.ctx.Err() != nil {
+					girp.Debug(message.Fields{
+						"message":  "removing locally tracked lock",
+						"cause":    "context canceled",
+						"job_id":   name,
+						"stat":     stat,
+						"job_type": j.Type().Name,
+						"service":  "amboy.queue.locker",
+					})
 					delete(activeLocks, name)
 					continue
 				}
 
 				if err := l.d.SaveStatus(j, stat); err != nil {
+					girp.Debug(message.WrapErrors(err, message.Fields{
+						"message":  "problem updating lock",
+						"job_id":   name,
+						"stat":     stat,
+						"job_type": j.Type().Name,
+						"service":  "amboy.queue.locker",
+					}))
 					continue
 				}
 
