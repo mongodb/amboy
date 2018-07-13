@@ -99,7 +99,7 @@ func (l *lockManager) lockPinger(ctx context.Context) {
 
 				stat := j.Status()
 				if !stat.InProgress {
-					girp.Debug(message.Fields{
+					grip.Debug(message.Fields{
 						"message":  "removing locally tracked lock",
 						"cause":    "job complete",
 						"job_id":   name,
@@ -111,7 +111,7 @@ func (l *lockManager) lockPinger(ctx context.Context) {
 					delete(activeLocks, name)
 					continue
 				} else if stat.Owner != l.name {
-					girp.Debug(message.Fields{
+					grip.Debug(message.Fields{
 						"message":  "removing locally tracked lock",
 						"cause":    "lock held by other service",
 						"self":     l.name,
@@ -130,7 +130,7 @@ func (l *lockManager) lockPinger(ctx context.Context) {
 				}
 
 				if op.ctx.Err() != nil {
-					girp.Debug(message.Fields{
+					grip.Debug(message.Fields{
 						"message":  "removing locally tracked lock",
 						"cause":    "context canceled",
 						"job_id":   name,
@@ -143,7 +143,7 @@ func (l *lockManager) lockPinger(ctx context.Context) {
 				}
 
 				if err := l.d.SaveStatus(j, stat); err != nil {
-					girp.Debug(message.WrapErrors(err, message.Fields{
+					grip.Debug(message.WrapErrors(err, message.Fields{
 						"message":  "problem updating lock",
 						"job_id":   name,
 						"stat":     stat,
