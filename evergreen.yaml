@@ -173,40 +173,24 @@ tasks:
     tags: ["test"]
 
   # run the suites with the race detector (one variant only)
-  - <<: *run-build
-    tags: ["race"]
-    name: build-race
   - <<: *run-go-test-suite
     name: race-dependency
     tags: ["race"]
-    depends_on:
-      - name: build-race
   - <<: *run-go-test-suite
     name: race-job
     tags: ["race"]
-    depends_on:
-      - name: build-race
   - <<: *run-go-test-suite
     name: race-rest
     tags: ["race"]
-    depends_on:
-      - name: build-race
   - <<: *run-go-test-suite
     name: race-registry
     tags: ["race"]
-    depends_on:
-      - name: build-race
   - <<: *run-go-test-suite
     name: race-pool
     tags: ["race"]
-    depends_on:
-      - name: build-race
   - <<: *run-go-test-suite-with-mongodb
     name: race-queue
     tags: ["race"]
-    depends_on:
-      - name: build-race
-
 
 post:
   - command: gotest.parse_files
