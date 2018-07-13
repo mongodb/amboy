@@ -213,8 +213,8 @@ func (l *lockManager) Lock(ctx context.Context, j amboy.Job) error {
 	// complete, *and* allowed queues implementations with more
 	// than one worker, to potentially repeat work.
 	if stat.InProgress && stat.ModificationTime.Add(l.timeout).After(time.Now()) {
-		return errors.Errorf("cannot take lock, job locked at %s by %s, for job: '%s'",
-			stat.ModificationTime, stat.Owner, j.ID())
+		return errors.Errorf("cannot take lock, for job: '%s', job locked at %s by %s",
+			j.ID(), stat.ModificationTime, stat.Owner)
 	}
 
 	stat.Owner = l.name

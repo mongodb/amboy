@@ -258,7 +258,6 @@ func (d *mongoDB) Save(j amboy.Job) error {
 	defer session.Close()
 
 	stat := j.Status()
-	query := d.getAtomicQuery(name, stat.ModificationCount)
 	stat.ModificationCount++
 	stat.ModificationTime = time.Now()
 	j.SetStatus(stat)
@@ -268,9 +267,22 @@ func (d *mongoDB) Save(j amboy.Job) error {
 		return errors.Wrap(err, "problem converting job to interchange format")
 	}
 
+	query := d.getAtomicQuery(name, stat.ModificationCount)
 	info, err := jobs.Upsert(query, job)
 	if err != nil {
-		return errors.Wrapf(err, "problem upserting %s: %+v", name, info)
+		if mgo.IsDup(errors.Cause(err)) {
+			grip.Debug(message.Fields{
+				"id":        d.instanceID,
+				"service":   "amboy.queue.mongodb",
+				"operation": "save job",
+				"name":      name,
+				"outcome":   "duplicate key error, ignoring stale job",
+			})
+
+			return nil
+		}
+
+		return errors.Wrapf(err, "problem saving document %s: %+v", name, info)
 	}
 
 	grip.Debug(message.Fields{
