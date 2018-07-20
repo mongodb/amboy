@@ -30,7 +30,7 @@ func (s *LockManagerSuite) SetupSuite() {
 func (s *LockManagerSuite) SetupTest() {
 	s.ctx, s.testCancel = context.WithCancel(context.Background())
 	s.lm = newLockManager("test", s.driver)
-	s.lm.timeout = 300 * time.Millisecond
+	s.lm.timeout = time.Second
 	s.lm.start(s.ctx)
 }
 
