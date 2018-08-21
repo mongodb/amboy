@@ -148,10 +148,9 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
 				}
 			}
 
-			grip.Error(message.WrapErrors(q.driver.Unlock(j),
+			grip.Error(message.WrapError(q.driver.Unlock(j),
 				message.Fields{
 					"job_id":      id,
-					"driver_type": q.driverType,
 					"job_type":    j.Type().Name,
 					"driver_type": q.driverType,
 					"driver_id":   q.driver.ID(),
