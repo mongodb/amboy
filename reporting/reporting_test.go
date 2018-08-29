@@ -151,7 +151,7 @@ func (s *ReportingSuite) TestJobTimingMustBeLongerThanASecond() {
 }
 
 func (s *ReportingSuite) TestJobTiming() {
-	for _, f := range []RuntimeFilter{Duration, Latency} {
+	for _, f := range []RuntimeFilter{Duration, Latency, Running} {
 		r, err := s.reporter.RecentTiming(s.ctx, time.Minute, f)
 		s.NoError(err)
 		s.NotNil(r)
