@@ -27,7 +27,7 @@ type ReportingSuite struct {
 
 func TestReportingSuiteBackedByMongoDB(t *testing.T) {
 	s := new(ReportingSuite)
-	dbName := "amboy"
+	dbName := "amboy_test"
 	opts := queue.DefaultMongoDBOptions()
 	session, err := mgo.Dial(opts.URI)
 	require.NoError(t, err)

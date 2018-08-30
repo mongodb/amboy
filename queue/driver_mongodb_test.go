@@ -29,7 +29,7 @@ func TestMongoDBDriverSuite(t *testing.T) {
 
 func (s *MongoDBDriverSuite) SetupSuite() {
 	s.uri = "mongodb://localhost:27017"
-	s.dbName = "amboy"
+	s.dbName = "amboy_test"
 
 	var err error
 	s.session, err = mgo.Dial(s.uri)
