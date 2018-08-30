@@ -36,8 +36,10 @@ func TestSimpleRemoteOrderedSuiteMongoDB(t *testing.T) {
 func (s *SimpleRemoteOrderedSuite) SetupSuite() {
 	name := "test-" + uuid.NewV4().String()
 	uri := "mongodb://localhost"
+	opts := DefaultMongoDBOptions()
+	opts.DB = "amboy_test"
 	s.driverConstructor = func() Driver {
-		return NewMongoDBDriver(name, DefaultMongoDBOptions())
+		return NewMongoDBDriver(name, opts)
 	}
 
 	s.tearDown = func() error {
