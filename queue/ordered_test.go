@@ -68,14 +68,14 @@ func TestRemoteMongoDBOrderedQueueSuiteFourWorkers(t *testing.T) {
 	s.tearDown = func() {
 		cancel()
 
-		grip.CatchError(session.DB("amboy_test").C(name + ".jobs").DropCollection())
-		grip.CatchError(session.DB("amboy_test").C(name + ".locks").DropCollection())
+		grip.CatchError(session.DB("amboy").C(name + ".jobs").DropCollection())
+		grip.CatchError(session.DB("amboy").C(name + ".locks").DropCollection())
 	}
 
 	s.reset = func() {
-		_, err = session.DB("amboy_test").C(name + ".jobs").RemoveAll(bson.M{})
+		_, err = session.DB("amboy").C(name + ".jobs").RemoveAll(bson.M{})
 		grip.CatchError(err)
-		_, err = session.DB("amboy_test").C(name + ".locks").RemoveAll(bson.M{})
+		_, err = session.DB("amboy").C(name + ".locks").RemoveAll(bson.M{})
 		grip.CatchError(err)
 	}
 
