@@ -75,7 +75,7 @@ func TestRemoteUnorderedMongoDBSuite(t *testing.T) {
 			return
 		}
 
-		err = session.DB("amboy").C(name + ".jobs").DropCollection()
+		err = session.DB("amboy").DropDatabase()
 		if err != nil {
 			grip.Error(err)
 			return
