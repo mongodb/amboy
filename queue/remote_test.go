@@ -63,8 +63,10 @@ func TestRemoteUnorderedMongoDBSuite(t *testing.T) {
 	tests := new(RemoteUnorderedSuite)
 	name := "test-" + uuid.NewV4().String()
 	uri := "mongodb://localhost"
+	opts := DefaultMongoDBOptions()
+	opts.DB = "amboy_test"
 	tests.driverConstructor = func() Driver {
-		return NewMongoDBDriver(name, DefaultMongoDBOptions())
+		return NewMongoDBDriver(name, opts)
 	}
 
 	tests.tearDown = func() {
@@ -75,7 +77,7 @@ func TestRemoteUnorderedMongoDBSuite(t *testing.T) {
 			return
 		}
 
-		err = session.DB("amboy_test").DropDatabase()
+		err = session.DB(opts.DB).DropDatabase()
 		if err != nil {
 			grip.Error(err)
 			return
