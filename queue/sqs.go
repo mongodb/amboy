@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -69,7 +70,7 @@ func (q *sqsFIFOQueue) Put(j amboy.Job) error {
 		return errors.Errorf("cannot add %s because duplicate job already exists", name)
 	}
 
-	dedupID := j.ID()
+	dedupID := strings.Join(strings.Split(j.ID(), " "), "") //remove all spaces
 	curStatus := j.Status()
 	curStatus.ID = dedupID
 	j.SetStatus(curStatus)
@@ -93,7 +94,7 @@ func (q *sqsFIFOQueue) Put(j amboy.Job) error {
 	if err != nil {
 		return errors.Wrap(err, "Error sending message in Put")
 	}
-	q.tasks.all[dedupID] = j
+	q.tasks.all[j.ID()] = j
 	return nil
 }
 
@@ -176,12 +177,12 @@ func (q *sqsFIFOQueue) Results(ctx context.Context) <-chan amboy.Job {
 		defer q.mutex.Unlock()
 		defer close(results)
 		for name, job := range q.tasks.all {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				if _, ok := q.tasks.completed[name]; ok {
-					results <- job
+			if _, ok := q.tasks.completed[name]; ok {
+				select {
+				case <-ctx.Done():
+					return
+				case results <- job:
+					continue
 				}
 			}
 		}
