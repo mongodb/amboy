@@ -107,7 +107,7 @@ func runSimpleUnorderedSmokeTest(ctx context.Context, q amboy.Queue, size int,
 		go func(num int) {
 			for _, name := range testNames {
 				j := newMockJob()
-				j.SetID(fmt.Sprintf("echo %s.%d", name, num))
+				j.SetID(fmt.Sprintf("%s.%d", name, num))
 				assert.NoError(q.Put(j),
 					fmt.Sprintf("with %d workers", num))
 				_, ok := q.Get(j.ID())
@@ -135,7 +135,6 @@ func runSimpleUnorderedSmokeTest(ctx context.Context, q amboy.Queue, size int,
 		statCounter++
 		assert.True(stat.ID != "")
 	}
-	fmt.Println("statCounter: ", statCounter)
 	assert.Equal(numJobs, statCounter, fmt.Sprintf("want jobStats for every job"))
 
 	grip.Infof("completed results check for %d worker smoke test", size)
@@ -555,7 +554,8 @@ func TestSmokeSQSFifoQueueWithSingleWorker(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	q := NewSQSFifoQueue(RandomString(4), 1)
+	q, err := NewSQSFifoQueue(randomString(4), 1)
+	assert.NoError(err)
 	runner := pool.NewSingle()
 	assert.NoError(runner.SetQueue(q))
 
@@ -572,7 +572,8 @@ func TestSmokeSQSFifoQueueWithWorkerPools(t *testing.T) {
 	for _, poolSize := range []int{2, 4, 6, 7, 16} {
 		ctx, cancel := context.WithTimeout(baseCtx, 3*time.Minute)
 
-		q := NewSQSFifoQueue(RandomString(4), poolSize)
+		q, err := NewSQSFifoQueue(randomString(4), poolSize)
+		assert.NoError(err)
 		runSimpleUnorderedSmokeTest(ctx, q, poolSize, assert)
 
 		cancel()
@@ -586,7 +587,8 @@ func TestSmokeSQSFifoQueueWithAbortablePools(t *testing.T) {
 		grip.Infoln("testing priority queue for:", poolSize)
 		ctx, cancel := context.WithTimeout(baseCtx, 3*time.Minute)
 
-		q := NewSQSFifoQueue(RandomString(4), 1)
+		q, err := NewSQSFifoQueue(randomString(4), 1)
+		assert.NoError(err)
 		q.SetRunner(pool.NewAbortablePool(poolSize, q))
 		runSimpleUnorderedSmokeTest(ctx, q, poolSize, assert)
 
@@ -602,7 +604,8 @@ func TestSmokeSQSFifoQueueWithRateLimitingPools(t *testing.T) {
 		grip.Infoln("testing priority queue for:", poolSize)
 		ctx, cancel := context.WithTimeout(baseCtx, 3*time.Minute)
 
-		q := NewSQSFifoQueue(RandomString(4), 1)
+		q, err := NewSQSFifoQueue(randomString(4), 1)
+		assert.NoError(err)
 		runner, _ := pool.NewSimpleRateLimitedWorkers(poolSize, time.Millisecond, q)
 		q.SetRunner(runner)
 		runSimpleUnorderedSmokeTest(ctx, q, poolSize, assert)

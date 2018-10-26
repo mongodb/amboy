@@ -15,6 +15,7 @@ import (
 	"github.com/mongodb/amboy/pool"
 	"github.com/mongodb/amboy/registry"
 	"github.com/mongodb/grip"
+	"github.com/mongodb/grip/message"
 	"github.com/pkg/errors"
 )
 
@@ -31,12 +32,11 @@ type sqsFIFOQueue struct {
 	mutex  sync.RWMutex
 }
 
-func NewSQSFifoQueue(queueName string, workers int) amboy.Queue {
+func NewSQSFifoQueue(queueName string, workers int) (amboy.Queue, error) {
 	q := &sqsFIFOQueue{}
 	q.tasks.completed = make(map[string]bool)
 	q.tasks.all = make(map[string]amboy.Job)
 	q.runner = pool.NewLocalWorkers(workers, q)
-	q.started = false
 	sess := session.Must(session.NewSession(&aws.Config{
 		Region: aws.String("us-west-2"),
 	}))
@@ -50,11 +50,10 @@ func NewSQSFifoQueue(queueName string, workers int) amboy.Queue {
 		},
 	})
 	if err != nil {
-		grip.Errorf("Error creating queue: %s", err)
-		return nil
+		return nil, errors.Errorf("Error creating queue: %s", err)
 	}
 	q.sqsURL = *result.QueueUrl
-	return q
+	return q, nil
 }
 
 func (q *sqsFIFOQueue) Put(j amboy.Job) error {
@@ -70,26 +69,31 @@ func (q *sqsFIFOQueue) Put(j amboy.Job) error {
 		return errors.Errorf("cannot add %s because duplicate job already exists", name)
 	}
 
+	dedupID := j.ID()
+	curStatus := j.Status()
+	curStatus.ID = dedupID
+	j.SetStatus(curStatus)
 	j.UpdateTimeInfo(amboy.JobTimeInfo{
 		Created: time.Now(),
 	})
 	jobItem, err := registry.MakeJobInterchange(j, amboy.JSON)
-	job, err := json.Marshal(jobItem)
-	if err != nil { // is this the right way to handle this?
-		return err
+	if err != nil {
+		return errors.Wrap(err, "Error converting job in Put")
 	}
-	groupID := RandomString(16)
-	dedupID := j.ID()
+	job, err := json.Marshal(jobItem)
+	if err != nil {
+		return errors.Wrap(err, "Error marshalling job to JSON in Put")
+	}
 	_, err = q.sqsClient.SendMessage(&sqs.SendMessageInput{
 		MessageBody:            aws.String(string(job)),
-		QueueUrl:               &q.sqsURL,
-		MessageGroupId:         &groupID,
-		MessageDeduplicationId: &dedupID,
+		QueueUrl:               aws.String(q.sqsURL),
+		MessageGroupId:         aws.String(randomString(16)),
+		MessageDeduplicationId: aws.String(dedupID),
 	})
-
 	if err != nil {
-		return errors.Errorf("Error sending message: %s", err)
+		return errors.Wrap(err, "Error sending message in Put")
 	}
+	q.tasks.all[dedupID] = j
 	return nil
 }
 
@@ -102,15 +106,15 @@ func (q *sqsFIFOQueue) Next(ctx context.Context) amboy.Job {
 		return nil
 	}
 	messageOutput, err := q.sqsClient.ReceiveMessageWithContext(ctx, &sqs.ReceiveMessageInput{
-		QueueUrl: &q.sqsURL,
+		QueueUrl: aws.String(q.sqsURL),
 	})
 	if err != nil || len(messageOutput.Messages) == 0 {
-		grip.Debug("No messages received")
+		grip.Debugf("No messages received in Next from %s", q.sqsURL)
 		return nil
 	}
 	message := messageOutput.Messages[0]
 	q.sqsClient.DeleteMessageWithContext(ctx, &sqs.DeleteMessageInput{
-		QueueUrl:      &q.sqsURL,
+		QueueUrl:      aws.String(q.sqsURL),
 		ReceiptHandle: message.ReceiptHandle,
 	})
 
@@ -147,14 +151,18 @@ func (q *sqsFIFOQueue) Complete(ctx context.Context, job amboy.Job) {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 	if ctx.Err() != nil {
-		grip.Noticef("did not complete %s job, because operation "+
-			"was canceled.", name)
+		grip.Notice(message.Fields{
+			"message":   "Did not complete job because context cancelled",
+			"id":        name,
+			"operation": "Complete",
+		})
 		return
 	}
 	q.tasks.completed[name] = true
-	if q.tasks.all[name] != nil {
-		q.tasks.all[name].SetStatus(job.Status())
-		q.tasks.all[name].UpdateTimeInfo(job.TimeInfo())
+	savedJob := q.tasks.all[name]
+	if savedJob != nil {
+		savedJob.SetStatus(job.Status())
+		savedJob.UpdateTimeInfo(job.TimeInfo())
 	}
 
 }
@@ -168,11 +176,13 @@ func (q *sqsFIFOQueue) Results(ctx context.Context) <-chan amboy.Job {
 		defer q.mutex.Unlock()
 		defer close(results)
 		for name, job := range q.tasks.all {
-			if ctx.Err() != nil {
+			select {
+			case <-ctx.Done():
 				return
-			}
-			if _, ok := q.tasks.completed[name]; ok {
-				results <- job
+			default:
+				if _, ok := q.tasks.completed[name]; ok {
+					results <- job
+				}
 			}
 		}
 	}()
@@ -188,13 +198,13 @@ func (q *sqsFIFOQueue) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo 
 		q.mutex.Lock()
 		defer q.mutex.Unlock()
 		defer close(allInfo)
-		for name, job := range q.tasks.all {
-			if ctx.Err() != nil {
+		for _, job := range q.tasks.all {
+			select {
+			case <-ctx.Done():
 				return
+			case allInfo <- job.Status():
+				continue
 			}
-			stat := job.Status()
-			stat.ID = name
-			allInfo <- stat
 		}
 	}()
 	return allInfo
@@ -214,7 +224,7 @@ func (q *sqsFIFOQueue) Stats() amboy.QueueStats {
 	output, err := q.sqsClient.GetQueueAttributes(&sqs.GetQueueAttributesInput{
 		AttributeNames: []*string{aws.String("ApproximateNumberOfMessages"),
 			aws.String("ApproximateNumberOfMessagesNotVisible")},
-		QueueUrl: &q.sqsURL,
+		QueueUrl: aws.String(q.sqsURL),
 	})
 	if err != nil {
 		return s

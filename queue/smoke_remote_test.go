@@ -108,15 +108,14 @@ func TestSQSFifoQueueRunsJobsOnlyOnce(t *testing.T) {
 	assert := assert.New(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	q := NewSQSFifoQueue(RandomString(8), 4)
-
+	q, err := NewSQSFifoQueue(randomString(8), 4)
+	assert.NoError(err)
 	assert.NoError(q.Start(ctx))
-	const single = 500
 	wg := &sync.WaitGroup{}
 	count := 0
 	const (
-		inside  = 250 //15
-		outside = 3   //10
+		inside  = 250
+		outside = 3
 	)
 	for i := 0; i < outside; i++ {
 		wg.Add(1)
@@ -150,16 +149,18 @@ func TestMultipleSQSFifoQueueRunsJobsOnlyOnce(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 
 	defer cancel()
-	name := RandomString(8)
-	q := NewSQSFifoQueue(name, 4)
+	name := randomString(8)
+	q, err := NewSQSFifoQueue(name, 4)
+	assert.NoError(err)
 	assert.NoError(q.Start(ctx))
 
-	q2 := NewSQSFifoQueue(name, 4)
+	q2, err := NewSQSFifoQueue(name, 4)
+	assert.NoError(err)
 	assert.NoError(q2.Start(ctx))
 
 	const (
-		inside  = 250 //15
-		outside = 3   //10
+		inside  = 250
+		outside = 3
 	)
 
 	wg := &sync.WaitGroup{}

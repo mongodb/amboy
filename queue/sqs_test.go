@@ -20,7 +20,9 @@ func TestSQSFifoQueueSuite(t *testing.T) {
 }
 
 func (s *SQSFifoQueueSuite) SetupTest() {
-	s.queue = NewSQSFifoQueue(RandomString(4), 4)
+	var err error
+	s.queue, err = NewSQSFifoQueue(randomString(4), 4)
+	s.NoError(err)
 	s.queue.Start(context.Background())
 	stats := s.queue.Stats()
 	s.Equal(0, stats.Total)
@@ -64,7 +66,9 @@ func (s *SQSFifoQueueSuite) TestCannotSetRunnerWhenQueueStarted() {
 }
 
 func (s *SQSFifoQueueSuite) TestSetRunnerWhenQueueNotStarted() {
-	s.queue = NewSQSFifoQueue(RandomString(4), 4)
+	var err error
+	s.queue, err = NewSQSFifoQueue(randomString(4), 4)
+	s.NoError(err)
 	r := pool.NewSingle()
 	s.NoError(s.queue.SetRunner(r))
 	s.Equal(r, s.queue.Runner())
