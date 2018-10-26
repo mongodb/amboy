@@ -118,7 +118,8 @@ func runSimpleUnorderedSmokeTest(ctx context.Context, q amboy.Queue, size int,
 	}
 	wg.Wait()
 
-	amboy.WaitCtxInterval(ctx, q, 10*time.Second)
+	amboy.WaitCtxInterval(ctx, q, time.Minute)
+	//time.Sleep(time.Minute)
 
 	grip.Infof("workers complete for %d worker smoke test", size)
 	assert.True(q.Stats().Total < numJobs)

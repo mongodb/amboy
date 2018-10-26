@@ -91,9 +91,10 @@ func (q *sqsFIFOQueue) Put(j amboy.Job) error {
 		MessageGroupId:         aws.String(randomString(16)),
 		MessageDeduplicationId: aws.String(dedupID),
 	}
+	grip.Alertf("Input to SendMessage: %#v", input)
 	output, err := q.sqsClient.SendMessage(input)
-	grip.Infof("Input to SendMessage: ", input)
-	grip.Infof("Output to SendMessage: ", output)
+	grip.Alertf("Output to SendMessage: %#v", output)
+
 	if err != nil {
 		return errors.Wrap(err, "Error sending message in Put")
 	}
