@@ -569,7 +569,11 @@ func TestSmokeSQSFifoQueueWithWorkerPools(t *testing.T) {
 	assert := assert.New(t) // nolint
 	baseCtx := context.Background()
 
+<<<<<<< HEAD
 	for _, poolSize := range []int{2, 4, 6, 7} {
+=======
+	for _, poolSize := range []int{2, 4, 5} {
+>>>>>>> MAKE-422 implement Queue interface with SQS
 		ctx, cancel := context.WithTimeout(baseCtx, 3*time.Minute)
 
 		q, err := NewSQSFifoQueue(randomString(4), poolSize)
@@ -583,7 +587,7 @@ func TestSmokeSQSFifoQueueWithWorkerPools(t *testing.T) {
 func TestSmokeSQSFifoQueueWithAbortablePools(t *testing.T) {
 	assert := assert.New(t) // nolint
 	baseCtx := context.Background()
-	for _, poolSize := range []int{1, 2, 4, 7} {
+	for _, poolSize := range []int{1, 2, 4, 5} {
 		grip.Infoln("testing priority queue for:", poolSize)
 		ctx, cancel := context.WithTimeout(baseCtx, 3*time.Minute)
 
@@ -600,7 +604,11 @@ func TestSmokeSQSFifoQueueWithRateLimitingPools(t *testing.T) {
 	assert := assert.New(t) // nolint
 	baseCtx := context.Background()
 
+<<<<<<< HEAD
 	for _, poolSize := range []int{1, 2, 4, 7} {
+=======
+	for _, poolSize := range []int{1, 2, 4, 5} {
+>>>>>>> MAKE-422 implement Queue interface with SQS
 		grip.Infoln("testing priority queue for:", poolSize)
 		ctx, cancel := context.WithTimeout(baseCtx, 3*time.Minute)
 
