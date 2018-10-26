@@ -85,12 +85,15 @@ func (q *sqsFIFOQueue) Put(j amboy.Job) error {
 	if err != nil {
 		return errors.Wrap(err, "Error marshalling job to JSON in Put")
 	}
-	_, err = q.sqsClient.SendMessage(&sqs.SendMessageInput{
+	input := &sqs.SendMessageInput{
 		MessageBody:            aws.String(string(job)),
 		QueueUrl:               aws.String(q.sqsURL),
 		MessageGroupId:         aws.String(randomString(16)),
 		MessageDeduplicationId: aws.String(dedupID),
-	})
+	}
+	output, err := q.sqsClient.SendMessage(input)
+	grip.Infof("Input to SendMessage: ", input)
+	grip.Infof("Output to SendMessage: ", output)
 	if err != nil {
 		return errors.Wrap(err, "Error sending message in Put")
 	}
