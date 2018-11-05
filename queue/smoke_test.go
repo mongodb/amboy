@@ -569,7 +569,7 @@ func TestSmokeSQSFifoQueueWithWorkerPools(t *testing.T) {
 	assert := assert.New(t) // nolint
 	baseCtx := context.Background()
 
-	for _, poolSize := range []int{1, 2} {
+	for _, poolSize := range []int{2} {
 		ctx, cancel := context.WithTimeout(baseCtx, 2*time.Minute)
 
 		q, err := NewSQSFifoQueue(randomString(4), poolSize)
