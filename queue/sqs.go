@@ -91,8 +91,9 @@ func (q *sqsFIFOQueue) Put(j amboy.Job) error {
 		MessageGroupId:         aws.String(randomString(16)),
 		MessageDeduplicationId: aws.String(dedupID),
 	}
-	grip.Alertf("Input to SendMessage: %#v", input)
-	output, err := q.sqsClient.SendMessage(input)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	output, err := q.sqsClient.SendMessageWithContext(ctx, input)
 	grip.Alertf("Output to SendMessage: %#v", output)
 
 	if err != nil {
@@ -110,6 +111,9 @@ func (q *sqsFIFOQueue) Next(ctx context.Context) amboy.Job {
 	if ctx.Err() != nil {
 		return nil
 	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	messageOutput, err := q.sqsClient.ReceiveMessageWithContext(ctx, &sqs.ReceiveMessageInput{
 		QueueUrl: aws.String(q.sqsURL),
 	})
