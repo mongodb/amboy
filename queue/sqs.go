@@ -93,6 +93,7 @@ func (q *sqsFIFOQueue) Put(j amboy.Job) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	fmt.Println("Put is trying to send this message")
 	output, err := q.sqsClient.SendMessageWithContext(ctx, input)
 	grip.Alertf("Output to SendMessage: %#v", output)
 
