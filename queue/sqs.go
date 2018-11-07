@@ -93,9 +93,7 @@ func (q *sqsFIFOQueue) Put(j amboy.Job) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	fmt.Println("Put is trying to send this message")
-	output, err := q.sqsClient.SendMessageWithContext(ctx, input)
-	grip.Alertf("Output to SendMessage: %#v", output)
+	_, err = q.sqsClient.SendMessageWithContext(ctx, input)
 
 	if err != nil {
 		return errors.Wrap(err, "Error sending message in Put")
@@ -114,7 +112,6 @@ func (q *sqsFIFOQueue) Next(ctx context.Context) amboy.Job {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	grip.Alert("Trying to receive messages in next")
 	messageOutput, err := q.sqsClient.ReceiveMessageWithContext(ctx, &sqs.ReceiveMessageInput{
 		QueueUrl: aws.String(q.sqsURL),
 	})
@@ -208,11 +205,14 @@ func (q *sqsFIFOQueue) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo 
 		q.mutex.Lock()
 		defer q.mutex.Unlock()
 		defer close(allInfo)
+		grip.Alertf("Length of tasks.all: ", len(q.tasks.all))
 		for _, job := range q.tasks.all {
 			select {
 			case <-ctx.Done():
+				grip.Alert("Done")
 				return
 			case allInfo <- job.Status():
+				grip.Alert("job in JobStats: ", job.ID())
 				continue
 			}
 		}

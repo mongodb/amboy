@@ -15,7 +15,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/client/metadata"
 	"github.com/aws/aws-sdk-go/internal/sdkio"
-	"github.com/mongodb/grip"
 )
 
 const (
@@ -460,12 +459,10 @@ func (r *Request) Send() error {
 	defer func() {
 		// Regardless of success or failure of the request trigger the Complete
 		// request handlers.
-		grip.Alert("deferred function")
 		r.Handlers.Complete.Run(r)
 	}()
 
 	for {
-		grip.Alert("Beginning of for loop")
 		r.AttemptTime = time.Now()
 		if aws.BoolValue(r.Retryable) {
 			if r.Config.LogLevel.Matches(aws.LogDebugWithRequestRetries) {
@@ -481,7 +478,6 @@ func (r *Request) Send() error {
 
 			// Closing response body to ensure that no response body is leaked
 			// between retry attempts.
-			grip.Alert("About to close response body")
 			if r.HTTPResponse != nil && r.HTTPResponse.Body != nil {
 				r.HTTPResponse.Body.Close()
 			}
@@ -493,7 +489,6 @@ func (r *Request) Send() error {
 		}
 
 		r.Retryable = nil
-		grip.Alert("About to send handlers")
 		r.Handlers.Send.Run(r)
 		if r.Error != nil {
 			if !shouldRetryCancel(r) {
@@ -501,7 +496,6 @@ func (r *Request) Send() error {
 			}
 
 			err := r.Error
-			grip.Alert("Retry handlers (sendRequest)")
 			r.Handlers.Retry.Run(r)
 			r.Handlers.AfterRetry.Run(r)
 			if r.Error != nil {
@@ -516,7 +510,6 @@ func (r *Request) Send() error {
 		if r.Error != nil {
 			r.Handlers.UnmarshalError.Run(r)
 			err := r.Error
-			grip.Alert("Retry handlers (ValidateResponse)")
 			r.Handlers.Retry.Run(r)
 			r.Handlers.AfterRetry.Run(r)
 			if r.Error != nil {
@@ -530,7 +523,6 @@ func (r *Request) Send() error {
 		r.Handlers.Unmarshal.Run(r)
 		if r.Error != nil {
 			err := r.Error
-			grip.Alert("Retry/After retry handlers (UnmarshalResponse)")
 			r.Handlers.Retry.Run(r)
 			r.Handlers.AfterRetry.Run(r)
 			if r.Error != nil {
@@ -540,7 +532,6 @@ func (r *Request) Send() error {
 			debugLogReqError(r, "Unmarshal Response", true, err)
 			continue
 		}
-		grip.Alert("DO WE EVER BREAK")
 		break
 	}
 

@@ -10,7 +10,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/private/protocol"
 	"github.com/aws/aws-sdk-go/private/protocol/query"
-	"github.com/mongodb/grip"
 )
 
 const opAddPermission = "AddPermission"
@@ -1426,7 +1425,6 @@ func (c *SQS) ReceiveMessage(input *ReceiveMessageInput) (*ReceiveMessageOutput,
 // sub-contexts for http.Requests. See https://golang.org/pkg/context/
 // for more information on using Contexts.
 func (c *SQS) ReceiveMessageWithContext(ctx aws.Context, input *ReceiveMessageInput, opts ...request.Option) (*ReceiveMessageOutput, error) {
-	grip.Alert("ReceiveMessageWithContext")
 	req, out := c.ReceiveMessageRequest(input)
 	req.SetContext(ctx)
 	req.ApplyOptions(opts...)
@@ -1600,11 +1598,9 @@ func (c *SQS) SendMessage(input *SendMessageInput) (*SendMessageOutput, error) {
 // sub-contexts for http.Requests. See https://golang.org/pkg/context/
 // for more information on using Contexts.
 func (c *SQS) SendMessageWithContext(ctx aws.Context, input *SendMessageInput, opts ...request.Option) (*SendMessageOutput, error) {
-	grip.Alert("SendMessageWithContext")
 	req, out := c.SendMessageRequest(input)
 	req.SetContext(ctx)
 	req.ApplyOptions(opts...)
-	grip.Alert("Returning req.Send()")
 	return out, req.Send()
 }
 
