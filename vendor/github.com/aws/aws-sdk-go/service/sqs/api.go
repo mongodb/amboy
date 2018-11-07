@@ -1426,6 +1426,7 @@ func (c *SQS) ReceiveMessage(input *ReceiveMessageInput) (*ReceiveMessageOutput,
 // sub-contexts for http.Requests. See https://golang.org/pkg/context/
 // for more information on using Contexts.
 func (c *SQS) ReceiveMessageWithContext(ctx aws.Context, input *ReceiveMessageInput, opts ...request.Option) (*ReceiveMessageOutput, error) {
+	grip.Alert("ReceiveMessageWithContext")
 	req, out := c.ReceiveMessageRequest(input)
 	req.SetContext(ctx)
 	req.ApplyOptions(opts...)
