@@ -114,7 +114,7 @@ func (q *sqsFIFOQueue) Next(ctx context.Context) amboy.Job {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-
+	grip.Alert("Trying to receive messages in next")
 	messageOutput, err := q.sqsClient.ReceiveMessageWithContext(ctx, &sqs.ReceiveMessageInput{
 		QueueUrl: aws.String(q.sqsURL),
 	})
