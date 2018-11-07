@@ -70,7 +70,7 @@ func (q *sqsFIFOQueue) Put(j amboy.Job) error {
 		return errors.Errorf("cannot add %s because duplicate job already exists", name)
 	}
 
-	dedupID := strings.Join(strings.Split(j.ID(), " "), "") //remove all spaces
+	dedupID := strings.Replace(j.ID(), " ", "", -1) //remove all spaces
 	curStatus := j.Status()
 	curStatus.ID = dedupID
 	j.SetStatus(curStatus)
@@ -212,7 +212,7 @@ func (q *sqsFIFOQueue) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo 
 				grip.Alert("Done")
 				return
 			case allInfo <- job.Status():
-				grip.Alert("job in JobStats: ", job.ID())
+				grip.Alertf("job in JobStats: ", job.ID())
 				continue
 			}
 		}
