@@ -78,6 +78,7 @@ functions:
             export GOPATH=$(cygpath -m $GOPATH)
          fi
 
+         RUN_TEST=TestSmokeSQSFifoQueue
          cd gopath/src/github.com/mongodb/amboy
 
          # Run make, called with proper environment variables set,
