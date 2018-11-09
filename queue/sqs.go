@@ -197,23 +197,13 @@ func (q *sqsFIFOQueue) Results(ctx context.Context) <-chan amboy.Job {
 // jobs in the queue, completed and otherwise.
 func (q *sqsFIFOQueue) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 	allInfo := make(chan amboy.JobStatusInfo)
-	if ctx.Err() != nil {
-		grip.Errorf("Context began as an error: ", ctx.Err())
-	}
 	go func() {
 		q.mutex.Lock()
 		defer q.mutex.Unlock()
 		defer close(allInfo)
-		grip.Alertf("Length of tasks.all: ", len(q.tasks.all))
 		for _, job := range q.tasks.all {
 			select {
-			/*
-				case <-ctx.Done():
-					grip.Alert("Done")
-					return
-			*/
 			case allInfo <- job.Status():
-				grip.Alertf("job in JobStats: ", job.ID())
 				continue
 			}
 		}
