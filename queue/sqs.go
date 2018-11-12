@@ -17,6 +17,7 @@ import (
 	"github.com/mongodb/amboy/registry"
 	"github.com/mongodb/grip"
 	"github.com/mongodb/grip/message"
+	"github.com/mongodb/grip/recovery"
 	"github.com/pkg/errors"
 )
 
@@ -123,7 +124,7 @@ func (q *sqsFIFOQueue) Next(ctx context.Context) amboy.Job {
 	})
 
 	var jobItem *registry.JobInterchange
-	err = json.Unmarshal([]byte(*message.Body), &jobItem)
+	err = json.Unmarshal([]byte(*message.Body), jobItem)
 	if err != nil {
 		return nil
 	}
@@ -183,7 +184,7 @@ func (q *sqsFIFOQueue) Results(ctx context.Context) <-chan amboy.Job {
 			if _, ok := q.tasks.completed[name]; ok {
 				select {
 				case <-ctx.Done():
-					return
+					recovery.LogStackTraceAndContinue("results context is done")
 				case results <- job:
 					continue
 				}
@@ -203,6 +204,8 @@ func (q *sqsFIFOQueue) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo 
 		defer close(allInfo)
 		for _, job := range q.tasks.all {
 			select {
+			case <-ctx.Done():
+				recovery.LogStackTraceAndContinue("jobStats context is Done")
 			case allInfo <- job.Status():
 				continue
 			}
