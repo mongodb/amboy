@@ -21,6 +21,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+const region string = "us-west-2"
+
 type sqsFIFOQueue struct {
 	sqsClient  *sqs.SQS
 	sqsURL     string
@@ -40,15 +42,13 @@ func NewSQSFifoQueue(queueName string, workers int) (amboy.Queue, error) {
 	q.tasks.all = make(map[string]amboy.Job)
 	q.runner = pool.NewLocalWorkers(workers, q)
 	sess := session.Must(session.NewSession(&aws.Config{
-		Region: aws.String("us-west-2"),
+		Region: aws.String(region),
 	}))
 	q.sqsClient = sqs.New(sess)
 	result, err := q.sqsClient.CreateQueue(&sqs.CreateQueueInput{
 		QueueName: aws.String(fmt.Sprintf("%s.fifo", queueName)),
 		Attributes: map[string]*string{
-			"FifoQueue":              aws.String("true"),
-			"DelaySeconds":           aws.String("60"),
-			"MessageRetentionPeriod": aws.String("86400"),
+			"FifoQueue": aws.String("true"),
 		},
 	})
 	if err != nil {
@@ -203,12 +203,7 @@ func (q *sqsFIFOQueue) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo 
 		defer q.mutex.Unlock()
 		defer close(allInfo)
 		for _, job := range q.tasks.all {
-			select {
-			case <-ctx.Done():
-				recovery.LogStackTraceAndContinue("jobStats context is Done")
-			case allInfo <- job.Status():
-				continue
-			}
+			allInfo <- job.Status()
 		}
 	}()
 	return allInfo

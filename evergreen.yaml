@@ -170,7 +170,8 @@ tasks:
     tags: ["test"]
   - <<: *run-go-test-suite-with-mongodb
     name: test-queue
-
+    tags: ["test"]
+    
   # run the suites with the race detector (one variant only)
   - <<: *run-go-test-suite
     name: race-dependency
@@ -266,9 +267,6 @@ buildvariants:
     tasks:
       - name: ".dist"
       - name: ".test"
-      - name: "test-queue"
-        distros:
-        - ubuntu1604-build
 
   - name: macos
     display_name: macOS 10.12
