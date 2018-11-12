@@ -204,8 +204,6 @@ func (q *sqsFIFOQueue) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo 
 		defer close(allInfo)
 		for _, job := range q.tasks.all {
 			select {
-			case <-ctx.Done():
-				recovery.LogStackTraceAndContinue("jobStats context is Done")
 			case allInfo <- job.Status():
 				continue
 			}
