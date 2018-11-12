@@ -115,7 +115,7 @@ func TestSQSFifoQueueRunsJobsOnlyOnce(t *testing.T) {
 	count := 0
 	const (
 		inside  = 250
-		outside = 1
+		outside = 3
 	)
 	for i := 0; i < outside; i++ {
 		wg.Add(1)
@@ -160,7 +160,7 @@ func TestMultipleSQSFifoQueueRunsJobsOnlyOnce(t *testing.T) {
 
 	const (
 		inside  = 250
-		outside = 2
+		outside = 3
 	)
 
 	wg := &sync.WaitGroup{}
