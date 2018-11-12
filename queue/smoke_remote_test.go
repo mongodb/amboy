@@ -115,7 +115,7 @@ func TestSQSFifoQueueRunsJobsOnlyOnce(t *testing.T) {
 	count := 0
 	const (
 		inside  = 250
-		outside = 3
+		outside = 1
 	)
 	for i := 0; i < outside; i++ {
 		wg.Add(1)
@@ -134,7 +134,7 @@ func TestSQSFifoQueueRunsJobsOnlyOnce(t *testing.T) {
 	grip.Notice("waiting to add all jobs")
 	wg.Wait()
 
-	amboy.WaitCtxInterval(ctx, q, 10*time.Second)
+	amboy.WaitCtxInterval(ctx, q, 20*time.Second)
 	stats := q.Stats()
 	grip.Alertln(stats)
 	assert.True(stats.Total <= inside*outside)
@@ -160,7 +160,7 @@ func TestMultipleSQSFifoQueueRunsJobsOnlyOnce(t *testing.T) {
 
 	const (
 		inside  = 250
-		outside = 3
+		outside = 2
 	)
 
 	wg := &sync.WaitGroup{}

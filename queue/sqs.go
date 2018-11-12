@@ -219,7 +219,6 @@ func (q *sqsFIFOQueue) Stats() amboy.QueueStats {
 	}
 	s.Running = q.numRunning - s.Completed
 
-	var numMsgs, numMsgsInFlight int
 	output, err := q.sqsClient.GetQueueAttributes(&sqs.GetQueueAttributesInput{
 		AttributeNames: []*string{aws.String("ApproximateNumberOfMessages"),
 			aws.String("ApproximateNumberOfMessagesNotVisible")},
@@ -229,8 +228,8 @@ func (q *sqsFIFOQueue) Stats() amboy.QueueStats {
 		return s
 	}
 
-	numMsgs, _ = strconv.Atoi(*output.Attributes["ApproximateNumberOfMessages"])
-	numMsgsInFlight, _ = strconv.Atoi(*output.Attributes["ApproximateNumberOfMessagesNotVisible"])
+	numMsgs, _ := strconv.Atoi(*output.Attributes["ApproximateNumberOfMessages"])
+	numMsgsInFlight, _ := strconv.Atoi(*output.Attributes["ApproximateNumberOfMessagesNotVisible"])
 
 	s.Pending = numMsgs + numMsgsInFlight
 	s.Total = s.Pending + s.Completed
