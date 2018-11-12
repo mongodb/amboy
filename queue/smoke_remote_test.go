@@ -137,7 +137,7 @@ func TestSQSFifoQueueRunsJobsOnlyOnce(t *testing.T) {
 	amboy.WaitCtxInterval(ctx, q, 10*time.Second)
 	stats := q.Stats()
 	grip.Alertln(stats)
-	assert.True(stats.Total < inside*outside)
+	assert.True(stats.Total <= inside*outside)
 	assert.Equal(stats.Total, stats.Pending+stats.Completed)
 }
 
