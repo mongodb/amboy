@@ -34,8 +34,11 @@ func (s *SQSFifoQueueSuite) SetupTest() {
 
 func (s *SQSFifoQueueSuite) TestPutMethodErrorsForDuplicateJobs() {
 	j := job.NewShellJob("echo true", "")
+	grip.Alert("Putting job1")
 	s.NoError(s.queue.Put(j))
+	grip.Alert("Putting job2")
 	s.Error(s.queue.Put(j))
+	grip.Alert("Put all jobs")
 }
 
 func (s *SQSFifoQueueSuite) TestJobStatsReturnsAllJobs() {
