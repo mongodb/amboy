@@ -42,15 +42,12 @@ func (s *SQSFifoQueueSuite) SetupTest() {
 }
 
 func (s *SQSFifoQueueSuite) TestPutMethodErrorsForDuplicateJobs() {
-	grip.Alert("getting job")
 	job, ok := s.queue.Get(s.jobID)
 	s.True(ok)
-	grip.Alert("putting duplicate")
 	s.Error(s.queue.Put(job))
 }
 
 func (s *SQSFifoQueueSuite) TestGetMethodReturnsRequestedJob() {
-	grip.Alert("Started TestGetMethod")
 	job, ok := s.queue.Get(s.jobID)
 	grip.Alert("Got job")
 	s.True(ok)
@@ -62,16 +59,12 @@ func (s *SQSFifoQueueSuite) TestCannotSetRunnerWhenQueueStarted() {
 	s.True(s.queue.Started())
 	grip.Alert("TestStarted")
 	s.Error(s.queue.SetRunner(pool.NewSingle()))
-	grip.Alert("tried setting runner")
 }
 
 func (s *SQSFifoQueueSuite) TestCompleteMethodChangesStatsAndResults() {
 	j := job.NewShellJob("echo true", "")
-	grip.Alert("Putting job")
 	s.NoError(s.queue.Put(j))
-	grip.Alert("Job put")
 	s.queue.Complete(context.Background(), j)
-	grip.Alert("Job complete")
 
 	counter := 0
 	results := s.queue.Results(context.Background())
@@ -80,7 +73,6 @@ func (s *SQSFifoQueueSuite) TestCompleteMethodChangesStatsAndResults() {
 		s.Equal(j.ID(), job.ID())
 		counter++
 	}
-	grip.Alert("Went through results")
 	stats := s.queue.Stats()
 	grip.Alert("Stats done")
 	s.Equal(1, stats.Completed)

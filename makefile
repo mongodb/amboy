@@ -117,10 +117,10 @@ lint-%:$(buildDir)/output.%.lint
 #    tests have compile and runtime deps. This varable has everything
 #    that the tests actually need to run. (The "build" target is
 #    intentional and makes these targets rerun as expected.)
-testArgs := -test.v --test.timeout=25m -test.run='TestSQSFifoQueueSuite'
-#ifneq (,$(RUN_TEST))
-#testArgs += -test.run='$(RUN_TEST)'
-#endif
+testArgs := -test.v --test.timeout=25m
+ifneq (,$(RUN_TEST))
+testArgs += -test.run='$(RUN_TEST)'
+endif
 ifneq (,$(RUN_CASE))
 testArgs += -testify.m='$(RUN_CASE)'
 endif
