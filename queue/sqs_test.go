@@ -14,6 +14,7 @@ import (
 type SQSFifoQueueSuite struct {
 	queue amboy.Queue
 	suite.Suite
+	jobID string
 }
 
 func TestSQSFifoQueueSuite(t *testing.T) {
@@ -30,43 +31,26 @@ func (s *SQSFifoQueueSuite) SetupTest() {
 	s.Equal(0, stats.Running)
 	s.Equal(0, stats.Pending)
 	s.Equal(0, stats.Completed)
+
+	j := job.NewShellJob("echo true", "")
+	s.jobID = j.ID()
+	s.NoError(s.queue.Put(j))
 }
 
 func (s *SQSFifoQueueSuite) TestPutMethodErrorsForDuplicateJobs() {
-	j := job.NewShellJob("echo true", "")
-	grip.Alert("Putting job1")
-	s.NoError(s.queue.Put(j))
-	grip.Alert("Putting job2")
-	s.Error(s.queue.Put(j))
-	grip.Alert("Put all jobs")
-}
-
-func (s *SQSFifoQueueSuite) TestJobStatsReturnsAllJobs() {
-	j := job.NewShellJob("echo true", "")
-	j2 := job.NewShellJob("echo true", "")
-	grip.Alert("Putting jobs")
-	s.NoError(s.queue.Put(j))
-	grip.Alert("Job1 put")
-	s.NoError(s.queue.Put(j2))
-	grip.Alert("job2 put, getting jobStats")
-
-	counter := 0
-	for range s.queue.JobStats(context.Background()) {
-		counter++
-	}
-	s.Equal(2, counter)
-	grip.Alert("Finished TestJobStats")
+	grip.Alert("getting job")
+	job, ok := s.queue.Get(s.jobID)
+	s.True(ok)
+	grip.Alert("putting duplicate")
+	s.Error(s.queue.Put(job))
 }
 
 func (s *SQSFifoQueueSuite) TestGetMethodReturnsRequestedJob() {
 	grip.Alert("Started TestGetMethod")
-	j := job.NewShellJob("echo true", "")
-	id := j.ID()
-	s.NoError(s.queue.Put(j))
-	job, ok := s.queue.Get(id)
+	job, ok := s.queue.Get(s.jobID)
 	s.True(ok)
 	s.NotNil(job)
-	s.Equal(id, job.ID())
+	s.Equal(s.jobID, job.ID())
 }
 
 func (s *SQSFifoQueueSuite) TestCannotSetRunnerWhenQueueStarted() {
@@ -83,7 +67,7 @@ func (s *SQSFifoQueueSuite) TestSetRunnerWhenQueueNotStarted() {
 	s.Equal(r, s.queue.Runner())
 }
 
-func (s *SQSFifoQueueSuite) TestCompleteMethodChangesStats() {
+func (s *SQSFifoQueueSuite) TestCompleteMethodChangesStatsAndResults() {
 	j := job.NewShellJob("echo true", "")
 	grip.Alert("Putting job")
 	s.NoError(s.queue.Put(j))
@@ -91,32 +75,15 @@ func (s *SQSFifoQueueSuite) TestCompleteMethodChangesStats() {
 	s.queue.Complete(context.Background(), j)
 	grip.Alert("Job complete")
 
-	stats := s.queue.Stats()
-	grip.Alert("Stats retrieved")
-	s.Equal(1, stats.Total)
-	s.Equal(1, stats.Completed)
-	grip.Alert("Finished TestCompleteMethodChangesStats")
-}
-
-func (s *SQSFifoQueueSuite) TestResultsProducesCompletedJobs() {
-	j := job.NewShellJob("echo true", "")
-	j2 := job.NewShellJob("echo true", "")
-	s.queue.Put(j)
-	s.queue.Put(j2)
-	s.queue.Complete(context.Background(), j)
-
 	counter := 0
 	results := s.queue.Results(context.Background())
 	for job := range results {
-		s.NotNil(job)
-		if job != nil {
-			s.Equal(j.ID(), job.ID())
-		}
+		s.Require().NotNil(job)
+		s.Equal(j.ID(), job.ID())
 		counter++
 	}
-
+	grip.Alert("Went through results")
 	stats := s.queue.Stats()
 	s.Equal(1, stats.Completed)
-	s.True(stats.Total == 1 || stats.Total == 2)
 	s.Equal(1, counter)
 }
