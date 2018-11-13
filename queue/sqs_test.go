@@ -25,7 +25,11 @@ func (s *SQSFifoQueueSuite) SetupTest() {
 	var err error
 	s.queue, err = NewSQSFifoQueue(randomString(4), 4)
 	s.NoError(err)
+	r := pool.NewSingle()
+	s.NoError(s.queue.SetRunner(r))
+	s.Equal(r, s.queue.Runner())
 	s.queue.Start(context.Background())
+
 	stats := s.queue.Stats()
 	s.Equal(0, stats.Total)
 	s.Equal(0, stats.Running)
@@ -48,6 +52,7 @@ func (s *SQSFifoQueueSuite) TestPutMethodErrorsForDuplicateJobs() {
 func (s *SQSFifoQueueSuite) TestGetMethodReturnsRequestedJob() {
 	grip.Alert("Started TestGetMethod")
 	job, ok := s.queue.Get(s.jobID)
+	grip.Alert("Got job")
 	s.True(ok)
 	s.NotNil(job)
 	s.Equal(s.jobID, job.ID())
@@ -55,16 +60,9 @@ func (s *SQSFifoQueueSuite) TestGetMethodReturnsRequestedJob() {
 
 func (s *SQSFifoQueueSuite) TestCannotSetRunnerWhenQueueStarted() {
 	s.True(s.queue.Started())
+	grip.Alert("TestStarted")
 	s.Error(s.queue.SetRunner(pool.NewSingle()))
-}
-
-func (s *SQSFifoQueueSuite) TestSetRunnerWhenQueueNotStarted() {
-	var err error
-	s.queue, err = NewSQSFifoQueue(randomString(4), 4)
-	s.NoError(err)
-	r := pool.NewSingle()
-	s.NoError(s.queue.SetRunner(r))
-	s.Equal(r, s.queue.Runner())
+	grip.Alert("tried setting runner")
 }
 
 func (s *SQSFifoQueueSuite) TestCompleteMethodChangesStatsAndResults() {
@@ -84,6 +82,7 @@ func (s *SQSFifoQueueSuite) TestCompleteMethodChangesStatsAndResults() {
 	}
 	grip.Alert("Went through results")
 	stats := s.queue.Stats()
+	grip.Alert("Stats done")
 	s.Equal(1, stats.Completed)
 	s.Equal(1, counter)
 }
