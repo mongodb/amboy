@@ -121,7 +121,7 @@ func runSimpleUnorderedSmokeTest(ctx context.Context, q amboy.Queue, size int,
 	amboy.WaitCtxInterval(ctx, q, time.Minute)
 
 	grip.Infof("workers complete for %d worker smoke test", size)
-	assert.True(q.Stats().Total < numJobs)
+	assert.True(q.Stats().Total <= numJobs)
 	for result := range q.Results(ctx) {
 		assert.True(result.Status().Completed, fmt.Sprintf("with %d workers", size))
 		// assert that we had valid time info persisted
