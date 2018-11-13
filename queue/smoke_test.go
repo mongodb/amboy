@@ -313,6 +313,7 @@ func runWaitUntilSmokeTest(ctx context.Context, q amboy.Queue, size int, assert 
 
 	assert.Equal(numJobs*2, q.Stats().Total, fmt.Sprintf("with %d workers", size))
 
+	// wait for things to finish
 	time.Sleep(2 * time.Second)
 
 	completed := 0
