@@ -52,9 +52,11 @@ func (s *SQSFifoQueueSuite) TestJobStatsReturnsAllJobs() {
 		counter++
 	}
 	s.Equal(2, counter)
+	grip.Alert("Finished TestJobStats")
 }
 
 func (s *SQSFifoQueueSuite) TestGetMethodReturnsRequestedJob() {
+	grip.Alert("Started TestGetMethod")
 	j := job.NewShellJob("echo true", "")
 	id := j.ID()
 	s.NoError(s.queue.Put(j))
@@ -90,6 +92,7 @@ func (s *SQSFifoQueueSuite) TestCompleteMethodChangesStats() {
 	grip.Alert("Stats retrieved")
 	s.Equal(1, stats.Total)
 	s.Equal(1, stats.Completed)
+	grip.Alert("Finished TestCompleteMethodChangesStats")
 }
 
 func (s *SQSFifoQueueSuite) TestResultsProducesCompletedJobs() {
@@ -113,5 +116,4 @@ func (s *SQSFifoQueueSuite) TestResultsProducesCompletedJobs() {
 	s.Equal(1, stats.Completed)
 	s.True(stats.Total == 1 || stats.Total == 2)
 	s.Equal(1, counter)
-
 }
