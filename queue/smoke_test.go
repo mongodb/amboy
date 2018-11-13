@@ -572,7 +572,7 @@ func TestSmokeSQSFifoQueueWithWorkerPools(t *testing.T) {
 	baseCtx := context.Background()
 
 	for _, poolSize := range []int{2, 4} {
-		ctx, cancel := context.WithTimeout(baseCtx, 2*time.Minute)
+		ctx, cancel := context.WithTimeout(baseCtx, time.Minute)
 
 		q, err := NewSQSFifoQueue(randomString(4), poolSize)
 		assert.NoError(err)
@@ -587,7 +587,7 @@ func TestSmokeSQSFifoQueueWithAbortablePools(t *testing.T) {
 	baseCtx := context.Background()
 	for _, poolSize := range []int{2, 4} {
 		grip.Infoln("testing priority queue for:", poolSize)
-		ctx, cancel := context.WithTimeout(baseCtx, 2*time.Minute)
+		ctx, cancel := context.WithTimeout(baseCtx, time.Minute)
 
 		q, err := NewSQSFifoQueue(randomString(4), 1)
 		assert.NoError(err)
@@ -604,7 +604,7 @@ func TestSmokeSQSFifoQueueWithRateLimitingPools(t *testing.T) {
 
 	for _, poolSize := range []int{2, 4} {
 		grip.Infoln("testing priority queue for:", poolSize)
-		ctx, cancel := context.WithTimeout(baseCtx, 2*time.Minute)
+		ctx, cancel := context.WithTimeout(baseCtx, time.Minute)
 
 		q, err := NewSQSFifoQueue(randomString(4), 1)
 		assert.NoError(err)
