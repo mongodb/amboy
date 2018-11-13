@@ -21,7 +21,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-const region string = "us-west-2"
+const region string = "us-east-1"
 
 type sqsFIFOQueue struct {
 	sqsClient  *sqs.SQS
@@ -180,11 +180,12 @@ func (q *sqsFIFOQueue) Results(ctx context.Context) <-chan amboy.Job {
 		q.mutex.Lock()
 		defer q.mutex.Unlock()
 		defer close(results)
+		defer recovery.LogStackTraceAndContinue("cancelled context in Results")
 		for name, job := range q.tasks.all {
 			if _, ok := q.tasks.completed[name]; ok {
 				select {
 				case <-ctx.Done():
-					recovery.LogStackTraceAndContinue("results context is done")
+					return
 				case results <- job:
 					continue
 				}

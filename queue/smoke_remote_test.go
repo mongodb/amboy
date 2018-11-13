@@ -106,7 +106,7 @@ func TestSmokeRemoteMultipleQueueRunsJobsOnlyOnce(t *testing.T) {
 
 func TestSQSFifoQueueRunsJobsOnlyOnce(t *testing.T) {
 	assert := assert.New(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	q, err := NewSQSFifoQueue(randomString(8), 4)
 	assert.NoError(err)
@@ -115,7 +115,7 @@ func TestSQSFifoQueueRunsJobsOnlyOnce(t *testing.T) {
 	count := 0
 	const (
 		inside  = 250
-		outside = 3
+		outside = 2
 	)
 	for i := 0; i < outside; i++ {
 		wg.Add(1)
@@ -146,7 +146,7 @@ func TestMultipleSQSFifoQueueRunsJobsOnlyOnce(t *testing.T) {
 	mockJobCounters.Reset()
 
 	assert := assert.New(t) // nolint
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 
 	defer cancel()
 	name := randomString(8)

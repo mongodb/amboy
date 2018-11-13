@@ -67,7 +67,7 @@ func runUnorderedSmokeTest(ctx context.Context, q amboy.Queue, size int, assert 
 	wg.Wait()
 
 	assert.Equal(numJobs, q.Stats().Total, fmt.Sprintf("with %d workers", size))
-	amboy.WaitCtxInterval(ctx, q, 10*time.Second)
+	amboy.WaitCtxInterval(ctx, q, 10*time.Millisecond)
 
 	grip.Infof("workers complete for %d worker smoke test", size)
 	assert.Equal(numJobs, q.Stats().Completed, fmt.Sprintf("%+v", q.Stats()))
@@ -313,9 +313,7 @@ func runWaitUntilSmokeTest(ctx context.Context, q amboy.Queue, size int, assert 
 
 	assert.Equal(numJobs*2, q.Stats().Total, fmt.Sprintf("with %d workers", size))
 
-	// wait for things to finish
-	amboy.WaitCtxInterval(ctx, q, 10*time.Second)
-	//time.Sleep(2 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	completed := 0
 	for result := range q.Results(ctx) {
@@ -1063,7 +1061,7 @@ func TestSmokeRemoteOrderedWithWorkerPoolsAndMongoDB(t *testing.T) {
 	}
 }
 
-func TestSmokeWaitUntilAdaptiveOrerQueuePools(t *testing.T) {
+func TestSmokeWaitUntilAdaptiveOrderQueuePools(t *testing.T) {
 	assert := assert.New(t) // nolint
 
 	for _, poolSize := range []int{1, 2} {
