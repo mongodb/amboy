@@ -7,7 +7,6 @@ import (
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/job"
 	"github.com/mongodb/amboy/pool"
-	"github.com/mongodb/grip"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -49,7 +48,6 @@ func (s *SQSFifoQueueSuite) TestPutMethodErrorsForDuplicateJobs() {
 
 func (s *SQSFifoQueueSuite) TestGetMethodReturnsRequestedJob() {
 	job, ok := s.queue.Get(s.jobID)
-	grip.Alert("Got job")
 	s.True(ok)
 	s.NotNil(job)
 	s.Equal(s.jobID, job.ID())
@@ -57,7 +55,6 @@ func (s *SQSFifoQueueSuite) TestGetMethodReturnsRequestedJob() {
 
 func (s *SQSFifoQueueSuite) TestCannotSetRunnerWhenQueueStarted() {
 	s.True(s.queue.Started())
-	grip.Alert("TestStarted")
 	s.Error(s.queue.SetRunner(pool.NewSingle()))
 }
 
@@ -74,7 +71,6 @@ func (s *SQSFifoQueueSuite) TestCompleteMethodChangesStatsAndResults() {
 		counter++
 	}
 	stats := s.queue.Stats()
-	grip.Alert("Stats done")
 	s.Equal(1, stats.Completed)
 	s.Equal(1, counter)
 }
