@@ -117,7 +117,7 @@ lint-%:$(buildDir)/output.%.lint
 #    tests have compile and runtime deps. This varable has everything
 #    that the tests actually need to run. (The "build" target is
 #    intentional and makes these targets rerun as expected.)
-testArgs := -test.v --test.timeout=25m
+testArgs := -test.v --test.timeout=15m
 ifneq (,$(RUN_TEST))
 testArgs += -test.run='$(RUN_TEST)'
 endif
