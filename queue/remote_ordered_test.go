@@ -69,7 +69,7 @@ func (s *SimpleRemoteOrderedSuite) TearDownTest() {
 	// the context to prevent closing the connection before
 	// running the teardown procedure, given that some connection
 	// resources may be shared in the driver.
-	grip.CatchError(s.tearDown())
+	grip.Error(s.tearDown())
 	s.canceler()
 }
 

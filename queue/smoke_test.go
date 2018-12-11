@@ -25,7 +25,7 @@ import (
 
 func init() {
 	grip.SetName("amboy.queue.tests")
-	grip.CatchError(grip.SetSender(send.MakeNative()))
+	grip.Error(grip.SetSender(send.MakeNative()))
 
 	lvl := grip.GetSender().Level()
 	lvl.Threshold = level.Error
@@ -463,7 +463,7 @@ func TestSmokeRemoteUnorderedSingleThreadedWithMongoDBDriver(t *testing.T) {
 	runUnorderedSmokeTest(ctx, q, 1, assert)
 	cancel()
 	d.Close()
-	grip.CatchError(cleanupMongoDB(name, opts))
+	grip.Error(cleanupMongoDB(name, opts))
 }
 
 func TestSmokeRemoteUnorderedSingleRunnerWithMongoDBDriver(t *testing.T) {
@@ -488,7 +488,7 @@ func TestSmokeRemoteUnorderedSingleRunnerWithMongoDBDriver(t *testing.T) {
 	runUnorderedSmokeTest(ctx, q, 1, assert)
 	cancel()
 	d.Close()
-	grip.CatchError(cleanupMongoDB(name, opts))
+	grip.Error(cleanupMongoDB(name, opts))
 }
 
 func TestSmokeRemoteUnorderedWorkerPoolsWithMongoDBDriver(t *testing.T) {
@@ -680,7 +680,7 @@ func TestSmokeMultipleMongoDBBackedRemoteUnorderedQueuesWithTheSameName(t *testi
 	cancel()
 
 	// do cleanup.
-	grip.CatchError(cleanupMongoDB(name, opts))
+	grip.Error(cleanupMongoDB(name, opts))
 }
 
 func TestSmokeMultipleLocalBackedRemoteOrderedQueuesWithOneDriver(t *testing.T) {
@@ -730,7 +730,7 @@ func TestSmokeMultipleMongoDBBackedRemoteOrderedQueuesWithTheSameName(t *testing
 	cancel()
 
 	// do cleanup.
-	grip.CatchError(cleanupMongoDB(name, opts))
+	grip.Error(cleanupMongoDB(name, opts))
 }
 
 func TestSmokeMultipleLocalBackedRemoteUnorderedQueuesWithOneDriver(t *testing.T) {
@@ -882,7 +882,7 @@ func TestSmokeSimpleRemoteOrderedWithSingleThreadedAndMongoDBDriver(t *testing.T
 	runUnorderedSmokeTest(ctx, q, 1, assert)
 	cancel()
 	d.Close()
-	grip.CatchError(cleanupMongoDB(name, opts))
+	grip.Error(cleanupMongoDB(name, opts))
 }
 
 func TestSmokeSimpleRemoteOrderedWorkerPoolsWithInternalDriver(t *testing.T) {
@@ -930,7 +930,7 @@ func TestSmokeSimpleRemoteOrderedWithSingleRunnerAndMongoDBDriver(t *testing.T) 
 	runOrderedSmokeTest(ctx, q, 1, false, assert)
 	cancel()
 	d.Close()
-	grip.CatchError(cleanupMongoDB(name, opts))
+	grip.Error(cleanupMongoDB(name, opts))
 }
 
 func TestSmokeSimpleRemoteOrderedWithSingleThreadedAndInternalDriver(t *testing.T) {
@@ -1058,7 +1058,7 @@ func TestSmokeRemoteOrderedWithWorkerPoolsAndMongoDB(t *testing.T) {
 
 		runOrderedSmokeTest(ctx, q, poolSize, false, assert)
 		cancel()
-		grip.CatchError(cleanupMongoDB(name, opts))
+		grip.Error(cleanupMongoDB(name, opts))
 	}
 }
 
@@ -1092,7 +1092,7 @@ func TestSmokeWaitUntilMongoDBQueue(t *testing.T) {
 		runWaitUntilSmokeTest(ctx, q, poolSize, assert)
 		cancel()
 		driver.Close()
-		grip.CatchError(cleanupMongoDB(name, opts))
+		grip.Error(cleanupMongoDB(name, opts))
 	}
 
 }

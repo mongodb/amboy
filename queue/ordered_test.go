@@ -70,15 +70,15 @@ func TestRemoteMongoDBOrderedQueueSuiteFourWorkers(t *testing.T) {
 	s.tearDown = func() {
 		cancel()
 
-		grip.CatchError(session.DB("amboy_test").C(name + ".jobs").DropCollection())
-		grip.CatchError(session.DB("amboy_test").C(name + ".locks").DropCollection())
+		grip.Error(session.DB("amboy_test").C(name + ".jobs").DropCollection())
+		grip.Error(session.DB("amboy_test").C(name + ".locks").DropCollection())
 	}
 
 	s.reset = func() {
 		_, err = session.DB("amboy_test").C(name + ".jobs").RemoveAll(bson.M{})
-		grip.CatchError(err)
+		grip.Error(err)
 		_, err = session.DB("amboy_test").C(name + ".locks").RemoveAll(bson.M{})
-		grip.CatchError(err)
+		grip.Error(err)
 	}
 
 	suite.Run(t, s)

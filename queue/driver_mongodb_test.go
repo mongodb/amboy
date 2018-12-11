@@ -51,7 +51,7 @@ func (s *MongoDBDriverSuite) SetupTest() {
 func (s *MongoDBDriverSuite) TearDownSuite() {
 	db := s.session.DB(s.dbName)
 	for _, coll := range s.collections {
-		grip.CatchWarning(db.C(coll).DropCollection())
+		grip.Warning(db.C(coll).DropCollection())
 	}
 	s.session.Close()
 }
