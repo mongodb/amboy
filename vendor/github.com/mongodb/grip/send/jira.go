@@ -15,6 +15,9 @@ import (
 	"github.com/trivago/tgo/tcontainer"
 )
 
+// jiraIssueKey is the key in a message.Fields that will hold the ID of the issue created
+const jiraIssueKey = "jira-key"
+
 type jiraJournal struct {
 	opts *JiraOptions
 	*Base
@@ -22,10 +25,11 @@ type jiraJournal struct {
 
 // JiraOptions include configurations for the JIRA client
 type JiraOptions struct {
-	Name     string // Name of the journaler
-	BaseURL  string // URL of the JIRA instance
-	Username string
-	Password string
+	Name         string // Name of the journaler
+	BaseURL      string // URL of the JIRA instance
+	Username     string
+	Password     string
+	UseBasicAuth bool
 
 	HTTPClient *http.Client
 	client     jiraClient
@@ -53,7 +57,7 @@ func NewJiraLogger(opts *JiraOptions, l LevelInfo) (Sender, error) {
 		return nil, err
 	}
 
-	if err := j.opts.client.Authenticate(opts.Username, opts.Password); err != nil {
+	if err := j.opts.client.Authenticate(opts.Username, opts.Password, opts.UseBasicAuth); err != nil {
 		return nil, fmt.Errorf("jira authentication error: %v", err)
 	}
 
@@ -82,9 +86,19 @@ func (j *jiraJournal) Send(m message.Composer) {
 		if len(issueFields.Summary) > 254 {
 			issueFields.Summary = issueFields.Summary[:254]
 		}
-		if err := j.opts.client.PostIssue(issueFields); err != nil {
-			j.errHandler(err, message.NewFormattedMessage(m.Priority(), m.String()))
+		if len(issueFields.Description) > 32767 {
+			issueFields.Description = issueFields.Description[:32767]
 		}
+
+		if err := j.opts.client.Authenticate(j.opts.Username, j.opts.Password, j.opts.UseBasicAuth); err != nil {
+			j.errHandler(fmt.Errorf("jira authentication error: %v", err), message.NewFormattedMessage(m.Priority(), m.String()))
+		}
+		issueKey, err := j.opts.client.PostIssue(issueFields)
+		if err != nil {
+			j.errHandler(err, message.NewFormattedMessage(m.Priority(), m.String()))
+			return
+		}
+		populateKey(m, issueKey)
 	}
 }
 
@@ -127,12 +141,11 @@ func getFields(m message.Composer) *jira.IssueFields {
 	var issueFields *jira.IssueFields
 
 	switch msg := m.Raw().(type) {
-	case message.JiraIssue:
+	case *message.JiraIssue:
 		issueFields = &jira.IssueFields{
 			Project:     jira.Project{Key: msg.Project},
 			Summary:     msg.Summary,
 			Description: msg.Description,
-			Components:  []*jira.Component{},
 		}
 		if len(msg.Fields) != 0 {
 			unknownsMap := tcontainer.NewMarshalMap()
@@ -153,11 +166,14 @@ func getFields(m message.Composer) *jira.IssueFields {
 		if len(msg.Labels) > 0 {
 			issueFields.Labels = msg.Labels
 		}
-		for _, component := range msg.Components {
-			issueFields.Components = append(issueFields.Components,
-				&jira.Component{
-					Name: component,
-				})
+		if len(msg.Components) > 0 {
+			issueFields.Components = make([]*jira.Component, 0, len(msg.Components))
+			for _, component := range msg.Components {
+				issueFields.Components = append(issueFields.Components,
+					&jira.Component{
+						Name: component,
+					})
+			}
 		}
 	case message.Fields:
 		issueFields = &jira.IssueFields{
@@ -180,6 +196,18 @@ func getFields(m message.Composer) *jira.IssueFields {
 	return issueFields
 }
 
+func populateKey(m message.Composer, issueKey string) {
+	switch msg := m.Raw().(type) {
+	case *message.JiraIssue:
+		msg.IssueKey = issueKey
+		if msg.Callback != nil {
+			msg.Callback(issueKey)
+		}
+	case message.Fields:
+		msg[jiraIssueKey] = issueKey
+	}
+}
+
 ////////////////////////////////////////////////////////////////////////
 //
 // interface wrapper for the slack client so that we can mock things out
@@ -188,8 +216,8 @@ func getFields(m message.Composer) *jira.IssueFields {
 
 type jiraClient interface {
 	CreateClient(*http.Client, string) error
-	Authenticate(string, string) error
-	PostIssue(*jira.IssueFields) error
+	Authenticate(string, string, bool) error
+	PostIssue(*jira.IssueFields) (string, error)
 	PostComment(string, string) error
 }
 
@@ -203,34 +231,41 @@ func (c *jiraClientImpl) CreateClient(client *http.Client, baseURL string) error
 	return err
 }
 
-func (c *jiraClientImpl) Authenticate(username string, password string) error {
-	authed, err := c.Client.Authentication.AcquireSessionCookie(username, password)
-	if err != nil {
-		return fmt.Errorf("problem authenticating to jira as '%s' [%s]", username, err.Error())
-	}
+func (c *jiraClientImpl) Authenticate(username string, password string, useBasic bool) error {
+	if useBasic {
+		c.Client.Authentication.SetBasicAuth(username, password)
 
-	if !authed {
-		return fmt.Errorf("problem authenticating to jira as '%s'", username)
+	} else {
+		authed, err := c.Client.Authentication.AcquireSessionCookie(username, password)
+		if err != nil {
+			return fmt.Errorf("problem authenticating to jira as '%s' [%s]", username, err.Error())
+		}
+
+		if !authed {
+			return fmt.Errorf("problem authenticating to jira as '%s'", username)
+		}
 	}
 	return nil
 }
 
-func (c *jiraClientImpl) PostIssue(issueFields *jira.IssueFields) error {
+func (c *jiraClientImpl) PostIssue(issueFields *jira.IssueFields) (string, error) {
 	i := jira.Issue{Fields: issueFields}
-	_, resp, err := c.Client.Issue.Create(&i)
-
+	issue, resp, err := c.Client.Issue.Create(&i)
 	if err != nil {
 		if resp != nil {
 			defer resp.Body.Close()
 			data, _ := ioutil.ReadAll(resp.Body)
-			return fmt.Errorf("encountered error logging to jira: %s [%s]",
+			return "", fmt.Errorf("encountered error logging to jira: %s [%s]",
 				err.Error(), string(data))
 		}
 
-		return err
+		return "", err
+	}
+	if issue == nil {
+		return "", errors.New("no issue returned from Jira")
 	}
 
-	return nil
+	return issue.Key, nil
 }
 
 // todo: allow more parameters than just body?

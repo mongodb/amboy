@@ -8,11 +8,13 @@ imports:
 - name: github.com/nutmegdevelopment/sumologic
   version: 42ed9b372fa36887ba95cba2eab345991ca6e217
 - name: github.com/bluele/slack
-  version: 1f14901342cf5347555c2a6b0160d1a94f9c46ea
+  version: b4b4d354a079fbf4bd948faad01b32cecb2ffe03
 - name: github.com/mattn/go-xmpp
   version: f4550b5399387339df5ce4c3f88c1ef85333bdd5
+- name: github.com/montanaflynn/stats
+  version: db72e6cae808b936b0c01fd330ff1fcd2c86c95e
 - name: github.com/shirou/gopsutil
-  version: 93564b314264efac01934715fad4c355ed6af1c5
+  version: da37b31860c94582c739949e48be902d69a321ae
 - name: github.com/shirou/w32
   version: bb4de0191aa41b5507caa14b0650cdbddcd9280b
 - name: github.com/StackExchange/wmi
@@ -24,6 +26,8 @@ imports:
 
 - name: github.com/stretchr/testify
   version: 890a5c3458b43e6104ff5da8dfa139d013d77544
+- name: github.com/pkg/errors
+  version: 248dadf4e9068a0b3e79f02ed0a610d935de5302
 
 - name: github.com/fuyufjh/splunk-hec-go
   version: 69956d6a6cbd511dade209563c3256c204c9ae51

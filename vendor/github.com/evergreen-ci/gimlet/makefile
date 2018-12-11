@@ -1,7 +1,7 @@
 # start project configuration
 name := gimlet
 buildDir := build
-packages := $(name)
+packages := $(name) ldap
 orgPath := github.com/evergreen-ci
 projectPath := $(orgPath)/$(name)
 # end project configuration
@@ -133,7 +133,7 @@ lint-%:$(buildDir)/output.%.lint
 #    tests have compile and runtime deps. This varable has everything
 #    that the tests actually need to run. (The "build" target is
 #    intentional and makes these targets rerun as expected.)
-testRunDeps := $(testSrcFiles) build 
+testRunDeps := $(testSrcFiles) build
 testArgs := -test.v
 ifneq (,$(RUN_TEST))
 testArgs += -test.run='$(RUN_TEST)'
@@ -177,7 +177,9 @@ $(buildDir)/output.lint:$(buildDir)/run-linter $(buildDir)/.lintSetup .FORCE
 
 # start vendoring configuration
 vendor-clean:
+	rm -rf vendor/github.com/mongodb/grip/vendor/github.com/pkg/
 	rm -rf vendor/github.com/mongodb/grip/vendor/github.com/stretchr/
+	rm -rf vendor/gopkg.in/asn1-ber.v1/tests/
 	find vendor/ -name "*.gif" -o -name "*.gz" -o -name "*.png" -o -name "*.ico" -o -name "*.dat" -o -name "*testdata" | xargs rm -rf
 phony += vendor-clean
 # end vendoring tooling configuration
