@@ -115,12 +115,33 @@ func TestSmokeMongoDriverRemoteQueueRunsJobsOnlyOnce(t *testing.T) {
 	runSmokeRemoteQueuesRunsJobsOnce(ctx, d, cleanup, assert)
 }
 
-func TestSmokeMgoDriverRemoteMultipleQueueRunsJobsOnlyOnce(t *testing.T) {
+func TestSmokeMgoDriverRemoteTwoQueueRunsJobsOnlyOnce(t *testing.T) {
 	assert := assert.New(t) // nolint
 	opts := DefaultMongoDBOptions()
 	opts.DB = "amboy_test"
 	name := uuid.NewV4().String()
 	drivers := []Driver{
+		NewMgoDriver(name, opts),
+		NewMgoDriver(name, opts),
+	}
+	cleanup := func() { cleanupMgo(opts.DB, name, drivers[0].(*mgoDriver).session.Clone()) }
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	mockJobCounters.Reset()
+	runSmokeMultipleQueuesRunJobsOnce(ctx, drivers, cleanup, assert)
+}
+
+func TestSmokeMgoDriverRemoteManyQueueRunsJobsOnlyOnce(t *testing.T) {
+	assert := assert.New(t) // nolint
+	opts := DefaultMongoDBOptions()
+	opts.DB = "amboy_test"
+	name := uuid.NewV4().String()
+	drivers := []Driver{
+		NewMgoDriver(name, opts),
+		NewMgoDriver(name, opts),
+		NewMgoDriver(name, opts),
 		NewMgoDriver(name, opts),
 		NewMgoDriver(name, opts),
 		NewMgoDriver(name, opts),
@@ -134,7 +155,7 @@ func TestSmokeMgoDriverRemoteMultipleQueueRunsJobsOnlyOnce(t *testing.T) {
 	runSmokeMultipleQueuesRunJobsOnce(ctx, drivers, cleanup, assert)
 }
 
-func TestSmokeMongoDriverRemoteMultipleQueueRunsJobsOnlyOnce(t *testing.T) {
+func TestSmokeMongoDriverRemoteTwoQueueRunsJobsOnlyOnce(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -143,6 +164,30 @@ func TestSmokeMongoDriverRemoteMultipleQueueRunsJobsOnlyOnce(t *testing.T) {
 	opts.DB = "amboy_test"
 	name := uuid.NewV4().String()
 	drivers := []Driver{
+		NewMongoDriver(name, opts),
+		NewMongoDriver(name, opts),
+	}
+	cleanup := func() { cleanupMongo(ctx, opts.DB, name, drivers[0].(*mongoDriver).client) }
+
+	ctx, cancel = context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+
+	mockJobCounters.Reset()
+	runSmokeMultipleQueuesRunJobsOnce(ctx, drivers, cleanup, assert)
+}
+
+func TestSmokeMongoDriverRemoteManyQueueRunsJobsOnlyOnce(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	assert := assert.New(t) // nolint
+	opts := DefaultMongoDBOptions()
+	opts.DB = "amboy_test"
+	name := uuid.NewV4().String()
+	drivers := []Driver{
+		NewMongoDriver(name, opts),
+		NewMongoDriver(name, opts),
+		NewMongoDriver(name, opts),
 		NewMongoDriver(name, opts),
 		NewMongoDriver(name, opts),
 		NewMongoDriver(name, opts),

@@ -835,9 +835,9 @@ func TestSmokeMultipleMongoBackedRemoteUnorderedQueuesWithTheSameName(t *testing
 	// create queues with two runners, mongodb backed drivers, and
 	// configure injectors
 	qOne := NewRemoteUnordered(runtime.NumCPU() / 2)
-	dOne := NewMgoDriver(name+"-one", opts).(*mongoDriver)
+	dOne := NewMongoDriver(name+"-one", opts).(*mongoDriver)
 	qTwo := NewRemoteUnordered(runtime.NumCPU() / 2)
-	dTwo := NewMgoDriver(name+"-two", opts).(*mongoDriver)
+	dTwo := NewMongoDriver(name+"-two", opts).(*mongoDriver)
 	assert.NoError(dOne.Open(ctx))
 	assert.NoError(dTwo.Open(ctx))
 	assert.NoError(qOne.SetDriver(dOne))

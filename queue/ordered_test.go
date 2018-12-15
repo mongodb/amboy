@@ -222,9 +222,7 @@ func (s *OrderedQueueSuite) TestResultsChannelProducesPointersToConsistentJobObj
 	defer cancel()
 	s.NoError(s.queue.Start(ctx))
 
-	grip.Critical(s.queue.Stats())
 	amboy.WaitCtxInterval(ctx, s.queue, 250*time.Millisecond)
-	grip.Critical(s.queue.Stats())
 
 	for result := range s.queue.Results(ctx) {
 		s.Equal(j.ID(), result.ID())
@@ -270,9 +268,7 @@ func (s *OrderedQueueSuite) TestPassedIsCompletedButDoesNotRun() {
 
 	s.NoError(s.queue.Start(ctx))
 
-	grip.Critical(s.queue.Stats())
 	amboy.WaitCtxInterval(ctx, s.queue, 250*time.Millisecond)
-	grip.Critical(s.queue.Stats())
 
 	j1Refreshed, ok1 := s.queue.Get(j1.ID())
 	j2Refreshed, ok2 := s.queue.Get(j2.ID())
