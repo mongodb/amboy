@@ -49,7 +49,7 @@ func NewMongoDriver(name string, opts MongoDBOptions) Driver {
 
 // OpenNewMongoDriver constructs and opens a new MongoDB driver instance
 // using the specified session. It is equivalent to calling
-// NewMgo() and calling *MongoDB.Open().
+// NewMongoDriver() and calling driver.Open().
 func OpenNewMongoDriver(ctx context.Context, name string, opts MongoDBOptions, client *mongo.Client) (Driver, error) {
 	d := NewMongoDriver(name, opts).(*mongoDriver)
 
@@ -504,7 +504,7 @@ func (d *mongoDriver) Stats() amboy.QueueStats {
 	numJobs, err := coll.Count(context.TODO(), nil)
 	grip.Warning(message.WrapError(err, message.Fields{
 		"id":         d.instanceID,
-		"service":    "amboy.queue.mgo",
+		"service":    "amboy.queue.mongo",
 		"collection": coll.Name(),
 		"operation":  "queue stats",
 		"message":    "problem counting all jobs",
@@ -513,7 +513,7 @@ func (d *mongoDriver) Stats() amboy.QueueStats {
 	pending, err := coll.Count(context.TODO(), bson.M{"status.completed": false})
 	grip.Warning(message.WrapError(err, message.Fields{
 		"id":         d.instanceID,
-		"service":    "amboy.queue.mgo",
+		"service":    "amboy.queue.mongo",
 		"collection": coll.Name(),
 		"operation":  "queue stats",
 		"message":    "problem counting pending jobs",
@@ -522,7 +522,7 @@ func (d *mongoDriver) Stats() amboy.QueueStats {
 	numLocked, err := coll.Count(context.TODO(), bson.M{"status.completed": false, "status.in_prog": true})
 	grip.Warning(message.WrapError(err, message.Fields{
 		"id":         d.instanceID,
-		"service":    "amboy.queue.mgo",
+		"service":    "amboy.queue.mongo",
 		"collection": coll.Name(),
 		"operation":  "queue stats",
 		"message":    "problem counting locked jobs",
