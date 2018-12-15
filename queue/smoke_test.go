@@ -334,12 +334,6 @@ func runWaitUntilSmokeTest(ctx context.Context, q amboy.Queue, size int, assert 
 
 		assert.NotZero(ti.WaitUntil)
 	}
-
-	stat := q.Stats()
-
-	assert.True(numJobs == stat.Running+stat.Completed, "%+v", q.Stats())
-
-	grip.Infof("completed wait until results for %d worker smoke test", size)
 }
 
 //////////////////////////////////////////////////////////////////////
