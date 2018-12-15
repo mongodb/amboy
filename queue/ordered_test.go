@@ -42,7 +42,7 @@ func TestLocalOrderedQueueSuiteThreeWorker(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func TestRemoteMongoDBOrderedQueueSuiteFourWorkers(t *testing.T) {
+func TestRemoteMgoOrderedQueueSuiteFourWorkers(t *testing.T) {
 	s := &OrderedQueueSuite{}
 	name := "test-" + uuid.NewV4().String()
 	uri := "mongodb://localhost"
@@ -60,7 +60,7 @@ func TestRemoteMongoDBOrderedQueueSuiteFourWorkers(t *testing.T) {
 
 	s.setup = func() {
 		remote := NewSimpleRemoteOrdered(s.size).(*remoteSimpleOrdered)
-		d := NewMongoDBDriver(name, opts)
+		d := NewMgoDriver(name, opts)
 		s.Require().NoError(d.Open(ctx))
 		s.Require().NoError(remote.SetDriver(d))
 		s.queue = remote

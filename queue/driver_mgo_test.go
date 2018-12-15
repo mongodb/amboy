@@ -15,7 +15,7 @@ import (
 )
 
 type MongoDBDriverSuite struct {
-	driver      *mongoDB
+	driver      *mgoDriver
 	session     *mgo.Session
 	collections []string
 	uri         string
@@ -38,7 +38,7 @@ func (s *MongoDBDriverSuite) SetupSuite() {
 
 func (s *MongoDBDriverSuite) SetupTest() {
 	name := uuid.NewV4().String()
-	s.driver = NewMongoDBDriver(name, DefaultMongoDBOptions()).(*mongoDB)
+	s.driver = NewMgoDriver(name, DefaultMongoDBOptions()).(*mgoDriver)
 	s.driver.dbName = s.dbName
 	s.collections = append(s.collections, name+".jobs", name+".locks")
 
@@ -91,9 +91,9 @@ func (s *MongoDBDriverSuite) TestSaveStatusSavesTimeInfo() {
 	j := newMockJob()
 	jobID := fmt.Sprintf("%d.%s.%d", 1, "mock-job", job.GetNumber())
 	j.SetID(jobID)
-	s.NoError(s.driver.Save(j))
+	s.NoError(s.driver.Put(j))
 	j2, err := s.driver.Get(jobID)
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Zero(j2.TimeInfo().Start)
 	now := time.Now().Round(time.Millisecond)
 	ti := amboy.JobTimeInfo{Start: now}

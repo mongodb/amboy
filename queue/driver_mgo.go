@@ -18,9 +18,9 @@ import (
 	"gopkg.in/mgo.v2/bson"
 )
 
-// mongoDB is a type that represents and wraps a queues
-// persistence of jobs *and* locks to a mongoDB instance.
-type mongoDB struct {
+// mgoDriver is a type that represents and wraps a queues
+// persistence of jobs *and* locks to a mgoDriver instance.
+type mgoDriver struct {
 	name             string
 	mongodbURI       string
 	dbName           string
@@ -33,8 +33,8 @@ type mongoDB struct {
 	LockManager
 }
 
-// MongoDBOptions is a struct passed to the NewMongoDB constructor to
-// communicate mongoDB specific settings about the driver's behavior
+// MongoDBOptions is a struct passed to the NewMgo constructor to
+// communicate mgoDriver specific settings about the driver's behavior
 // and operation.
 type MongoDBOptions struct {
 	URI            string
@@ -55,11 +55,11 @@ func DefaultMongoDBOptions() MongoDBOptions {
 	}
 }
 
-// NewMongoDBDriver creates a driver object given a name, which
+// NewMgoDriver creates a driver object given a name, which
 // serves as a prefix for collection names, and a MongoDB connection
-func NewMongoDBDriver(name string, opts MongoDBOptions) Driver {
+func NewMgoDriver(name string, opts MongoDBOptions) Driver {
 	host, _ := os.Hostname()
-	return &mongoDB{
+	return &mgoDriver{
 		name:             name,
 		dbName:           opts.DB,
 		mongodbURI:       opts.URI,
@@ -69,11 +69,11 @@ func NewMongoDBDriver(name string, opts MongoDBOptions) Driver {
 	}
 }
 
-// OpenNewMongoDBDriver constructs and opens a new MongoDB driver instance
+// OpenNewMgoDriver constructs and opens a new MongoDB driver instance
 // using the specified session. It is equivalent to calling
-// NewMongoDB() and calling *MongoDB.Open().
-func OpenNewMongoDBDriver(ctx context.Context, name string, opts MongoDBOptions, session *mgo.Session) (Driver, error) {
-	d := NewMongoDBDriver(name, opts).(*mongoDB)
+// NewMgo() and calling *MongoDB.Open().
+func OpenNewMgoDriver(ctx context.Context, name string, opts MongoDBOptions, session *mgo.Session) (Driver, error) {
+	d := NewMgoDriver(name, opts).(*mgoDriver)
 
 	if err := d.start(ctx, session.Copy()); err != nil {
 		return nil, errors.Wrap(err, "problem starting driver")
@@ -82,16 +82,16 @@ func OpenNewMongoDBDriver(ctx context.Context, name string, opts MongoDBOptions,
 	return d, nil
 }
 
-func (d *mongoDB) ID() string {
+func (d *mgoDriver) ID() string {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
 	return d.instanceID
 }
 
-// Open creates a connection to mongoDB, and returns an error if
+// Open creates a connection to mgoDriver, and returns an error if
 // there's a problem connecting.
-func (d *mongoDB) Open(ctx context.Context) error {
+func (d *mgoDriver) Open(ctx context.Context) error {
 	if d.canceler != nil {
 		return nil
 	}
@@ -104,7 +104,7 @@ func (d *mongoDB) Open(ctx context.Context) error {
 	return errors.Wrap(d.start(ctx, session), "problem starting driver")
 }
 
-func (d *mongoDB) start(ctx context.Context, session *mgo.Session) error {
+func (d *mgoDriver) start(ctx context.Context, session *mgo.Session) error {
 	d.LockManager = NewLockManager(ctx, d)
 
 	dCtx, cancel := context.WithCancel(ctx)
@@ -124,7 +124,7 @@ func (d *mongoDB) start(ctx context.Context, session *mgo.Session) error {
 			"id":      d.instanceID,
 			"uptime":  time.Since(startAt),
 			"span":    time.Since(startAt).String(),
-			"service": "amboy.queue.mongodb",
+			"service": "amboy.queue.mgo",
 		})
 	}()
 
@@ -135,7 +135,7 @@ func (d *mongoDB) start(ctx context.Context, session *mgo.Session) error {
 	return nil
 }
 
-func (d *mongoDB) getJobsCollection() (*mgo.Session, *mgo.Collection) {
+func (d *mgoDriver) getJobsCollection() (*mgo.Session, *mgo.Collection) {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	session := d.session.Copy()
@@ -143,7 +143,7 @@ func (d *mongoDB) getJobsCollection() (*mgo.Session, *mgo.Collection) {
 	return session, session.DB(d.dbName).C(d.name + ".jobs")
 }
 
-func (d *mongoDB) setupDB() error {
+func (d *mgoDriver) setupDB() error {
 	catcher := grip.NewCatcher()
 	session, jobs := d.getJobsCollection()
 	defer session.Close()
@@ -168,7 +168,7 @@ func (d *mongoDB) setupDB() error {
 }
 
 // Close terminates the connection to the database server.
-func (d *mongoDB) Close() {
+func (d *mgoDriver) Close() {
 	if d.canceler != nil {
 		d.canceler()
 	}
@@ -176,18 +176,19 @@ func (d *mongoDB) Close() {
 
 // Get takes the name of a job and returns an amboy.Job object from
 // the persistence layer for the job matching that unique id.
-func (d *mongoDB) Get(name string) (amboy.Job, error) {
+func (d *mgoDriver) Get(name string) (amboy.Job, error) {
 	session, jobs := d.getJobsCollection()
 	defer session.Close()
 
 	j := &registry.JobInterchange{}
 
 	err := jobs.FindId(name).One(j)
+
 	grip.Debug(message.WrapError(err, message.Fields{
 		"operation": "get job",
 		"name":      name,
 		"id":        d.instanceID,
-		"service":   "amboy.queue.mongodb",
+		"service":   "amboy.queue.mgo",
 	}))
 
 	if err != nil {
@@ -203,30 +204,28 @@ func (d *mongoDB) Get(name string) (amboy.Job, error) {
 	return output, nil
 }
 
-func (d *mongoDB) getAtomicQuery(jobName string, modCount int) bson.M {
+func getAtomicQuery(owner, jobName string, modCount int) bson.M {
 	timeoutTs := time.Now().Add(-LockTimeout)
 
 	return bson.M{
 		"_id": jobName,
 		"$or": []bson.M{
-			// if there is no owner, then there can be no lock,
-			bson.M{"status.owner": ""},
 			// owner and modcount should match, which
 			// means there's an active lock but we own it.
-			bson.M{
-				"status.owner":     d.instanceID,
+			{
+				"status.owner":     owner,
 				"status.mod_count": modCount,
 				"status.mod_ts":    bson.M{"$gt": timeoutTs},
 			},
 			// modtime is older than the lock timeout,
 			// regardless of what the other data is,
-			bson.M{"status.mod_ts": bson.M{"$lte": timeoutTs}},
+			{"status.mod_ts": bson.M{"$lte": timeoutTs}},
 		},
 	}
 }
 
 // Put inserts the job into the collection, returning an error when that job already exists.
-func (d *mongoDB) Put(j amboy.Job) error {
+func (d *mgoDriver) Put(j amboy.Job) error {
 	job, err := registry.MakeJobInterchange(j, amboy.BSON)
 	if err != nil {
 		return errors.Wrap(err, "problem converting job to interchange format")
@@ -242,7 +241,7 @@ func (d *mongoDB) Put(j amboy.Job) error {
 
 	grip.Debug(message.Fields{
 		"id":        d.instanceID,
-		"service":   "amboy.queue.mongodb",
+		"service":   "amboy.queue.mgo",
 		"operation": "put job",
 		"name":      name,
 	})
@@ -252,12 +251,13 @@ func (d *mongoDB) Put(j amboy.Job) error {
 
 // Save takes a job object and updates that job in the persistence
 // layer. Replaces or updates an existing job with the same ID.
-func (d *mongoDB) Save(j amboy.Job) error {
+func (d *mgoDriver) Save(j amboy.Job) error {
 	name := j.ID()
 	session, jobs := d.getJobsCollection()
 	defer session.Close()
 
 	stat := j.Status()
+	stat.Owner = d.instanceID
 	stat.ModificationCount++
 	stat.ModificationTime = time.Now()
 	j.SetStatus(stat)
@@ -267,13 +267,13 @@ func (d *mongoDB) Save(j amboy.Job) error {
 		return errors.Wrap(err, "problem converting job to interchange format")
 	}
 
-	query := d.getAtomicQuery(name, stat.ModificationCount)
-	info, err := jobs.Upsert(query, job)
+	query := getAtomicQuery(d.instanceID, name, stat.ModificationCount)
+	err = jobs.Update(query, job)
 	if err != nil {
 		if mgo.IsDup(errors.Cause(err)) {
 			grip.Debug(message.Fields{
 				"id":        d.instanceID,
-				"service":   "amboy.queue.mongodb",
+				"service":   "amboy.queue.mgo",
 				"operation": "save job",
 				"name":      name,
 				"outcome":   "duplicate key error, ignoring stale job",
@@ -282,15 +282,14 @@ func (d *mongoDB) Save(j amboy.Job) error {
 			return nil
 		}
 
-		return errors.Wrapf(err, "problem saving document %s: %+v", name, info)
+		return errors.Wrapf(err, "problem saving document %s", name)
 	}
 
 	grip.Debug(message.Fields{
 		"id":        d.instanceID,
-		"service":   "amboy.queue.mongodb",
+		"service":   "amboy.queue.mgo",
 		"operation": "save job",
 		"name":      name,
-		"info":      info,
 	})
 
 	return nil
@@ -300,12 +299,13 @@ func (d *mongoDB) Save(j amboy.Job) error {
 // persistence layer. If the job does not exist, or the underlying
 // status document has changed incompatibly this operation produces
 // an error.
-func (d *mongoDB) SaveStatus(j amboy.Job, stat amboy.JobStatusInfo) error {
+func (d *mgoDriver) SaveStatus(j amboy.Job, stat amboy.JobStatusInfo) error {
 	session, jobs := d.getJobsCollection()
 	defer session.Close()
 
 	id := j.ID()
-	query := d.getAtomicQuery(id, stat.ModificationCount)
+	query := getAtomicQuery(d.instanceID, id, stat.ModificationCount)
+	stat.Owner = d.instanceID
 	stat.ModificationCount++
 	stat.ModificationTime = time.Now()
 	timeInfo := j.TimeInfo()
@@ -325,7 +325,7 @@ func (d *mongoDB) SaveStatus(j amboy.Job, stat amboy.JobStatusInfo) error {
 // driver. This includes all completed, pending, and locked
 // jobs. Errors, including those with connections to MongoDB or with
 // corrupt job documents, are logged.
-func (d *mongoDB) Jobs() <-chan amboy.Job {
+func (d *mgoDriver) Jobs() <-chan amboy.Job {
 	output := make(chan amboy.Job)
 	go func() {
 		defer close(output)
@@ -341,7 +341,7 @@ func (d *mongoDB) Jobs() <-chan amboy.Job {
 			if err != nil {
 				grip.Warning(message.WrapError(err, message.Fields{
 					"id":        d.instanceID,
-					"service":   "amboy.queue.mongodb",
+					"service":   "amboy.queue.mgo",
 					"operation": "job iterator",
 					"message":   "problem converting job obj",
 				}))
@@ -352,7 +352,7 @@ func (d *mongoDB) Jobs() <-chan amboy.Job {
 
 		grip.Error(message.WrapError(results.Err(), message.Fields{
 			"id":        d.instanceID,
-			"service":   "amboy.queue.mongodb",
+			"service":   "amboy.queue.mgo",
 			"operation": "job iterator",
 			"message":   "database interface error",
 		}))
@@ -363,7 +363,7 @@ func (d *mongoDB) Jobs() <-chan amboy.Job {
 // JobStats returns job status documents for all jobs in the storage layer.
 //
 // This implementation returns documents in reverse modification time.
-func (d *mongoDB) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
+func (d *mgoDriver) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 	output := make(chan amboy.JobStatusInfo)
 	go func() {
 		defer close(output)
@@ -378,19 +378,19 @@ func (d *mongoDB) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 
 		j := &registry.JobInterchange{}
 		for results.Next(j) {
-			if ctx.Err() != nil {
-				return
-			}
-
 			j.Status.ID = j.Name
-			output <- j.Status
+			select {
+			case <-ctx.Done():
+				return
+			case output <- j.Status:
+			}
 		}
 	}()
 	return output
 }
 
 // Next returns one job, not marked complete from the database.
-func (d *mongoDB) Next(ctx context.Context) amboy.Job {
+func (d *mgoDriver) Next(ctx context.Context) amboy.Job {
 	session, jobs := d.getJobsCollection()
 	if session == nil || jobs == nil {
 		return nil
@@ -452,7 +452,7 @@ func (d *mongoDB) Next(ctx context.Context) amboy.Job {
 				if err = iter.Close(); err != nil {
 					grip.Warning(message.WrapError(err, message.Fields{
 						"id":        d.instanceID,
-						"service":   "amboy.queue.mongodb",
+						"service":   "amboy.queue.mgo",
 						"message":   "problem closing iterator",
 						"operation": "retrieving next job",
 						"misses":    misses,
@@ -469,7 +469,7 @@ func (d *mongoDB) Next(ctx context.Context) amboy.Job {
 			if err != nil {
 				grip.Warning(message.WrapError(err, message.Fields{
 					"id":        d.instanceID,
-					"service":   "amboy.queue.mongodb",
+					"service":   "amboy.queue.mgo",
 					"operation": "converting next job",
 					"message":   "problem converting job object from mongodb",
 					"misses":    misses,
@@ -483,7 +483,7 @@ func (d *mongoDB) Next(ctx context.Context) amboy.Job {
 			if err = iter.Close(); err != nil {
 				grip.Warning(message.WrapError(err, message.Fields{
 					"id":        d.instanceID,
-					"service":   "amboy.queue.mongodb",
+					"service":   "amboy.queue.mgo",
 					"message":   "problem closing iterator",
 					"operation": "returning next job",
 					"misses":    misses,
@@ -503,14 +503,14 @@ func (d *mongoDB) Next(ctx context.Context) amboy.Job {
 // performs a number of asynchronous queries to collect data, and in
 // an active system with a number of active queues, stats may report
 // incongruous data.
-func (d *mongoDB) Stats() amboy.QueueStats {
+func (d *mgoDriver) Stats() amboy.QueueStats {
 	session, jobs := d.getJobsCollection()
 	defer session.Close()
 
 	numJobs, err := jobs.Count()
 	grip.Warning(message.WrapError(err, message.Fields{
 		"id":         d.instanceID,
-		"service":    "amboy.queue.mongodb",
+		"service":    "amboy.queue.mgo",
 		"collection": jobs.Name,
 		"operation":  "queue stats",
 		"message":    "problem counting all jobs",
@@ -519,7 +519,7 @@ func (d *mongoDB) Stats() amboy.QueueStats {
 	pending, err := jobs.Find(bson.M{"status.completed": false}).Count()
 	grip.Warning(message.WrapError(err, message.Fields{
 		"id":         d.instanceID,
-		"service":    "amboy.queue.mongodb",
+		"service":    "amboy.queue.mgo",
 		"collection": jobs.Name,
 		"operation":  "queue stats",
 		"message":    "problem counting pending jobs",
@@ -528,7 +528,7 @@ func (d *mongoDB) Stats() amboy.QueueStats {
 	numLocked, err := jobs.Find(bson.M{"status.completed": false, "status.in_prog": true}).Count()
 	grip.Warning(message.WrapError(err, message.Fields{
 		"id":         d.instanceID,
-		"service":    "amboy.queue.mongodb",
+		"service":    "amboy.queue.mgo",
 		"collection": jobs.Name,
 		"operation":  "queue stats",
 		"message":    "problem counting locked jobs",
