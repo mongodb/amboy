@@ -581,7 +581,7 @@ func TestSmokeRemoteUnorderedWorkerPoolsWithMongoDriver(t *testing.T) {
 		name := strings.Replace(uuid.NewV4().String(), "-", ".", -1)
 
 		ctx, cancel := context.WithCancel(baseCtx)
-		d := NewMgoDriver(name, opts).(*mongoDriver)
+		d := NewMongoDriver(name, opts).(*mongoDriver)
 		assert.NoError(q.SetDriver(d))
 
 		runUnorderedSmokeTest(ctx, q, poolSize, assert)
