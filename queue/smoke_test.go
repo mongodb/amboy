@@ -489,30 +489,6 @@ func TestSmokeRemoteUnorderedSingleThreadedWithMongoDriver(t *testing.T) {
 	cancel()
 }
 
-func TestSmokeRemoteUnorderedSingleThreadedWithMongoDriver(t *testing.T) {
-	assert := assert.New(t) // nolint
-	name := strings.Replace(uuid.NewV4().String(), "-", ".", -1)
-
-	opts := DefaultMongoDBOptions()
-	opts.DB = "amboy_test"
-
-	ctx, cancel := context.WithCancel(context.Background())
-	q := NewRemoteUnordered(1)
-	d := NewMongoDriver(name, opts).(*mongoDriver)
-
-	assert.NoError(d.Open(ctx))
-
-	assert.NoError(q.SetDriver(d))
-
-	runUnorderedSmokeTest(ctx, q, 1, assert)
-
-	grip.Error(cleanupMongo(ctx, opts.DB, name, d.client))
-
-	d.Close()
-
-	cancel()
-}
-
 func TestSmokeRemoteUnorderedSingleRunnerWithMgoDriver(t *testing.T) {
 	assert := assert.New(t) // nolint
 	name := strings.Replace(uuid.NewV4().String(), "-", ".", -1)
