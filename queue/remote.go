@@ -58,7 +58,7 @@ func (q *remoteUnordered) Next(ctx context.Context) amboy.Job {
 				continue
 			}
 
-			job, err = q.driver.Get(job.ID())
+			job, err = q.driver.Get(ctx, job.ID())
 			if job == nil {
 				continue
 			}
@@ -69,7 +69,7 @@ func (q *remoteUnordered) Next(ctx context.Context) amboy.Job {
 					"operation": "problem refreshing job in dispatching from remote queue",
 				}))
 
-				grip.Debug(message.WrapError(q.driver.Unlock(job),
+				grip.Debug(message.WrapError(q.driver.Unlock(ctx, job),
 					message.Fields{
 						"id":        job.ID(),
 						"operation": "unlocking job, may leave a stale job",

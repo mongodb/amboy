@@ -589,7 +589,7 @@ func TestSmokeRemoteUnorderedWorkerPoolsWithMongoDriver(t *testing.T) {
 		d.Close()
 
 		grip.Infof("test with %d jobs, duration = %s", poolSize, time.Since(start))
-		err := cleanupMongo(baseCtx, opts.DB, name, d.client)
+		err := cleanupMongo(ctx, opts.DB, name, d.client)
 		grip.AlertWhenf(err != nil,
 			"encountered error cleaning up %s: %+v", name, err)
 	}
