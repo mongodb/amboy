@@ -619,62 +619,6 @@ func TestSmokeRemoteUnorderedWorkerPoolsWithMongoDriver(t *testing.T) {
 	}
 }
 
-func TestSmokeRemoteUnorderedWorkerPoolsWithMgoDriver(t *testing.T) {
-	assert := assert.New(t) // nolint
-	opts := DefaultMongoDBOptions()
-	opts.DB = "amboy_test"
-	baseCtx, baseCancel := context.WithCancel(context.Background())
-	defer baseCancel()
-
-	for _, poolSize := range []int{2, 4, 8, 16, 32, 64} {
-		start := time.Now()
-		grip.Infof("running mongodb queue smoke test with %d jobs", poolSize)
-		q := NewRemoteUnordered(poolSize)
-		name := strings.Replace(uuid.NewV4().String(), "-", ".", -1)
-
-		ctx, cancel := context.WithCancel(baseCtx)
-		d := NewMgoDriver(name, opts).(*mgoDriver)
-		assert.NoError(q.SetDriver(d))
-
-		runUnorderedSmokeTest(ctx, q, poolSize, assert)
-		cancel()
-		d.Close()
-
-		grip.Infof("test with %d jobs, duration = %s", poolSize, time.Since(start))
-		err := cleanupMgo(opts.DB, name, d.session.Clone())
-		grip.AlertWhenf(err != nil,
-			"encountered error cleaning up %s: %+v", name, err)
-	}
-}
-
-func TestSmokeRemoteUnorderedWorkerPoolsWithMongoDriver(t *testing.T) {
-	assert := assert.New(t) // nolint
-	opts := DefaultMongoDBOptions()
-	opts.DB = "amboy_test"
-	baseCtx, baseCancel := context.WithCancel(context.Background())
-	defer baseCancel()
-
-	for _, poolSize := range []int{2, 4, 8, 16, 32, 64} {
-		start := time.Now()
-		grip.Infof("running mongodb queue smoke test with %d jobs", poolSize)
-		q := NewRemoteUnordered(poolSize)
-		name := strings.Replace(uuid.NewV4().String(), "-", ".", -1)
-
-		ctx, cancel := context.WithCancel(baseCtx)
-		d := NewMongoDriver(name, opts).(*mongoDriver)
-		assert.NoError(q.SetDriver(d))
-
-		runUnorderedSmokeTest(ctx, q, poolSize, assert)
-		cancel()
-		d.Close()
-
-		grip.Infof("test with %d jobs, duration = %s", poolSize, time.Since(start))
-		err := cleanupMongo(baseCtx, opts.DB, name, d.client)
-		grip.AlertWhenf(err != nil,
-			"encountered error cleaning up %s: %+v", name, err)
-	}
-}
-
 func TestSmokePriorityQueueWithSingleWorker(t *testing.T) {
 	assert := assert.New(t) // nolint
 
@@ -811,64 +755,6 @@ func TestSmokePriorityDriverWithRemoteQueueWithWorkerPools(t *testing.T) {
 }
 
 func TestSmokeMultipleMgoDriverRemoteUnorderedQueuesWithTheSameName(t *testing.T) {
-	assert := assert.New(t) // nolint
-	ctx, cancel := context.WithCancel(context.Background())
-
-	name := strings.Replace(uuid.NewV4().String(), "-", ".", -1)
-
-	opts := DefaultMongoDBOptions()
-	opts.DB = "amboy_test"
-
-	// create queues with two runners, mongodb backed drivers, and
-	// configure injectors
-	qOne := NewRemoteUnordered(runtime.NumCPU() / 2)
-	dOne := NewMgoDriver(name+"-one", opts).(*mgoDriver)
-	qTwo := NewRemoteUnordered(runtime.NumCPU() / 2)
-	dTwo := NewMgoDriver(name+"-two", opts).(*mgoDriver)
-	assert.NoError(dOne.Open(ctx))
-	assert.NoError(dTwo.Open(ctx))
-	assert.NoError(qOne.SetDriver(dOne))
-	assert.NoError(qTwo.SetDriver(dTwo))
-
-	runMultiQueueSingleBackEndSmokeTest(ctx, qOne, qTwo, false, assert)
-
-	// release runner/driver resources.
-	cancel()
-
-	// do cleanup.
-	grip.Error(cleanupMgo(opts.DB, name, dOne.session.Clone()))
-}
-
-func TestSmokeMultipleMongoDriverRemoteUnorderedQueuesWithTheSameName(t *testing.T) {
-	assert := assert.New(t) // nolint
-	ctx, cancel := context.WithCancel(context.Background())
-
-	name := strings.Replace(uuid.NewV4().String(), "-", ".", -1)
-
-	opts := DefaultMongoDBOptions()
-	opts.DB = "amboy_test"
-
-	// create queues with two runners, mongodb backed drivers, and
-	// configure injectors
-	qOne := NewRemoteUnordered(runtime.NumCPU() / 2)
-	dOne := NewMongoDriver(name+"-one", opts).(*mongoDriver)
-	qTwo := NewRemoteUnordered(runtime.NumCPU() / 2)
-	dTwo := NewMongoDriver(name+"-two", opts).(*mongoDriver)
-	assert.NoError(dOne.Open(ctx))
-	assert.NoError(dTwo.Open(ctx))
-	assert.NoError(qOne.SetDriver(dOne))
-	assert.NoError(qTwo.SetDriver(dTwo))
-
-	runMultiQueueSingleBackEndSmokeTest(ctx, qOne, qTwo, false, assert)
-
-	// do cleanup.
-	grip.Error(cleanupMongo(ctx, opts.DB, name, dOne.client))
-
-	// release runner/driver resources.
-	cancel()
-}
-
-func TestSmokeMultipleMgoBackedRemoteUnorderedQueuesWithTheSameName(t *testing.T) {
 	assert := assert.New(t) // nolint
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -1410,35 +1296,6 @@ func TestSmokeRemoteOrderedWithWorkerPoolsAndMgoDriver(t *testing.T) {
 		defer driver.Close()
 
 		runOrderedSmokeTest(ctx, q, poolSize, false, assert)
-		cancel()
-		grip.Error(cleanupMgo(opts.DB, name, session.Clone()))
-	}
-}
-
-func TestSmokeRemoteOrderedWithWorkerPoolsAndMongoDriver(t *testing.T) {
-	t.Skip("this test test's an odd combination of variables, and gets stuck")
-
-	assert := assert.New(t) // nolint
-	opts := DefaultMongoDBOptions()
-	opts.DB = "amboy_test"
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	client, err := mongo.Connect(ctx, opts.URI, options.Client().SetConnectTimeout(5*time.Second))
-	require.NoError(t, err)
-
-	for _, poolSize := range []int{2, 4, 8, 16, 32} {
-		ctx, cancel = context.WithTimeout(ctx, 10*time.Second)
-		q := NewSimpleRemoteOrdered(poolSize)
-
-		name := strings.Replace(uuid.NewV4().String(), "-", ".", -1)
-		driver, err := OpenNewMongoDriver(ctx, name, opts, client)
-		assert.NoError(err)
-		assert.NoError(q.SetDriver(driver))
-		defer driver.Close()
-
-		runOrderedSmokeTest(ctx, q, poolSize, false, assert)
-		grip.Error(cleanupMongo(ctx, opts.DB, name, client))
 		cancel()
 		grip.Error(cleanupMgo(opts.DB, name, session.Clone()))
 	}
