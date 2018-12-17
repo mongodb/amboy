@@ -39,7 +39,7 @@ func (s *SimpleRemoteOrderedSuite) SetupSuite() {
 	opts := DefaultMongoDBOptions()
 	opts.DB = "amboy_test"
 	s.driverConstructor = func() Driver {
-		return NewMongoDBDriver(name, opts)
+		return NewMgoDriver(name, opts)
 	}
 
 	s.tearDown = func() error {
