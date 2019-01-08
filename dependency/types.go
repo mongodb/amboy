@@ -13,4 +13,6 @@ const (
 	// targets and dependencies and run if any target is older
 	// than any dependency, like make.
 	LocalFileRelationship = "local-file"
+
+	CheckCallback = "check-callback"
 )

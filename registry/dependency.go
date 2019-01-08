@@ -19,3 +19,17 @@ func AddDependencyType(name string, f DependencyFactory) {
 func GetDependencyFactory(name string) (DependencyFactory, error) {
 	return amboyRegistry.getDependencyFactory(name)
 }
+
+type CallbackFactory func() dependency.CallbackCheck
+
+// AddCallbackType registers a callback function used in the
+// production of some dependencies
+func AddCallbackType(name string, f CallbackFactory) {
+	amboyRegistry.registerCallbackFactory(name, f)
+}
+
+// GetCallbackFactory returns a callback function factory for use in
+// dependencies
+func GetCallbackFactory(name string) (CallbackFactory, error) {
+	return amboyRegistry.getCallbackFactory(name)
+}

@@ -12,6 +12,10 @@ func init() {
 	AddDependencyType(dependency.AlwaysRun, alwaysDependencyFactory)
 	AddDependencyType(dependency.LocalFileRelationship, localFileDependencyFactory)
 	AddDependencyType(dependency.Create, createsFileDependencyFactory)
+
+	AddDependencyType(dependency.CheckCallback, func() dependency.Manager {
+		return dependencies.NewCallbackManager("")
+	})
 }
 
 func alwaysDependencyFactory() dependency.Manager {
