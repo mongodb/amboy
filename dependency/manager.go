@@ -1,7 +1,5 @@
 package dependency
 
-import "github.com/mongodb/amboy/registry"
-
 // TypeInfo describes the type information that every dependency
 // implementation should provide in its Type() implementation.
 type TypeInfo struct {
@@ -33,28 +31,4 @@ type Manager interface {
 	// Returns a pointer to a DependencyType object, which is used
 	// for serializing Dependency objects, when needed.
 	Type() TypeInfo
-}
-
-type CallbackCheck func([]string) State
-
-type CallbackManager struct {
-	CallbackName string   `bson:"function_name" json:"function_name" yaml:"function_name"`
-	T            TypeInfo `bson:"type" json:"type" yaml:"type"`
-	JobEdges     `bson:"edges" json:"edges" yaml:"edges"`
-}
-
-func NewCallbackManager(name string) *CallbackManager {
-	return &CallbackManager{
-		CallbackName: name,
-		T: TypeInfo{
-			Version: 1,
-			Name:    CheckCallback,
-		},
-	}
-}
-
-func (d *CallbackManager) Type() TypeInfo { return d.T }
-func (d *CallbackManager) State() State {
-	cb := registry.GetCallbackFactory(d.CallbackName)
-	return cb(c.Edges())
 }
