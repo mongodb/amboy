@@ -99,7 +99,7 @@ func (q *remoteUnordered) Next(ctx context.Context) amboy.Job {
 			}
 
 			dispatchSecs := time.Since(start).Seconds()
-			grip.DebugWhen(dispatchSecs > dispatchWarningThreshold || attempts > 3, message.Fields{
+			grip.DebugWhen(dispatchSecs > dispatchWarningThreshold.Seconds() || attempts > 3, message.Fields{
 				"message":             "returning job from remote source",
 				"threshold_secs":      dispatchWarningThreshold.Seconds(),
 				"dispatch_secs":       dispatchSecs,

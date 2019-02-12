@@ -8,7 +8,6 @@ import (
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/grip"
 	"github.com/mongodb/grip/recovery"
-	"github.com/pkg/errors"
 )
 
 type workUnit struct {
@@ -30,15 +29,6 @@ func executeJob(ctx context.Context, job amboy.Job, q amboy.Queue, startAt time.
 	ti.End = time.Now()
 	job.UpdateTimeInfo(ti)
 
-	if ctx.Err() == context.Canceled {
-		job.AddError(errors.New("job aborted"))
-		return
-	}
-
-	// only call complete if the context isn't canceled. Otherwise
-	// we want to let other workers pick it up with (potentially
-	// better impacts.) The risk here is that a job can get
-	// stuck if it will always it its timeout, or get canceled.
 	q.Complete(ctx, job)
 	ti.End = time.Now()
 	job.UpdateTimeInfo(ti)
