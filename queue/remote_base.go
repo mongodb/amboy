@@ -56,7 +56,6 @@ func (q *remoteBase) Get(name string) (amboy.Job, bool) {
 
 	job, err := q.driver.Get(context.TODO(), name)
 	if err != nil {
-		grip.Debug(err)
 		return nil, false
 	}
 
