@@ -184,13 +184,6 @@ func (d *mgoDriver) Get(_ context.Context, name string) (amboy.Job, error) {
 
 	err := jobs.FindId(name).One(j)
 
-	grip.Debug(message.WrapError(err, message.Fields{
-		"operation": "get job",
-		"name":      name,
-		"id":        d.instanceID,
-		"service":   "amboy.queue.mgo",
-	}))
-
 	if err != nil {
 		return nil, errors.Wrapf(err, "GET problem fetching '%s'", name)
 	}
@@ -239,13 +232,6 @@ func (d *mgoDriver) Put(_ context.Context, j amboy.Job) error {
 		return errors.Wrapf(err, "problem saving new job %s", name)
 	}
 
-	grip.Debug(message.Fields{
-		"id":        d.instanceID,
-		"service":   "amboy.queue.mgo",
-		"operation": "put job",
-		"name":      name,
-	})
-
 	return nil
 }
 
@@ -284,13 +270,6 @@ func (d *mgoDriver) Save(_ context.Context, j amboy.Job) error {
 
 		return errors.Wrapf(err, "problem saving document %s", name)
 	}
-
-	grip.Debug(message.Fields{
-		"id":        d.instanceID,
-		"service":   "amboy.queue.mgo",
-		"operation": "save job",
-		"name":      name,
-	})
 
 	return nil
 }

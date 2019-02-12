@@ -167,14 +167,6 @@ func (d *mongoDriver) Get(ctx context.Context, name string) (amboy.Job, error) {
 	j := &registry.JobInterchange{}
 
 	err := d.getCollection().FindOne(ctx, bson.M{"_id": name}).Decode(j)
-
-	grip.Debug(message.WrapError(err, message.Fields{
-		"operation": "get job",
-		"name":      name,
-		"id":        d.instanceID,
-		"service":   "amboy.queue.mongo",
-	}))
-
 	if err != nil {
 		return nil, errors.Wrapf(err, "GET problem fetching '%s'", name)
 	}
@@ -199,13 +191,6 @@ func (d *mongoDriver) Put(ctx context.Context, j amboy.Job) error {
 	if _, err = d.getCollection().InsertOne(ctx, job); err != nil {
 		return errors.Wrapf(err, "problem saving new job %s", name)
 	}
-
-	grip.Debug(message.Fields{
-		"id":        d.instanceID,
-		"service":   "amboy.queue.mongo",
-		"operation": "put job",
-		"name":      name,
-	})
 
 	return nil
 }
@@ -245,14 +230,6 @@ func (d *mongoDriver) Save(ctx context.Context, j amboy.Job) error {
 		}
 		return errors.Wrapf(err, "problem saving document %s: %+v", name, res)
 	}
-
-	grip.Debug(message.Fields{
-		"id":        d.instanceID,
-		"service":   "amboy.queue.mongo",
-		"operation": "save job",
-		"name":      name,
-		"info":      res,
-	})
 
 	return nil
 }
