@@ -572,8 +572,7 @@ func TestSmokeRemoteUnorderedWorkerPoolsWithMgoDriver(t *testing.T) {
 
 		grip.Infof("test with %d jobs, duration = %s", poolSize, time.Since(start))
 		err := cleanupMgo(opts.DB, name, d.session.Clone())
-		grip.AlertWhenf(err != nil,
-			"encountered error cleaning up %s: %+v", name, err)
+		grip.AlertWhenf(err != nil, "encountered error cleaning up %s: %+v", name, err)
 	}
 }
 
@@ -600,8 +599,7 @@ func TestSmokeRemoteUnorderedWorkerPoolsWithMongoDriver(t *testing.T) {
 
 		grip.Infof("test with %d jobs, duration = %s", poolSize, time.Since(start))
 		err := cleanupMongo(ctx, opts.DB, name, d.client)
-		grip.AlertWhenf(err != nil,
-			"encountered error cleaning up %s: %+v", name, err)
+		grip.AlertWhenf(err != nil, "encountered error cleaning up %s: %+v", name, err)
 	}
 }
 
@@ -1076,8 +1074,7 @@ func TestSmokeSimpleRemoteOrderedWorkerPoolsWithMgoDriver(t *testing.T) {
 
 		grip.Infof("test with %d jobs, duration = %s", poolSize, time.Since(start))
 		err = cleanupMgo(opts.DB, name, session.Clone())
-		grip.AlertWhenf(err != nil,
-			"encountered error cleaning up %s: %+v", name, err)
+		grip.AlertWhenf(err != nil, "encountered error cleaning up %s: %+v", name, err)
 	}
 }
 

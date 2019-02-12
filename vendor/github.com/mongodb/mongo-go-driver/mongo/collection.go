@@ -149,7 +149,7 @@ func (coll *Collection) BulkWrite(ctx context.Context, models []WriteModel,
 	opts ...*options.BulkWriteOptions) (*BulkWriteResult, error) {
 
 	if len(models) == 0 {
-		return nil, errors.New("a bulk write must contain at least one write model")
+		return nil, ErrEmptySlice
 	}
 
 	if ctx == nil {
@@ -165,6 +165,9 @@ func (coll *Collection) BulkWrite(ctx context.Context, models []WriteModel,
 
 	dispatchModels := make([]driver.WriteModel, len(models))
 	for i, model := range models {
+		if model == nil {
+			return nil, ErrNilDocument
+		}
 		dispatchModels[i] = model.convertModel()
 	}
 
@@ -226,7 +229,7 @@ func (coll *Collection) InsertOne(ctx context.Context, document interface{},
 	}
 
 	wc := coll.writeConcern
-	if sess != nil && sess.TransactionRunning() {
+	if sess.TransactionRunning() {
 		wc = nil
 	}
 	oldns := coll.namespace()
@@ -271,10 +274,17 @@ func (coll *Collection) InsertMany(ctx context.Context, documents []interface{},
 		ctx = context.Background()
 	}
 
+	if len(documents) == 0 {
+		return nil, ErrEmptySlice
+	}
+
 	result := make([]interface{}, len(documents))
 	docs := make([]bsonx.Doc, len(documents))
 
 	for i, doc := range documents {
+		if doc == nil {
+			return nil, ErrNilDocument
+		}
 		bdoc, insertedID, err := transformAndEnsureID(coll.registry, doc)
 		if err != nil {
 			return nil, err
@@ -292,7 +302,7 @@ func (coll *Collection) InsertMany(ctx context.Context, documents []interface{},
 	}
 
 	wc := coll.writeConcern
-	if sess != nil && sess.TransactionRunning() {
+	if sess.TransactionRunning() {
 		wc = nil
 	}
 
@@ -371,7 +381,7 @@ func (coll *Collection) DeleteOne(ctx context.Context, filter interface{},
 	}
 
 	wc := coll.writeConcern
-	if sess != nil && sess.TransactionRunning() {
+	if sess.TransactionRunning() {
 		wc = nil
 	}
 
@@ -423,7 +433,7 @@ func (coll *Collection) DeleteMany(ctx context.Context, filter interface{},
 	}
 
 	wc := coll.writeConcern
-	if sess != nil && sess.TransactionRunning() {
+	if sess.TransactionRunning() {
 		wc = nil
 	}
 
@@ -470,7 +480,7 @@ func (coll *Collection) updateOrReplaceOne(ctx context.Context, filter,
 	}
 
 	wc := coll.writeConcern
-	if sess != nil && sess.TransactionRunning() {
+	if sess.TransactionRunning() {
 		wc = nil
 	}
 
@@ -499,6 +509,7 @@ func (coll *Collection) updateOrReplaceOne(ctx context.Context, filter,
 	res := &UpdateResult{
 		MatchedCount:  r.MatchedCount,
 		ModifiedCount: r.ModifiedCount,
+		UpsertedCount: int64(len(r.Upserted)),
 	}
 	if len(r.Upserted) > 0 {
 		res.UpsertedID = r.Upserted[0].ID
@@ -582,7 +593,7 @@ func (coll *Collection) UpdateMany(ctx context.Context, filter interface{}, upda
 	}
 
 	wc := coll.writeConcern
-	if sess != nil && sess.TransactionRunning() {
+	if sess.TransactionRunning() {
 		wc = nil
 	}
 
@@ -610,6 +621,7 @@ func (coll *Collection) UpdateMany(ctx context.Context, filter interface{}, upda
 	res := &UpdateResult{
 		MatchedCount:  r.MatchedCount,
 		ModifiedCount: r.ModifiedCount,
+		UpsertedCount: int64(len(r.Upserted)),
 	}
 	// TODO(skriptble): Is this correct? Do we only return the first upserted ID for an UpdateMany?
 	if len(r.Upserted) > 0 {
@@ -669,7 +681,7 @@ func (coll *Collection) ReplaceOne(ctx context.Context, filter interface{},
 //
 // See https://docs.mongodb.com/manual/aggregation/.
 func (coll *Collection) Aggregate(ctx context.Context, pipeline interface{},
-	opts ...*options.AggregateOptions) (Cursor, error) {
+	opts ...*options.AggregateOptions) (*Cursor, error) {
 
 	if ctx == nil {
 		ctx = context.Background()
@@ -690,12 +702,10 @@ func (coll *Collection) Aggregate(ctx context.Context, pipeline interface{},
 	}
 
 	wc := coll.writeConcern
-	if sess != nil && sess.TransactionRunning() {
-		wc = nil
-	}
-
 	rc := coll.readConcern
-	if sess != nil && (sess.TransactionInProgress()) {
+
+	if sess.TransactionRunning() {
+		wc = nil
 		rc = nil
 	}
 
@@ -710,7 +720,7 @@ func (coll *Collection) Aggregate(ctx context.Context, pipeline interface{},
 		Clock:        coll.client.clock,
 	}
 
-	cursor, err := driver.Aggregate(
+	batchCursor, err := driver.Aggregate(
 		ctx, cmd,
 		coll.client.topology,
 		coll.readSelector,
@@ -720,7 +730,11 @@ func (coll *Collection) Aggregate(ctx context.Context, pipeline interface{},
 		coll.registry,
 		aggOpts,
 	)
+	if err != nil {
+		return nil, replaceTopologyErr(err)
+	}
 
+	cursor, err := newCursor(batchCursor, coll.registry)
 	return cursor, replaceTopologyErr(err)
 }
 
@@ -795,7 +809,7 @@ func (coll *Collection) CountDocuments(ctx context.Context, filter interface{},
 	}
 
 	rc := coll.readConcern
-	if sess != nil && (sess.TransactionInProgress()) {
+	if sess.TransactionRunning() {
 		rc = nil
 	}
 
@@ -879,13 +893,9 @@ func (coll *Collection) Distinct(ctx context.Context, fieldName string, filter i
 		ctx = context.Background()
 	}
 
-	var f bsonx.Doc
-	var err error
-	if filter != nil {
-		f, err = transformDocument(coll.registry, filter)
-		if err != nil {
-			return nil, err
-		}
+	f, err := transformDocument(coll.registry, filter)
+	if err != nil {
+		return nil, err
 	}
 
 	sess := sessionFromContext(ctx)
@@ -896,7 +906,7 @@ func (coll *Collection) Distinct(ctx context.Context, fieldName string, filter i
 	}
 
 	rc := coll.readConcern
-	if sess != nil && (sess.TransactionInProgress()) {
+	if sess.TransactionRunning() {
 		rc = nil
 	}
 
@@ -928,19 +938,15 @@ func (coll *Collection) Distinct(ctx context.Context, fieldName string, filter i
 
 // Find finds the documents matching a model.
 func (coll *Collection) Find(ctx context.Context, filter interface{},
-	opts ...*options.FindOptions) (Cursor, error) {
+	opts ...*options.FindOptions) (*Cursor, error) {
 
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	var f bsonx.Doc
-	var err error
-	if filter != nil {
-		f, err = transformDocument(coll.registry, filter)
-		if err != nil {
-			return nil, err
-		}
+	f, err := transformDocument(coll.registry, filter)
+	if err != nil {
+		return nil, err
 	}
 
 	sess := sessionFromContext(ctx)
@@ -951,7 +957,7 @@ func (coll *Collection) Find(ctx context.Context, filter interface{},
 	}
 
 	rc := coll.readConcern
-	if sess != nil && (sess.TransactionInProgress()) {
+	if sess.TransactionRunning() {
 		rc = nil
 	}
 
@@ -965,7 +971,7 @@ func (coll *Collection) Find(ctx context.Context, filter interface{},
 		Clock:       coll.client.clock,
 	}
 
-	cursor, err := driver.Find(
+	batchCursor, err := driver.Find(
 		ctx, cmd,
 		coll.client.topology,
 		coll.readSelector,
@@ -974,7 +980,11 @@ func (coll *Collection) Find(ctx context.Context, filter interface{},
 		coll.registry,
 		opts...,
 	)
+	if err != nil {
+		return nil, replaceTopologyErr(err)
+	}
 
+	cursor, err := newCursor(batchCursor, coll.registry)
 	return cursor, replaceTopologyErr(err)
 }
 
@@ -986,13 +996,9 @@ func (coll *Collection) FindOne(ctx context.Context, filter interface{},
 		ctx = context.Background()
 	}
 
-	var f bsonx.Doc
-	var err error
-	if filter != nil {
-		f, err = transformDocument(coll.registry, filter)
-		if err != nil {
-			return &SingleResult{err: err}
-		}
+	f, err := transformDocument(coll.registry, filter)
+	if err != nil {
+		return &SingleResult{err: err}
 	}
 
 	sess := sessionFromContext(ctx)
@@ -1003,7 +1009,7 @@ func (coll *Collection) FindOne(ctx context.Context, filter interface{},
 	}
 
 	rc := coll.readConcern
-	if sess != nil && (sess.TransactionInProgress()) {
+	if sess.TransactionRunning() {
 		rc = nil
 	}
 
@@ -1040,7 +1046,7 @@ func (coll *Collection) FindOne(ctx context.Context, filter interface{},
 		}
 	}
 
-	cursor, err := driver.Find(
+	batchCursor, err := driver.Find(
 		ctx, cmd,
 		coll.client.topology,
 		coll.readSelector,
@@ -1053,7 +1059,8 @@ func (coll *Collection) FindOne(ctx context.Context, filter interface{},
 		return &SingleResult{err: replaceTopologyErr(err)}
 	}
 
-	return &SingleResult{cur: cursor, reg: coll.registry}
+	cursor, err := newCursor(batchCursor, coll.registry)
+	return &SingleResult{cur: cursor, reg: coll.registry, err: replaceTopologyErr(err)}
 }
 
 // FindOneAndDelete find a single document and deletes it, returning the
@@ -1065,13 +1072,9 @@ func (coll *Collection) FindOneAndDelete(ctx context.Context, filter interface{}
 		ctx = context.Background()
 	}
 
-	var f bsonx.Doc
-	var err error
-	if filter != nil {
-		f, err = transformDocument(coll.registry, filter)
-		if err != nil {
-			return &SingleResult{err: err}
-		}
+	f, err := transformDocument(coll.registry, filter)
+	if err != nil {
+		return &SingleResult{err: err}
 	}
 
 	sess := sessionFromContext(ctx)
@@ -1083,7 +1086,7 @@ func (coll *Collection) FindOneAndDelete(ctx context.Context, filter interface{}
 
 	oldns := coll.namespace()
 	wc := coll.writeConcern
-	if sess != nil && sess.TransactionRunning() {
+	if sess.TransactionRunning() {
 		wc = nil
 	}
 
@@ -1143,7 +1146,7 @@ func (coll *Collection) FindOneAndReplace(ctx context.Context, filter interface{
 	}
 
 	wc := coll.writeConcern
-	if sess != nil && sess.TransactionRunning() {
+	if sess.TransactionRunning() {
 		wc = nil
 	}
 
@@ -1193,8 +1196,11 @@ func (coll *Collection) FindOneAndUpdate(ctx context.Context, filter interface{}
 		return &SingleResult{err: err}
 	}
 
-	if len(u) > 0 && !strings.HasPrefix(u[0].Key, "$") {
-		return &SingleResult{err: errors.New("update document must contain key beginning with '$")}
+	err = ensureDollarKey(u)
+	if err != nil {
+		return &SingleResult{
+			err: err,
+		}
 	}
 
 	sess := sessionFromContext(ctx)
@@ -1205,7 +1211,7 @@ func (coll *Collection) FindOneAndUpdate(ctx context.Context, filter interface{}
 	}
 
 	wc := coll.writeConcern
-	if sess != nil && sess.TransactionRunning() {
+	if sess.TransactionRunning() {
 		wc = nil
 	}
 
@@ -1242,7 +1248,7 @@ func (coll *Collection) FindOneAndUpdate(ctx context.Context, filter interface{}
 // supports resumability in the case of some errors. The collection must have read concern majority or no read concern
 // for a change stream to be created successfully.
 func (coll *Collection) Watch(ctx context.Context, pipeline interface{},
-	opts ...*options.ChangeStreamOptions) (Cursor, error) {
+	opts ...*options.ChangeStreamOptions) (*ChangeStream, error) {
 	return newChangeStream(ctx, coll, pipeline, opts...)
 }
 
@@ -1265,7 +1271,7 @@ func (coll *Collection) Drop(ctx context.Context) error {
 	}
 
 	wc := coll.writeConcern
-	if sess != nil && sess.TransactionRunning() {
+	if sess.TransactionRunning() {
 		wc = nil
 	}
 

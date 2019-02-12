@@ -7,6 +7,7 @@
 package gridfs
 
 import (
+	"bytes"
 	"context"
 
 	"io"
@@ -15,6 +16,7 @@ import (
 
 	"time"
 
+	"github.com/mongodb/mongo-go-driver/bson"
 	"github.com/mongodb/mongo-go-driver/bson/primitive"
 	"github.com/mongodb/mongo-go-driver/mongo"
 	"github.com/mongodb/mongo-go-driver/mongo/options"
@@ -244,7 +246,7 @@ func (b *Bucket) Delete(fileID primitive.ObjectID) error {
 }
 
 // Find returns the files collection documents that match the given filter.
-func (b *Bucket) Find(filter interface{}, opts ...*options.GridFSFindOptions) (mongo.Cursor, error) {
+func (b *Bucket) Find(filter interface{}, opts ...*options.GridFSFindOptions) (*mongo.Cursor, error) {
 	ctx, cancel := deadlineContext(b.readDeadline)
 	if cancel != nil {
 		defer cancel()
@@ -322,16 +324,11 @@ func (b *Bucket) openDownloadStream(filter interface{}, opts ...*options.FindOpt
 		return nil, err
 	}
 
-	fileRdr, err := cursor.DecodeBytes()
+	fileLenElem, err := cursor.Current.LookupErr("length")
 	if err != nil {
 		return nil, err
 	}
-
-	fileLenElem, err := fileRdr.LookupErr("length")
-	if err != nil {
-		return nil, err
-	}
-	fileIDElem, err := fileRdr.LookupErr("_id")
+	fileIDElem, err := cursor.Current.LookupErr("_id")
 	if err != nil {
 		return nil, err
 	}
@@ -377,7 +374,7 @@ func (b *Bucket) deleteChunks(ctx context.Context, fileID primitive.ObjectID) er
 	return err
 }
 
-func (b *Bucket) findFile(ctx context.Context, filter interface{}, opts ...*options.FindOptions) (mongo.Cursor, error) {
+func (b *Bucket) findFile(ctx context.Context, filter interface{}, opts ...*options.FindOptions) (*mongo.Cursor, error) {
 	cursor, err := b.filesColl.Find(ctx, filter, opts...)
 	if err != nil {
 		return nil, err
@@ -391,7 +388,7 @@ func (b *Bucket) findFile(ctx context.Context, filter interface{}, opts ...*opti
 	return cursor, nil
 }
 
-func (b *Bucket) findChunks(ctx context.Context, fileID primitive.ObjectID) (mongo.Cursor, error) {
+func (b *Bucket) findChunks(ctx context.Context, fileID primitive.ObjectID) (*mongo.Cursor, error) {
 	chunksCursor, err := b.chunksColl.Find(ctx,
 		bsonx.Doc{{"files_id", bsonx.ObjectID(fileID)}},
 		options.Find().SetSort(bsonx.Doc{{"n", bsonx.Int32(1)}})) // sort by chunk index
@@ -414,22 +411,18 @@ func createIndexIfNotExists(ctx context.Context, iv mongo.IndexView, model mongo
 
 	var found bool
 	for c.Next(ctx) {
-		rdr, err := c.DecodeBytes()
+		keyElem, err := c.Current.LookupErr("key")
 		if err != nil {
 			return err
 		}
 
-		keyElem, err := rdr.LookupErr("key")
+		keyElemDoc := keyElem.Document()
+		modelKeysDoc, err := bson.Marshal(model.Keys)
 		if err != nil {
 			return err
 		}
 
-		keyElemDoc, err := bsonx.ReadDoc(keyElem.Document())
-		if err != nil {
-			return err
-		}
-
-		if model.Keys.Equal(keyElemDoc) {
+		if bytes.Equal(modelKeysDoc, keyElemDoc) {
 			found = true
 			break
 		}
@@ -455,31 +448,34 @@ func (b *Bucket) createIndexes(ctx context.Context) error {
 
 	docRes := cloned.FindOne(ctx, bsonx.Doc{}, options.FindOne().SetProjection(bsonx.Doc{{"_id", bsonx.Int32(1)}}))
 
-	err = docRes.Err()
-	if err == mongo.ErrNoDocuments {
-		filesIv := b.filesColl.Indexes()
-		chunksIv := b.chunksColl.Indexes()
+	_, err = docRes.DecodeBytes()
+	if err != mongo.ErrNoDocuments {
+		// nil, or error that occured during the FindOne operation
+		return err
+	}
 
-		filesModel := mongo.IndexModel{
-			Keys: bsonx.Doc{
-				{"filename", bsonx.Int32(1)},
-				{"uploadDate", bsonx.Int32(1)},
-			},
-		}
+	filesIv := b.filesColl.Indexes()
+	chunksIv := b.chunksColl.Indexes()
 
-		chunksModel := mongo.IndexModel{
-			Keys: bsonx.Doc{
-				{"files_id", bsonx.Int32(1)},
-				{"n", bsonx.Int32(1)},
-			},
-		}
+	filesModel := mongo.IndexModel{
+		Keys: bson.D{
+			{"filename", int32(1)},
+			{"uploadDate", int32(1)},
+		},
+	}
 
-		if err = createIndexIfNotExists(ctx, filesIv, filesModel); err != nil {
-			return err
-		}
-		if err = createIndexIfNotExists(ctx, chunksIv, chunksModel); err != nil {
-			return err
-		}
+	chunksModel := mongo.IndexModel{
+		Keys: bson.D{
+			{"files_id", int32(1)},
+			{"n", int32(1)},
+		},
+	}
+
+	if err = createIndexIfNotExists(ctx, filesIv, filesModel); err != nil {
+		return err
+	}
+	if err = createIndexIfNotExists(ctx, chunksIv, chunksModel); err != nil {
+		return err
 	}
 
 	return nil

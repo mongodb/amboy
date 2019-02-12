@@ -8,6 +8,7 @@ package mongo
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path"
 	"testing"
@@ -22,12 +23,15 @@ import (
 
 	"time"
 
+	"github.com/mongodb/mongo-go-driver/bson/bsoncodec"
+	"github.com/mongodb/mongo-go-driver/bson/bsonrw"
 	"github.com/mongodb/mongo-go-driver/mongo/options"
 	"github.com/mongodb/mongo-go-driver/mongo/readpref"
 	"github.com/mongodb/mongo-go-driver/mongo/writeconcern"
 	"github.com/mongodb/mongo-go-driver/x/mongo/driver/session"
 	"github.com/mongodb/mongo-go-driver/x/mongo/driver/uuid"
 	"github.com/mongodb/mongo-go-driver/x/network/connstring"
+	"reflect"
 )
 
 func createTestClient(t *testing.T) *Client {
@@ -92,6 +96,62 @@ func TestClientOptions(t *testing.T) {
 	require.Equal(t, time.Duration(20), c.connString.LocalThreshold)
 	require.Equal(t, time.Duration(100), c.connString.MaxConnIdleTime)
 	require.Equal(t, "test", c.connString.ReplicaSet)
+}
+
+type NewCodec struct {
+	ID int64 `bson:"_id"`
+}
+
+func (e *NewCodec) EncodeValue(ectx bsoncodec.EncodeContext, vw bsonrw.ValueWriter, val reflect.Value) error {
+	return vw.WriteInt64(val.Int())
+}
+
+// DecodeValue negates the value of ID when reading
+func (e *NewCodec) DecodeValue(ectx bsoncodec.DecodeContext, vr bsonrw.ValueReader, val reflect.Value) error {
+	i, err := vr.ReadInt64()
+	if err != nil {
+		return err
+	}
+
+	val.SetInt(i * -1)
+	return nil
+}
+
+func TestClientRegistryPassedToCursors(t *testing.T) {
+	// register a new codec for the int64 type that does the default encoding for an int64 and negates the value when
+	// decoding
+
+	rb := bson.NewRegistryBuilder()
+	cod := &NewCodec{}
+	rb.RegisterCodec(reflect.TypeOf(int64(0)), cod)
+
+	cs := testutil.ConnString(t)
+	client, err := NewClientWithOptions(cs.String(), options.Client().SetRegistry(rb.Build()))
+	require.NoError(t, err)
+	err = client.Connect(ctx)
+	require.NoError(t, err)
+
+	db := client.Database("TestRegistryDB")
+	defer func() {
+		_ = db.Drop(ctx)
+		_ = client.Disconnect(ctx)
+	}()
+
+	coll := db.Collection("TestRegistryColl")
+
+	_, err = coll.InsertOne(ctx, NewCodec{ID: 10})
+	require.NoError(t, err)
+
+	c, err := coll.Find(ctx, bsonx.Doc{})
+	require.NoError(t, err)
+
+	require.True(t, c.Next(ctx))
+
+	var foundDoc NewCodec
+	err = c.Decode(&foundDoc)
+	require.NoError(t, err)
+
+	require.Equal(t, foundDoc.ID, int64(-10))
 }
 
 func TestClient_TLSConnection(t *testing.T) {
@@ -226,7 +286,7 @@ func TestClient_ReplaceTopologyError(t *testing.T) {
 	_, err = c.StartSession()
 	require.Equal(t, err, ErrClientDisconnected)
 
-	_, err = c.ListDatabases(ctx, nil)
+	_, err = c.ListDatabases(ctx, bsonx.Doc{})
 	require.Equal(t, err, ErrClientDisconnected)
 
 	err = c.Ping(ctx, nil)
@@ -255,7 +315,7 @@ func TestClient_ListDatabases_noFilter(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	dbs, err := c.ListDatabases(context.Background(), nil)
+	dbs, err := c.ListDatabases(context.Background(), bsonx.Doc{})
 	require.NoError(t, err)
 	found := false
 
@@ -319,7 +379,7 @@ func TestClient_ListDatabaseNames_noFilter(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	dbs, err := c.ListDatabaseNames(context.Background(), nil)
+	dbs, err := c.ListDatabaseNames(context.Background(), bsonx.Doc{})
 	found := false
 
 	for _, name := range dbs {
@@ -360,6 +420,21 @@ func TestClient_ListDatabaseNames_filter(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, dbs, 1)
 	require.Equal(t, dbName, dbs[0])
+}
+
+func TestClient_NilDocumentError(t *testing.T) {
+	t.Parallel()
+
+	c := createTestClient(t)
+
+	_, err := c.Watch(context.Background(), nil)
+	require.Equal(t, err, errors.New("can only transform slices and arrays into aggregation pipelines, but got invalid"))
+
+	_, err = c.ListDatabases(context.Background(), nil)
+	require.Equal(t, err, ErrNilDocument)
+
+	_, err = c.ListDatabaseNames(context.Background(), nil)
+	require.Equal(t, err, ErrNilDocument)
 }
 
 func TestClient_ReadPreference(t *testing.T) {

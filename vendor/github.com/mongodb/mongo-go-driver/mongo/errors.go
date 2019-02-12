@@ -26,6 +26,14 @@ var ErrUnacknowledgedWrite = errors.New("unacknowledged write")
 // disconnected client
 var ErrClientDisconnected = errors.New("client is disconnected")
 
+// ErrNilDocument is returned when a user attempts to pass a nil document or filter
+// to a function where the field is required.
+var ErrNilDocument = errors.New("document is nil")
+
+// ErrEmptySlice is returned when a user attempts to pass an empty slice as input
+// to a function wehere the field is required.
+var ErrEmptySlice = errors.New("must provide at least one element in input slice")
+
 func replaceTopologyErr(err error) error {
 	if err == topology.ErrTopologyClosed {
 		return ErrClientDisconnected
@@ -77,6 +85,20 @@ type WriteConcernError struct {
 }
 
 func (wce WriteConcernError) Error() string { return wce.Message }
+
+// WriteException is an error for a non-bulk write operation.
+type WriteException struct {
+	WriteConcernError *WriteConcernError
+	WriteErrors       WriteErrors
+}
+
+func (mwe WriteException) Error() string {
+	var buf bytes.Buffer
+	fmt.Fprint(&buf, "multiple write errors: [")
+	fmt.Fprintf(&buf, "{%s}, ", mwe.WriteErrors)
+	fmt.Fprintf(&buf, "{%s}]", mwe.WriteConcernError)
+	return buf.String()
+}
 
 func convertBulkWriteErrors(errors []driver.BulkWriteError) []BulkWriteError {
 	bwErrors := make([]BulkWriteError, 0, len(errors))
@@ -153,10 +175,11 @@ func processWriteError(wce *result.WriteConcernError, wes []result.WriteError, e
 		return rrAll, ErrUnacknowledgedWrite
 	case err != nil:
 		return rrNone, replaceTopologyErr(err)
-	case wce != nil:
-		return rrMany, WriteConcernError{Code: wce.Code, Message: wce.ErrMsg}
-	case len(wes) > 0:
-		return rrMany, writeErrorsFromResult(wes)
+	case wce != nil || len(wes) > 0:
+		return rrMany, WriteException{
+			WriteConcernError: convertWriteConcernError(wce),
+			WriteErrors:       writeErrorsFromResult(wes),
+		}
 	default:
 		return rrAll, nil
 	}

@@ -31,17 +31,18 @@ var errNoMoreChunks = errors.New("no more chunks remaining")
 type DownloadStream struct {
 	numChunks     int32
 	chunkSize     int32
-	cursor        mongo.Cursor
+	cursor        *mongo.Cursor
 	done          bool
 	closed        bool
 	buffer        []byte // store up to 1 chunk if the user provided buffer isn't big enough
 	bufferStart   int
+	bufferEnd     int
 	expectedChunk int32 // index of next expected chunk
 	readDeadline  time.Time
 	fileLen       int64
 }
 
-func newDownloadStream(cursor mongo.Cursor, chunkSize int32, fileLen int64) *DownloadStream {
+func newDownloadStream(cursor *mongo.Cursor, chunkSize int32, fileLen int64) *DownloadStream {
 	numChunks := int32(math.Ceil(float64(fileLen) / float64(chunkSize)))
 
 	return &DownloadStream{
@@ -93,21 +94,21 @@ func (ds *DownloadStream) Read(p []byte) (int, error) {
 	var err error
 
 	for bytesCopied < len(p) {
-		if ds.bufferStart == 0 {
-			// buffer empty
+		if ds.bufferStart >= ds.bufferEnd {
+			// Buffer is empty and can load in data from new chunk.
 			err = ds.fillBuffer(ctx)
 			if err != nil {
 				if err == errNoMoreChunks {
 					return bytesCopied, nil
 				}
-
 				return bytesCopied, err
 			}
 		}
 
-		copied := copy(p, ds.buffer[ds.bufferStart:])
+		copied := copy(p[bytesCopied:], ds.buffer[ds.bufferStart:ds.bufferEnd])
+
 		bytesCopied += copied
-		ds.bufferStart = (ds.bufferStart + copied) % int(ds.chunkSize)
+		ds.bufferStart += copied
 	}
 
 	return len(p), nil
@@ -166,12 +167,7 @@ func (ds *DownloadStream) fillBuffer(ctx context.Context) error {
 		return errNoMoreChunks
 	}
 
-	nextChunk, err := ds.cursor.DecodeBytes()
-	if err != nil {
-		return err
-	}
-
-	chunkIndex, err := nextChunk.LookupErr("n")
+	chunkIndex, err := ds.cursor.Current.LookupErr("n")
 	if err != nil {
 		return err
 	}
@@ -181,12 +177,13 @@ func (ds *DownloadStream) fillBuffer(ctx context.Context) error {
 	}
 
 	ds.expectedChunk++
-	data, err := nextChunk.LookupErr("data")
+	data, err := ds.cursor.Current.LookupErr("data")
 	if err != nil {
 		return err
 	}
 
 	_, dataBytes := data.Binary()
+	copied := copy(ds.buffer, dataBytes)
 
 	bytesLen := int32(len(dataBytes))
 	if ds.expectedChunk == ds.numChunks {
@@ -202,7 +199,8 @@ func (ds *DownloadStream) fillBuffer(ctx context.Context) error {
 		return ErrWrongSize
 	}
 
-	copy(ds.buffer, dataBytes)
 	ds.bufferStart = 0
+	ds.bufferEnd = copied
+
 	return nil
 }

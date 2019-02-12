@@ -10,8 +10,9 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/mongodb/mongo-go-driver/bson/bsoncodec"
-	"github.com/mongodb/mongo-go-driver/x/bsonx"
+	"github.com/mongodb/mongo-go-driver/bson/primitive"
 	"github.com/stretchr/testify/require"
 )
 
@@ -125,7 +126,7 @@ func TestMarshalExtJSONAppendWithContext(t *testing.T) {
 		ec := bsoncodec.EncodeContext{Registry: DefaultRegistry}
 		got, err := MarshalExtJSONAppendWithContext(ec, dst, val, true, false)
 		noerr(t, err)
-		want := []byte(`{"foo":{"$numberLong":"1"}}`)
+		want := []byte(`{"foo":{"$numberInt":"1"}}`)
 		if !bytes.Equal(got, want) {
 			t.Errorf("Bytes are not equal. got %v; want %v", got, want)
 			t.Errorf("Bytes:\n%s\n%s", got, want)
@@ -140,7 +141,7 @@ func TestMarshalExtJSONWithContext(t *testing.T) {
 		ec := bsoncodec.EncodeContext{Registry: DefaultRegistry}
 		got, err := MarshalExtJSONWithContext(ec, val, true, false)
 		noerr(t, err)
-		want := []byte(`{"foo":{"$numberLong":"1"}}`)
+		want := []byte(`{"foo":{"$numberInt":"1"}}`)
 		if !bytes.Equal(got, want) {
 			t.Errorf("Bytes are not equal. got %v; want %v", got, want)
 			t.Errorf("Bytes:\n%s\n%s", got, want)
@@ -180,7 +181,7 @@ func TestMarshal_roundtripFromBytes(t *testing.T) {
 		0x0,
 	}
 
-	var doc bsonx.Doc
+	var doc D
 	require.NoError(t, Unmarshal(before, &doc))
 
 	after, err := Marshal(doc)
@@ -190,17 +191,19 @@ func TestMarshal_roundtripFromBytes(t *testing.T) {
 }
 
 func TestMarshal_roundtripFromDoc(t *testing.T) {
-	before := bsonx.Doc{
-		{"foo", bsonx.String("bar")},
-		{"baz", bsonx.Int32(-27)},
-		{"bing", bsonx.Array(bsonx.Arr{bsonx.Null(), bsonx.Regex("word", "i")})},
+	before := D{
+		{"foo", "bar"},
+		{"baz", int64(-27)},
+		{"bing", A{nil, primitive.Regex{Pattern: "word", Options: "i"}}},
 	}
 
 	b, err := Marshal(before)
 	require.NoError(t, err)
 
-	var after bsonx.Doc
+	var after D
 	require.NoError(t, Unmarshal(b, &after))
 
-	require.True(t, before.Equal(after))
+	if !cmp.Equal(after, before) {
+		t.Errorf("Documents to not match. got %v; want %v", after, before)
+	}
 }

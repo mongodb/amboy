@@ -114,21 +114,18 @@ func (d *mongoDriver) getCollection() *mongo.Collection {
 }
 
 func (d *mongoDriver) setupDB(ctx context.Context) error {
-	indexKey := mongo.IndexModel{
-		Keys: bsonx.Doc{
-			{
-				Key:   "status.completed",
-				Value: bsonx.Int32(1),
-			},
-			{
-				Key:   "status.in_prog",
-				Value: bsonx.Int32(1),
-			},
+	keys := bsonx.Doc{
+		{
+			Key:   "status.completed",
+			Value: bsonx.Int32(1),
+		},
+		{
+			Key:   "status.in_prog",
+			Value: bsonx.Int32(1),
 		},
 	}
-
 	if d.respectWaitUntil {
-		indexKey.Keys = append(indexKey.Keys, bsonx.Elem{
+		keys = append(keys, bsonx.Elem{
 			Key:   "time_info.wait_until",
 			Value: bsonx.Int32(1),
 		})
@@ -136,14 +133,16 @@ func (d *mongoDriver) setupDB(ctx context.Context) error {
 
 	// priority must be at the end for the sort
 	if d.priority {
-		indexKey.Keys = append(indexKey.Keys, bsonx.Elem{
+		keys = append(keys, bsonx.Elem{
 			Key:   "priority",
 			Value: bsonx.Int32(1),
 		})
 	}
 
 	_, err := d.getCollection().Indexes().CreateMany(ctx, []mongo.IndexModel{
-		indexKey,
+		mongo.IndexModel{
+			Keys: keys,
+		},
 		mongo.IndexModel{
 			Keys: bsonx.Doc{
 				{
@@ -400,7 +399,7 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 	timer := time.NewTimer(0)
 	defer timer.Stop()
 
-	var iter mongo.Cursor
+	var iter *mongo.Cursor
 	j := &registry.JobInterchange{}
 	for {
 		select {
@@ -478,7 +477,7 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 func (d *mongoDriver) Stats(ctx context.Context) amboy.QueueStats {
 	coll := d.getCollection()
 
-	numJobs, err := coll.Count(ctx, nil)
+	numJobs, err := coll.Count(ctx, struct{}{})
 	grip.Warning(message.WrapError(err, message.Fields{
 		"id":         d.instanceID,
 		"service":    "amboy.queue.mongo",

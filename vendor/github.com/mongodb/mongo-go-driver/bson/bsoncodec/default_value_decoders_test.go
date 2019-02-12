@@ -2130,6 +2130,12 @@ func TestDefaultValueDecoders(t *testing.T) {
 				nil,
 			},
 			{
+				"map[mystring]interface{}",
+				map[mystring]interface{}{"pi": 3.14159},
+				buildDocument(bsoncore.AppendDoubleElement(nil, "pi", 3.14159)),
+				nil,
+			},
+			{
 				"-",
 				struct {
 					A string `bson:"-"`
@@ -2274,6 +2280,11 @@ func TestDefaultValueDecoders(t *testing.T) {
 					AS []byte
 					AT map[string]interface{}
 					AU primitive.CodeWithScope
+					AV primitive.M
+					AW primitive.D
+					AX map[string]interface{}
+					AY []primitive.E
+					AZ interface{}
 				}{
 					A: true,
 					B: 123,
@@ -2315,6 +2326,11 @@ func TestDefaultValueDecoders(t *testing.T) {
 					AS: nil,
 					AT: nil,
 					AU: primitive.CodeWithScope{Code: "var hello = 'world';", Scope: primitive.D{{"pi", 3.14159}}},
+					AV: primitive.M{"foo": primitive.M{"bar": "baz"}},
+					AW: primitive.D{{"foo", primitive.D{{"bar", "baz"}}}},
+					AX: map[string]interface{}{"foo": map[string]interface{}{"bar": "baz"}},
+					AY: []primitive.E{{"foo", []primitive.E{{"bar", "baz"}}}},
+					AZ: primitive.D{{"foo", primitive.D{{"bar", "baz"}}}},
 				},
 				buildDocument(func(doc []byte) []byte {
 					doc = bsoncore.AppendBooleanElement(doc, "a", true)
@@ -2361,6 +2377,13 @@ func TestDefaultValueDecoders(t *testing.T) {
 					doc = bsoncore.AppendCodeWithScopeElement(doc, "au",
 						"var hello = 'world';", buildDocument(bsoncore.AppendDoubleElement(nil, "pi", 3.14159)),
 					)
+					for _, name := range [5]string{"av", "aw", "ax", "ay", "az"} {
+						doc = bsoncore.AppendDocumentElement(doc, name, buildDocument(
+							bsoncore.AppendDocumentElement(nil, "foo", buildDocument(
+								bsoncore.AppendStringElement(nil, "bar", "baz"),
+							)),
+						))
+					}
 					return doc
 				}(nil)),
 				nil,
@@ -2577,11 +2600,6 @@ func TestDefaultValueDecoders(t *testing.T) {
 					bsontype.String,
 				},
 				{
-					"Embedded Document - primitive.D",
-					primitive.D{{"foo", nil}},
-					bsontype.EmbeddedDocument,
-				},
-				{
 					"Array - primitive.A",
 					primitive.A{3.14159},
 					bsontype.Array,
@@ -2767,6 +2785,18 @@ func TestDefaultValueDecoders(t *testing.T) {
 			got := dvd.EmptyInterfaceDecodeValue(DecodeContext{Registry: NewRegistryBuilder().Build()}, llvr, val)
 			if !compareErrors(got, want) {
 				t.Errorf("Errors are not equal. got %v; want %v", got, want)
+			}
+		})
+		t.Run("top level document", func(t *testing.T) {
+			data := bsoncore.BuildDocument(nil, bsoncore.AppendDoubleElement(nil, "pi", 3.14159))
+			vr := bsonrw.NewBSONDocumentReader(data)
+			want := primitive.D{{"pi", 3.14159}}
+			var got interface{}
+			val := reflect.ValueOf(&got).Elem()
+			err := dvd.EmptyInterfaceDecodeValue(DecodeContext{Registry: buildDefaultRegistry()}, vr, val)
+			noerr(t, err)
+			if !cmp.Equal(got, want) {
+				t.Errorf("Did not get correct result. got %v; want %v", got, want)
 			}
 		})
 	})

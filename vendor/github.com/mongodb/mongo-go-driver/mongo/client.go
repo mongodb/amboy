@@ -177,7 +177,17 @@ func newClient(cs connstring.ConnString, opts ...*options.ClientOptions) (*Clien
 		topologyOptions: clientOpt.TopologyOptions,
 		connString:      clientOpt.ConnString,
 		localThreshold:  defaultLocalThreshold,
+		readPreference:  clientOpt.ReadPreference,
+		readConcern:     clientOpt.ReadConcern,
+		writeConcern:    clientOpt.WriteConcern,
 		registry:        clientOpt.Registry,
+	}
+
+	if client.connString.RetryWritesSet {
+		client.retryWrites = client.connString.RetryWrites
+	}
+	if clientOpt.RetryWrites != nil {
+		client.retryWrites = *clientOpt.RetryWrites
 	}
 
 	clientID, err := uuid.New()
@@ -192,6 +202,8 @@ func newClient(cs connstring.ConnString, opts ...*options.ClientOptions) (*Clien
 		topology.WithServerOptions(func(opts ...topology.ServerOption) []topology.ServerOption {
 			return append(opts, topology.WithClock(func(clock *session.ClusterClock) *session.ClusterClock {
 				return client.clock
+			}), topology.WithRegistry(func(registry *bsoncodec.Registry) *bsoncodec.Registry {
+				return client.registry
 			}))
 		}),
 	)
@@ -348,10 +360,14 @@ func (c *Client) ListDatabases(ctx context.Context, filter interface{}, opts ...
 		Clock:   c.clock,
 	}
 
+	readSelector := description.CompositeSelector([]description.ServerSelector{
+		description.ReadPrefSelector(readpref.Primary()),
+		description.LatencySelector(c.localThreshold),
+	})
 	res, err := driver.ListDatabases(
 		ctx, cmd,
 		c.topology,
-		description.ReadPrefSelector(readpref.Primary()),
+		readSelector,
 		c.id,
 		c.topology.SessionPool,
 		opts...,
@@ -432,7 +448,7 @@ func (c *Client) UseSessionWithOptions(ctx context.Context, opts *options.Sessio
 // to running a raw aggregation with a $changeStream stage because it supports resumability in the case of some errors.
 // The client must have read concern majority or no read concern for a change stream to be created successfully.
 func (c *Client) Watch(ctx context.Context, pipeline interface{},
-	opts ...*options.ChangeStreamOptions) (Cursor, error) {
+	opts ...*options.ChangeStreamOptions) (*ChangeStream, error) {
 
 	return newClientChangeStream(ctx, c, pipeline, opts...)
 }

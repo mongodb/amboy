@@ -234,7 +234,7 @@ func (s *DriverSuite) TestNextMethodReturnsJob() {
 
 	s.NoError(s.driver.Put(s.ctx, j))
 	stats := s.driver.Stats(s.ctx)
-	s.Equal(1, stats.Total)
+	s.Equal(1, stats.Total, "%+v", stats)
 	s.Equal(1, stats.Pending)
 
 	nj := s.driver.Next(s.ctx)

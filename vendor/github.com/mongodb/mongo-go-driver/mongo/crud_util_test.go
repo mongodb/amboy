@@ -72,7 +72,7 @@ func executeCount(sess *sessionImpl, coll *Collection, args map[string]interface
 		case "limit":
 			opts = opts.SetLimit(int64(opt.(float64)))
 		case "collation":
-			opts = opts.SetCollation(newCollationFromMap(opt.(map[string]interface{})))
+			opts = opts.SetCollation(collationFromMap(opt.(map[string]interface{})))
 		}
 	}
 
@@ -87,6 +87,33 @@ func executeCount(sess *sessionImpl, coll *Collection, args map[string]interface
 	return coll.Count(ctx, filter, opts)
 }
 
+func executeCountDocuments(sess *sessionImpl, coll *Collection, args map[string]interface{}) (int64, error) {
+	var filter map[string]interface{}
+	opts := options.Count()
+	for name, opt := range args {
+		switch name {
+		case "filter":
+			filter = opt.(map[string]interface{})
+		case "skip":
+			opts = opts.SetSkip(int64(opt.(float64)))
+		case "limit":
+			opts = opts.SetLimit(int64(opt.(float64)))
+		case "collation":
+			opts = opts.SetCollation(collationFromMap(opt.(map[string]interface{})))
+		}
+	}
+
+	if sess != nil {
+		// EXAMPLE:
+		sessCtx := sessionContext{
+			Context: context.WithValue(ctx, sessionKey{}, sess),
+			Session: sess,
+		}
+		return coll.CountDocuments(sessCtx, filter, opts)
+	}
+	return coll.CountDocuments(ctx, filter, opts)
+}
+
 func executeDistinct(sess *sessionImpl, coll *Collection, args map[string]interface{}) ([]interface{}, error) {
 	var fieldName string
 	var filter map[string]interface{}
@@ -98,7 +125,7 @@ func executeDistinct(sess *sessionImpl, coll *Collection, args map[string]interf
 		case "fieldName":
 			fieldName = opt.(string)
 		case "collation":
-			opts = opts.SetCollation(newCollationFromMap(opt.(map[string]interface{})))
+			opts = opts.SetCollation(collationFromMap(opt.(map[string]interface{})))
 		}
 	}
 
@@ -157,7 +184,7 @@ func executeInsertMany(sess *sessionImpl, coll *Collection, args map[string]inte
 	return coll.InsertMany(context.Background(), documents)
 }
 
-func executeFind(sess *sessionImpl, coll *Collection, args map[string]interface{}) (Cursor, error) {
+func executeFind(sess *sessionImpl, coll *Collection, args map[string]interface{}) (*Cursor, error) {
 	opts := options.Find()
 	var filter map[string]interface{}
 	for name, opt := range args {
@@ -317,7 +344,7 @@ func executeDeleteOne(sess *sessionImpl, coll *Collection, args map[string]inter
 		case "filter":
 			filter = opt.(map[string]interface{})
 		case "collation":
-			opts = opts.SetCollation(newCollationFromMap(opt.(map[string]interface{})))
+			opts = opts.SetCollation(collationFromMap(opt.(map[string]interface{})))
 		}
 	}
 
@@ -346,7 +373,7 @@ func executeDeleteMany(sess *sessionImpl, coll *Collection, args map[string]inte
 		case "filter":
 			filter = opt.(map[string]interface{})
 		case "collation":
-			opts = opts.SetCollation(newCollationFromMap(opt.(map[string]interface{})))
+			opts = opts.SetCollation(collationFromMap(opt.(map[string]interface{})))
 		}
 	}
 
@@ -380,7 +407,7 @@ func executeReplaceOne(sess *sessionImpl, coll *Collection, args map[string]inte
 		case "upsert":
 			opts = opts.SetUpsert(opt.(bool))
 		case "collation":
-			opts = opts.SetCollation(newCollationFromMap(opt.(map[string]interface{})))
+			opts = opts.SetCollation(collationFromMap(opt.(map[string]interface{})))
 		}
 	}
 
@@ -423,7 +450,7 @@ func executeUpdateOne(sess *sessionImpl, coll *Collection, args map[string]inter
 		case "upsert":
 			opts = opts.SetUpsert(opt.(bool))
 		case "collation":
-			opts = opts.SetCollation(newCollationFromMap(opt.(map[string]interface{})))
+			opts = opts.SetCollation(collationFromMap(opt.(map[string]interface{})))
 		}
 	}
 
@@ -463,7 +490,7 @@ func executeUpdateMany(sess *sessionImpl, coll *Collection, args map[string]inte
 		case "upsert":
 			opts = opts.SetUpsert(opt.(bool))
 		case "collation":
-			opts = opts.SetCollation(newCollationFromMap(opt.(map[string]interface{})))
+			opts = opts.SetCollation(collationFromMap(opt.(map[string]interface{})))
 		}
 	}
 
@@ -488,7 +515,7 @@ func executeUpdateMany(sess *sessionImpl, coll *Collection, args map[string]inte
 	return coll.UpdateMany(ctx, filter, update, opts)
 }
 
-func executeAggregate(sess *sessionImpl, coll *Collection, args map[string]interface{}) (Cursor, error) {
+func executeAggregate(sess *sessionImpl, coll *Collection, args map[string]interface{}) (*Cursor, error) {
 	var pipeline []interface{}
 	opts := options.Aggregate()
 	for name, opt := range args {
@@ -498,7 +525,7 @@ func executeAggregate(sess *sessionImpl, coll *Collection, args map[string]inter
 		case "batchSize":
 			opts = opts.SetBatchSize(int32(opt.(float64)))
 		case "collation":
-			opts = opts.SetCollation(newCollationFromMap(opt.(map[string]interface{})))
+			opts = opts.SetCollation(collationFromMap(opt.(map[string]interface{})))
 		}
 	}
 
@@ -612,7 +639,22 @@ func verifyInsertManyResult(t *testing.T, res *InsertManyResult, result json.Raw
 	}
 }
 
-func verifyCursorResult(t *testing.T, cur Cursor, result json.RawMessage) {
+func verifyCursorResult2(t *testing.T, cur *Cursor, result json.RawMessage) {
+	for _, expected := range docSliceFromRaw(t, result) {
+		require.NotNil(t, cur)
+		require.True(t, cur.Next(context.Background()))
+
+		var actual bsonx.Doc
+		require.NoError(t, cur.Decode(&actual))
+
+		compareDocs(t, expected, actual)
+	}
+
+	require.False(t, cur.Next(ctx))
+	require.NoError(t, cur.Err())
+}
+
+func verifyCursorResult(t *testing.T, cur *Cursor, result json.RawMessage) {
 	for _, expected := range docSliceFromRaw(t, result) {
 		require.NotNil(t, cur)
 		require.True(t, cur.Next(context.Background()))
@@ -711,6 +753,9 @@ func verifyUpdateResult(t *testing.T, res *UpdateResult, result json.RawMessage)
 }
 
 func verifyRunCommandResult(t *testing.T, res bson.Raw, result json.RawMessage) {
+	if len(result) == 0 {
+		return
+	}
 	jsonBytes, err := result.MarshalJSON()
 	require.NoError(t, err)
 
@@ -727,7 +772,7 @@ func verifyRunCommandResult(t *testing.T, res bson.Raw, result json.RawMessage) 
 }
 
 func verifyCollectionContents(t *testing.T, coll *Collection, result json.RawMessage) {
-	cursor, err := coll.Find(context.Background(), nil)
+	cursor, err := coll.Find(context.Background(), bsonx.Doc{})
 	require.NoError(t, err)
 
 	verifyCursorResult(t, cursor, result)
@@ -824,46 +869,8 @@ func collationFromMap(m map[string]interface{}) *options.Collation {
 		collation.MaxVariable = maxVariable.(string)
 	}
 
-	if backwards, found := m["backwards"]; found {
-		collation.Backwards = backwards.(bool)
-	}
-
-	return &collation
-}
-
-// Matt: bad name, I know; also, type-aliasing, I know.
-// The issue is, options.Collation has a ToDocument function and mongoopt.Collation has a convert function
-// type aliasing doesn't allow defining new functions on non-local types.
-// When all options are updated to the improved api, this function will be the only one and will simply be named "collationFromMap"
-func newCollationFromMap(m map[string]interface{}) *options.Collation {
-	var collation options.Collation
-
-	if locale, found := m["locale"]; found {
-		collation.Locale = locale.(string)
-	}
-
-	if caseLevel, found := m["caseLevel"]; found {
-		collation.CaseLevel = caseLevel.(bool)
-	}
-
-	if caseFirst, found := m["caseFirst"]; found {
-		collation.CaseFirst = caseFirst.(string)
-	}
-
-	if strength, found := m["strength"]; found {
-		collation.Strength = int(strength.(float64))
-	}
-
-	if numericOrdering, found := m["numericOrdering"]; found {
-		collation.NumericOrdering = numericOrdering.(bool)
-	}
-
-	if alternate, found := m["alternate"]; found {
-		collation.Alternate = alternate.(string)
-	}
-
-	if maxVariable, found := m["maxVariable"]; found {
-		collation.MaxVariable = maxVariable.(string)
+	if normalization, found := m["normalization"]; found {
+		collation.Normalization = normalization.(bool)
 	}
 
 	if backwards, found := m["backwards"]; found {

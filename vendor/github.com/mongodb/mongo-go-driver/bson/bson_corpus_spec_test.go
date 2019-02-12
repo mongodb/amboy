@@ -7,13 +7,12 @@
 package bson
 
 import (
-	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"path"
-	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -23,7 +22,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/mongodb/mongo-go-driver/bson/bsoncodec"
 	"github.com/mongodb/mongo-go-driver/bson/bsonrw"
-	"github.com/mongodb/mongo-go-driver/x/bsonx"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/pretty"
 )
@@ -62,7 +60,6 @@ type parseErrorTestCase struct {
 
 const dataDir = "../data"
 
-var pc bsonx.PrimitiveCodecs
 var dvd bsoncodec.DefaultValueDecoders
 var dve bsoncodec.DefaultValueEncoders
 
@@ -133,6 +130,26 @@ func unescapeUnicode(s, bsonType string) string {
 	return newS
 }
 
+func formatDouble(f float64) string {
+	var s string
+	if math.IsInf(f, 1) {
+		s = "Infinity"
+	} else if math.IsInf(f, -1) {
+		s = "-Infinity"
+	} else if math.IsNaN(f) {
+		s = "NaN"
+	} else {
+		// Print exactly one decimalType place for integers; otherwise, print as many are necessary to
+		// perfectly represent it.
+		s = strconv.FormatFloat(f, 'G', -1, 64)
+		if !strings.ContainsRune(s, 'E') && !strings.ContainsRune(s, '.') {
+			s += ".0"
+		}
+	}
+
+	return s
+}
+
 func normalizeCanonicalDouble(t *testing.T, key string, cEJ string) string {
 	// Unmarshal string into map
 	cEJMap := make(map[string]map[string]string)
@@ -163,39 +180,36 @@ func normalizeRelaxedDouble(t *testing.T, key string, rEJ string) string {
 }
 
 // bsonToNative decodes the BSON bytes (b) into a native Document
-func bsonToNative(t *testing.T, b []byte, bType, testDesc string) bsonx.Doc {
-	doc := reflect.New(reflect.TypeOf(bsonx.Doc{})).Elem()
-	err := pc.DocumentDecodeValue(dc, bsonrw.NewBSONDocumentReader(b), doc)
+func bsonToNative(t *testing.T, b []byte, bType, testDesc string) D {
+	var doc D
+	err := Unmarshal(b, &doc)
 	expectNoError(t, err, fmt.Sprintf("%s: decoding %s BSON", testDesc, bType))
-	return doc.Interface().(bsonx.Doc)
+	return doc
 }
 
 // nativeToBSON encodes the native Document (doc) into canonical BSON and compares it to the expected
 // canonical BSON (cB)
-func nativeToBSON(t *testing.T, cB []byte, doc bsonx.Doc, testDesc, bType, docSrcDesc string) {
-	actualB := new(bytes.Buffer)
-	vw, err := bsonrw.NewBSONValueWriter(actualB)
-	expectNoError(t, err, fmt.Sprintf("%s: creating ValueWriter", testDesc))
-	err = pc.DocumentEncodeValue(ec, vw, reflect.ValueOf(doc))
+func nativeToBSON(t *testing.T, cB []byte, doc D, testDesc, bType, docSrcDesc string) {
+	actual, err := Marshal(doc)
 	expectNoError(t, err, fmt.Sprintf("%s: encoding %s BSON", testDesc, bType))
 
-	if diff := cmp.Diff(cB, actualB.Bytes()); diff != "" {
+	if diff := cmp.Diff(cB, actual); diff != "" {
 		t.Errorf("%s: 'native_to_bson(%s) = cB' failed (-want, +got):\n-%v\n+%v\n",
-			testDesc, docSrcDesc, cB, actualB.Bytes())
+			testDesc, docSrcDesc, cB, actual)
 		t.FailNow()
 	}
 }
 
 // jsonToNative decodes the extended JSON string (ej) into a native Document
-func jsonToNative(t *testing.T, ej, ejType, testDesc string) bsonx.Doc {
-	var doc bsonx.Doc
+func jsonToNative(t *testing.T, ej, ejType, testDesc string) D {
+	var doc D
 	err := UnmarshalExtJSON([]byte(ej), ejType != "relaxed", &doc)
 	expectNoError(t, err, fmt.Sprintf("%s: decoding %s extended JSON", testDesc, ejType))
 	return doc
 }
 
 // nativeToJSON encodes the native Document (doc) into an extended JSON string
-func nativeToJSON(t *testing.T, ej string, doc bsonx.Doc, testDesc, ejType, ejShortName, docSrcDesc string) {
+func nativeToJSON(t *testing.T, ej string, doc D, testDesc, ejType, ejShortName, docSrcDesc string) {
 	actualEJ, err := MarshalExtJSON(doc, ejType != "relaxed", true)
 	expectNoError(t, err, fmt.Sprintf("%s: encoding %s extended JSON", testDesc, ejType))
 
@@ -300,8 +314,8 @@ func runTest(t *testing.T, file string) {
 			b, err := hex.DecodeString(d.Bson)
 			expectNoError(t, err, d.Description)
 
-			doc := reflect.New(reflect.TypeOf(bsonx.Doc{})).Elem()
-			err = pc.DocumentDecodeValue(dc, bsonrw.NewBSONDocumentReader(b), doc)
+			var doc D
+			err = Unmarshal(b, &doc)
 			expectError(t, err, fmt.Sprintf("%s: expected decode error", d.Description))
 		}
 
@@ -318,12 +332,13 @@ func runTest(t *testing.T, file string) {
 
 			switch test.BsonType {
 			case "0x00":
-				var doc bsonx.Doc
+				var doc D
 				err := UnmarshalExtJSON([]byte(s), true, &doc)
 				expectError(t, err, fmt.Sprintf("%s: expected parse error", p.Description))
 			case "0x13":
-				ejvr := bsonrw.NewExtJSONValueReader(strings.NewReader(s), true)
-				_, err := ejvr.ReadDecimal128()
+				ejvr, err := bsonrw.NewExtJSONValueReader(strings.NewReader(s), true)
+				expectNoError(t, err, fmt.Sprintf("error creating value reader: %s", err))
+				_, err = ejvr.ReadDecimal128()
 				expectError(t, err, fmt.Sprintf("%s: expected parse error", p.Description))
 			default:
 				t.Errorf("Update test to check for parse errors for type %s", test.BsonType)

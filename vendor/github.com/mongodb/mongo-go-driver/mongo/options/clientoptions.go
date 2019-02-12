@@ -117,6 +117,7 @@ func (c *ClientOptions) SetConnectTimeout(d time.Duration) *ClientOptions {
 }
 
 // SetDialer specifies a custom dialer used to dial new connections to a server.
+// If a custom dialer is not set, a net.Dialer with a 300 second keepalive time will be used by default.
 func (c *ClientOptions) SetDialer(d ContextDialer) *ClientOptions {
 	c.TopologyOptions = append(
 		c.TopologyOptions,
@@ -220,6 +221,19 @@ func (c *ClientOptions) SetReadPreference(rp *readpref.ReadPref) *ClientOptions 
 func (c *ClientOptions) SetRegistry(registry *bsoncodec.Registry) *ClientOptions {
 	c.Registry = registry
 
+	// add registry to the server options so that it will be used for the cursors built by this client
+	c.TopologyOptions = append(
+		c.TopologyOptions,
+		topology.WithServerOptions(func(opts ...topology.ServerOption) []topology.ServerOption {
+			return append(
+				opts,
+				topology.WithRegistry(func(*bsoncodec.Registry) *bsoncodec.Registry {
+					return registry
+				}),
+			)
+		}),
+	)
+
 	return c
 }
 
@@ -272,17 +286,23 @@ func (c *ClientOptions) SetSSL(ssl *SSLOpt) *ClientOptions {
 	c.ConnString.SSL = ssl.Enabled
 	c.ConnString.SSLSet = true
 
-	c.ConnString.SSLClientCertificateKeyFile = ssl.ClientCertificateKeyFile
-	c.ConnString.SSLClientCertificateKeyFileSet = true
+	if ssl.ClientCertificateKeyFile != "" {
+		c.ConnString.SSLClientCertificateKeyFile = ssl.ClientCertificateKeyFile
+		c.ConnString.SSLClientCertificateKeyFileSet = true
+	}
 
-	c.ConnString.SSLClientCertificateKeyPassword = ssl.ClientCertificateKeyPassword
-	c.ConnString.SSLClientCertificateKeyPasswordSet = true
+	if ssl.ClientCertificateKeyPassword != nil {
+		c.ConnString.SSLClientCertificateKeyPassword = ssl.ClientCertificateKeyPassword
+		c.ConnString.SSLClientCertificateKeyPasswordSet = true
+	}
 
 	c.ConnString.SSLInsecure = ssl.Insecure
 	c.ConnString.SSLInsecureSet = true
 
-	c.ConnString.SSLCaFile = ssl.CaFile
-	c.ConnString.SSLCaFileSet = true
+	if ssl.CaFile != "" {
+		c.ConnString.SSLCaFile = ssl.CaFile
+		c.ConnString.SSLCaFileSet = true
+	}
 
 	return c
 }
