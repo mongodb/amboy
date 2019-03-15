@@ -23,7 +23,7 @@ func TestQueueGroupConstructor(t *testing.T) {
 	for _, test := range []struct {
 		name        string
 		valid       bool
-		constructor QueueConstructor
+		constructor amboy.QueueConstructor
 		ttl         time.Duration
 	}{
 		{

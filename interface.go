@@ -209,3 +209,6 @@ type AbortableRunner interface {
 	Abort(context.Context, string) error
 	AbortAll(context.Context)
 }
+
+// QueueConstructor is a function passed by the client which makes a new queue for a QueueGroup.
+type QueueConstructor func(ctx context.Context) (Queue, error)
