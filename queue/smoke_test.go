@@ -1312,7 +1312,7 @@ func TestSmokeRemoteOrderedWithWorkerPoolsAndMongoDriver(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	client, err := mongo.Connect(ctx, opts.URI, options.Client().SetConnectTimeout(5*time.Second))
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(opts.URI).SetConnectTimeout(5*time.Second))
 	require.NoError(t, err)
 
 	for _, poolSize := range []int{2, 4, 8, 16, 32} {
