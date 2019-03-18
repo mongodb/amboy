@@ -137,14 +137,24 @@ func (g *localQueueGroup) Prune() error {
 // Close the queues.
 func (g *localQueueGroup) Close(ctx context.Context) {
 	g.canceler()
+	waitCh := make(chan struct{})
 	wg := &sync.WaitGroup{}
-	for _, queue := range g.queues {
-		wg.Add(1)
-		go func(queue amboy.Queue) {
-			defer wg.Done()
-			defer recovery.LogStackTraceAndContinue("panic in local queue group closer")
-			queue.Runner().Close()
-		}(queue)
+	go func() {
+		for _, queue := range g.queues {
+			wg.Add(1)
+			go func(queue amboy.Queue) {
+				defer recovery.LogStackTraceAndContinue("panic in local queue group closer")
+				defer wg.Done()
+				queue.Runner().Close()
+			}(queue)
+		}
+		wg.Wait()
+		close(waitCh)
+	}()
+	select {
+	case <-waitCh:
+		return
+	case <-ctx.Done():
+		return
 	}
-	wg.Wait()
 }
