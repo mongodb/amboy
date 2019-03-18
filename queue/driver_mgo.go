@@ -14,7 +14,7 @@ import (
 	"github.com/mongodb/grip/message"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
-	"gopkg.in/mgo.v2"
+	mgo "gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )
 

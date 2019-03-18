@@ -18,12 +18,12 @@ import (
 	"github.com/mongodb/grip"
 	"github.com/mongodb/grip/level"
 	"github.com/mongodb/grip/send"
-	"github.com/mongodb/mongo-go-driver/mongo"
-	"github.com/mongodb/mongo-go-driver/mongo/options"
 	"github.com/pkg/errors"
 	"github.com/satori/go.uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"gopkg.in/mgo.v2"
 )
 
@@ -1312,7 +1312,7 @@ func TestSmokeRemoteOrderedWithWorkerPoolsAndMongoDriver(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	client, err := mongo.Connect(ctx, opts.URI, options.Client().SetConnectTimeout(5*time.Second))
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(opts.URI).SetConnectTimeout(5*time.Second))
 	require.NoError(t, err)
 
 	for _, poolSize := range []int{2, 4, 8, 16, 32} {

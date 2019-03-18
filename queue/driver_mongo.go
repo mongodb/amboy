@@ -13,12 +13,12 @@ import (
 	"github.com/mongodb/amboy/registry"
 	"github.com/mongodb/grip"
 	"github.com/mongodb/grip/message"
-	"github.com/mongodb/mongo-go-driver/bson"
-	"github.com/mongodb/mongo-go-driver/mongo"
-	"github.com/mongodb/mongo-go-driver/mongo/options"
-	"github.com/mongodb/mongo-go-driver/x/bsonx"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/x/bsonx"
 )
 
 type mongoDriver struct {
@@ -72,7 +72,7 @@ func (d *mongoDriver) Open(ctx context.Context) error {
 		return nil
 	}
 
-	client, err := mongo.Connect(ctx, d.mongodbURI)
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(d.mongodbURI))
 	if err != nil {
 		return errors.Wrapf(err, "problem opening connection to mongodb at '%s", d.mongodbURI)
 	}
@@ -477,7 +477,7 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 func (d *mongoDriver) Stats(ctx context.Context) amboy.QueueStats {
 	coll := d.getCollection()
 
-	numJobs, err := coll.Count(ctx, struct{}{})
+	numJobs, err := coll.CountDocuments(ctx, struct{}{})
 	grip.Warning(message.WrapError(err, message.Fields{
 		"id":         d.instanceID,
 		"service":    "amboy.queue.mongo",
@@ -486,7 +486,7 @@ func (d *mongoDriver) Stats(ctx context.Context) amboy.QueueStats {
 		"message":    "problem counting all jobs",
 	}))
 
-	pending, err := coll.Count(ctx, bson.M{"status.completed": false})
+	pending, err := coll.CountDocuments(ctx, bson.M{"status.completed": false})
 	grip.Warning(message.WrapError(err, message.Fields{
 		"id":         d.instanceID,
 		"service":    "amboy.queue.mongo",
@@ -495,7 +495,7 @@ func (d *mongoDriver) Stats(ctx context.Context) amboy.QueueStats {
 		"message":    "problem counting pending jobs",
 	}))
 
-	numLocked, err := coll.Count(ctx, bson.M{"status.completed": false, "status.in_prog": true})
+	numLocked, err := coll.CountDocuments(ctx, bson.M{"status.completed": false, "status.in_prog": true})
 	grip.Warning(message.WrapError(err, message.Fields{
 		"id":         d.instanceID,
 		"service":    "amboy.queue.mongo",
