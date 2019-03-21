@@ -165,10 +165,10 @@ type QueueGroup interface {
 	Get(context.Context, string) (Queue, error)
 
 	// Put a queue at the given index.
-	Put(string, Queue) error
+	Put(context.Context, string, Queue) error
 
 	// Prune old queues.
-	Prune() error
+	Prune(context.Context) error
 
 	// Close the queues.
 	Close(context.Context)
@@ -209,6 +209,3 @@ type AbortableRunner interface {
 	Abort(context.Context, string) error
 	AbortAll(context.Context)
 }
-
-// QueueConstructor is a function passed by the client which makes a new queue for a QueueGroup.
-type QueueConstructor func(ctx context.Context) (Queue, error)
