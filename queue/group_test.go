@@ -12,11 +12,11 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-func localQueueConstructor(ctx context.Context) (amboy.Queue, error) {
+func localConstructor(ctx context.Context) (amboy.Queue, error) {
 	return NewLocalUnordered(1), nil
 }
 
-func remoteQueueConstructor(ctx context.Context) (Remote, error) {
+func remoteConstructor(ctx context.Context) (Remote, error) {
 	return NewRemoteUnordered(1), nil
 }
 
@@ -24,7 +24,7 @@ func TestQueueGroupConstructor(t *testing.T) {
 	for _, test := range []struct {
 		name              string
 		valid             bool
-		localConstructor  QueueConstructor
+		localConstructor  Constructor
 		remoteConstructor RemoteConstructor
 		ttl               time.Duration
 	}{
@@ -51,22 +51,22 @@ func TestQueueGroupConstructor(t *testing.T) {
 		},
 		{
 			name:              "ConstructorNegativeTime",
-			localConstructor:  localQueueConstructor,
-			remoteConstructor: remoteQueueConstructor,
+			localConstructor:  localConstructor,
+			remoteConstructor: remoteConstructor,
 			valid:             false,
 			ttl:               -time.Minute,
 		},
 		{
 			name:              "ConstructorZeroTime",
-			localConstructor:  localQueueConstructor,
-			remoteConstructor: remoteQueueConstructor,
+			localConstructor:  localConstructor,
+			remoteConstructor: remoteConstructor,
 			valid:             true,
 			ttl:               0,
 		},
 		{
 			name:              "ConstructorPositiveTime",
-			localConstructor:  localQueueConstructor,
-			remoteConstructor: remoteQueueConstructor,
+			localConstructor:  localConstructor,
+			remoteConstructor: remoteConstructor,
 			valid:             true,
 			ttl:               time.Minute,
 		},
@@ -88,7 +88,6 @@ func TestQueueGroupConstructor(t *testing.T) {
 			})
 			for _, remoteTest := range []struct {
 				name   string
-				client *mongo.Client
 				db     string
 				prefix string
 				uri    string
@@ -123,6 +122,7 @@ func TestQueueGroupConstructor(t *testing.T) {
 
 				t.Run(remoteTest.name, func(t *testing.T) {
 					client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://localhost:27017"))
+					require.NoError(t, err)
 					ctx, cancel := context.WithCancel(context.Background())
 					defer cancel()
 					require.NoError(t, client.Connect(ctx))
@@ -154,7 +154,7 @@ func TestQueueGroupConstructor(t *testing.T) {
 type queueGroupConstructor func(*testing.T, context.Context, time.Duration) (amboy.QueueGroup, error)
 
 func localQueueGroupConstructor(t *testing.T, ctx context.Context, ttl time.Duration) (amboy.QueueGroup, error) {
-	return NewLocalQueueGroup(ctx, LocalQueueGroupOptions{Constructor: localQueueConstructor, TTL: ttl})
+	return NewLocalQueueGroup(ctx, LocalQueueGroupOptions{Constructor: localConstructor, TTL: ttl})
 }
 
 func remoteQueueGroupConstructor(t *testing.T, ctx context.Context, ttl time.Duration) (amboy.QueueGroup, error) {
@@ -167,7 +167,7 @@ func remoteQueueGroupConstructor(t *testing.T, ctx context.Context, ttl time.Dur
 	}
 	opts := RemoteQueueGroupOptions{
 		Client:      client,
-		Constructor: remoteQueueConstructor,
+		Constructor: remoteConstructor,
 		MongoOptions: MongoDBOptions{
 			DB:  "amboy_test",
 			URI: "mongodb://localhost:27017",
@@ -234,7 +234,6 @@ func TestQueueGroupOperations(t *testing.T) {
 			for result := range q2.Results(ctx) {
 				resultsQ2 = append(resultsQ2, result)
 			}
-
 			require.Len(t, resultsQ1, 1)
 			require.Len(t, resultsQ2, 2)
 
@@ -256,6 +255,8 @@ func TestQueueGroupOperations(t *testing.T) {
 			for result := range q2.Results(ctx) {
 				resultsQ2 = append(resultsQ2, result)
 			}
+			require.Len(t, resultsQ1, 1)
+			require.Len(t, resultsQ2, 2)
 		})
 
 		t.Run("Put", func(t *testing.T) {
@@ -272,17 +273,17 @@ func TestQueueGroupOperations(t *testing.T) {
 			require.NotNil(t, q1)
 			require.NoError(t, q1.Start(ctx))
 
-			q2, err := localQueueConstructor(ctx)
+			q2, err := localConstructor(ctx)
 			require.NoError(t, err)
 			require.Error(t, g.Put(ctx, "one", q2), "cannot add queue to existing index")
 			require.NoError(t, q2.Start(ctx))
 
-			q3, err := localQueueConstructor(ctx)
+			q3, err := localConstructor(ctx)
 			require.NoError(t, err)
 			require.NoError(t, g.Put(ctx, "three", q3))
 			require.NoError(t, q3.Start(ctx))
 
-			q4, err := localQueueConstructor(ctx)
+			q4, err := localConstructor(ctx)
 			require.NoError(t, err)
 			require.NoError(t, g.Put(ctx, "four", q4))
 			require.NoError(t, q4.Start(ctx))
@@ -307,16 +308,15 @@ func TestQueueGroupOperations(t *testing.T) {
 			for result := range q4.Results(ctx) {
 				resultsQ4 = append(resultsQ4, result)
 			}
-
 			require.Len(t, resultsQ3, 1)
 			require.Len(t, resultsQ4, 2)
 
 			// Try getting the queues again
-			q3, err = g.Get(ctx, "one")
+			q3, err = g.Get(ctx, "three")
 			require.NoError(t, err)
 			require.NotNil(t, q3)
 
-			q4, err = g.Get(ctx, "two")
+			q4, err = g.Get(ctx, "four")
 			require.NoError(t, err)
 			require.NotNil(t, q4)
 
@@ -329,6 +329,8 @@ func TestQueueGroupOperations(t *testing.T) {
 			for result := range q4.Results(ctx) {
 				resultsQ4 = append(resultsQ4, result)
 			}
+			require.Len(t, resultsQ3, 1)
+			require.Len(t, resultsQ4, 2)
 		})
 
 		t.Run("Prune", func(t *testing.T) {
@@ -375,7 +377,7 @@ func TestQueueGroupOperations(t *testing.T) {
 			require.Zero(t, stats2.Blocked)
 			require.Equal(t, 2, stats2.Total)
 
-			g.Prune(ctx)
+			require.NoError(t, g.Prune(ctx))
 
 			// Try getting the queues again
 			q1, err = g.Get(ctx, "one")
