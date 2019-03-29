@@ -10,52 +10,61 @@ import (
 	"github.com/pkg/errors"
 )
 
-// NewLocalQueueGroup constructs a new local queue group. If ttl is 0, the queues will not be
-// TTLed except when the client explicitly calls Prune.
-func NewLocalQueueGroup(ctx context.Context, constructor amboy.QueueConstructor, ttl time.Duration) (amboy.QueueGroup, error) {
-	if constructor == nil {
-		return nil, errors.New("must pass a constructor")
-	}
-	if ttl < 0 {
-		return nil, errors.New("ttl must be greater than or equal to 0")
-	}
-	if ttl > 0 && ttl < time.Second {
-		return nil, errors.New("ttl cannot be less than 1 second, unless it is 0")
-	}
-	ctx, cancel := context.WithCancel(ctx)
-	g := &localQueueGroup{
-		canceler:    cancel,
-		queues:      map[string]amboy.Queue{},
-		constructor: constructor,
-		ttlMap:      map[string]time.Time{},
-		ttl:         ttl,
-	}
-	if ttl > 0 {
-		go func() {
-			defer recovery.LogStackTraceAndContinue("panic in local queue group ticker")
-			ticker := time.NewTicker(ttl)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-ticker.C:
-					g.Prune()
-				}
-			}
-		}()
-	}
-	return g, nil
-}
+// Constructor is a function passed by the client which makes a new queue for a QueueGroup.
+type Constructor func(ctx context.Context) (amboy.Queue, error)
 
 // localQueueGroup is a group of in-memory queues.
 type localQueueGroup struct {
 	mu          sync.RWMutex
 	canceler    context.CancelFunc
 	queues      map[string]amboy.Queue
-	constructor amboy.QueueConstructor
+	constructor Constructor
 	ttlMap      map[string]time.Time
 	ttl         time.Duration
+}
+
+// LocalQueueGroupOptions describe options passed to NewLocalQueueGroup.
+type LocalQueueGroupOptions struct {
+	Constructor Constructor
+	TTL         time.Duration
+}
+
+// NewLocalQueueGroup constructs a new local queue group. If ttl is 0, the queues will not be
+// TTLed except when the client explicitly calls Prune.
+func NewLocalQueueGroup(ctx context.Context, opts LocalQueueGroupOptions) (amboy.QueueGroup, error) {
+	if opts.Constructor == nil {
+		return nil, errors.New("must pass a constructor")
+	}
+	if opts.TTL < 0 {
+		return nil, errors.New("ttl must be greater than or equal to 0")
+	}
+	if opts.TTL > 0 && opts.TTL < time.Second {
+		return nil, errors.New("ttl cannot be less than 1 second, unless it is 0")
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	g := &localQueueGroup{
+		canceler:    cancel,
+		queues:      map[string]amboy.Queue{},
+		constructor: opts.Constructor,
+		ttlMap:      map[string]time.Time{},
+		ttl:         opts.TTL,
+	}
+	if opts.TTL > 0 {
+		go func() {
+			defer recovery.LogStackTraceAndContinue("panic in local queue group ticker")
+			ticker := time.NewTicker(opts.TTL)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					_ = g.Prune(ctx)
+				}
+			}
+		}()
+	}
+	return g, nil
 }
 
 // Get a queue with the given index. Get sets the last accessed time to now. Note that this means
@@ -79,7 +88,10 @@ func (g *localQueueGroup) Get(ctx context.Context, id string) (amboy.Queue, erro
 
 	queue, err := g.constructor(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "problem constructing queue")
+		return nil, errors.Wrap(err, "problem starting queue")
+	}
+	if err := queue.Start(ctx); err != nil {
+		return nil, errors.Wrap(err, "problem starting queue")
 	}
 	g.queues[id] = queue
 	g.ttlMap[id] = time.Now()
@@ -87,7 +99,7 @@ func (g *localQueueGroup) Get(ctx context.Context, id string) (amboy.Queue, erro
 }
 
 // Put a queue at the given index.
-func (g *localQueueGroup) Put(id string, queue amboy.Queue) error {
+func (g *localQueueGroup) Put(ctx context.Context, id string, queue amboy.Queue) error {
 	g.mu.RLock()
 	if _, ok := g.queues[id]; ok {
 		g.mu.RUnlock()
@@ -107,11 +119,10 @@ func (g *localQueueGroup) Put(id string, queue amboy.Queue) error {
 }
 
 // Prune old queues.
-func (g *localQueueGroup) Prune() error {
+func (g *localQueueGroup) Prune(ctx context.Context) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	queues := make([]amboy.Queue, 0, len(g.ttlMap))
-	i := 0
 	for queueID, t := range g.ttlMap {
 		if time.Since(t) > g.ttl {
 			if q, ok := g.queues[queueID]; ok {
@@ -120,7 +131,6 @@ func (g *localQueueGroup) Prune() error {
 			}
 			delete(g.ttlMap, queueID)
 		}
-		i++
 	}
 	wg := &sync.WaitGroup{}
 	for _, queue := range queues {
@@ -136,6 +146,8 @@ func (g *localQueueGroup) Prune() error {
 
 // Close the queues.
 func (g *localQueueGroup) Close(ctx context.Context) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	g.canceler()
 	waitCh := make(chan struct{})
 	wg := &sync.WaitGroup{}
