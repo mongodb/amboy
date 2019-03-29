@@ -67,11 +67,6 @@ func NewRemoteQueueGroup(ctx context.Context, opts RemoteQueueGroupOptions) (amb
 		return nil, errors.Wrap(err, "invalid remote queue options")
 	}
 
-	colls, err := getExistingCollections(ctx, opts.Client, opts.MongoOptions.DB, opts.Prefix)
-	if err != nil {
-		return nil, errors.Wrap(err, "problem getting existing collections")
-	}
-
 	g := &remoteQueueGroup{
 		canceler:       cancel,
 		client:         opts.Client,
@@ -84,14 +79,19 @@ func NewRemoteQueueGroup(ctx context.Context, opts RemoteQueueGroupOptions) (amb
 		ttlMap:         map[string]time.Time{},
 	}
 
+	colls, err := g.getExistingCollections(ctx, g.client, g.mongooptions.DB, g.prefix)
+	if err != nil {
+		return nil, errors.Wrap(err, "problem getting existing collections")
+	}
+
 	catcher := grip.NewBasicCatcher()
 	for _, coll := range colls {
 		q, err := g.startProcessingRemoteQueue(ctx, coll)
 		if err != nil {
 			catcher.Add(errors.Wrap(err, "problem starting queue"))
 		} else {
-			g.queues[idFromCollection(g.prefix, coll)] = q
-			g.ttlMap[idFromCollection(g.prefix, coll)] = time.Now()
+			g.queues[g.idFromCollection(coll)] = q
+			g.ttlMap[g.idFromCollection(coll)] = time.Now()
 		}
 	}
 	if catcher.HasErrors() {
@@ -137,39 +137,39 @@ func (g *remoteQueueGroup) startProcessingRemoteQueue(ctx context.Context, coll 
 func (opts RemoteQueueGroupOptions) validate() error {
 	catcher := grip.NewBasicCatcher()
 	if opts.Client == nil {
-		catcher.Add(errors.New("must pass a client"))
+		catcher.New("must pass a client")
 	}
 	if opts.Constructor == nil {
-		catcher.Add(errors.New("must pass a constructor"))
+		catcher.New("must pass a constructor")
 	}
 	if opts.TTL < 0 {
-		catcher.Add(errors.New("ttl must be greater than or equal to 0"))
+		catcher.New("ttl must be greater than or equal to 0")
 	}
 	if opts.TTL > 0 && opts.TTL < time.Second {
-		catcher.Add(errors.New("ttl cannot be less than 1 second, unless it is 0"))
+		catcher.New("ttl cannot be less than 1 second, unless it is 0")
 	}
 	if opts.PruneFrequency < 0 {
-		catcher.Add(errors.New("prune frequency must be greater than or equal to 0"))
+		catcher.New("prune frequency must be greater than or equal to 0")
 	}
 	if opts.PruneFrequency > 0 && opts.TTL < time.Second {
-		catcher.Add(errors.New("prune frequency cannot be less than 1 second, unless it is 0"))
+		catcher.New("prune frequency cannot be less than 1 second, unless it is 0")
 	}
 	if (opts.TTL == 0 && opts.PruneFrequency != 0) || (opts.TTL != 0 && opts.PruneFrequency == 0) {
-		catcher.Add(errors.New("ttl and prune frequency must both be 0 or both be not 0"))
+		catcher.New("ttl and prune frequency must both be 0 or both be not 0")
 	}
 	if opts.MongoOptions.DB == "" {
-		catcher.Add(errors.New("db must be set"))
+		catcher.New("db must be set")
 	}
 	if opts.Prefix == "" {
-		catcher.Add(errors.New("prefix must be set"))
+		catcher.New("prefix must be set")
 	}
 	if opts.MongoOptions.URI == "" {
-		catcher.Add(errors.New("uri must be set"))
+		catcher.New("uri must be set")
 	}
 	return catcher.Resolve()
 }
 
-func getExistingCollections(ctx context.Context, client *mongo.Client, db, prefix string) ([]string, error) {
+func (g *remoteQueueGroup) getExistingCollections(ctx context.Context, client *mongo.Client, db, prefix string) ([]string, error) {
 	c, err := client.Database(db).ListCollections(ctx, bson.M{"name": bson.M{"$regex": fmt.Sprintf("^%s.*", prefix)}})
 	if err != nil {
 		return nil, errors.Wrap(err, "problem calling listCollections")
@@ -208,7 +208,7 @@ func (g *remoteQueueGroup) Get(ctx context.Context, id string) (amboy.Queue, err
 		return queue, nil
 	}
 
-	queue, err := g.startProcessingRemoteQueue(ctx, collectionFromID(g.prefix, id))
+	queue, err := g.startProcessingRemoteQueue(ctx, g.collectionFromID(id))
 	if err != nil {
 		return nil, errors.Wrap(err, "problem starting queue")
 	}
@@ -245,7 +245,7 @@ func (g *remoteQueueGroup) Prune(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	colls, err := getExistingCollections(ctx, g.client, g.mongooptions.DB, g.prefix)
+	colls, err := g.getExistingCollections(ctx, g.client, g.mongooptions.DB, g.prefix)
 	if err != nil {
 		return errors.Wrap(err, "problem getting collections")
 	}
@@ -253,7 +253,7 @@ func (g *remoteQueueGroup) Prune(ctx context.Context) error {
 		// This is an optimization. If we've added to the queue recently enough, there's no
 		// need to query its contents, since it cannot be old enough to prune.
 		if t, ok := g.ttlMap[coll]; ok && time.Since(t) < g.ttl {
-			remove(colls, i)
+			g.remove(colls, i)
 		}
 	}
 	catcher := grip.NewBasicCatcher()
@@ -262,6 +262,7 @@ func (g *remoteQueueGroup) Prune(ctx context.Context) error {
 	collsDropChan := make(chan string)
 
 	go func() {
+		defer recovery.LogStackTraceAndContinue("panic in pruning collections")
 		for _, coll := range colls {
 			collsDropChan <- coll
 		}
@@ -301,9 +302,14 @@ func (g *remoteQueueGroup) Prune(ctx context.Context) error {
 				} else {
 					return
 				}
-				if queue, ok := g.queues[idFromCollection(g.prefix, nextColl)]; ok {
+				if queue, ok := g.queues[g.idFromCollection(nextColl)]; ok {
 					queue.Runner().Close()
-					ch <- idFromCollection(g.prefix, nextColl)
+					select {
+					case <-ctx.Done():
+						return
+					case ch <- g.idFromCollection(nextColl):
+						// pass
+					}
 				}
 				if err := c.Drop(ctx); err != nil {
 					catcher.Add(err)
@@ -324,7 +330,7 @@ func (g *remoteQueueGroup) Prune(ctx context.Context) error {
 outer:
 	for id, q := range g.queues {
 		for _, coll := range colls {
-			if id == idFromCollection(g.prefix, coll) {
+			if id == g.idFromCollection(coll) {
 				continue outer
 			}
 		}
@@ -333,7 +339,12 @@ outer:
 			defer recovery.LogStackTraceAndContinue("panic in pruning queues")
 			defer wg.Done()
 			qu.Runner().Close()
-			ch <- queueID
+			select {
+			case <-ctx.Done():
+				return
+			case ch <- queueID:
+				// pass
+			}
 		}(id, queuesDeleteChan, q)
 	}
 	wg.Wait()
@@ -353,6 +364,7 @@ func (g *remoteQueueGroup) Close(ctx context.Context) {
 	waitCh := make(chan struct{})
 	wg := &sync.WaitGroup{}
 	go func() {
+		defer recovery.LogStackTraceAndContinue("panic in remote queue group closer")
 		for _, queue := range g.queues {
 			wg.Add(1)
 			go func(queue amboy.Queue) {
@@ -372,16 +384,16 @@ func (g *remoteQueueGroup) Close(ctx context.Context) {
 	}
 }
 
-func collectionFromID(prefix, id string) string {
-	return prefix + id
+func (g *remoteQueueGroup) collectionFromID(id string) string {
+	return g.prefix + id
 }
 
-func idFromCollection(prefix, collection string) string {
-	return strings.TrimPrefix(collection, prefix)
+func (g *remoteQueueGroup) idFromCollection(collection string) string {
+	return strings.TrimPrefix(collection, g.prefix)
 }
 
 // remove efficiently from a slice if order doesn't matter https://stackoverflow.com/a/37335777.
-func remove(s []string, i int) []string {
+func (g *remoteQueueGroup) remove(s []string, i int) []string {
 	s[i] = s[len(s)-1]
 	return s[:len(s)-1]
 }
