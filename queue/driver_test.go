@@ -200,10 +200,6 @@ func (s *DriverSuite) TestSaveAndSaveStatus() {
 	n, err = s.driver.Get(s.ctx, name)
 	s.Require().NoError(err)
 
-	nsh := n.(*job.ShellJob)
-	s.Equal(j.ID(), nsh.ID())
-	s.Equal(j.Command, nsh.Command)
-
 	s.Equal(name, n.ID())
 	s.Equal(status.Completed, n.Status().Completed)
 	s.Equal(status.InProgress, n.Status().InProgress)
