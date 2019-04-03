@@ -199,7 +199,6 @@ func (s *DriverSuite) TestSaveAndSaveStatus() {
 
 	n, err = s.driver.Get(s.ctx, name)
 	s.Require().NoError(err)
-
 	s.Equal(name, n.ID())
 	s.Equal(status.Completed, n.Status().Completed)
 	s.Equal(status.InProgress, n.Status().InProgress)
