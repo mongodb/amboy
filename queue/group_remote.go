@@ -16,8 +16,6 @@ import (
 	"gopkg.in/mgo.v2/bson"
 )
 
-const jobsSuffix = ".jobs"
-
 // RemoteConstructor is a function passed by a client which makes a new remote queue for a QueueGroup.
 type RemoteConstructor func(ctx context.Context) (Remote, error)
 
@@ -119,7 +117,7 @@ func NewRemoteQueueGroup(ctx context.Context, opts RemoteQueueGroupOptions) (amb
 }
 
 func (g *remoteQueueGroup) startProcessingRemoteQueue(ctx context.Context, coll string) (Remote, error) {
-	coll = strings.TrimSuffix(coll, jobsSuffix)
+	coll = TrimJobsSuffix(coll)
 	q, err := g.constructor(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "problem starting queue")
@@ -392,11 +390,11 @@ func (g *remoteQueueGroup) Close(ctx context.Context) {
 }
 
 func (g *remoteQueueGroup) collectionFromID(id string) string {
-	return g.prefix + id + jobsSuffix
+	return AddJobsSuffix(g.prefix + id)
 }
 
 func (g *remoteQueueGroup) idFromCollection(collection string) string {
-	return strings.TrimSuffix(strings.TrimPrefix(collection, g.prefix), jobsSuffix)
+	return TrimJobsSuffix(strings.TrimPrefix(collection, g.prefix))
 }
 
 // remove efficiently from a slice if order doesn't matter https://stackoverflow.com/a/37335777.
