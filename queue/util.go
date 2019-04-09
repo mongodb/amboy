@@ -13,10 +13,10 @@ func randomString(x int) string {
 	return hex.EncodeToString(b)
 }
 
-func AddJobsSuffix(s string) string {
+func addJobsSuffix(s string) string {
 	return s + ".jobs"
 }
 
-func TrimJobsSuffix(s string) string {
+func trimJobsSuffix(s string) string {
 	return strings.TrimSuffix(s, ".jobs")
 }

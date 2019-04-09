@@ -117,7 +117,7 @@ func NewRemoteQueueGroup(ctx context.Context, opts RemoteQueueGroupOptions) (amb
 }
 
 func (g *remoteQueueGroup) startProcessingRemoteQueue(ctx context.Context, coll string) (Remote, error) {
-	coll = TrimJobsSuffix(coll)
+	coll = trimJobsSuffix(coll)
 	q, err := g.constructor(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "problem starting queue")
@@ -390,11 +390,11 @@ func (g *remoteQueueGroup) Close(ctx context.Context) {
 }
 
 func (g *remoteQueueGroup) collectionFromID(id string) string {
-	return AddJobsSuffix(g.prefix + id)
+	return addJobsSuffix(g.prefix + id)
 }
 
 func (g *remoteQueueGroup) idFromCollection(collection string) string {
-	return TrimJobsSuffix(strings.TrimPrefix(collection, g.prefix))
+	return trimJobsSuffix(strings.TrimPrefix(collection, g.prefix))
 }
 
 // remove efficiently from a slice if order doesn't matter https://stackoverflow.com/a/37335777.
