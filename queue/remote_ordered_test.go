@@ -50,7 +50,7 @@ func (s *SimpleRemoteOrderedSuite) SetupSuite() {
 			return err
 		}
 
-		return session.DB("amboy_test").C(AddJobsSuffix(name)).DropCollection()
+		return session.DB("amboy_test").C(addJobsSuffix(name)).DropCollection()
 	}
 }
 
