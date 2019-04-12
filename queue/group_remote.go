@@ -10,6 +10,7 @@ import (
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/grip"
+	"github.com/mongodb/grip/message"
 	"github.com/mongodb/grip/recovery"
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -116,7 +117,7 @@ func NewRemoteQueueGroup(ctx context.Context, opts RemoteQueueGroupOptions) (amb
 				case <-ctx.Done():
 					return
 				case <-ticker.C:
-					grip.Error(errors.Wrap(g.Prune(pruneCtx), "problem pruning remote queue group database"))
+					grip.Error(message.WrapError(g.Prune(pruneCtx), "problem pruning remote queue group database"))
 				}
 			}
 		}()
@@ -265,9 +266,7 @@ func (g *remoteQueueGroup) Prune(ctx context.Context) error {
 	for _, coll := range colls {
 		// This is an optimization. If we've added to the queue recently enough, there's no
 		// need to query its contents, since it cannot be old enough to prune.
-		if t, ok := g.ttlMap[g.idFromCollection(coll)]; ok && time.Since(t) < g.ttl {
-			// pass
-		} else {
+		if t, ok := g.ttlMap[g.idFromCollection(coll)]; !ok || ok && time.Since(t) > g.ttl {
 			collsToCheck = append(collsToCheck, coll)
 		}
 	}
@@ -276,13 +275,11 @@ func (g *remoteQueueGroup) Prune(ctx context.Context) error {
 	collsDeleteChan := make(chan string, len(collsToCheck))
 	collsDropChan := make(chan string)
 
-	go func() {
-		defer recovery.LogStackTraceAndContinue("panic in pruning collections")
-		for _, coll := range collsToCheck {
-			collsDropChan <- coll
-		}
-		close(collsDropChan)
-	}()
+	for _, coll := range collsToCheck {
+		collsDropChan <- coll
+	}
+	close(collsDropChan)
+
 	wg = &sync.WaitGroup{}
 	for i := 0; i < runtime.NumCPU(); i++ {
 		wg.Add(1)
@@ -291,34 +288,24 @@ func (g *remoteQueueGroup) Prune(ctx context.Context) error {
 			defer wg.Done()
 			for nextColl := range collsDropChan {
 				c := g.client.Database(g.mongooptions.DB).Collection(nextColl)
-				one := c.FindOne(ctx, bson.M{
+				count, err := c.CountDocuments(ctx, bson.M{
 					"status.completed": true,
 					"status.in_prog":   false,
 					"status.mod_ts":    bson.M{"$gte": time.Now().Add(-g.ttl)},
 				})
-				if err := one.Err(); err != nil {
+				if err != nil {
 					catcher.Add(err)
 					return
 				}
-				if err := one.Decode(&struct{}{}); err != nil {
-					if err != mongo.ErrNoDocuments {
-						catcher.Add(err)
-						return
-					}
-				} else {
+				if count == 0 {
 					return
 				}
-				one = c.FindOne(ctx, bson.M{"status.completed": false})
-				if err := one.Err(); err != nil {
+				count, err = c.CountDocuments(ctx, bson.M{"status.completed": false})
+				if err != nil {
 					catcher.Add(err)
 					return
 				}
-				if err := one.Decode(&struct{}{}); err != nil {
-					if err != mongo.ErrNoDocuments {
-						catcher.Add(err)
-						return
-					}
-				} else {
+				if count == 0 {
 					return
 				}
 				if queue, ok := g.queues[g.idFromCollection(nextColl)]; ok {
