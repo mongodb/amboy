@@ -273,7 +273,7 @@ func (g *remoteQueueGroup) Prune(ctx context.Context) error {
 	catcher := grip.NewBasicCatcher()
 	wg := &sync.WaitGroup{}
 	collsDeleteChan := make(chan string, len(collsToCheck))
-	collsDropChan := make(chan string)
+	collsDropChan := make(chan string, len(collsToCheck))
 
 	for _, coll := range collsToCheck {
 		collsDropChan <- coll
@@ -297,7 +297,7 @@ func (g *remoteQueueGroup) Prune(ctx context.Context) error {
 					catcher.Add(err)
 					return
 				}
-				if count == 0 {
+				if count > 0 {
 					return
 				}
 				count, err = c.CountDocuments(ctx, bson.M{"status.completed": false})
@@ -305,7 +305,7 @@ func (g *remoteQueueGroup) Prune(ctx context.Context) error {
 					catcher.Add(err)
 					return
 				}
-				if count == 0 {
+				if count > 0 {
 					return
 				}
 				if queue, ok := g.queues[g.idFromCollection(nextColl)]; ok {

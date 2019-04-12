@@ -542,8 +542,9 @@ func TestQueueGroupConstructorPruneSmokeTest(t *testing.T) {
 	require.NoError(t, err)
 	time.Sleep(time.Second)
 	for i := 0; i < 10; i++ {
-		one := client.Database("amboy_test").Collection(fmt.Sprintf("gen-%d.jobs", i)).FindOne(ctx, bson.M{})
-		require.Equal(t, mongo.ErrNoDocuments, one.Decode(&struct{}{}))
+		count, err := client.Database("amboy_test").Collection(fmt.Sprintf("gen-%d.jobs", i)).CountDocuments(ctx, bson.M{})
+		require.NoError(t, err)
+		require.Zero(t, count, fmt.Sprintf("gen-%d.jobs not dropped", i))
 	}
 
 }
