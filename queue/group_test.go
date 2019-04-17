@@ -8,10 +8,12 @@ import (
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/job"
+	"github.com/mongodb/grip"
 	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	mgo "gopkg.in/mgo.v2"
 )
 
 func localConstructor(ctx context.Context) (amboy.Queue, error) {
@@ -23,6 +25,19 @@ func remoteConstructor(ctx context.Context) (Remote, error) {
 }
 
 func TestQueueGroupConstructor(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const mdburl = "mongodb://localhost:27017"
+	client, err := mongo.NewClient(options.Client().ApplyURI(mdburl).SetConnectTimeout(2 * time.Second))
+	require.NoError(t, err)
+	require.NoError(t, client.Connect(ctx))
+	defer func() { require.NoError(t, client.Disconnect(ctx)) }()
+
+	session, err := mgo.DialWithTimeout(mdburl, 2*time.Second)
+	require.NoError(t, err)
+	defer session.Close()
+
 	for _, test := range []struct {
 		name              string
 		valid             bool
@@ -74,12 +89,12 @@ func TestQueueGroupConstructor(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			t.Run("local", func(t *testing.T) {
+			t.Run("Local", func(t *testing.T) {
 				localOpts := LocalQueueGroupOptions{
 					Constructor: test.localConstructor,
 					TTL:         test.ttl,
 				}
-				g, err := NewLocalQueueGroup(context.Background(), localOpts)
+				g, err := NewLocalQueueGroup(ctx, localOpts)
 				if test.valid {
 					require.NotNil(t, g)
 					require.NoError(t, err)
@@ -88,117 +103,212 @@ func TestQueueGroupConstructor(t *testing.T) {
 					require.Error(t, err)
 				}
 			})
-			for _, remoteTest := range []struct {
-				name   string
-				db     string
-				prefix string
-				uri    string
-				valid  bool
-			}{
-				{
-					name:   "AllFieldsSet",
-					db:     "db",
-					prefix: "prefix",
-					uri:    "uri",
-					valid:  true,
-				},
-				{
-					name:   "DBMissing",
-					prefix: "prefix",
-					uri:    "uri",
-					valid:  false,
-				},
-				{
-					name:  "PrefixMissing",
-					db:    "db",
-					uri:   "uri",
-					valid: false,
-				},
-				{
-					name:   "URIMissing",
-					db:     "db",
-					prefix: "prefix",
-					valid:  false,
-				},
-			} {
-
-				t.Run(remoteTest.name, func(t *testing.T) {
-					client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://localhost:27017"))
-					require.NoError(t, err)
-					ctx, cancel := context.WithCancel(context.Background())
-					defer cancel()
-					require.NoError(t, client.Connect(ctx))
-					remoteOpts := RemoteQueueGroupOptions{
-						Client: client,
-						MongoOptions: MongoDBOptions{
+			t.Run("Mongo", func(t *testing.T) {
+				for _, remoteTest := range []struct {
+					name   string
+					db     string
+					prefix string
+					uri    string
+					valid  bool
+				}{
+					{
+						name:   "AllFieldsSet",
+						db:     "db",
+						prefix: "prefix",
+						uri:    "uri",
+						valid:  true,
+					},
+					{
+						name:   "DBMissing",
+						prefix: "prefix",
+						uri:    "uri",
+						valid:  false,
+					},
+					{
+						name:  "PrefixMissing",
+						db:    "db",
+						uri:   "uri",
+						valid: false,
+					},
+					{
+						name:   "URIMissing",
+						db:     "db",
+						prefix: "prefix",
+						valid:  false,
+					},
+				} {
+					t.Run(remoteTest.name, func(t *testing.T) {
+						require.NoError(t, err)
+						tctx, cancel := context.WithCancel(ctx)
+						defer cancel()
+						mopts := MongoDBOptions{
 							DB:  remoteTest.db,
 							URI: remoteTest.uri,
-						},
-						Prefix:         remoteTest.prefix,
-						Constructor:    test.remoteConstructor,
-						TTL:            test.ttl,
-						PruneFrequency: test.ttl,
-					}
-					g, err := NewRemoteQueueGroup(context.Background(), remoteOpts)
-					if test.valid && remoteTest.valid {
-						require.NotNil(t, g)
+						}
+
+						remoteOpts := RemoteQueueGroupOptions{
+							Prefix:         remoteTest.prefix,
+							Constructor:    test.remoteConstructor,
+							TTL:            test.ttl,
+							PruneFrequency: test.ttl,
+						}
+						g, err := NewMongoRemoteQueueGroup(tctx, remoteOpts, client, mopts)
+						if test.valid && remoteTest.valid {
+							require.NoError(t, err)
+							require.NotNil(t, g)
+						} else {
+							require.Error(t, err)
+							require.Nil(t, g)
+						}
+					})
+				}
+			})
+			t.Run("LegacyMgo", func(t *testing.T) {
+				for _, remoteTest := range []struct {
+					name   string
+					db     string
+					prefix string
+					uri    string
+					valid  bool
+				}{
+					{
+						name:   "AllFieldsSet",
+						db:     "db",
+						prefix: "prefix",
+						uri:    "uri",
+						valid:  true,
+					},
+					{
+						name:   "DBMissing",
+						prefix: "prefix",
+						uri:    "uri",
+						valid:  false,
+					},
+					{
+						name:  "PrefixMissing",
+						db:    "db",
+						uri:   "uri",
+						valid: false,
+					},
+					{
+						name:   "URIMissing",
+						db:     "db",
+						prefix: "prefix",
+						valid:  false,
+					},
+				} {
+
+					t.Run(remoteTest.name, func(t *testing.T) {
 						require.NoError(t, err)
-					} else {
-						require.Nil(t, g)
-						require.Error(t, err)
-					}
-				})
-			}
+						tctx, cancel := context.WithCancel(ctx)
+						defer cancel()
+						mopts := MongoDBOptions{
+							DB:  remoteTest.db,
+							URI: remoteTest.uri,
+						}
+
+						remoteOpts := RemoteQueueGroupOptions{
+							Prefix:         remoteTest.prefix,
+							Constructor:    test.remoteConstructor,
+							TTL:            test.ttl,
+							PruneFrequency: test.ttl,
+						}
+						g, err := NewMgoRemoteQueueGroup(tctx, remoteOpts, session, mopts)
+						if test.valid && remoteTest.valid {
+							require.NoError(t, err)
+							require.NotNil(t, g)
+						} else {
+							require.Error(t, err)
+							require.Nil(t, g)
+						}
+					})
+				}
+			})
 		})
 	}
 }
 
-type queueGroupConstructor func(*testing.T, context.Context, time.Duration) (amboy.QueueGroup, error)
+type queueGroupCloser func(context.Context) error
+type queueGroupConstructor func(*testing.T, context.Context, time.Duration) (amboy.QueueGroup, queueGroupCloser, error)
 
-func localQueueGroupConstructor(t *testing.T, ctx context.Context, ttl time.Duration) (amboy.QueueGroup, error) {
-	return NewLocalQueueGroup(ctx, LocalQueueGroupOptions{Constructor: localConstructor, TTL: ttl})
+func localQueueGroupConstructor(t *testing.T, ctx context.Context, ttl time.Duration) (amboy.QueueGroup, queueGroupCloser, error) {
+	qg, err := NewLocalQueueGroup(ctx, LocalQueueGroupOptions{Constructor: localConstructor, TTL: ttl})
+	closer := func(_ context.Context) error { return nil }
+	return qg, closer, err
 }
 
-func remoteQueueGroupConstructor(t *testing.T, ctx context.Context, ttl time.Duration) (amboy.QueueGroup, error) {
-	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://localhost:27017"))
-	if err != nil {
-		return nil, err
+func remoteQueueGroupConstructor(t *testing.T, ctx context.Context, ttl time.Duration) (amboy.QueueGroup, queueGroupCloser, error) {
+	mopts := MongoDBOptions{
+		DB:  "amboy_test",
+		URI: "mongodb://localhost:27017",
 	}
-	if err := client.Connect(ctx); err != nil {
-		return nil, err
+
+	client, err := mongo.NewClient(options.Client().ApplyURI(mopts.DB).SetConnectTimeout(2 * time.Second))
+	if err != nil {
+		return nil, func(_ context.Context) error { return nil }, err
+	}
+
+	closer := func(cctx context.Context) error {
+		catcher := grip.NewBasicCatcher()
+		catcher.Add(client.Database(mopts.DB).Drop(cctx))
+		catcher.Add(client.Disconnect(cctx))
+		return catcher.Resolve()
+	}
+
+	if err = client.Connect(ctx); err != nil {
+		return nil, closer, err
 	}
 	opts := RemoteQueueGroupOptions{
-		Client:      client,
-		Constructor: remoteConstructor,
-		MongoOptions: MongoDBOptions{
-			DB:  "amboy_test",
-			URI: "mongodb://localhost:27017",
-		},
+		Constructor:    remoteConstructor,
 		Prefix:         "prefix",
 		TTL:            ttl,
 		PruneFrequency: ttl,
 	}
-	return NewRemoteQueueGroup(ctx, opts)
+
+	if err = client.Database(mopts.DB).Drop(ctx); err != nil {
+		return nil, closer, err
+	}
+
+	qg, err := NewMongoRemoteQueueGroup(ctx, opts, client, mopts)
+	return qg, closer, err
 }
 
-func dropDatabase(ctx context.Context) error {
-	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://localhost:27017"))
+func remoteLegacyQueueGroupConstructor(t *testing.T, ctx context.Context, ttl time.Duration) (amboy.QueueGroup, queueGroupCloser, error) {
+	mopts := MongoDBOptions{
+		DB:  "amboy_test",
+		URI: "mongodb://localhost:27017",
+	}
+
+	session, err := mgo.DialWithTimeout(mopts.URI, time.Second)
 	if err != nil {
-		return err
+		return nil, func(_ context.Context) error { return nil }, err
 	}
-	if err := client.Connect(ctx); err != nil {
-		return err
+
+	closer := func(cctx context.Context) error {
+		defer session.Close()
+		return session.DB(mopts.DB).DropDatabase()
 	}
-	if err := client.Database("amboy_test").Drop(ctx); err != nil {
-		return err
+
+	opts := RemoteQueueGroupOptions{
+		Constructor:    remoteConstructor,
+		Prefix:         "prefix",
+		TTL:            ttl,
+		PruneFrequency: ttl / 2,
 	}
-	return nil
+
+	if err = session.DB(mopts.DB).DropDatabase(); err != nil {
+		return nil, closer, err
+	}
+
+	qg, err := NewMgoRemoteQueueGroup(ctx, opts, session, mopts)
+	return qg, closer, err
 }
 
 func TestQueueGroupOperations(t *testing.T) {
 	queueGroups := map[string]queueGroupConstructor{
-		"Local":  localQueueGroupConstructor,
-		"Remote": remoteQueueGroupConstructor,
+		"Local":     localQueueGroupConstructor,
+		"Mongo":     remoteQueueGroupConstructor,
+		"LegacyMgo": remoteLegacyQueueGroupConstructor,
 	}
 
 	for groupName, constructor := range queueGroups {
@@ -206,9 +316,9 @@ func TestQueueGroupOperations(t *testing.T) {
 			t.Run("Get", func(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
-				require.NoError(t, dropDatabase(ctx))
 
-				g, err := constructor(t, ctx, 0)
+				g, closer, err := constructor(t, ctx, 0)
+				defer func() { require.NoError(t, closer(ctx)) }()
 				require.NoError(t, err)
 				require.NotNil(t, g)
 
@@ -268,9 +378,10 @@ func TestQueueGroupOperations(t *testing.T) {
 			t.Run("Put", func(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
-				require.NoError(t, dropDatabase(ctx))
 
-				g, err := constructor(t, ctx, 0)
+				g, closer, err := constructor(t, ctx, 0)
+				defer func() { require.NoError(t, closer(ctx)) }()
+
 				require.NoError(t, err)
 				require.NotNil(t, g)
 
@@ -342,9 +453,9 @@ func TestQueueGroupOperations(t *testing.T) {
 			t.Run("Prune", func(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
-				require.NoError(t, dropDatabase(ctx))
 
-				g, err := constructor(t, ctx, 0)
+				g, closer, err := constructor(t, ctx, 0)
+				defer func() { require.NoError(t, closer(ctx)) }()
 				require.NoError(t, err)
 				require.NotNil(t, g)
 
@@ -365,8 +476,8 @@ func TestQueueGroupOperations(t *testing.T) {
 				require.NoError(t, q2.Put(j2))
 				require.NoError(t, q2.Put(j3))
 
-				amboy.Wait(q1)
-				amboy.Wait(q2)
+				amboy.WaitCtxInterval(ctx, q2, 10*time.Millisecond)
+				amboy.WaitCtxInterval(ctx, q1, 10*time.Millisecond)
 
 				// Queues should have completed work
 				stats1 := q1.Stats()
@@ -409,13 +520,12 @@ func TestQueueGroupOperations(t *testing.T) {
 				require.Zero(t, stats2.Blocked)
 				require.Zero(t, stats2.Total)
 			})
-
 			t.Run("PruneWithTTL", func(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				defer cancel()
-				require.NoError(t, dropDatabase(ctx))
 
-				g, err := constructor(t, ctx, time.Second)
+				g, closer, err := constructor(t, ctx, time.Second)
+				defer func() { require.NoError(t, closer(ctx)) }()
 				require.NoError(t, err)
 				require.NotNil(t, g)
 
@@ -436,23 +546,23 @@ func TestQueueGroupOperations(t *testing.T) {
 				require.NoError(t, q2.Put(j2))
 				require.NoError(t, q2.Put(j3))
 
-				amboy.Wait(q1)
-				amboy.Wait(q2)
+				amboy.WaitCtxInterval(ctx, q1, 10*time.Millisecond)
+				amboy.WaitCtxInterval(ctx, q2, 10*time.Millisecond)
 
 				// Queues should have completed work
 				stats1 := q1.Stats()
+				require.Equal(t, 1, stats1.Total)
 				require.Zero(t, stats1.Running)
-				require.Equal(t, 1, stats1.Completed)
+				require.Equal(t, 1, stats1.Completed, stats1.String())
 				require.Zero(t, stats1.Pending)
 				require.Zero(t, stats1.Blocked)
-				require.Equal(t, 1, stats1.Total)
 
 				stats2 := q2.Stats()
+				require.Equal(t, 2, stats2.Total)
 				require.Zero(t, stats2.Running)
 				require.Equal(t, 2, stats2.Completed)
 				require.Zero(t, stats2.Pending)
 				require.Zero(t, stats2.Blocked)
-				require.Equal(t, 2, stats2.Total)
 
 				time.Sleep(2 * time.Second)
 
@@ -484,9 +594,9 @@ func TestQueueGroupOperations(t *testing.T) {
 			t.Run("Close", func(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
-				require.NoError(t, dropDatabase(ctx))
 
-				g, err := constructor(t, ctx, 0)
+				g, closer, err := constructor(t, ctx, 0)
+				defer func() { require.NoError(t, closer(ctx)) }()
 				require.NoError(t, err)
 				require.NotNil(t, g)
 
@@ -517,7 +627,12 @@ func TestQueueGroupOperations(t *testing.T) {
 }
 
 func TestQueueGroupConstructorPruneSmokeTest(t *testing.T) {
-	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://localhost:27017"))
+	mopts := MongoDBOptions{
+		DB:  "amboy_test",
+		URI: "mongodb://localhost:27017",
+	}
+
+	client, err := mongo.NewClient(options.Client().ApplyURI(mopts.DB).SetConnectTimeout(time.Second))
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -527,17 +642,12 @@ func TestQueueGroupConstructorPruneSmokeTest(t *testing.T) {
 		require.NoError(t, err)
 	}
 	remoteOpts := RemoteQueueGroupOptions{
-		Client: client,
-		MongoOptions: MongoDBOptions{
-			DB:  "amboy_test",
-			URI: "mongodb://localhost:27017",
-		},
 		Prefix:         "gen",
 		Constructor:    remoteConstructor,
 		TTL:            time.Second,
 		PruneFrequency: time.Second,
 	}
-	_, err = NewRemoteQueueGroup(ctx, remoteOpts)
+	_, err = NewMongoRemoteQueueGroup(ctx, remoteOpts, client, mopts)
 	require.NoError(t, err)
 	time.Sleep(time.Second)
 	for i := 0; i < 10; i++ {
@@ -545,5 +655,4 @@ func TestQueueGroupConstructorPruneSmokeTest(t *testing.T) {
 		require.NoError(t, err)
 		require.Zero(t, count, fmt.Sprintf("gen-%d.jobs not dropped", i))
 	}
-
 }
