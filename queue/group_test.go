@@ -527,7 +527,7 @@ func TestQueueGroupOperations(t *testing.T) {
 				require.Zero(t, stats2.Total)
 			})
 			t.Run("PruneWithTTL", func(t *testing.T) {
-				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 				defer cancel()
 
 				g, closer, err := constructor(t, ctx, 5*time.Second)
