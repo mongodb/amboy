@@ -553,8 +553,8 @@ func TestQueueGroupOperations(t *testing.T) {
 				require.NoError(t, q2.Put(j2))
 				require.NoError(t, q2.Put(j3))
 
-				amboy.WaitCtxInterval(ctx, q1, 10*time.Millisecond)
-				amboy.WaitCtxInterval(ctx, q2, 10*time.Millisecond)
+				amboy.WaitCtxInterval(ctx, q1, 100*time.Millisecond)
+				amboy.WaitCtxInterval(ctx, q2, 100*time.Millisecond)
 
 				// Queues should have completed work
 				stats1 := q1.Stats()
