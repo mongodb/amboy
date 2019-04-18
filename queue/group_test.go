@@ -9,6 +9,7 @@ import (
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/job"
 	"github.com/mongodb/grip"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -319,8 +320,10 @@ func TestQueueGroupOperations(t *testing.T) {
 
 				g, closer, err := constructor(t, ctx, 0)
 				defer func() { require.NoError(t, closer(ctx)) }()
+
 				require.NoError(t, err)
 				require.NotNil(t, g)
+				defer g.Close(ctx)
 
 				q1, err := g.Get(ctx, "one")
 				require.NoError(t, err)
@@ -339,8 +342,8 @@ func TestQueueGroupOperations(t *testing.T) {
 				require.NoError(t, q2.Put(j2))
 				require.NoError(t, q2.Put(j3))
 
-				amboy.Wait(q1)
-				amboy.Wait(q2)
+				amboy.WaitCtxInterval(ctx, q2, 10*time.Millisecond)
+				amboy.WaitCtxInterval(ctx, q1, 10*time.Millisecond)
 
 				resultsQ1 := []amboy.Job{}
 				for result := range q1.Results(ctx) {
@@ -374,7 +377,6 @@ func TestQueueGroupOperations(t *testing.T) {
 				require.Len(t, resultsQ1, 1)
 				require.Len(t, resultsQ2, 2)
 			})
-
 			t.Run("Put", func(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
@@ -384,6 +386,8 @@ func TestQueueGroupOperations(t *testing.T) {
 
 				require.NoError(t, err)
 				require.NotNil(t, g)
+
+				defer g.Close(ctx)
 
 				q1, err := g.Get(ctx, "one")
 				require.NoError(t, err)
@@ -414,8 +418,8 @@ func TestQueueGroupOperations(t *testing.T) {
 				require.NoError(t, q4.Put(j2))
 				require.NoError(t, q4.Put(j3))
 
-				amboy.Wait(q3)
-				amboy.Wait(q4)
+				amboy.WaitCtxInterval(ctx, q3, 10*time.Millisecond)
+				amboy.WaitCtxInterval(ctx, q4, 10*time.Millisecond)
 
 				resultsQ3 := []amboy.Job{}
 				for result := range q3.Results(ctx) {
@@ -449,7 +453,6 @@ func TestQueueGroupOperations(t *testing.T) {
 				require.Len(t, resultsQ3, 1)
 				require.Len(t, resultsQ4, 2)
 			})
-
 			t.Run("Prune", func(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
@@ -458,12 +461,13 @@ func TestQueueGroupOperations(t *testing.T) {
 				defer func() { require.NoError(t, closer(ctx)) }()
 				require.NoError(t, err)
 				require.NotNil(t, g)
+				defer g.Close(ctx)
 
-				q1, err := g.Get(ctx, "one")
+				q1, err := g.Get(ctx, "five")
 				require.NoError(t, err)
 				require.NotNil(t, q1)
 
-				q2, err := g.Get(ctx, "two")
+				q2, err := g.Get(ctx, "six")
 				require.NoError(t, err)
 				require.NotNil(t, q2)
 
@@ -494,14 +498,16 @@ func TestQueueGroupOperations(t *testing.T) {
 				require.Zero(t, stats2.Blocked)
 				require.Equal(t, 2, stats2.Total)
 
+				time.Sleep(2 * time.Second)
+
 				require.NoError(t, g.Prune(ctx))
 
 				// Try getting the queues again
-				q1, err = g.Get(ctx, "one")
+				q1, err = g.Get(ctx, "five")
 				require.NoError(t, err)
 				require.NotNil(t, q1)
 
-				q2, err = g.Get(ctx, "two")
+				q2, err = g.Get(ctx, "six")
 				require.NoError(t, err)
 				require.NotNil(t, q2)
 
@@ -521,19 +527,20 @@ func TestQueueGroupOperations(t *testing.T) {
 				require.Zero(t, stats2.Total)
 			})
 			t.Run("PruneWithTTL", func(t *testing.T) {
-				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer cancel()
 
-				g, closer, err := constructor(t, ctx, time.Second)
+				g, closer, err := constructor(t, ctx, 5*time.Second)
 				defer func() { require.NoError(t, closer(ctx)) }()
 				require.NoError(t, err)
 				require.NotNil(t, g)
+				defer g.Close(ctx)
 
-				q1, err := g.Get(ctx, "one")
+				q1, err := g.Get(ctx, "seven")
 				require.NoError(t, err)
 				require.NotNil(t, q1)
 
-				q2, err := g.Get(ctx, "two")
+				q2, err := g.Get(ctx, "eight")
 				require.NoError(t, err)
 				require.NotNil(t, q2)
 
@@ -552,47 +559,46 @@ func TestQueueGroupOperations(t *testing.T) {
 				// Queues should have completed work
 				stats1 := q1.Stats()
 				require.Equal(t, 1, stats1.Total)
-				require.Zero(t, stats1.Running)
-				require.Equal(t, 1, stats1.Completed, stats1.String())
-				require.Zero(t, stats1.Pending)
-				require.Zero(t, stats1.Blocked)
+				assert.Zero(t, stats1.Running)
+				assert.Equal(t, 1, stats1.Completed, stats1.String())
+				assert.Zero(t, stats1.Pending)
+				assert.Zero(t, stats1.Blocked)
 
 				stats2 := q2.Stats()
 				require.Equal(t, 2, stats2.Total)
-				require.Zero(t, stats2.Running)
-				require.Equal(t, 2, stats2.Completed)
-				require.Zero(t, stats2.Pending)
-				require.Zero(t, stats2.Blocked)
+				assert.Zero(t, stats2.Running)
+				assert.Equal(t, 2, stats2.Completed, stats2.String())
+				assert.Zero(t, stats2.Pending)
+				assert.Zero(t, stats2.Blocked)
 
-				time.Sleep(2 * time.Second)
+				time.Sleep(20 * time.Second)
 
 				// Try getting the queues again
-				q1, err = g.Get(ctx, "one")
+				q1, err = g.Get(ctx, "seven")
 				require.NoError(t, err)
 				require.NotNil(t, q1)
 
-				q2, err = g.Get(ctx, "two")
+				q2, err = g.Get(ctx, "eight")
 				require.NoError(t, err)
 				require.NotNil(t, q2)
 
 				// Queues should be empty
 				stats1 = q1.Stats()
-				require.Zero(t, stats1.Running)
-				require.Zero(t, stats1.Completed)
-				require.Zero(t, stats1.Pending)
-				require.Zero(t, stats1.Blocked)
 				require.Zero(t, stats1.Total)
+				assert.Zero(t, stats1.Running)
+				assert.Zero(t, stats1.Completed)
+				assert.Zero(t, stats1.Pending)
+				assert.Zero(t, stats1.Blocked)
 
 				stats2 = q2.Stats()
 				require.Zero(t, stats2.Running)
-				require.Zero(t, stats2.Completed)
-				require.Zero(t, stats2.Pending)
-				require.Zero(t, stats2.Blocked)
-				require.Zero(t, stats2.Total)
+				assert.Zero(t, stats2.Completed)
+				assert.Zero(t, stats2.Pending)
+				assert.Zero(t, stats2.Blocked)
+				assert.Zero(t, stats2.Total)
 			})
-
 			t.Run("Close", func(t *testing.T) {
-				ctx, cancel := context.WithCancel(context.Background())
+				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 				defer cancel()
 
 				g, closer, err := constructor(t, ctx, 0)
@@ -600,11 +606,11 @@ func TestQueueGroupOperations(t *testing.T) {
 				require.NoError(t, err)
 				require.NotNil(t, g)
 
-				q1, err := g.Get(ctx, "one")
+				q1, err := g.Get(ctx, "nine")
 				require.NoError(t, err)
 				require.NotNil(t, q1)
 
-				q2, err := g.Get(ctx, "two")
+				q2, err := g.Get(ctx, "ten")
 				require.NoError(t, err)
 				require.NotNil(t, q2)
 
@@ -617,8 +623,8 @@ func TestQueueGroupOperations(t *testing.T) {
 				require.NoError(t, q2.Put(j2))
 				require.NoError(t, q2.Put(j3))
 
-				amboy.Wait(q1)
-				amboy.Wait(q2)
+				amboy.WaitCtxInterval(ctx, q1, 10*time.Millisecond)
+				amboy.WaitCtxInterval(ctx, q2, 10*time.Millisecond)
 
 				g.Close(ctx)
 			})
