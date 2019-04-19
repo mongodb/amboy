@@ -49,6 +49,32 @@ type RemoteQueueGroupOptions struct {
 	TTL time.Duration
 }
 
+func (opts RemoteQueueGroupOptions) validate() error {
+	catcher := grip.NewBasicCatcher()
+	if opts.Constructor == nil {
+		catcher.New("must pass a constructor")
+	}
+	if opts.TTL < 0 {
+		catcher.New("ttl must be greater than or equal to 0")
+	}
+	if opts.TTL > 0 && opts.TTL < time.Second {
+		catcher.New("ttl cannot be less than 1 second, unless it is 0")
+	}
+	if opts.PruneFrequency < 0 {
+		catcher.New("prune frequency must be greater than or equal to 0")
+	}
+	if opts.PruneFrequency > 0 && opts.TTL < time.Second {
+		catcher.New("prune frequency cannot be less than 1 second, unless it is 0")
+	}
+	if (opts.TTL == 0 && opts.PruneFrequency != 0) || (opts.TTL != 0 && opts.PruneFrequency == 0) {
+		catcher.New("ttl and prune frequency must both be 0 or both be not 0")
+	}
+	if opts.Prefix == "" {
+		catcher.New("prefix must be set")
+	}
+	return catcher.Resolve()
+}
+
 type listCollectionsOutput struct {
 	Name string `bson:"name"`
 }

@@ -33,7 +33,7 @@ func (s QueueStats) String() string {
 		s.Running, s.Completed, s.Pending, s.Blocked, s.Total)
 }
 
-func (s QueueStats) isComplete() bool {
+func (s QueueStats) IsComplete() bool {
 	grip.DebugWhen(sometimes.Fifth(), &s)
 
 	if s.Total == s.Completed {

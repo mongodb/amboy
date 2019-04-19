@@ -172,6 +172,27 @@ func TestSmokeMongoDriverRemoteTwoQueueRunsJobsOnlyOnce(t *testing.T) {
 	runSmokeMultipleQueuesRunJobsOnce(ctx, drivers, cleanup, assert)
 }
 
+func TestSmokeMongoGroupDriverRemoteTwoQueueRunsJobsOnlyOnce(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	assert := assert.New(t) // nolint
+	opts := DefaultMongoDBOptions()
+	opts.DB = "amboy_test"
+	name := uuid.NewV4().String()
+	drivers := []Driver{
+		NewMongoGroupDriver(name, "one", opts),
+		NewMongoGroupDriver(name, "one", opts),
+	}
+	cleanup := func() { cleanupMongo(ctx, opts.DB, name, drivers[0].(*mongoGroupDriver).client) }
+
+	ctx, cancel = context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+
+	mockJobCounters.Reset()
+	runSmokeMultipleQueuesRunJobsOnce(ctx, drivers, cleanup, assert)
+}
+
 func TestSmokeMongoDriverRemoteManyQueueRunsJobsOnlyOnce(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -187,6 +208,31 @@ func TestSmokeMongoDriverRemoteManyQueueRunsJobsOnlyOnce(t *testing.T) {
 		NewMongoDriver(name, opts),
 		NewMongoDriver(name, opts),
 		NewMongoDriver(name, opts),
+	}
+	cleanup := func() { cleanupMongo(ctx, opts.DB, name, drivers[0].(*mongoDriver).client) }
+
+	ctx, cancel = context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+
+	mockJobCounters.Reset()
+	runSmokeMultipleQueuesRunJobsOnce(ctx, drivers, cleanup, assert)
+}
+
+func TestSmokeMongoGroupDriverRemoteManyQueueRunsJobsOnlyOnce(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	assert := assert.New(t) // nolint
+	opts := DefaultMongoDBOptions()
+	opts.DB = "amboy_test"
+	name := uuid.NewV4().String()
+	drivers := []Driver{
+		NewMongoGroupDriver(name, "first", opts),
+		NewMongoGroupDriver(name, "second", opts),
+		NewMongoGroupDriver(name, "first", opts),
+		NewMongoGroupDriver(name, "second", opts),
+		NewMongoGroupDriver(name, "first", opts),
+		NewMongoGroupDriver(name, "second", opts),
 	}
 	cleanup := func() { cleanupMongo(ctx, opts.DB, name, drivers[0].(*mongoDriver).client) }
 

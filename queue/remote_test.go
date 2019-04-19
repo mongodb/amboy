@@ -11,6 +11,7 @@ import (
 	"github.com/mongodb/amboy/job"
 	"github.com/mongodb/amboy/pool"
 	"github.com/mongodb/grip"
+	"github.com/pkg/errors"
 	"github.com/satori/go.uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -59,7 +60,7 @@ func TestRemoteUnorderedPriorityDriverSuite(t *testing.T) {
 	suite.Run(t, tests)
 }
 
-func TestRemoteUnorderedMongoDBSuite(t *testing.T) {
+func TestRemoteUnorderedMgoSuite(t *testing.T) {
 	tests := new(RemoteUnorderedSuite)
 	name := "test-" + uuid.NewV4().String()
 	uri := "mongodb://localhost"
@@ -82,6 +83,42 @@ func TestRemoteUnorderedMongoDBSuite(t *testing.T) {
 			grip.Error(err)
 			return
 		}
+	}
+
+	suite.Run(t, tests)
+}
+
+func TestRemoteUnorderedMongoDBSuite(t *testing.T) {
+	tests := new(RemoteUnorderedSuite)
+	name := "test-" + uuid.NewV4().String()
+	opts := DefaultMongoDBOptions()
+	opts.DB = "amboy_test"
+	opts.URI = "mongodb://localhost"
+	mDriver := NewMongoDriver(name, opts).(*mongoDriver)
+	tests.driverConstructor = func() Driver {
+		return mDriver
+	}
+
+	tests.tearDown = func() {
+		grip.Error(errors.Wrap(mDriver.client.Database(opts.DB).Drop(nil), "problem cleaning database"))
+	}
+
+	suite.Run(t, tests)
+}
+
+func TestRemoteUnorderedMongoDBGroupSuite(t *testing.T) {
+	tests := new(RemoteUnorderedSuite)
+	name := "test-" + uuid.NewV4().String()
+	opts := DefaultMongoDBOptions()
+	opts.DB = "amboy_test"
+	opts.URI = "mongodb://localhost"
+	mDriver := NewMongoGroupDriver(name, "group", opts).(*mongoGroupDriver)
+	tests.driverConstructor = func() Driver {
+		return mDriver
+	}
+
+	tests.tearDown = func() {
+		grip.Error(errors.Wrap(mDriver.client.Database(opts.DB).Drop(nil), "problem cleaning database"))
 	}
 
 	suite.Run(t, tests)
