@@ -181,8 +181,8 @@ func TestSmokeMongoGroupDriverRemoteTwoQueueRunsJobsOnlyOnce(t *testing.T) {
 	opts.DB = "amboy_test"
 	name := uuid.NewV4().String()
 	drivers := []Driver{
-		NewMongoGroupDriver(name, "one", opts),
-		NewMongoGroupDriver(name, "one", opts),
+		NewMongoGroupDriver(name, opts, "one", time.Hour),
+		NewMongoGroupDriver(name, opts, "one", time.Hour),
 	}
 	cleanup := func() { cleanupMongo(ctx, opts.DB, name, drivers[0].(*mongoGroupDriver).client) }
 
@@ -227,12 +227,12 @@ func TestSmokeMongoGroupDriverRemoteManyQueueRunsJobsOnlyOnce(t *testing.T) {
 	opts.DB = "amboy_test"
 	name := uuid.NewV4().String()
 	drivers := []Driver{
-		NewMongoGroupDriver(name, "first", opts),
-		NewMongoGroupDriver(name, "second", opts),
-		NewMongoGroupDriver(name, "first", opts),
-		NewMongoGroupDriver(name, "second", opts),
-		NewMongoGroupDriver(name, "first", opts),
-		NewMongoGroupDriver(name, "second", opts),
+		NewMongoGroupDriver(name, opts, "first", time.Hour),
+		NewMongoGroupDriver(name, opts, "second", time.Hour),
+		NewMongoGroupDriver(name, opts, "first", time.Hour),
+		NewMongoGroupDriver(name, opts, "second", time.Hour),
+		NewMongoGroupDriver(name, opts, "first", time.Hour),
+		NewMongoGroupDriver(name, opts, "second", time.Hour),
 	}
 	cleanup := func() { cleanupMongo(ctx, opts.DB, name, drivers[0].(*mongoDriver).client) }
 

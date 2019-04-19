@@ -99,8 +99,10 @@ func TestDriverSuiteWithGroupMongoDBInstance(t *testing.T) {
 	opts.DB = "amboy_test"
 	mDriver := NewMongoGroupDriver(
 		"test-"+tests.uuid,
+		opts,
 		"group0",
-		opts).(*mongoGroupDriver)
+		time.Hour,
+	).(*mongoGroupDriver)
 
 	tests.driverConstructor = func() Driver {
 		return mDriver

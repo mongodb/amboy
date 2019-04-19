@@ -9,6 +9,7 @@ import (
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/job"
 	"github.com/mongodb/grip"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/bson"
@@ -230,15 +231,15 @@ func TestQueueGroupConstructor(t *testing.T) {
 }
 
 type queueGroupCloser func(context.Context) error
-type queueGroupConstructor func(*testing.T, context.Context, time.Duration) (amboy.QueueGroup, queueGroupCloser, error)
+type queueGroupConstructor func(context.Context, time.Duration) (amboy.QueueGroup, queueGroupCloser, error)
 
-func localQueueGroupConstructor(t *testing.T, ctx context.Context, ttl time.Duration) (amboy.QueueGroup, queueGroupCloser, error) {
+func localQueueGroupConstructor(ctx context.Context, ttl time.Duration) (amboy.QueueGroup, queueGroupCloser, error) {
 	qg, err := NewLocalQueueGroup(ctx, LocalQueueGroupOptions{Constructor: localConstructor, TTL: ttl})
 	closer := func(_ context.Context) error { return nil }
 	return qg, closer, err
 }
 
-func remoteQueueGroupConstructor(t *testing.T, ctx context.Context, ttl time.Duration) (amboy.QueueGroup, queueGroupCloser, error) {
+func remoteQueueGroupConstructor(ctx context.Context, ttl time.Duration) (amboy.QueueGroup, queueGroupCloser, error) {
 	mopts := MongoDBOptions{
 		DB:  "amboy_test",
 		URI: "mongodb://localhost:27017",
@@ -274,7 +275,7 @@ func remoteQueueGroupConstructor(t *testing.T, ctx context.Context, ttl time.Dur
 	return qg, closer, err
 }
 
-func remoteLegacyQueueGroupConstructor(t *testing.T, ctx context.Context, ttl time.Duration) (amboy.QueueGroup, queueGroupCloser, error) {
+func remoteLegacyQueueGroupConstructor(ctx context.Context, ttl time.Duration) (amboy.QueueGroup, queueGroupCloser, error) {
 	mopts := MongoDBOptions{
 		DB:  "amboy_test",
 		URI: "mongodb://localhost:27017",
@@ -305,11 +306,55 @@ func remoteLegacyQueueGroupConstructor(t *testing.T, ctx context.Context, ttl ti
 	return qg, closer, err
 }
 
+func remoteQueueGroupMergedConstructor(ctx context.Context, ttl time.Duration) (amboy.QueueGroup, queueGroupCloser, error) {
+	mopts := MongoDBOptions{
+		DB:  "amboy_test",
+		URI: "mongodb://localhost:27017",
+	}
+
+	client, err := mongo.NewClient(options.Client().ApplyURI(mopts.URI).SetConnectTimeout(time.Second))
+	if err != nil {
+		return nil, func(_ context.Context) error { return nil }, err
+	}
+
+	closer := func(cctx context.Context) error {
+		catcher := grip.NewBasicCatcher()
+		catcher.Add(client.Database(mopts.DB).Drop(cctx))
+		//catcher.Add(client.Disconnect(cctx))
+		return catcher.Resolve()
+	}
+	if ttl == 0 {
+		ttl = time.Hour
+	}
+
+	if err = client.Connect(ctx); err != nil {
+		return nil, closer, err
+	}
+	opts := RemoteQueueGroupOptions{
+		Constructor:    remoteConstructor,
+		Prefix:         "prefix",
+		TTL:            ttl,
+		PruneFrequency: ttl,
+	}
+
+	if err = client.Database(mopts.DB).Drop(ctx); err != nil {
+		return nil, closer, err
+	}
+
+	if err := client.Ping(ctx, nil); err != nil {
+		return nil, closer, errors.Wrap(err, "server not pingable")
+	}
+
+	qg, err := NewMongoRemoteSingleQueueGroup(ctx, opts, client, mopts)
+	return qg, closer, err
+}
+
 func TestQueueGroupOperations(t *testing.T) {
 	queueGroups := map[string]queueGroupConstructor{
-		"Local":     localQueueGroupConstructor,
-		"Mongo":     remoteQueueGroupConstructor,
-		"LegacyMgo": remoteLegacyQueueGroupConstructor,
+		"Local":       localQueueGroupConstructor,
+		"Mongo":       remoteQueueGroupConstructor,
+		"MongoMerged": remoteQueueGroupMergedConstructor,
+		"LegacyMgo":   remoteLegacyQueueGroupConstructor,
 	}
 
 	for groupName, constructor := range queueGroups {
@@ -318,9 +363,8 @@ func TestQueueGroupOperations(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 
-				g, closer, err := constructor(t, ctx, 0)
+				g, closer, err := constructor(ctx, 0)
 				defer func() { require.NoError(t, closer(ctx)) }()
-
 				require.NoError(t, err)
 				require.NotNil(t, g)
 				defer g.Close(ctx)
@@ -353,8 +397,8 @@ func TestQueueGroupOperations(t *testing.T) {
 				for result := range q2.Results(ctx) {
 					resultsQ2 = append(resultsQ2, result)
 				}
-				require.Len(t, resultsQ1, 1)
-				require.Len(t, resultsQ2, 2)
+
+				require.True(t, assert.Len(t, resultsQ1, 1, "first") && assert.Len(t, resultsQ2, 2, "second"))
 
 				// Try getting the queues again
 				q1, err = g.Get(ctx, "one")
@@ -381,7 +425,7 @@ func TestQueueGroupOperations(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 
-				g, closer, err := constructor(t, ctx, 0)
+				g, closer, err := constructor(ctx, 0)
 				defer func() { require.NoError(t, closer(ctx)) }()
 
 				require.NoError(t, err)
@@ -457,7 +501,7 @@ func TestQueueGroupOperations(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 
-				g, closer, err := constructor(t, ctx, 0)
+				g, closer, err := constructor(ctx, 0)
 				defer func() { require.NoError(t, closer(ctx)) }()
 				require.NoError(t, err)
 				require.NotNil(t, g)
@@ -511,26 +555,34 @@ func TestQueueGroupOperations(t *testing.T) {
 				require.NoError(t, err)
 				require.NotNil(t, q2)
 
-				// Queues should be empty
-				stats1 = q1.Stats()
-				require.Zero(t, stats1.Running)
-				require.Zero(t, stats1.Completed)
-				require.Zero(t, stats1.Pending)
-				require.Zero(t, stats1.Blocked)
-				require.Zero(t, stats1.Total)
+				if mg, ok := g.(*remoteMongoQueueGroupSingle); ok {
+					// we should be tracking no
+					// local queues
+					assert.Len(t, mg.queues, 2)
+					require.NoError(t, g.Prune(ctx))
+					assert.Len(t, mg.queues, 0)
+				} else {
+					// Queues should be empty
+					stats1 = q1.Stats()
+					require.Zero(t, stats1.Running)
+					require.Zero(t, stats1.Completed)
+					require.Zero(t, stats1.Pending)
+					require.Zero(t, stats1.Blocked)
+					require.Zero(t, stats1.Total)
 
-				stats2 = q2.Stats()
-				require.Zero(t, stats2.Running)
-				require.Zero(t, stats2.Completed)
-				require.Zero(t, stats2.Pending)
-				require.Zero(t, stats2.Blocked)
-				require.Zero(t, stats2.Total)
+					stats2 = q2.Stats()
+					require.Zero(t, stats2.Running)
+					require.Zero(t, stats2.Completed)
+					require.Zero(t, stats2.Pending)
+					require.Zero(t, stats2.Blocked)
+					require.Zero(t, stats2.Total)
+				}
 			})
 			t.Run("PruneWithTTL", func(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 				defer cancel()
 
-				g, closer, err := constructor(t, ctx, 5*time.Second)
+				g, closer, err := constructor(ctx, 5*time.Second)
 				defer func() { require.NoError(t, closer(ctx)) }()
 				require.NoError(t, err)
 				require.NotNil(t, g)
@@ -573,6 +625,12 @@ func TestQueueGroupOperations(t *testing.T) {
 
 				time.Sleep(20 * time.Second)
 
+				if mg, ok := g.(*remoteMongoQueueGroupSingle); ok {
+					// we should be tracking no
+					// local queues
+					assert.Len(t, mg.queues, 0)
+				}
+
 				// Try getting the queues again
 				q1, err = g.Get(ctx, "seven")
 				require.NoError(t, err)
@@ -582,27 +640,35 @@ func TestQueueGroupOperations(t *testing.T) {
 				require.NoError(t, err)
 				require.NotNil(t, q2)
 
-				// Queues should be empty
-				stats1 = q1.Stats()
-				require.Zero(t, stats1.Total)
-				assert.Zero(t, stats1.Running)
-				assert.Zero(t, stats1.Completed)
-				assert.Zero(t, stats1.Pending)
-				assert.Zero(t, stats1.Blocked)
+				if mg, ok := g.(*remoteMongoQueueGroupSingle); ok {
+					// we should be tracking no
+					// local queues
+					assert.Len(t, mg.queues, 2)
+					require.NoError(t, g.Prune(ctx))
+					assert.Len(t, mg.queues, 0)
+				} else {
+					// Queues should be empty
+					stats1 = q1.Stats()
+					require.Zero(t, stats1.Running)
+					require.Zero(t, stats1.Completed)
+					require.Zero(t, stats1.Pending)
+					require.Zero(t, stats1.Blocked)
+					require.Zero(t, stats1.Total)
 
-				stats2 = q2.Stats()
-				require.Zero(t, stats2.Running)
-				assert.Zero(t, stats2.Completed)
-				assert.Zero(t, stats2.Pending)
-				assert.Zero(t, stats2.Blocked)
-				assert.Zero(t, stats2.Total)
+					stats2 = q2.Stats()
+					require.Zero(t, stats2.Running)
+					require.Zero(t, stats2.Completed)
+					require.Zero(t, stats2.Pending)
+					require.Zero(t, stats2.Blocked)
+					require.Zero(t, stats2.Total)
+				}
 			})
 			t.Run("Close", func(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 				defer cancel()
 
-				g, closer, err := constructor(t, ctx, 0)
-				defer func() { require.NoError(t, closer(ctx)) }()
+				g, closer, err := constructor(ctx, 0)
+				defer func() { grip.Alert(closer(ctx)) }()
 				require.NoError(t, err)
 				require.NotNil(t, g)
 

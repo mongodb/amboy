@@ -28,13 +28,14 @@ type mongoGroupDriver struct {
 	instanceID       string
 	priority         bool
 	respectWaitUntil bool
+	ttl              time.Duration
 	mu               sync.RWMutex
 	canceler         context.CancelFunc
 
 	LockManager
 }
 
-func NewMongoGroupDriver(name, group string, opts MongoDBOptions) Driver {
+func NewMongoGroupDriver(name string, opts MongoDBOptions, group string, groupTTL time.Duration) Driver {
 	host, _ := os.Hostname()
 	return &mongoGroupDriver{
 		name:             name,
@@ -50,8 +51,8 @@ func NewMongoGroupDriver(name, group string, opts MongoDBOptions) Driver {
 // OpenNewMongoGroupDriver constructs and opens a new MongoDB driver instance
 // using the specified session. It is equivalent to calling
 // NewMongoGroupDriver() and calling driver.Open().
-func OpenNewMongoGroupDriver(ctx context.Context, name, group string, opts MongoDBOptions, client *mongo.Client) (Driver, error) {
-	d := NewMongoGroupDriver(name, group, opts).(*mongoGroupDriver)
+func OpenNewMongoGroupDriver(ctx context.Context, name string, opts MongoDBOptions, group string, groupTTL time.Duration, client *mongo.Client) (Driver, error) {
+	d := NewMongoGroupDriver(name, opts, group, groupTTL).(*mongoGroupDriver)
 
 	if err := d.start(ctx, client); err != nil {
 		return nil, errors.Wrap(err, "problem starting driver")
@@ -146,19 +147,6 @@ func (d *mongoGroupDriver) setupDB(ctx context.Context) error {
 
 	_, err := d.getCollection().Indexes().CreateMany(ctx, []mongo.IndexModel{
 		mongo.IndexModel{
-			Keys: bsonx.Doc{
-				{
-					Key:   "group",
-					Value: bsonx.Int32(1),
-				},
-				{
-					Key:   "_id",
-					Value: bsonx.Int32(1),
-				},
-			},
-			Options: options.Index().SetUnique(true),
-		},
-		mongo.IndexModel{
 			Keys: keys,
 		},
 		mongo.IndexModel{
@@ -187,7 +175,7 @@ func (d *mongoGroupDriver) Close() {
 func (d *mongoGroupDriver) Get(ctx context.Context, name string) (amboy.Job, error) {
 	j := &registry.JobInterchange{}
 
-	err := d.getCollection().FindOne(ctx, bson.M{"_id": name}).Decode(j)
+	err := d.getCollection().FindOne(ctx, bson.M{"_id": buildCompoundID(d.group, name)}).Decode(j)
 	if err != nil {
 		return nil, errors.Wrapf(err, "GET problem fetching '%s'", name)
 	}
@@ -208,13 +196,17 @@ func (d *mongoGroupDriver) Put(ctx context.Context, j amboy.Job) error {
 	}
 
 	job.Group = d.group
+	job.Name = buildCompoundJobID(d.group, j)
 
-	if _, err = d.getCollection().InsertOne(ctx, job); err != nil {
+	if _, err := d.getCollection().InsertOne(ctx, job); err != nil {
 		return errors.Wrapf(err, "problem saving new job %s", j.ID())
 	}
 
 	return nil
 }
+
+func buildCompoundJobID(n string, job amboy.Job) string { return buildCompoundID(n, job.ID()) }
+func buildCompoundID(n, id string) string               { return fmt.Sprintf("%s.%s", n, id) }
 
 func (d *mongoGroupDriver) Save(ctx context.Context, j amboy.Job) error {
 	name := j.ID()
@@ -229,7 +221,10 @@ func (d *mongoGroupDriver) Save(ctx context.Context, j amboy.Job) error {
 		return errors.Wrap(err, "problem converting job to interchange format")
 	}
 
-	query := getAtomicQuery(d.instanceID, name, stat.ModificationCount)
+	job.Group = d.group
+	job.Name = buildCompoundJobID(d.group, j)
+
+	query := getAtomicQuery(d.instanceID, job.Name, stat.ModificationCount)
 	res, err := d.getCollection().ReplaceOne(ctx, query, job)
 	if err != nil {
 		if isMongoDupKey(err) {
@@ -251,7 +246,7 @@ func (d *mongoGroupDriver) Save(ctx context.Context, j amboy.Job) error {
 
 func (d *mongoGroupDriver) SaveStatus(ctx context.Context, j amboy.Job, stat amboy.JobStatusInfo) error {
 	id := j.ID()
-	query := getAtomicQuery(d.instanceID, id, stat.ModificationCount)
+	query := getAtomicQuery(d.instanceID, buildCompoundJobID(d.group, j), stat.ModificationCount)
 	stat.Owner = d.instanceID
 	stat.ModificationCount++
 	stat.ModificationTime = time.Now()
@@ -301,6 +296,8 @@ func (d *mongoGroupDriver) Jobs(ctx context.Context) <-chan amboy.Job {
 				continue
 			}
 
+			j.Name = j.Name[len(d.group)+1:]
+
 			job, err = j.Resolve(amboy.BSON)
 			if err != nil {
 				grip.Warning(message.WrapError(err, message.Fields{
@@ -333,7 +330,7 @@ func (d *mongoGroupDriver) JobStats(ctx context.Context) <-chan amboy.JobStatusI
 		defer close(output)
 
 		iter, err := d.getCollection().Find(ctx,
-			struct{}{},
+			bson.M{"group": d.group},
 			&options.FindOptions{
 				Sort: bson.M{"status.mod_ts": -1},
 				Projection: bson.M{
@@ -364,16 +361,14 @@ func (d *mongoGroupDriver) JobStats(ctx context.Context) <-chan amboy.JobStatusI
 				}))
 				continue
 			}
-
+			j.Name = j.Name[len(d.group)+1:]
 			j.Status.ID = j.Name
 			select {
 			case <-ctx.Done():
 				return
 			case output <- j.Status:
 			}
-
 		}
-
 	}()
 
 	return output
@@ -495,17 +490,6 @@ func (d *mongoGroupDriver) Next(ctx context.Context) amboy.Job {
 
 func (d *mongoGroupDriver) Stats(ctx context.Context) amboy.QueueStats {
 	coll := d.getCollection()
-
-	numJobs, err := coll.CountDocuments(ctx, bson.M{"group": d.group})
-	grip.Warning(message.WrapError(err, message.Fields{
-		"id":         d.instanceID,
-		"group":      d.group,
-		"service":    "amboy.queue.group.mongo",
-		"collection": coll.Name(),
-		"operation":  "queue stats",
-		"message":    "problem counting all jobs",
-	}))
-
 	pending, err := coll.CountDocuments(ctx, bson.M{"group": d.group, "status.completed": false})
 	grip.Warning(message.WrapError(err, message.Fields{
 		"id":         d.instanceID,
@@ -516,7 +500,7 @@ func (d *mongoGroupDriver) Stats(ctx context.Context) amboy.QueueStats {
 		"message":    "problem counting pending jobs",
 	}))
 
-	numLocked, err := coll.CountDocuments(ctx, bson.M{"group": d.group, "status.completed": false, "status.in_prog": true})
+	numLocked, err := coll.CountDocuments(ctx, bson.M{"group": d.group, "status.completed": false})
 	grip.Warning(message.WrapError(err, message.Fields{
 		"id":         d.instanceID,
 		"group":      d.group,
@@ -526,10 +510,20 @@ func (d *mongoGroupDriver) Stats(ctx context.Context) amboy.QueueStats {
 		"message":    "problem counting locked jobs",
 	}))
 
+	numCompleted, err := coll.CountDocuments(ctx, bson.M{"group": d.group, "status.completed": true})
+	grip.Warning(message.WrapError(err, message.Fields{
+		"id":         d.instanceID,
+		"group":      d.group,
+		"service":    "amboy.queue.group.mongo",
+		"collection": coll.Name(),
+		"operation":  "queue stats",
+		"message":    "problem counting completed jobs",
+	}))
+
 	return amboy.QueueStats{
-		Total:     int(numJobs),
+		Total:     int(pending + numCompleted + numLocked),
 		Pending:   int(pending),
-		Completed: int(numJobs - pending),
+		Completed: int(numCompleted),
 		Running:   int(numLocked),
 	}
 }

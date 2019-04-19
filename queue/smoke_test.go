@@ -603,7 +603,7 @@ func TestSmokeRemoteUnorderedWorkerPoolsWithMongoDriver(t *testing.T) {
 	}
 }
 
-func TestSmokeRemoteUnorderedWorkerPoolsWithMongoGroupDriver(t *testing.T) {
+func TestSmokeRemoteUnorderedWorkerPoolsWithGroupMongoDriver(t *testing.T) {
 	assert := assert.New(t) // nolint
 	opts := DefaultMongoDBOptions()
 	opts.DB = "amboy_test"
@@ -618,7 +618,7 @@ func TestSmokeRemoteUnorderedWorkerPoolsWithMongoGroupDriver(t *testing.T) {
 		name := strings.Replace(uuid.NewV4().String(), "-", ".", -1)
 
 		ctx, cancel := context.WithCancel(baseCtx)
-		d := NewMongoGroupDriver(name, fmt.Sprintf("group%d", poolSize), opts).(*mongoGroupDriver)
+		d := NewMongoGroupDriver(name, opts, fmt.Sprintf("group%d", poolSize), time.Hour).(*mongoGroupDriver)
 		assert.NoError(q.SetDriver(d))
 
 		runUnorderedSmokeTest(ctx, q, poolSize, assert)
@@ -627,7 +627,7 @@ func TestSmokeRemoteUnorderedWorkerPoolsWithMongoGroupDriver(t *testing.T) {
 		client = d.client
 		grip.Infof("test with %d jobs, duration = %s", poolSize, time.Since(start))
 	}
-	grip.Alert(errors.Wrap(cleanupClient(ctx, opts.DB, client), "problem cleaning up group driver"))
+	grip.Alert(errors.Wrap(cleanupClient(baseCtx, opts.DB, client), "problem cleaning up group driver"))
 }
 
 func TestSmokePriorityQueueWithSingleWorker(t *testing.T) {
@@ -823,7 +823,7 @@ func TestSmokeMultipleMongoDriverRemoteUnorderedQueuesWithTheSameName(t *testing
 	cancel()
 }
 
-func TestSmokeMultipleMongoGroupDriverRemoteUnorderedQueuesWithTheSameName(t *testing.T) {
+func TestSmokeMultipleGroupMongoDriverRemoteUnorderedQueuesWithTheSameName(t *testing.T) {
 	assert := assert.New(t) // nolint
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -835,9 +835,9 @@ func TestSmokeMultipleMongoGroupDriverRemoteUnorderedQueuesWithTheSameName(t *te
 	// create queues with two runners, mongodb backed drivers, and
 	// configure injectors
 	qOne := NewRemoteUnordered(runtime.NumCPU() / 2)
-	dOne := NewMongoGroupDriver(name+"-one", "group0", opts).(*mongoGroupDriver)
+	dOne := NewMongoGroupDriver(name+"-one", opts, "group0", time.Hour).(*mongoGroupDriver)
 	qTwo := NewRemoteUnordered(runtime.NumCPU() / 2)
-	dTwo := NewMongoGroupDriver(name+"-two", "group0", opts).(*mongoGroupDriver)
+	dTwo := NewMongoGroupDriver(name+"-two", opts, "group0", time.Hour).(*mongoGroupDriver)
 	assert.NoError(dOne.Open(ctx))
 	assert.NoError(dTwo.Open(ctx))
 	assert.NoError(qOne.SetDriver(dOne))
@@ -1444,7 +1444,7 @@ func TestSmokeWaitUntilMongoDriver(t *testing.T) {
 	}
 }
 
-func TestSmokeWaitUntilMongoGroupDriver(t *testing.T) {
+func TestSmokeWaitUntilGroupMongoDriver(t *testing.T) {
 	assert := assert.New(t) // nolint
 	opts := DefaultMongoDBOptions()
 	opts.DB = "amboy_group_test"
@@ -1457,7 +1457,7 @@ func TestSmokeWaitUntilMongoGroupDriver(t *testing.T) {
 		q := NewSimpleRemoteOrdered(poolSize)
 
 		name := strings.Replace(uuid.NewV4().String(), "-", ".", -1)
-		driver := NewMongoGroupDriver(name, fmt.Sprintf("group%d", poolSize), opts).(*mongoGroupDriver)
+		driver := NewMongoGroupDriver(name, opts, fmt.Sprintf("group%d", poolSize), time.Hour).(*mongoGroupDriver)
 		assert.NoError(driver.Open(ctx))
 		assert.NoError(q.SetDriver(driver))
 
@@ -1510,4 +1510,5 @@ func cleanupClient(ctx context.Context, dbname string, client *mongo.Client) err
 	if err := client.Database(dbname).Drop(ctx); err != nil {
 		return errors.WithStack(err)
 	}
+	return nil
 }
