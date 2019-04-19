@@ -234,7 +234,7 @@ func TestSmokeMongoGroupDriverRemoteManyQueueRunsJobsOnlyOnce(t *testing.T) {
 		NewMongoGroupDriver(name, opts, "first", time.Hour),
 		NewMongoGroupDriver(name, opts, "second", time.Hour),
 	}
-	cleanup := func() { cleanupMongo(ctx, opts.DB, name, drivers[0].(*mongoDriver).client) }
+	cleanup := func() { cleanupMongo(ctx, opts.DB, name, drivers[0].(*mongoGroupDriver).client) }
 
 	ctx, cancel = context.WithTimeout(ctx, time.Minute)
 	defer cancel()
