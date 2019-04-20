@@ -25,7 +25,7 @@ func init() {
 // Manager registry.
 func RegisterManager(name string, f ManagerFactory) { registry.addManager(name, f) }
 
-// GetMangerFactory returns a globally registered manager factory by name.
+// GetManagerFactory returns a globally registered manager factory by name.
 func GetManagerFactory(name string) (ManagerFactory, error) { return registry.getManager(name) }
 
 // RegisterCheck stores a CheckFactory in the global check registry.
