@@ -34,8 +34,11 @@ type mongoDriver struct {
 	LockManager
 }
 
+// NewMongoDriver constructs a MongoDB backed queue driver
+// implementation using the go.mongodb.org/mongo-driver as the
+// database interface.
 func NewMongoDriver(name string, opts MongoDBOptions) Driver {
-	host, _ := os.Hostname()
+	host, _ := os.Hostname() // nolint
 	return &mongoDriver{
 		name:             name,
 		dbName:           opts.DB,

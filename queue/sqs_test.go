@@ -27,7 +27,7 @@ func (s *SQSFifoQueueSuite) SetupTest() {
 	r := pool.NewSingle()
 	s.NoError(s.queue.SetRunner(r))
 	s.Equal(r, s.queue.Runner())
-	s.queue.Start(context.Background())
+	s.NoError(s.queue.Start(context.Background()))
 
 	stats := s.queue.Stats()
 	s.Equal(0, stats.Total)
