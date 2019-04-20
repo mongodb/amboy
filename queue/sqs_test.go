@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/mongodb/amboy"
@@ -17,6 +18,9 @@ type SQSFifoQueueSuite struct {
 }
 
 func TestSQSFifoQueueSuite(t *testing.T) {
+	if os.Getenv("EVR_TASK_ID") != "" {
+		t.Skip("evergreen test environment not configured with credentials")
+	}
 	suite.Run(t, new(SQSFifoQueueSuite))
 }
 
