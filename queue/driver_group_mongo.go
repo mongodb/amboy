@@ -34,6 +34,10 @@ type mongoGroupDriver struct {
 	LockManager
 }
 
+// NewMongoGroupDriver is similar to the MongoDriver, except it
+// prefixes job ids with a prefix and adds the group field to the
+// documents in the database which makes it possible to manage
+// distinct queues with a single MongoDB collection.
 func NewMongoGroupDriver(name string, opts MongoDBOptions, group string, groupTTL time.Duration) Driver {
 	host, _ := os.Hostname() // nolint
 	return &mongoGroupDriver{
@@ -416,7 +420,7 @@ func (d *mongoGroupDriver) Next(ctx context.Context) amboy.Job {
 
 	iter, err := d.getCollection().Find(ctx, qd, opts)
 	if err != nil {
-		grip.Error(message.WrapError(err, message.Fields{
+		grip.Debug(message.WrapError(err, message.Fields{
 			"id":        d.instanceID,
 			"group":     d.group,
 			"service":   "amboy.queue.group.mongo",
@@ -427,14 +431,6 @@ func (d *mongoGroupDriver) Next(ctx context.Context) amboy.Job {
 	}
 	coll := d.getCollection().Name()
 	for iter.Next(ctx) {
-		grip.Info(message.Fields{
-			"id":              d.instanceID,
-			"group":           d.group,
-			"service":         "amboy.queue.group.mongo",
-			"operation":       "converting next job",
-			"message":         "iterating",
-			"collection_name": coll,
-		})
 		if err = iter.Decode(j); err != nil {
 			grip.Warning(message.WrapError(err, message.Fields{
 				"id":        d.instanceID,
@@ -462,27 +458,23 @@ func (d *mongoGroupDriver) Next(ctx context.Context) amboy.Job {
 		break
 	}
 
-	if err = iter.Err(); err != nil {
-		grip.Warning(message.WrapError(err, message.Fields{
-			"id":              d.instanceID,
-			"group":           d.group,
-			"service":         "amboy.queue.group.mongo",
-			"message":         "problem reported by iterator",
-			"operation":       "retrieving next job",
-			"collection_name": coll,
-		}))
-	}
+	grip.WarningWhen(job == nil, message.WrapError(iter.Err(), message.Fields{
+		"id":              d.instanceID,
+		"group":           d.group,
+		"service":         "amboy.queue.group.mongo",
+		"message":         "problem reported by iterator",
+		"operation":       "retrieving next job",
+		"collection_name": coll,
+	}))
 
-	if err = iter.Close(ctx); err != nil {
-		grip.Warning(message.WrapError(err, message.Fields{
-			"id":              d.instanceID,
-			"group":           d.group,
-			"service":         "amboy.queue.group.mongo",
-			"message":         "problem closing iterator",
-			"operation":       "retrieving next job",
-			"collection_name": coll,
-		}))
-	}
+	grip.Warning(message.WrapError(iter.Close(ctx), message.Fields{
+		"id":              d.instanceID,
+		"group":           d.group,
+		"service":         "amboy.queue.group.mongo",
+		"message":         "problem closing iterator",
+		"operation":       "retrieving next job",
+		"collection_name": coll,
+	}))
 
 	return job
 }

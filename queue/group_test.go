@@ -246,7 +246,7 @@ func remoteQueueGroupConstructor(ctx context.Context, ttl time.Duration) (amboy.
 		URI: "mongodb://localhost:27017",
 	}
 
-	client, err := mongo.NewClient(options.Client().ApplyURI(mopts.DB).SetConnectTimeout(2 * time.Second))
+	client, err := mongo.NewClient(options.Client().ApplyURI(mopts.URI).SetConnectTimeout(2 * time.Second))
 	if err != nil {
 		return nil, func(_ context.Context) error { return nil }, err
 	}
@@ -321,7 +321,7 @@ func remoteQueueGroupMergedConstructor(ctx context.Context, ttl time.Duration) (
 	closer := func(cctx context.Context) error {
 		catcher := grip.NewBasicCatcher()
 		catcher.Add(client.Database(mopts.DB).Drop(cctx))
-		//catcher.Add(client.Disconnect(cctx))
+		catcher.Add(client.Disconnect(cctx))
 		return catcher.Resolve()
 	}
 	if ttl == 0 {

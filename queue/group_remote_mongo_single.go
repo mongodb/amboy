@@ -126,7 +126,7 @@ func (g *remoteMongoQueueGroupSingle) Prune(ctx context.Context) error {
 	defer g.mu.Unlock()
 
 	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, 3*time.Second)
+	ctx, cancel = context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 
 	for name, queue := range g.queues {
@@ -145,8 +145,6 @@ func (g *remoteMongoQueueGroupSingle) Close(ctx context.Context) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	g.canceler()
-
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
@@ -157,4 +155,5 @@ func (g *remoteMongoQueueGroupSingle) Close(ctx context.Context) {
 		queue.Runner().Close(ctx)
 		delete(g.queues, name)
 	}
+	g.canceler()
 }
