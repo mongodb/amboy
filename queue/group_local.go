@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/mongodb/amboy"
+	"github.com/mongodb/grip"
+	"github.com/mongodb/grip/message"
 	"github.com/mongodb/grip/recovery"
 	"github.com/pkg/errors"
 )
@@ -59,7 +61,11 @@ func NewLocalQueueGroup(ctx context.Context, opts LocalQueueGroupOptions) (amboy
 				case <-ctx.Done():
 					return
 				case <-ticker.C:
-					_ = g.Prune(ctx)
+					grip.Error(message.WrapError(g.Prune(ctx),
+						message.Fields{
+							"group": "local queue group background pruning",
+							"ttl":   opts.TTL,
+						}))
 				}
 			}
 		}()

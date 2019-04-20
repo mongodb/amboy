@@ -96,7 +96,7 @@ func TestQueueGroupConstructor(t *testing.T) {
 					Constructor: test.localConstructor,
 					TTL:         test.ttl,
 				}
-				g, err := NewLocalQueueGroup(ctx, localOpts)
+				g, err := NewLocalQueueGroup(ctx, localOpts) // nolint
 				if test.valid {
 					require.NotNil(t, g)
 					require.NoError(t, err)
@@ -154,7 +154,8 @@ func TestQueueGroupConstructor(t *testing.T) {
 							TTL:            test.ttl,
 							PruneFrequency: test.ttl,
 						}
-						g, err := NewMongoRemoteQueueGroup(tctx, remoteOpts, client, mopts)
+
+						g, err := NewMongoRemoteQueueGroup(tctx, remoteOpts, client, mopts) // nolint
 						if test.valid && remoteTest.valid {
 							require.NoError(t, err)
 							require.NotNil(t, g)
@@ -668,7 +669,7 @@ func TestQueueGroupOperations(t *testing.T) {
 				defer cancel()
 
 				g, closer, err := constructor(ctx, 0)
-				defer func() { grip.Alert(closer(ctx)) }()
+				defer func() { require.NoError(t, closer(ctx)) }()
 				require.NoError(t, err)
 				require.NotNil(t, g)
 
@@ -710,7 +711,7 @@ func TestQueueGroupConstructorPruneSmokeTest(t *testing.T) {
 	defer cancel()
 	require.NoError(t, client.Connect(ctx))
 	for i := 0; i < 10; i++ {
-		_, err := client.Database("amboy_test").Collection(fmt.Sprintf("gen-%d.jobs", i)).InsertOne(ctx, bson.M{"foo": "bar"})
+		_, err = client.Database("amboy_test").Collection(fmt.Sprintf("gen-%d.jobs", i)).InsertOne(ctx, bson.M{"foo": "bar"})
 		require.NoError(t, err)
 	}
 	remoteOpts := RemoteQueueGroupOptions{

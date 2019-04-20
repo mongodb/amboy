@@ -71,6 +71,30 @@ func TestDriverSuiteWithMgoInstance(t *testing.T) {
 	suite.Run(t, tests)
 }
 
+func TestDriverSuiteWithMongoDBInstance(t *testing.T) {
+	tests := new(DriverSuite)
+	tests.uuid = uuid.NewV4().String()
+	opts := DefaultMongoDBOptions()
+	opts.DB = "amboy_test"
+	mDriver := NewMongoDriver(
+		"test-"+tests.uuid,
+		opts).(*mongoDriver)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	tests.driverConstructor = func() Driver {
+		return mDriver
+	}
+
+	tests.tearDown = func() {
+		err := mDriver.getCollection().Drop(ctx)
+		grip.Infof("removed %s collection (%+v)", mDriver.getCollection().Name(), err)
+	}
+
+	suite.Run(t, tests)
+}
+
 // Implementation of the suite:
 
 func (s *DriverSuite) SetupSuite() {

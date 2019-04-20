@@ -34,8 +34,11 @@ type mongoDriver struct {
 	LockManager
 }
 
+// NewMongoDriver constructs a MongoDB backed queue driver
+// implementation using the go.mongodb.org/mongo-driver as the
+// database interface.
 func NewMongoDriver(name string, opts MongoDBOptions) Driver {
-	host, _ := os.Hostname()
+	host, _ := os.Hostname() // nolint
 	return &mongoDriver{
 		name:             name,
 		dbName:           opts.DB,
@@ -409,13 +412,6 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 	}
 	coll := d.getCollection().Name()
 	for iter.Next(ctx) {
-		grip.Info(message.Fields{
-			"id":              d.instanceID,
-			"service":         "amboy.queue.mongo",
-			"operation":       "converting next job",
-			"message":         "iterating",
-			"collection_name": coll,
-		})
 		if err = iter.Decode(j); err != nil {
 			grip.Warning(message.WrapError(err, message.Fields{
 				"id":        d.instanceID,
@@ -441,25 +437,21 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 		break
 	}
 
-	if err = iter.Err(); err != nil {
-		grip.Warning(message.WrapError(err, message.Fields{
-			"id":              d.instanceID,
-			"service":         "amboy.queue.mongo",
-			"message":         "problem reported by iterator",
-			"operation":       "retrieving next job",
-			"collection_name": coll,
-		}))
-	}
+	grip.Warning(message.WrapError(iter.Err(), message.Fields{
+		"id":              d.instanceID,
+		"service":         "amboy.queue.mongo",
+		"message":         "problem reported by iterator",
+		"operation":       "retrieving next job",
+		"collection_name": coll,
+	}))
 
-	if err = iter.Close(ctx); err != nil {
-		grip.Warning(message.WrapError(err, message.Fields{
-			"id":              d.instanceID,
-			"service":         "amboy.queue.mongo",
-			"message":         "problem closing iterator",
-			"operation":       "retrieving next job",
-			"collection_name": coll,
-		}))
-	}
+	grip.Warning(message.WrapError(iter.Close(ctx), message.Fields{
+		"id":              d.instanceID,
+		"service":         "amboy.queue.mongo",
+		"message":         "problem closing iterator",
+		"operation":       "retrieving next job",
+		"collection_name": coll,
+	}))
 
 	return job
 }

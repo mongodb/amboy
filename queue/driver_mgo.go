@@ -58,7 +58,7 @@ func DefaultMongoDBOptions() MongoDBOptions {
 // NewMgoDriver creates a driver object given a name, which
 // serves as a prefix for collection names, and a MongoDB connection
 func NewMgoDriver(name string, opts MongoDBOptions) Driver {
-	host, _ := os.Hostname()
+	host, _ := os.Hostname() // nolint
 	return &mgoDriver{
 		name:             name,
 		dbName:           opts.DB,
