@@ -28,7 +28,6 @@ type mongoGroupDriver struct {
 	instanceID       string
 	priority         bool
 	respectWaitUntil bool
-	ttl              time.Duration
 	mu               sync.RWMutex
 	canceler         context.CancelFunc
 
@@ -36,7 +35,7 @@ type mongoGroupDriver struct {
 }
 
 func NewMongoGroupDriver(name string, opts MongoDBOptions, group string, groupTTL time.Duration) Driver {
-	host, _ := os.Hostname()
+	host, _ := os.Hostname() // nolint
 	return &mongoGroupDriver{
 		name:             name,
 		group:            group,
