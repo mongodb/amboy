@@ -342,7 +342,7 @@ func remoteQueueGroupMergedConstructor(ctx context.Context, ttl time.Duration) (
 		return nil, closer, err
 	}
 
-	if err := client.Ping(ctx, nil); err != nil {
+	if err = client.Ping(ctx, nil); err != nil {
 		return nil, closer, errors.Wrap(err, "server not pingable")
 	}
 
@@ -705,7 +705,7 @@ func TestQueueGroupConstructorPruneSmokeTest(t *testing.T) {
 		URI: "mongodb://localhost:27017",
 	}
 
-	client, err := mongo.NewClient(options.Client().ApplyURI(mopts.DB).SetConnectTimeout(time.Second))
+	client, err := mongo.NewClient(options.Client().ApplyURI(mopts.URI).SetConnectTimeout(time.Second))
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
