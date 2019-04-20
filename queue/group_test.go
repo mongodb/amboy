@@ -95,7 +95,8 @@ func TestQueueGroupConstructor(t *testing.T) {
 					Constructor: test.localConstructor,
 					TTL:         test.ttl,
 				}
-				g, err := NewLocalQueueGroup(ctx, localOpts)
+				var g amboy.QueueGroup
+				g, err = NewLocalQueueGroup(ctx, localOpts)
 				if test.valid {
 					require.NotNil(t, g)
 					require.NoError(t, err)
@@ -153,7 +154,9 @@ func TestQueueGroupConstructor(t *testing.T) {
 							TTL:            test.ttl,
 							PruneFrequency: test.ttl,
 						}
-						g, err := NewMongoRemoteQueueGroup(tctx, remoteOpts, client, mopts)
+
+						var g amboy.QueueGroup
+						g, err = NewMongoRemoteQueueGroup(tctx, remoteOpts, client, mopts)
 						if test.valid && remoteTest.valid {
 							require.NoError(t, err)
 							require.NotNil(t, g)
@@ -638,7 +641,8 @@ func TestQueueGroupConstructorPruneSmokeTest(t *testing.T) {
 		URI: "mongodb://localhost:27017",
 	}
 
-	client, err := mongo.NewClient(options.Client().ApplyURI(mopts.DB).SetConnectTimeout(time.Second))
+	var client *mongo.Client
+	client, err = mongo.NewClient(options.Client().ApplyURI(mopts.DB).SetConnectTimeout(time.Second))
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

@@ -28,7 +28,7 @@ func NewDBQueueState(ctx context.Context, name string, opts queue.MongoDBOptions
 		return nil, errors.Wrap(err, "problem constructing mongodb client")
 	}
 
-	if err := client.Connect(ctx); err != nil {
+	if err = client.Connect(ctx); err != nil {
 		return nil, errors.Wrap(err, "problem connecting to database")
 	}
 
