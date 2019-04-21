@@ -41,53 +41,50 @@ func TestQueueGroupConstructor(t *testing.T) {
 	defer session.Close()
 
 	for _, test := range []struct {
-		name              string
-		valid             bool
-		localConstructor  Constructor
-		remoteConstructor RemoteConstructor
-		ttl               time.Duration
+		name             string
+		valid            bool
+		localConstructor Constructor
+		ttl              time.Duration
+		skipRemote       bool
 	}{
 		{
-			name:              "NilConstructorNegativeTime",
-			localConstructor:  nil,
-			remoteConstructor: nil,
-			valid:             false,
-			ttl:               -time.Minute,
+			name:             "NilConstructorNegativeTime",
+			localConstructor: nil,
+			valid:            false,
+			ttl:              -time.Minute,
+			skipRemote:       true,
 		},
 		{
-			name:              "NilConstructorZeroTime",
-			localConstructor:  nil,
-			remoteConstructor: nil,
-			valid:             false,
-			ttl:               0,
+			name:             "NilConstructorZeroTime",
+			localConstructor: nil,
+			valid:            false,
+			ttl:              0,
+			skipRemote:       true,
 		},
 		{
-			name:              "NilConstructorPositiveTime",
-			localConstructor:  nil,
-			remoteConstructor: nil,
-			valid:             false,
-			ttl:               time.Minute,
+			name:             "NilConstructorPositiveTime",
+			localConstructor: nil,
+			valid:            false,
+			ttl:              time.Minute,
+			skipRemote:       true,
 		},
 		{
-			name:              "ConstructorNegativeTime",
-			localConstructor:  localConstructor,
-			remoteConstructor: remoteConstructor,
-			valid:             false,
-			ttl:               -time.Minute,
+			name:             "ConstructorNegativeTime",
+			localConstructor: localConstructor,
+			valid:            false,
+			ttl:              -time.Minute,
 		},
 		{
-			name:              "ConstructorZeroTime",
-			localConstructor:  localConstructor,
-			remoteConstructor: remoteConstructor,
-			valid:             true,
-			ttl:               0,
+			name:             "ConstructorZeroTime",
+			localConstructor: localConstructor,
+			valid:            true,
+			ttl:              0,
 		},
 		{
-			name:              "ConstructorPositiveTime",
-			localConstructor:  localConstructor,
-			remoteConstructor: remoteConstructor,
-			valid:             true,
-			ttl:               time.Minute,
+			name:             "ConstructorPositiveTime",
+			localConstructor: localConstructor,
+			valid:            true,
+			ttl:              time.Minute,
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -105,40 +102,76 @@ func TestQueueGroupConstructor(t *testing.T) {
 					require.Error(t, err)
 				}
 			})
+			if test.skipRemote {
+				return
+			}
+
+			remoteTests := []struct {
+				name       string
+				db         string
+				prefix     string
+				uri        string
+				workers    int
+				workerFunc func(string) int
+				valid      bool
+			}{
+				{
+					name:       "AllFieldsSet",
+					db:         "db",
+					prefix:     "prefix",
+					uri:        "uri",
+					workerFunc: func(s string) int { return 1 },
+					workers:    1,
+					valid:      true,
+				},
+				{
+					name:   "WorkersMissing",
+					db:     "db",
+					prefix: "prefix",
+					uri:    "uri",
+					valid:  false,
+				},
+				{
+					name:       "WorkerFunctions",
+					db:         "db",
+					prefix:     "prefix",
+					workerFunc: func(s string) int { return 1 },
+					uri:        "uri",
+					valid:      true,
+				},
+				{
+					name:    "WorkerDefault",
+					db:      "db",
+					prefix:  "prefix",
+					workers: 2,
+					uri:     "uri",
+					valid:   true,
+				},
+				{
+					name:    "DBMissing",
+					prefix:  "prefix",
+					uri:     "uri",
+					workers: 1,
+					valid:   false,
+				},
+				{
+					name:    "PrefixMissing",
+					db:      "db",
+					workers: 1,
+					uri:     "uri",
+					valid:   false,
+				},
+				{
+					name:    "URIMissing",
+					db:      "db",
+					prefix:  "prefix",
+					workers: 1,
+					valid:   false,
+				},
+			}
+
 			t.Run("Mongo", func(t *testing.T) {
-				for _, remoteTest := range []struct {
-					name   string
-					db     string
-					prefix string
-					uri    string
-					valid  bool
-				}{
-					{
-						name:   "AllFieldsSet",
-						db:     "db",
-						prefix: "prefix",
-						uri:    "uri",
-						valid:  true,
-					},
-					{
-						name:   "DBMissing",
-						prefix: "prefix",
-						uri:    "uri",
-						valid:  false,
-					},
-					{
-						name:  "PrefixMissing",
-						db:    "db",
-						uri:   "uri",
-						valid: false,
-					},
-					{
-						name:   "URIMissing",
-						db:     "db",
-						prefix: "prefix",
-						valid:  false,
-					},
-				} {
+				for _, remoteTest := range remoteTests {
 					t.Run(remoteTest.name, func(t *testing.T) {
 						require.NoError(t, err)
 						tctx, cancel := context.WithCancel(ctx)
@@ -149,8 +182,9 @@ func TestQueueGroupConstructor(t *testing.T) {
 						}
 
 						remoteOpts := RemoteQueueGroupOptions{
+							DefaultWorkers: remoteTest.workers,
+							WorkerPoolSize: remoteTest.workerFunc,
 							Prefix:         remoteTest.prefix,
-							Constructor:    test.remoteConstructor,
 							TTL:            test.ttl,
 							PruneFrequency: test.ttl,
 						}
@@ -166,41 +200,8 @@ func TestQueueGroupConstructor(t *testing.T) {
 					})
 				}
 			})
-			t.Run("LegacyMgo", func(t *testing.T) {
-				for _, remoteTest := range []struct {
-					name   string
-					db     string
-					prefix string
-					uri    string
-					valid  bool
-				}{
-					{
-						name:   "AllFieldsSet",
-						db:     "db",
-						prefix: "prefix",
-						uri:    "uri",
-						valid:  true,
-					},
-					{
-						name:   "DBMissing",
-						prefix: "prefix",
-						uri:    "uri",
-						valid:  false,
-					},
-					{
-						name:  "PrefixMissing",
-						db:    "db",
-						uri:   "uri",
-						valid: false,
-					},
-					{
-						name:   "URIMissing",
-						db:     "db",
-						prefix: "prefix",
-						valid:  false,
-					},
-				} {
-
+			t.Run("MongoMerged", func(t *testing.T) {
+				for _, remoteTest := range remoteTests {
 					t.Run(remoteTest.name, func(t *testing.T) {
 						require.NoError(t, err)
 						tctx, cancel := context.WithCancel(ctx)
@@ -211,8 +212,40 @@ func TestQueueGroupConstructor(t *testing.T) {
 						}
 
 						remoteOpts := RemoteQueueGroupOptions{
+							DefaultWorkers: remoteTest.workers,
+							WorkerPoolSize: remoteTest.workerFunc,
 							Prefix:         remoteTest.prefix,
-							Constructor:    test.remoteConstructor,
+							TTL:            test.ttl,
+							PruneFrequency: test.ttl,
+						}
+
+						g, err := NewMongoRemoteSingleQueueGroup(tctx, remoteOpts, client, mopts) // nolint
+						if test.valid && remoteTest.valid {
+							require.NoError(t, err)
+							require.NotNil(t, g)
+						} else {
+							require.Error(t, err)
+							require.Nil(t, g)
+						}
+					})
+				}
+			})
+
+			t.Run("LegacyMgo", func(t *testing.T) {
+				for _, remoteTest := range remoteTests {
+					t.Run(remoteTest.name, func(t *testing.T) {
+						require.NoError(t, err)
+						tctx, cancel := context.WithCancel(ctx)
+						defer cancel()
+						mopts := MongoDBOptions{
+							DB:  remoteTest.db,
+							URI: remoteTest.uri,
+						}
+
+						remoteOpts := RemoteQueueGroupOptions{
+							DefaultWorkers: remoteTest.workers,
+							WorkerPoolSize: remoteTest.workerFunc,
+							Prefix:         remoteTest.prefix,
 							TTL:            test.ttl,
 							PruneFrequency: test.ttl,
 						}
@@ -262,7 +295,7 @@ func remoteQueueGroupConstructor(ctx context.Context, ttl time.Duration) (amboy.
 		return nil, closer, err
 	}
 	opts := RemoteQueueGroupOptions{
-		Constructor:    remoteConstructor,
+		DefaultWorkers: 1,
 		Prefix:         "prefix",
 		TTL:            ttl,
 		PruneFrequency: ttl,
@@ -293,7 +326,7 @@ func remoteLegacyQueueGroupConstructor(ctx context.Context, ttl time.Duration) (
 	}
 
 	opts := RemoteQueueGroupOptions{
-		Constructor:    remoteConstructor,
+		DefaultWorkers: 1,
 		Prefix:         "prefix",
 		TTL:            ttl,
 		PruneFrequency: ttl / 2,
@@ -332,7 +365,7 @@ func remoteQueueGroupMergedConstructor(ctx context.Context, ttl time.Duration) (
 		return nil, closer, err
 	}
 	opts := RemoteQueueGroupOptions{
-		Constructor:    remoteConstructor,
+		DefaultWorkers: 1,
 		Prefix:         "prefix",
 		TTL:            ttl,
 		PruneFrequency: ttl,
@@ -716,7 +749,7 @@ func TestQueueGroupConstructorPruneSmokeTest(t *testing.T) {
 	}
 	remoteOpts := RemoteQueueGroupOptions{
 		Prefix:         "gen",
-		Constructor:    remoteConstructor,
+		DefaultWorkers: 1,
 		TTL:            time.Second,
 		PruneFrequency: time.Second,
 	}

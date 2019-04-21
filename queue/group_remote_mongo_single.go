@@ -10,19 +10,17 @@ import (
 	"github.com/mongodb/grip/message"
 	"github.com/mongodb/grip/recovery"
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type remoteMongoQueueGroupSingle struct {
-	canceler       context.CancelFunc
-	client         *mongo.Client
-	constructor    RemoteConstructor
-	mu             sync.RWMutex
-	mongooptions   MongoDBOptions
-	prefix         string
-	pruneFrequency time.Duration
-	ttl            time.Duration
-	queues         map[string]amboy.Queue
+	canceler context.CancelFunc
+	client   *mongo.Client
+	mu       sync.RWMutex
+	opts     RemoteQueueGroupOptions
+	dbOpts   MongoDBOptions
+	queues   map[string]amboy.Queue
 }
 
 // NewMongoRemoteSingleQueueGroup constructs a new remote queue group. If ttl is 0, the queues will not be
@@ -42,14 +40,11 @@ func NewMongoRemoteSingleQueueGroup(ctx context.Context, opts RemoteQueueGroupOp
 
 	ctx, cancel := context.WithCancel(ctx)
 	g := &remoteMongoQueueGroupSingle{
-		canceler:       cancel,
-		client:         client,
-		mongooptions:   mdbopts,
-		constructor:    opts.Constructor,
-		prefix:         opts.Prefix,
-		pruneFrequency: opts.PruneFrequency,
-		ttl:            opts.TTL,
-		queues:         map[string]amboy.Queue{},
+		canceler: cancel,
+		client:   client,
+		dbOpts:   mdbopts,
+		opts:     opts,
+		queues:   map[string]amboy.Queue{},
 	}
 
 	if opts.PruneFrequency > 0 {
@@ -70,7 +65,81 @@ func NewMongoRemoteSingleQueueGroup(ctx context.Context, opts RemoteQueueGroupOp
 		}()
 	}
 
+	if opts.BackgroundCreateFrequency > 0 {
+		go func() {
+			defer recovery.LogStackTraceAndContinue("panic in remote queue group ticker")
+			ticker := time.NewTicker(opts.PruneFrequency)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					grip.Error(message.WrapError(g.startQueues(ctx), "problem starting external queues"))
+				}
+			}
+		}()
+	}
+
+	if err := g.startQueues(ctx); err != nil {
+		return nil, errors.WithStack(err)
+	}
+
 	return g, nil
+}
+
+func (g *remoteMongoQueueGroupSingle) startQueues(ctx context.Context) error {
+	cursor, err := g.client.Database(g.dbOpts.DB).Collection(addGroupSufix(g.opts.Prefix)).Aggregate(ctx,
+		[]bson.M{
+			{
+				"$match": bson.M{
+					"$or": []bson.M{
+						{
+							"status.completed": false,
+						},
+						{
+							"status.completed": true,
+							"status.mod_ts":    bson.M{"$gte": time.Now().Add(-g.opts.TTL)},
+						},
+					},
+				},
+			},
+			{
+
+				"$group": bson.M{
+					"_id": nil,
+					"groups": bson.M{
+						"$addToSet": "$group",
+					},
+				},
+			},
+		},
+	)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	out := struct {
+		Groups []string `bson:"groups"`
+	}{}
+
+	catcher := grip.NewBasicCatcher()
+	for cursor.Next(ctx) {
+		if err = cursor.Decode(&out); err != nil {
+			catcher.Add(err)
+		}
+		break
+	}
+	catcher.Add(cursor.Err())
+	catcher.Add(cursor.Close(ctx))
+
+	grip.NoticeWhen(len(out.Groups) == 0, "no queue groups with active tasks")
+	for _, id := range out.Groups {
+		_, err := g.Get(ctx, id)
+		catcher.Add(err)
+	}
+
+	return catcher.Resolve()
 }
 
 func (g *remoteMongoQueueGroupSingle) Get(ctx context.Context, id string) (amboy.Queue, error) {
@@ -87,15 +156,12 @@ func (g *remoteMongoQueueGroupSingle) Get(ctx context.Context, id string) (amboy
 		return queue, nil
 	}
 
-	driver, err := OpenNewMongoGroupDriver(ctx, g.prefix, g.mongooptions, id, g.ttl, g.client)
+	driver, err := OpenNewMongoGroupDriver(ctx, g.opts.Prefix, g.dbOpts, id, g.opts.TTL, g.client)
 	if err != nil {
 		return nil, errors.Wrap(err, "problem opening driver for queue")
 	}
 
-	queue, err := g.constructor(ctx)
-	if err != nil {
-		return nil, errors.Wrap(err, "problem opening driver for queue")
-	}
+	queue := g.opts.constructor(ctx, id)
 
 	if err := queue.SetDriver(driver); err != nil {
 		return nil, errors.Wrap(err, "problem setting driver")
