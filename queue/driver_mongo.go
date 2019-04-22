@@ -391,7 +391,7 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 		}
 	}
 
-	opts := options.Find()
+	opts := options.Find().SetBatchSize(4)
 	if d.opts.Priority {
 		opts.SetSort(bson.M{"priority": -1})
 	}

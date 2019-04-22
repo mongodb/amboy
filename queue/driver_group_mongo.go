@@ -408,11 +408,10 @@ func (d *mongoGroupDriver) Next(ctx context.Context) amboy.Job {
 					{"time_info.wait_until": bson.M{"$lte": time.Now()}},
 					{"time_info.wait_until": bson.M{"$exists": false}}},
 				},
-			},
-		}
+			}}
 	}
 
-	opts := options.Find()
+	opts := options.Find().SetBatchSize(4)
 	if d.opts.Priority {
 		opts.SetSort(bson.M{"priority": -1})
 	}
