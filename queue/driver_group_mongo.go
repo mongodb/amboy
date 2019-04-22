@@ -116,6 +116,10 @@ func (d *mongoGroupDriver) getCollection() *mongo.Collection {
 }
 
 func (d *mongoGroupDriver) setupDB(ctx context.Context) error {
+	if d.opts.SkipIndexBuilds {
+		return nil
+	}
+
 	keys := bsonx.Doc{
 		{
 			Key:   "group",

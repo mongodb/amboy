@@ -46,10 +46,11 @@ type MongoDBOptions struct {
 // "amboy" database, and *not* using priority ordering of jobs.
 func DefaultMongoDBOptions() MongoDBOptions {
 	return MongoDBOptions{
-		URI:            "mongodb://localhost:27017",
-		DB:             "amboy",
-		Priority:       false,
-		CheckWaitUntil: true,
+		URI:             "mongodb://localhost:27017",
+		DB:              "amboy",
+		Priority:        false,
+		CheckWaitUntil:  true,
+		SkipIndexBuilds: false,
 	}
 }
 
