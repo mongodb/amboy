@@ -40,6 +40,7 @@ func NewMongoGroupDriver(name string, opts MongoDBOptions, group string, groupTT
 	return &mongoGroupDriver{
 		name:       name,
 		group:      group,
+		opts:       opts,
 		instanceID: fmt.Sprintf("%s.%s.%s.%s", name, group, host, uuid.NewV4()),
 	}
 }
