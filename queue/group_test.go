@@ -301,6 +301,10 @@ func remoteQueueGroupConstructor(ctx context.Context, ttl time.Duration) (amboy.
 		return nil, closer, err
 	}
 
+	if err = client.Ping(ctx, nil); err != nil {
+		return nil, closer, errors.Wrap(err, "server not pingable")
+	}
+
 	qg, err := NewMongoRemoteQueueGroup(ctx, opts, client, mopts)
 	return qg, closer, err
 }
@@ -402,10 +406,12 @@ func TestQueueGroupOperations(t *testing.T) {
 				q1, err := g.Get(ctx, "one")
 				require.NoError(t, err)
 				require.NotNil(t, q1)
+				require.True(t, q1.Started())
 
 				q2, err := g.Get(ctx, "two")
 				require.NoError(t, err)
 				require.NotNil(t, q2)
+				require.True(t, q2.Started())
 
 				j1 := job.NewShellJob("true", "")
 				j2 := job.NewShellJob("true", "")
@@ -416,8 +422,9 @@ func TestQueueGroupOperations(t *testing.T) {
 				require.NoError(t, q2.Put(j2))
 				require.NoError(t, q2.Put(j3))
 
-				amboy.WaitCtxInterval(ctx, q2, 10*time.Millisecond)
+				grip.Warning(q1.Stats())
 				amboy.WaitCtxInterval(ctx, q1, 10*time.Millisecond)
+				amboy.WaitCtxInterval(ctx, q2, 10*time.Millisecond)
 
 				resultsQ1 := []amboy.Job{}
 				for result := range q1.Results(ctx) {

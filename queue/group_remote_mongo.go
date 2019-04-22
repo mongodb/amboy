@@ -66,10 +66,10 @@ func (opts *RemoteQueueGroupOptions) constructor(ctx context.Context, name strin
 	}
 
 	if opts.Ordered {
-		return NewRemoteUnordered(workers)
+		return NewSimpleRemoteOrdered(workers)
 	}
 
-	return NewSimpleRemoteOrdered(workers)
+	return NewRemoteUnordered(workers)
 }
 
 func (opts RemoteQueueGroupOptions) validate() error {
@@ -186,6 +186,7 @@ func (g *remoteMongoQueueGroup) startProcessingRemoteQueue(ctx context.Context, 
 	if err := q.Start(ctx); err != nil {
 		return nil, errors.Wrap(err, "problem starting queue")
 	}
+	grip.Infof("%T", q)
 	return q, nil
 }
 
