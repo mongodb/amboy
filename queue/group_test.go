@@ -256,6 +256,37 @@ func TestQueueGroupConstructor(t *testing.T) {
 					})
 				}
 			})
+
+			t.Run("LegacyMgoMerged", func(t *testing.T) {
+				for _, remoteTest := range remoteTests {
+					t.Run(remoteTest.name, func(t *testing.T) {
+						require.NoError(t, err)
+						tctx, cancel := context.WithCancel(ctx)
+						defer cancel()
+						mopts := MongoDBOptions{
+							DB:  remoteTest.db,
+							URI: remoteTest.uri,
+						}
+
+						remoteOpts := RemoteQueueGroupOptions{
+							DefaultWorkers: remoteTest.workers,
+							WorkerPoolSize: remoteTest.workerFunc,
+							Prefix:         remoteTest.prefix,
+							TTL:            test.ttl,
+							PruneFrequency: test.ttl,
+						}
+						g, err := NewMgoRemoteSingleQueueGroup(tctx, remoteOpts, session, mopts)
+						if test.valid && remoteTest.valid {
+							require.NoError(t, err)
+							require.NotNil(t, g)
+						} else {
+							require.Error(t, err)
+							require.Nil(t, g)
+						}
+					})
+				}
+			})
+
 		})
 	}
 }
@@ -340,7 +371,7 @@ func remoteLegacyQueueGroupConstructor(ctx context.Context, ttl time.Duration) (
 	return qg, closer, err
 }
 
-func remoteQueueGroupMergedConstructor(ctx context.Context, ttl time.Duration) (amboy.QueueGroup, queueGroupCloser, error) {
+func remoteLegacyQueueGroupMergedConstructor(ctx context.Context, ttl time.Duration) (amboy.QueueGroup, queueGroupCloser, error) {
 	mopts := MongoDBOptions{
 		DB:  "amboy_test",
 		URI: "mongodb://localhost:27017",
@@ -361,7 +392,7 @@ func remoteQueueGroupMergedConstructor(ctx context.Context, ttl time.Duration) (
 	}
 
 	opts := RemoteQueueGroupOptions{
-		DefaultWorkers: 1,
+		DefaultWorkers: 2,
 		Prefix:         "prefix",
 		TTL:            ttl,
 		PruneFrequency: ttl / 2,
@@ -379,7 +410,7 @@ func remoteQueueGroupMergedConstructor(ctx context.Context, ttl time.Duration) (
 	return qg, closer, err
 }
 
-func remoteLegacyQueueGroupMergedConstructor(ctx context.Context, ttl time.Duration) (amboy.QueueGroup, queueGroupCloser, error) {
+func remoteQueueGroupMergedConstructor(ctx context.Context, ttl time.Duration) (amboy.QueueGroup, queueGroupCloser, error) {
 	mopts := MongoDBOptions{
 		DB:  "amboy_test",
 		URI: "mongodb://localhost:27017",
@@ -462,9 +493,8 @@ func TestQueueGroupOperations(t *testing.T) {
 				require.NoError(t, q2.Put(j2))
 				require.NoError(t, q2.Put(j3))
 
-				grip.Warning(q1.Stats())
-				amboy.WaitCtxInterval(ctx, q1, 10*time.Millisecond)
-				amboy.WaitCtxInterval(ctx, q2, 10*time.Millisecond)
+				amboy.WaitCtxInterval(ctx, q1, 100*time.Millisecond)
+				amboy.WaitCtxInterval(ctx, q2, 100*time.Millisecond)
 
 				resultsQ1 := []amboy.Job{}
 				for result := range q1.Results(ctx) {
@@ -632,13 +662,18 @@ func TestQueueGroupOperations(t *testing.T) {
 				require.NoError(t, err)
 				require.NotNil(t, q2)
 
-				if mg, ok := g.(*remoteMongoQueueGroupSingle); ok {
+				switch mg := g.(type) {
+				case *remoteMongoQueueGroupSingle:
 					// we should be tracking no
 					// local queues
 					assert.Len(t, mg.queues, 2)
 					require.NoError(t, g.Prune(ctx))
 					assert.Len(t, mg.queues, 0)
-				} else {
+				case *remoteMgoQueueGroupSingle:
+					assert.Len(t, mg.queues, 2)
+					require.NoError(t, g.Prune(ctx))
+					assert.Len(t, mg.queues, 0)
+				default:
 					// Queues should be empty
 					stats1 = q1.Stats()
 					require.Zero(t, stats1.Running)
@@ -702,9 +737,10 @@ func TestQueueGroupOperations(t *testing.T) {
 
 				time.Sleep(20 * time.Second)
 
-				if mg, ok := g.(*remoteMongoQueueGroupSingle); ok {
-					// we should be tracking no
-					// local queues
+				switch mg := g.(type) {
+				case *remoteMongoQueueGroupSingle:
+					assert.Len(t, mg.queues, 0)
+				case *remoteMgoQueueGroupSingle:
 					assert.Len(t, mg.queues, 0)
 				}
 
@@ -717,13 +753,18 @@ func TestQueueGroupOperations(t *testing.T) {
 				require.NoError(t, err)
 				require.NotNil(t, q2)
 
-				if mg, ok := g.(*remoteMongoQueueGroupSingle); ok {
+				switch mg := g.(type) {
+				case *remoteMongoQueueGroupSingle:
 					// we should be tracking no
 					// local queues
 					assert.Len(t, mg.queues, 2)
 					require.NoError(t, g.Prune(ctx))
 					assert.Len(t, mg.queues, 0)
-				} else {
+				case *remoteMgoQueueGroupSingle:
+					assert.Len(t, mg.queues, 2)
+					require.NoError(t, g.Prune(ctx))
+					assert.Len(t, mg.queues, 0)
+				default:
 					// Queues should be empty
 					stats1 = q1.Stats()
 					require.Zero(t, stats1.Running)

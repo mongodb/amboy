@@ -157,13 +157,12 @@ func (g *remoteMgoQueueGroupSingle) Get(ctx context.Context, id string) (amboy.Q
 		return queue, nil
 	}
 
-	driver, err := OpenNewMgoGroupDriver(ctx, g.opts.Prefix, g.dbOpts, id, g.session)
+	driver, err := OpenNewMgoGroupDriver(ctx, g.opts.Prefix, g.dbOpts, id, g.session.Clone())
 	if err != nil {
 		return nil, errors.Wrap(err, "problem opening driver for queue")
 	}
 
 	queue := g.opts.constructor(ctx, id)
-
 	if err := queue.SetDriver(driver); err != nil {
 		return nil, errors.Wrap(err, "problem setting driver")
 

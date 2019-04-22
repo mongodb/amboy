@@ -133,7 +133,6 @@ func (g *remoteMongoQueueGroupSingle) startQueues(ctx context.Context) error {
 	}
 	catcher.Add(cursor.Err())
 	catcher.Add(cursor.Close(ctx))
-
 	grip.NoticeWhen(len(out.Groups) == 0, "no queue groups with active tasks")
 	for _, id := range out.Groups {
 		_, err := g.Get(ctx, id)

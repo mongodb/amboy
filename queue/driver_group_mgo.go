@@ -162,11 +162,13 @@ func (d *mgoGroupDriver) Get(_ context.Context, name string) (amboy.Job, error) 
 
 	j := &registry.JobInterchange{}
 
-	err := jobs.FindId(name).One(j)
+	err := jobs.FindId(buildCompoundID(d.group, name)).One(j)
 
 	if err != nil {
 		return nil, errors.Wrapf(err, "GET problem fetching '%s'", name)
 	}
+
+	j.Name = j.Name[len(d.group)+1:]
 
 	output, err := j.Resolve(amboy.BSON)
 	if err != nil {
@@ -218,7 +220,7 @@ func (d *mgoGroupDriver) Save(_ context.Context, j amboy.Job) error {
 	job.Group = d.group
 	job.Name = buildCompoundJobID(d.group, j)
 
-	query := getAtomicQuery(d.instanceID, name, stat.ModificationCount)
+	query := getAtomicQuery(d.instanceID, job.Name, stat.ModificationCount)
 	err = jobs.Update(query, job)
 	if err != nil {
 		if mgo.IsDup(errors.Cause(err)) {
@@ -420,11 +422,11 @@ func (d *mgoGroupDriver) Next(ctx context.Context) amboy.Job {
 					}))
 					return nil
 				}
-
 				timer.Reset(time.Duration(misses * rand.Int63n(int64(time.Second))))
 				iter = query.Iter()
 				continue
 			}
+			j.Name = j.Name[len(d.group)+1:]
 
 			job, err = j.Resolve(amboy.BSON)
 			if err != nil {
@@ -470,7 +472,7 @@ func (d *mgoGroupDriver) Stats(_ context.Context) amboy.QueueStats {
 	session, jobs := d.getJobsCollection()
 	defer session.Close()
 
-	pending, err := jobs.Find(bson.M{"group": d.group, "status.completed": false}).Count()
+	pending, err := jobs.Find(bson.M{"group": d.group, "status.completed": false, "status.in_prog": false}).Count()
 	grip.Warning(message.WrapError(err, message.Fields{
 		"id":         d.instanceID,
 		"service":    "amboy.queue.group.mgo",

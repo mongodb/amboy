@@ -184,6 +184,8 @@ func (d *mongoGroupDriver) Get(ctx context.Context, name string) (amboy.Job, err
 		return nil, errors.Wrapf(err, "GET problem fetching '%s'", name)
 	}
 
+	j.Name = j.Name[len(d.group)+1:]
+
 	output, err := j.Resolve(amboy.BSON2)
 	if err != nil {
 		return nil, errors.Wrapf(err,
@@ -441,6 +443,7 @@ func (d *mongoGroupDriver) Next(ctx context.Context) amboy.Job {
 			// try for the next thing in the iterator if we can
 			continue
 		}
+		j.Name = j.Name[len(d.group)+1:]
 
 		job, err = j.Resolve(amboy.BSON2)
 		if err != nil {
@@ -454,6 +457,7 @@ func (d *mongoGroupDriver) Next(ctx context.Context) amboy.Job {
 			// try for the next thing in the iterator if we can
 			continue
 		}
+
 		break
 	}
 

@@ -186,7 +186,6 @@ func (g *remoteMongoQueueGroup) startProcessingRemoteQueue(ctx context.Context, 
 	if err := q.Start(ctx); err != nil {
 		return nil, errors.Wrap(err, "problem starting queue")
 	}
-	grip.Infof("%T", q)
 	return q, nil
 }
 
