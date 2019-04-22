@@ -92,11 +92,11 @@ func (r *single) Close(ctx context.Context) {
 	}
 
 	wait := make(chan struct{})
-	go func() {
+	go func(wg *sync.WaitGroup) {
 		defer recovery.LogStackTraceAndContinue("waiting for close")
 		defer close(wait)
-		r.wg.Wait()
-	}()
+		wg.Wait()
+	}(&r.wg)
 
 	select {
 	case <-ctx.Done():
