@@ -51,11 +51,11 @@ func NewMgoRemoteSingleQueueGroup(ctx context.Context, opts RemoteQueueGroupOpti
 
 	if opts.PruneFrequency > 0 {
 		go func() {
+			defer recovery.LogStackTraceAndContinue("panic in remote queue group ticker")
 			pruneCtx, pruneCancel := context.WithCancel(context.Background())
 			defer pruneCancel()
 			ticker := time.NewTicker(opts.PruneFrequency)
 			defer ticker.Stop()
-			defer recovery.LogStackTraceAndContinue("panic in remote queue group ticker")
 			for {
 				select {
 				case <-ctx.Done():
@@ -69,9 +69,9 @@ func NewMgoRemoteSingleQueueGroup(ctx context.Context, opts RemoteQueueGroupOpti
 
 	if opts.BackgroundCreateFrequency > 0 {
 		go func() {
+			defer recovery.LogStackTraceAndContinue("panic in remote queue group ticker")
 			ticker := time.NewTicker(opts.BackgroundCreateFrequency)
 			defer ticker.Stop()
-			defer recovery.LogStackTraceAndContinue("panic in remote queue group ticker")
 			for {
 				select {
 				case <-ctx.Done():
