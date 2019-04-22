@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"os"
 	"strings"
 	"sync"
@@ -360,9 +361,9 @@ func (d *mongoDriver) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 
 func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 	var (
-		qd  bson.M
-		err error
-		job amboy.Job
+		qd     bson.M
+		job    amboy.Job
+		misses int64
 	)
 
 	qd = bson.M{
@@ -397,63 +398,82 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 	}
 
 	j := &registry.JobInterchange{}
+	timer := time.NewTimer(0)
+	defer timer.Stop()
 
-	if ctx.Err() != nil {
-		return nil
-	}
+RETRY:
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-timer.C:
+			misses++
+			iter, err := d.getCollection().Find(ctx, qd, opts)
+			if err != nil {
+				grip.Debug(message.WrapError(err, message.Fields{
+					"id":        d.instanceID,
+					"service":   "amboy.queue.mongo",
+					"operation": "retrieving next job",
+					"message":   "problem generating query",
+				}))
+				return nil
+			}
 
-	iter, err := d.getCollection().Find(ctx, qd, opts)
-	if err != nil {
-		grip.Debug(message.WrapError(err, message.Fields{
-			"id":        d.instanceID,
-			"service":   "amboy.queue.mongo",
-			"operation": "retrieving next job",
-			"message":   "problem generating query",
-		}))
-		return nil
-	}
-	coll := d.getCollection().Name()
-	for iter.Next(ctx) {
-		if err = iter.Decode(j); err != nil {
-			grip.Warning(message.WrapError(err, message.Fields{
-				"id":        d.instanceID,
-				"service":   "amboy.queue.mongo",
-				"operation": "converting next job",
-				"message":   "problem reading document from cursor",
-			}))
-			// try for the next thing in the iterator if we can
-			continue
+		CURSOR:
+			for iter.Next(ctx) {
+				if err = iter.Decode(j); err != nil {
+					grip.Warning(message.WrapError(err, message.Fields{
+						"id":        d.instanceID,
+						"service":   "amboy.queue.mongo",
+						"operation": "converting next job",
+						"message":   "problem reading document from cursor",
+					}))
+					// try for the next thing in the iterator if we can
+					continue CURSOR
+				}
+
+				job, err = j.Resolve(amboy.BSON2)
+				if err != nil {
+					grip.Warning(message.WrapError(err, message.Fields{
+						"id":        d.instanceID,
+						"service":   "amboy.queue.mongo",
+						"operation": "converting document",
+						"message":   "problem converting job from intermediate form",
+					}))
+					// try for the next thing in the iterator if we can
+					continue CURSOR
+				}
+				break CURSOR
+			}
+
+			if err = iter.Err(); err != nil {
+				grip.Warning(message.WrapError(err, message.Fields{
+					"id":        d.instanceID,
+					"service":   "amboy.queue.mongo",
+					"message":   "problem reported by iterator",
+					"operation": "retrieving next job",
+				}))
+				return nil
+			}
+
+			if err = iter.Close(ctx); err != nil {
+				grip.Warning(message.WrapError(err, message.Fields{
+					"id":        d.instanceID,
+					"service":   "amboy.queue.mongo",
+					"message":   "problem closing iterator",
+					"operation": "retrieving next job",
+				}))
+				return nil
+			}
+
+			if job != nil {
+				break RETRY
+			}
+
+			timer.Reset(time.Duration(misses * rand.Int63n(int64(time.Second))))
+			continue RETRY
 		}
-
-		job, err = j.Resolve(amboy.BSON2)
-		if err != nil {
-			grip.Warning(message.WrapError(err, message.Fields{
-				"id":        d.instanceID,
-				"service":   "amboy.queue.mongo",
-				"operation": "converting document",
-				"message":   "problem converting job from intermediate form",
-			}))
-			// try for the next thing in the iterator if we can
-			continue
-		}
-		break
 	}
-
-	grip.WarningWhen(job == nil, message.WrapError(iter.Err(), message.Fields{
-		"id":              d.instanceID,
-		"service":         "amboy.queue.mongo",
-		"message":         "problem reported by iterator",
-		"operation":       "retrieving next job",
-		"collection_name": coll,
-	}))
-
-	grip.Warning(message.WrapError(iter.Close(ctx), message.Fields{
-		"id":              d.instanceID,
-		"service":         "amboy.queue.mongo",
-		"message":         "problem closing iterator",
-		"operation":       "retrieving next job",
-		"collection_name": coll,
-	}))
 
 	return job
 }

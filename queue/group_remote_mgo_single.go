@@ -10,22 +10,24 @@ import (
 	"github.com/mongodb/grip/message"
 	"github.com/mongodb/grip/recovery"
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
+	mgo "gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
 )
 
-type remoteMongoQueueGroupSingle struct {
+type remoteMgoQueueGroupSingle struct {
 	canceler context.CancelFunc
-	client   *mongo.Client
+	session  *mgo.Session
 	mu       sync.RWMutex
 	opts     RemoteQueueGroupOptions
 	dbOpts   MongoDBOptions
 	queues   map[string]amboy.Queue
 }
 
-// NewMongoRemoteSingleQueueGroup constructs a new remote queue group. If ttl is 0, the queues will not be
+// NewMgoRemoteSingleQueueGroup constructs a new remote queue group
+// where all queues are stored in a single collection, using the
+// legacy driver. If ttl is 0, the queues will not be
 // TTLed except when the client explicitly calls Prune.
-func NewMongoRemoteSingleQueueGroup(ctx context.Context, opts RemoteQueueGroupOptions, client *mongo.Client, mdbopts MongoDBOptions) (amboy.QueueGroup, error) {
+func NewMgoRemoteSingleQueueGroup(ctx context.Context, opts RemoteQueueGroupOptions, session *mgo.Session, mdbopts MongoDBOptions) (amboy.QueueGroup, error) {
 	if err := opts.validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid remote queue options")
 	}
@@ -39,9 +41,9 @@ func NewMongoRemoteSingleQueueGroup(ctx context.Context, opts RemoteQueueGroupOp
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
-	g := &remoteMongoQueueGroupSingle{
+	g := &remoteMgoQueueGroupSingle{
 		canceler: cancel,
-		client:   client,
+		session:  session,
 		dbOpts:   mdbopts,
 		opts:     opts,
 		queues:   map[string]amboy.Queue{},
@@ -88,53 +90,52 @@ func NewMongoRemoteSingleQueueGroup(ctx context.Context, opts RemoteQueueGroupOp
 	return g, nil
 }
 
-func (g *remoteMongoQueueGroupSingle) startQueues(ctx context.Context) error {
-	cursor, err := g.client.Database(g.dbOpts.DB).Collection(addGroupSufix(g.opts.Prefix)).Aggregate(ctx,
-		[]bson.M{
-			{
-				"$match": bson.M{
-					"$or": []bson.M{
-						{
-							"status.completed": false,
-						},
-						{
-							"status.completed": true,
-							"status.mod_ts":    bson.M{"$gte": time.Now().Add(-g.opts.TTL)},
-						},
-					},
-				},
-			},
-			{
+func (g *remoteMgoQueueGroupSingle) startQueues(ctx context.Context) error {
+	session := g.session.Clone()
+	defer session.Close()
 
-				"$group": bson.M{
-					"_id": nil,
-					"groups": bson.M{
-						"$addToSet": "$group",
+	out := []struct {
+		Groups []string `bson:"groups"`
+	}{}
+
+	err := session.DB(g.dbOpts.DB).C(addGroupSufix(g.opts.Prefix)).Pipe([]bson.M{
+		{
+			"$match": bson.M{
+				"$or": []bson.M{
+					{
+						"status.completed": false,
+					},
+					{
+						"status.completed": true,
+						"status.mod_ts":    bson.M{"$gte": time.Now().Add(-g.opts.TTL)},
 					},
 				},
 			},
 		},
-	)
+		{
+
+			"$group": bson.M{
+				"_id": nil,
+				"groups": bson.M{
+					"$addToSet": "$group",
+				},
+			},
+		},
+	}).AllowDiskUse().All(&out)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	out := struct {
-		Groups []string `bson:"groups"`
-	}{}
+	if len(out) == 0 {
+		return nil
+	}
+
+	if len(out) != 1 {
+		return errors.New("invalid inventory of existing queues")
+	}
 
 	catcher := grip.NewBasicCatcher()
-	for cursor.Next(ctx) {
-		if err = cursor.Decode(&out); err != nil {
-			catcher.Add(err)
-		} else {
-			break
-		}
-	}
-	catcher.Add(cursor.Err())
-	catcher.Add(cursor.Close(ctx))
-	grip.NoticeWhen(len(out.Groups) == 0, "no queue groups with active tasks")
-	for _, id := range out.Groups {
+	for _, id := range out[0].Groups {
 		_, err := g.Get(ctx, id)
 		catcher.Add(err)
 	}
@@ -142,7 +143,7 @@ func (g *remoteMongoQueueGroupSingle) startQueues(ctx context.Context) error {
 	return catcher.Resolve()
 }
 
-func (g *remoteMongoQueueGroupSingle) Get(ctx context.Context, id string) (amboy.Queue, error) {
+func (g *remoteMgoQueueGroupSingle) Get(ctx context.Context, id string) (amboy.Queue, error) {
 	g.mu.RLock()
 	if queue, ok := g.queues[id]; ok {
 		g.mu.RUnlock()
@@ -156,13 +157,12 @@ func (g *remoteMongoQueueGroupSingle) Get(ctx context.Context, id string) (amboy
 		return queue, nil
 	}
 
-	driver, err := OpenNewMongoGroupDriver(ctx, g.opts.Prefix, g.dbOpts, id, g.client)
+	driver, err := OpenNewMgoGroupDriver(ctx, g.opts.Prefix, g.dbOpts, id, g.session.Clone())
 	if err != nil {
 		return nil, errors.Wrap(err, "problem opening driver for queue")
 	}
 
 	queue := g.opts.constructor(ctx, id)
-
 	if err := queue.SetDriver(driver); err != nil {
 		return nil, errors.Wrap(err, "problem setting driver")
 
@@ -176,7 +176,7 @@ func (g *remoteMongoQueueGroupSingle) Get(ctx context.Context, id string) (amboy
 	return queue, nil
 }
 
-func (g *remoteMongoQueueGroupSingle) Put(ctx context.Context, name string, queue amboy.Queue) error {
+func (g *remoteMgoQueueGroupSingle) Put(ctx context.Context, name string, queue amboy.Queue) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if _, ok := g.queues[name]; ok {
@@ -187,7 +187,7 @@ func (g *remoteMongoQueueGroupSingle) Put(ctx context.Context, name string, queu
 	return nil
 }
 
-func (g *remoteMongoQueueGroupSingle) Prune(ctx context.Context) error {
+func (g *remoteMgoQueueGroupSingle) Prune(ctx context.Context) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
@@ -207,7 +207,7 @@ func (g *remoteMongoQueueGroupSingle) Prune(ctx context.Context) error {
 	return nil
 }
 
-func (g *remoteMongoQueueGroupSingle) Close(ctx context.Context) {
+func (g *remoteMgoQueueGroupSingle) Close(ctx context.Context) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
