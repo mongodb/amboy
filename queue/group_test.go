@@ -22,10 +22,6 @@ func localConstructor(ctx context.Context) (amboy.Queue, error) {
 	return NewLocalUnordered(1), nil
 }
 
-func remoteConstructor(ctx context.Context) (Remote, error) {
-	return NewRemoteUnordered(1), nil
-}
-
 func TestQueueGroupConstructor(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

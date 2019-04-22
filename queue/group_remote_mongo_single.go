@@ -127,8 +127,9 @@ func (g *remoteMongoQueueGroupSingle) startQueues(ctx context.Context) error {
 	for cursor.Next(ctx) {
 		if err = cursor.Decode(&out); err != nil {
 			catcher.Add(err)
+		} else {
+			break
 		}
-		break
 	}
 	catcher.Add(cursor.Err())
 	catcher.Add(cursor.Close(ctx))
