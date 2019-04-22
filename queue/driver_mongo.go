@@ -21,15 +21,12 @@ import (
 )
 
 type mongoDriver struct {
-	client           *mongo.Client
-	name             string
-	mongodbURI       string
-	dbName           string
-	instanceID       string
-	priority         bool
-	respectWaitUntil bool
-	mu               sync.RWMutex
-	canceler         context.CancelFunc
+	client     *mongo.Client
+	name       string
+	opts       MongoDBOptions
+	instanceID string
+	mu         sync.RWMutex
+	canceler   context.CancelFunc
 
 	LockManager
 }
@@ -40,12 +37,9 @@ type mongoDriver struct {
 func NewMongoDriver(name string, opts MongoDBOptions) Driver {
 	host, _ := os.Hostname() // nolint
 	return &mongoDriver{
-		name:             name,
-		dbName:           opts.DB,
-		mongodbURI:       opts.URI,
-		priority:         opts.Priority,
-		respectWaitUntil: opts.CheckWaitUntil,
-		instanceID:       fmt.Sprintf("%s.%s.%s", name, host, uuid.NewV4()),
+		name:       name,
+		opts:       opts,
+		instanceID: fmt.Sprintf("%s.%s.%s", name, host, uuid.NewV4()),
 	}
 }
 
@@ -74,9 +68,9 @@ func (d *mongoDriver) Open(ctx context.Context) error {
 		return nil
 	}
 
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(d.mongodbURI))
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(d.opts.URI))
 	if err != nil {
-		return errors.Wrapf(err, "problem opening connection to mongodb at '%s", d.mongodbURI)
+		return errors.Wrapf(err, "problem opening connection to mongodb at '%s", d.opts.URI)
 	}
 
 	return errors.Wrap(d.start(ctx, client), "problem starting driver")
@@ -112,10 +106,14 @@ func (d *mongoDriver) start(ctx context.Context, client *mongo.Client) error {
 }
 
 func (d *mongoDriver) getCollection() *mongo.Collection {
-	return d.client.Database(d.dbName).Collection(addJobsSuffix(d.name))
+	return d.client.Database(d.opts.DB).Collection(addJobsSuffix(d.name))
 }
 
 func (d *mongoDriver) setupDB(ctx context.Context) error {
+	if d.opts.SkipIndexBuilds {
+		return nil
+	}
+
 	keys := bsonx.Doc{
 		{
 			Key:   "status.completed",
@@ -126,7 +124,7 @@ func (d *mongoDriver) setupDB(ctx context.Context) error {
 			Value: bsonx.Int32(1),
 		},
 	}
-	if d.respectWaitUntil {
+	if d.opts.CheckWaitUntil {
 		keys = append(keys, bsonx.Elem{
 			Key:   "time_info.wait_until",
 			Value: bsonx.Int32(1),
@@ -134,7 +132,7 @@ func (d *mongoDriver) setupDB(ctx context.Context) error {
 	}
 
 	// priority must be at the end for the sort
-	if d.priority {
+	if d.opts.Priority {
 		keys = append(keys, bsonx.Elem{
 			Key:   "priority",
 			Value: bsonx.Int32(1),
@@ -381,7 +379,7 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 		},
 	}
 
-	if d.respectWaitUntil {
+	if d.opts.CheckWaitUntil {
 		qd = bson.M{
 			"$and": []bson.M{
 				qd,
@@ -393,8 +391,8 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 		}
 	}
 
-	opts := options.Find()
-	if d.priority {
+	opts := options.Find().SetBatchSize(4)
+	if d.opts.Priority {
 		opts.SetSort(bson.M{"priority": -1})
 	}
 
