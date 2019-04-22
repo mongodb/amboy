@@ -398,13 +398,17 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 
 	j := &registry.JobInterchange{}
 
+	if ctx.Err() != nil {
+		return nil
+	}
+
 	iter, err := d.getCollection().Find(ctx, qd, opts)
 	if err != nil {
-		grip.Error(message.WrapError(err, message.Fields{
+		grip.Debug(message.WrapError(err, message.Fields{
 			"id":        d.instanceID,
 			"service":   "amboy.queue.mongo",
 			"operation": "retrieving next job",
-			"message":   "problem regenerating query",
+			"message":   "problem generating query",
 		}))
 		return nil
 	}
@@ -435,7 +439,7 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 		break
 	}
 
-	grip.Warning(message.WrapError(iter.Err(), message.Fields{
+	grip.WarningWhen(job == nil, message.WrapError(iter.Err(), message.Fields{
 		"id":              d.instanceID,
 		"service":         "amboy.queue.mongo",
 		"message":         "problem reported by iterator",
