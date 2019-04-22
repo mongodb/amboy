@@ -69,10 +69,10 @@ func (r *single) Start(ctx context.Context) error {
 
 	jobs := startWorkerServer(workerCtx, r.queue, &r.wg)
 
-	go func() {
-		worker(workerCtx, jobs, r.queue, &r.wg)
+	go func(wg *sync.WaitGroup) {
+		worker(workerCtx, jobs, r.queue, wg)
 		grip.Info("worker process complete")
-	}()
+	}(&r.wg)
 
 	grip.Info("started single queue worker")
 
