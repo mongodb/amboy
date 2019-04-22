@@ -205,7 +205,7 @@ func TestSmokeMgoGroupDriverRemoteTwoQueueRunsJobsOnlyOnce(t *testing.T) {
 		NewMgoGroupDriver(name, opts, "one"),
 		NewMgoGroupDriver(name, opts, "one"),
 	}
-	cleanup := func() { grip.Alert(cleanupMgo(ctx, opts.DB, name, drivers[0].(*mgoGroupDriver).session)) }
+	cleanup := func() { grip.Alert(cleanupMgo(opts.DB, name, drivers[0].(*mgoGroupDriver).session)) }
 
 	ctx, cancel = context.WithTimeout(ctx, time.Minute)
 	defer cancel()
@@ -255,7 +255,7 @@ func TestSmokeMongoGroupDriverRemoteManyQueueRunsJobsOnlyOnce(t *testing.T) {
 		NewMongoGroupDriver(name, opts, "first"),
 		NewMongoGroupDriver(name, opts, "second"),
 	}
-	cleanup := func() { grip.Alert(cleanupMongo(ctx, opts.DB, name, drivers[0].(*mgoGroupDriver).session)) }
+	cleanup := func() { grip.Alert(cleanupMongo(ctx, opts.DB, name, drivers[0].(*mongoGroupDriver).client)) }
 
 	ctx, cancel = context.WithTimeout(ctx, time.Minute)
 	defer cancel()
@@ -280,7 +280,7 @@ func TestSmokeMgoGroupDriverRemoteManyQueueRunsJobsOnlyOnce(t *testing.T) {
 		NewMgoGroupDriver(name, opts, "first"),
 		NewMgoGroupDriver(name, opts, "second"),
 	}
-	cleanup := func() { grip.Alert(cleanupMgo(ctx, opts.DB, name, drivers[0].(*mongoGroupDriver).client)) }
+	cleanup := func() { grip.Alert(cleanupMgo(opts.DB, name, drivers[0].(*mgoGroupDriver).session)) }
 
 	ctx, cancel = context.WithTimeout(ctx, time.Minute)
 	defer cancel()
