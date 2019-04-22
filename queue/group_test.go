@@ -346,6 +346,45 @@ func remoteQueueGroupMergedConstructor(ctx context.Context, ttl time.Duration) (
 		URI: "mongodb://localhost:27017",
 	}
 
+	session, err := mgo.DialWithTimeout(mopts.URI, time.Second)
+	if err != nil {
+		return nil, func(_ context.Context) error { return nil }, err
+	}
+
+	closer := func(cctx context.Context) error {
+		defer session.Close()
+		return session.DB(mopts.DB).DropDatabase()
+	}
+
+	if ttl == 0 {
+		ttl = time.Hour
+	}
+
+	opts := RemoteQueueGroupOptions{
+		DefaultWorkers: 1,
+		Prefix:         "prefix",
+		TTL:            ttl,
+		PruneFrequency: ttl / 2,
+	}
+
+	if err = session.DB(mopts.DB).DropDatabase(); err != nil {
+		return nil, closer, err
+	}
+
+	if err = session.DB(mopts.DB).DropDatabase(); err != nil {
+		return nil, closer, err
+	}
+
+	qg, err := NewMgoRemoteSingleQueueGroup(ctx, opts, session, mopts)
+	return qg, closer, err
+}
+
+func remoteLegacyQueueGroupMergedConstructor(ctx context.Context, ttl time.Duration) (amboy.QueueGroup, queueGroupCloser, error) {
+	mopts := MongoDBOptions{
+		DB:  "amboy_test",
+		URI: "mongodb://localhost:27017",
+	}
+
 	client, err := mongo.NewClient(options.Client().ApplyURI(mopts.URI).SetConnectTimeout(time.Second))
 	if err != nil {
 		return nil, func(_ context.Context) error { return nil }, err
@@ -385,10 +424,11 @@ func remoteQueueGroupMergedConstructor(ctx context.Context, ttl time.Duration) (
 
 func TestQueueGroupOperations(t *testing.T) {
 	queueGroups := map[string]queueGroupConstructor{
-		"Local":       localQueueGroupConstructor,
-		"Mongo":       remoteQueueGroupConstructor,
-		"MongoMerged": remoteQueueGroupMergedConstructor,
-		"LegacyMgo":   remoteLegacyQueueGroupConstructor,
+		"Local":           localQueueGroupConstructor,
+		"Mongo":           remoteQueueGroupConstructor,
+		"MongoMerged":     remoteQueueGroupMergedConstructor,
+		"LegacyMgo":       remoteLegacyQueueGroupConstructor,
+		"LegacyMgoMerged": remoteLegacyQueueGroupMergedConstructor,
 	}
 
 	for groupName, constructor := range queueGroups {

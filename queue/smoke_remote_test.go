@@ -181,10 +181,31 @@ func TestSmokeMongoGroupDriverRemoteTwoQueueRunsJobsOnlyOnce(t *testing.T) {
 	opts.DB = "amboy_test"
 	name := uuid.NewV4().String()
 	drivers := []Driver{
-		NewMongoGroupDriver(name, opts, "one", time.Hour),
-		NewMongoGroupDriver(name, opts, "one", time.Hour),
+		NewMongoGroupDriver(name, opts, "one"),
+		NewMongoGroupDriver(name, opts, "one"),
 	}
 	cleanup := func() { grip.Alert(cleanupMongo(ctx, opts.DB, name, drivers[0].(*mongoGroupDriver).client)) }
+
+	ctx, cancel = context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+
+	mockJobCounters.Reset()
+	runSmokeMultipleQueuesRunJobsOnce(ctx, drivers, cleanup, assert)
+}
+
+func TestSmokeMgoGroupDriverRemoteTwoQueueRunsJobsOnlyOnce(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	assert := assert.New(t) // nolint
+	opts := DefaultMongoDBOptions()
+	opts.DB = "amboy_test"
+	name := uuid.NewV4().String()
+	drivers := []Driver{
+		NewMgoGroupDriver(name, opts, "one"),
+		NewMgoGroupDriver(name, opts, "one"),
+	}
+	cleanup := func() { grip.Alert(cleanupMgo(ctx, opts.DB, name, drivers[0].(*mgoGroupDriver).session)) }
 
 	ctx, cancel = context.WithTimeout(ctx, time.Minute)
 	defer cancel()
@@ -227,14 +248,39 @@ func TestSmokeMongoGroupDriverRemoteManyQueueRunsJobsOnlyOnce(t *testing.T) {
 	opts.DB = "amboy_test"
 	name := uuid.NewV4().String()
 	drivers := []Driver{
-		NewMongoGroupDriver(name, opts, "first", time.Hour),
-		NewMongoGroupDriver(name, opts, "second", time.Hour),
-		NewMongoGroupDriver(name, opts, "first", time.Hour),
-		NewMongoGroupDriver(name, opts, "second", time.Hour),
-		NewMongoGroupDriver(name, opts, "first", time.Hour),
-		NewMongoGroupDriver(name, opts, "second", time.Hour),
+		NewMongoGroupDriver(name, opts, "first"),
+		NewMongoGroupDriver(name, opts, "second"),
+		NewMongoGroupDriver(name, opts, "first"),
+		NewMongoGroupDriver(name, opts, "second"),
+		NewMongoGroupDriver(name, opts, "first"),
+		NewMongoGroupDriver(name, opts, "second"),
 	}
-	cleanup := func() { grip.Alert(cleanupMongo(ctx, opts.DB, name, drivers[0].(*mongoGroupDriver).client)) }
+	cleanup := func() { grip.Alert(cleanupMongo(ctx, opts.DB, name, drivers[0].(*mgoGroupDriver).session)) }
+
+	ctx, cancel = context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+
+	mockJobCounters.Reset()
+	runSmokeMultipleQueuesRunJobsOnce(ctx, drivers, cleanup, assert)
+}
+
+func TestSmokeMgoGroupDriverRemoteManyQueueRunsJobsOnlyOnce(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	assert := assert.New(t) // nolint
+	opts := DefaultMongoDBOptions()
+	opts.DB = "amboy_test"
+	name := uuid.NewV4().String()
+	drivers := []Driver{
+		NewMgoGroupDriver(name, opts, "first"),
+		NewMgoGroupDriver(name, opts, "second"),
+		NewMgoGroupDriver(name, opts, "first"),
+		NewMgoGroupDriver(name, opts, "second"),
+		NewMgoGroupDriver(name, opts, "first"),
+		NewMgoGroupDriver(name, opts, "second"),
+	}
+	cleanup := func() { grip.Alert(cleanupMgo(ctx, opts.DB, name, drivers[0].(*mongoGroupDriver).client)) }
 
 	ctx, cancel = context.WithTimeout(ctx, time.Minute)
 	defer cancel()

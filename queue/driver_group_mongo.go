@@ -35,7 +35,7 @@ type mongoGroupDriver struct {
 // prefixes job ids with a prefix and adds the group field to the
 // documents in the database which makes it possible to manage
 // distinct queues with a single MongoDB collection.
-func NewMongoGroupDriver(name string, opts MongoDBOptions, group string, groupTTL time.Duration) Driver {
+func NewMongoGroupDriver(name string, opts MongoDBOptions, group string) Driver {
 	host, _ := os.Hostname() // nolint
 	return &mongoGroupDriver{
 		name:       name,
@@ -48,8 +48,8 @@ func NewMongoGroupDriver(name string, opts MongoDBOptions, group string, groupTT
 // OpenNewMongoGroupDriver constructs and opens a new MongoDB driver instance
 // using the specified session. It is equivalent to calling
 // NewMongoGroupDriver() and calling driver.Open().
-func OpenNewMongoGroupDriver(ctx context.Context, name string, opts MongoDBOptions, group string, groupTTL time.Duration, client *mongo.Client) (Driver, error) {
-	d, ok := NewMongoGroupDriver(name, opts, group, groupTTL).(*mongoGroupDriver)
+func OpenNewMongoGroupDriver(ctx context.Context, name string, opts MongoDBOptions, group string, client *mongo.Client) (Driver, error) {
+	d, ok := NewMongoGroupDriver(name, opts, group).(*mongoGroupDriver)
 	if !ok {
 		return nil, errors.New("amboy programmer error: incorrect constructor")
 	}
@@ -249,7 +249,6 @@ func (d *mongoGroupDriver) Save(ctx context.Context, j amboy.Job) error {
 }
 
 func (d *mongoGroupDriver) SaveStatus(ctx context.Context, j amboy.Job, stat amboy.JobStatusInfo) error {
-	id := j.ID()
 	query := getAtomicQuery(d.instanceID, buildCompoundJobID(d.group, j), stat.ModificationCount)
 	stat.Owner = d.instanceID
 	stat.ModificationCount++
@@ -258,7 +257,7 @@ func (d *mongoGroupDriver) SaveStatus(ctx context.Context, j amboy.Job, stat amb
 
 	res, err := d.getCollection().UpdateOne(ctx, query, bson.M{"$set": bson.M{"status": stat, "time_info": timeInfo}})
 	if err != nil {
-		return errors.Wrapf(err, "problem updating status document for %s", id)
+		return errors.Wrapf(err, "problem updating status document for %s", j.ID())
 	}
 
 	if res.ModifiedCount != 1 {
@@ -481,7 +480,7 @@ func (d *mongoGroupDriver) Next(ctx context.Context) amboy.Job {
 
 func (d *mongoGroupDriver) Stats(ctx context.Context) amboy.QueueStats {
 	coll := d.getCollection()
-	pending, err := coll.CountDocuments(ctx, bson.M{"group": d.group, "status.completed": false})
+	pending, err := coll.CountDocuments(ctx, bson.M{"group": d.group, "status.completed": false, "status.in_prog": false})
 	grip.Warning(message.WrapError(err, message.Fields{
 		"id":         d.instanceID,
 		"group":      d.group,
@@ -491,7 +490,7 @@ func (d *mongoGroupDriver) Stats(ctx context.Context) amboy.QueueStats {
 		"message":    "problem counting pending jobs",
 	}))
 
-	numLocked, err := coll.CountDocuments(ctx, bson.M{"group": d.group, "status.completed": false})
+	numLocked, err := coll.CountDocuments(ctx, bson.M{"group": d.group, "status.completed": false, "status.in_prog": true})
 	grip.Warning(message.WrapError(err, message.Fields{
 		"id":         d.instanceID,
 		"group":      d.group,
