@@ -172,6 +172,27 @@ func TestSmokeMongoDriverRemoteTwoQueueRunsJobsOnlyOnce(t *testing.T) {
 	runSmokeMultipleQueuesRunJobsOnce(ctx, drivers, cleanup, assert)
 }
 
+func TestSmokeMongoGroupDriverRemoteTwoQueueRunsJobsOnlyOnce(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	assert := assert.New(t) // nolint
+	opts := DefaultMongoDBOptions()
+	opts.DB = "amboy_test"
+	name := uuid.NewV4().String()
+	drivers := []Driver{
+		NewMongoGroupDriver(name, opts, "one", time.Hour),
+		NewMongoGroupDriver(name, opts, "one", time.Hour),
+	}
+	cleanup := func() { grip.Alert(cleanupMongo(ctx, opts.DB, name, drivers[0].(*mongoGroupDriver).client)) }
+
+	ctx, cancel = context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+
+	mockJobCounters.Reset()
+	runSmokeMultipleQueuesRunJobsOnce(ctx, drivers, cleanup, assert)
+}
+
 func TestSmokeMongoDriverRemoteManyQueueRunsJobsOnlyOnce(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -189,6 +210,31 @@ func TestSmokeMongoDriverRemoteManyQueueRunsJobsOnlyOnce(t *testing.T) {
 		NewMongoDriver(name, opts),
 	}
 	cleanup := func() { grip.Alert(cleanupMongo(ctx, opts.DB, name, drivers[0].(*mongoDriver).client)) }
+
+	ctx, cancel = context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+
+	mockJobCounters.Reset()
+	runSmokeMultipleQueuesRunJobsOnce(ctx, drivers, cleanup, assert)
+}
+
+func TestSmokeMongoGroupDriverRemoteManyQueueRunsJobsOnlyOnce(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	assert := assert.New(t) // nolint
+	opts := DefaultMongoDBOptions()
+	opts.DB = "amboy_test"
+	name := uuid.NewV4().String()
+	drivers := []Driver{
+		NewMongoGroupDriver(name, opts, "first", time.Hour),
+		NewMongoGroupDriver(name, opts, "second", time.Hour),
+		NewMongoGroupDriver(name, opts, "first", time.Hour),
+		NewMongoGroupDriver(name, opts, "second", time.Hour),
+		NewMongoGroupDriver(name, opts, "first", time.Hour),
+		NewMongoGroupDriver(name, opts, "second", time.Hour),
+	}
+	cleanup := func() { grip.Alert(cleanupMongo(ctx, opts.DB, name, drivers[0].(*mongoGroupDriver).client)) }
 
 	ctx, cancel = context.WithTimeout(ctx, time.Minute)
 	defer cancel()
