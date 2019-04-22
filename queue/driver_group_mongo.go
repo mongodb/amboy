@@ -20,16 +20,13 @@ import (
 )
 
 type mongoGroupDriver struct {
-	client           *mongo.Client
-	group            string
-	name             string
-	mongodbURI       string
-	dbName           string
-	instanceID       string
-	priority         bool
-	respectWaitUntil bool
-	mu               sync.RWMutex
-	canceler         context.CancelFunc
+	client     *mongo.Client
+	name       string
+	group      string
+	opts       MongoDBOptions
+	instanceID string
+	mu         sync.RWMutex
+	canceler   context.CancelFunc
 
 	LockManager
 }
@@ -41,13 +38,9 @@ type mongoGroupDriver struct {
 func NewMongoGroupDriver(name string, opts MongoDBOptions, group string, groupTTL time.Duration) Driver {
 	host, _ := os.Hostname() // nolint
 	return &mongoGroupDriver{
-		name:             name,
-		group:            group,
-		dbName:           opts.DB,
-		mongodbURI:       opts.URI,
-		priority:         opts.Priority,
-		respectWaitUntil: opts.CheckWaitUntil,
-		instanceID:       fmt.Sprintf("%s.%s.%s.%s", name, group, host, uuid.NewV4()),
+		name:       name,
+		group:      group,
+		instanceID: fmt.Sprintf("%s.%s.%s.%s", name, group, host, uuid.NewV4()),
 	}
 }
 
@@ -55,7 +48,10 @@ func NewMongoGroupDriver(name string, opts MongoDBOptions, group string, groupTT
 // using the specified session. It is equivalent to calling
 // NewMongoGroupDriver() and calling driver.Open().
 func OpenNewMongoGroupDriver(ctx context.Context, name string, opts MongoDBOptions, group string, groupTTL time.Duration, client *mongo.Client) (Driver, error) {
-	d := NewMongoGroupDriver(name, opts, group, groupTTL).(*mongoGroupDriver)
+	d, ok := NewMongoGroupDriver(name, opts, group, groupTTL).(*mongoGroupDriver)
+	if !ok {
+		return nil, errors.New("amboy programmer error: incorrect constructor")
+	}
 
 	if err := d.start(ctx, client); err != nil {
 		return nil, errors.Wrap(err, "problem starting driver")
@@ -76,9 +72,9 @@ func (d *mongoGroupDriver) Open(ctx context.Context) error {
 		return nil
 	}
 
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(d.mongodbURI))
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(d.opts.URI))
 	if err != nil {
-		return errors.Wrapf(err, "problem opening connection to mongodb at '%s", d.mongodbURI)
+		return errors.Wrapf(err, "problem opening connection to mongodb at '%s", d.opts.URI)
 	}
 
 	return errors.Wrap(d.start(ctx, client), "problem starting driver")
@@ -115,7 +111,7 @@ func (d *mongoGroupDriver) start(ctx context.Context, client *mongo.Client) erro
 }
 
 func (d *mongoGroupDriver) getCollection() *mongo.Collection {
-	return d.client.Database(d.dbName).Collection(addGroupSufix(d.name))
+	return d.client.Database(d.opts.DB).Collection(addGroupSufix(d.name))
 }
 
 func (d *mongoGroupDriver) setupDB(ctx context.Context) error {
@@ -133,7 +129,7 @@ func (d *mongoGroupDriver) setupDB(ctx context.Context) error {
 			Value: bsonx.Int32(1),
 		},
 	}
-	if d.respectWaitUntil {
+	if d.opts.CheckWaitUntil {
 		keys = append(keys, bsonx.Elem{
 			Key:   "time_info.wait_until",
 			Value: bsonx.Int32(1),
@@ -141,7 +137,7 @@ func (d *mongoGroupDriver) setupDB(ctx context.Context) error {
 	}
 
 	// priority must be at the end for the sort
-	if d.priority {
+	if d.opts.Priority {
 		keys = append(keys, bsonx.Elem{
 			Key:   "priority",
 			Value: bsonx.Int32(1),
@@ -399,7 +395,7 @@ func (d *mongoGroupDriver) Next(ctx context.Context) amboy.Job {
 		},
 	}
 
-	if d.respectWaitUntil {
+	if d.opts.CheckWaitUntil {
 		qd = bson.M{
 			"$and": []bson.M{
 				qd,
@@ -412,7 +408,7 @@ func (d *mongoGroupDriver) Next(ctx context.Context) amboy.Job {
 	}
 
 	opts := options.Find()
-	if d.priority {
+	if d.opts.Priority {
 		opts.SetSort(bson.M{"priority": -1})
 	}
 
