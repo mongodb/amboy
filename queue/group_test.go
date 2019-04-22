@@ -245,7 +245,7 @@ func TestQueueGroupConstructor(t *testing.T) {
 							TTL:            test.ttl,
 							PruneFrequency: test.ttl,
 						}
-						g, err := NewMgoRemoteQueueGroup(tctx, remoteOpts, session, mopts)
+						g, err := NewMgoRemoteQueueGroup(tctx, remoteOpts, session, mopts) // nolint
 						if test.valid && remoteTest.valid {
 							require.NoError(t, err)
 							require.NotNil(t, g)
@@ -275,7 +275,7 @@ func TestQueueGroupConstructor(t *testing.T) {
 							TTL:            test.ttl,
 							PruneFrequency: test.ttl,
 						}
-						g, err := NewMgoRemoteSingleQueueGroup(tctx, remoteOpts, session, mopts)
+						g, err := NewMgoRemoteSingleQueueGroup(tctx, remoteOpts, session, mopts) // nolint
 						if test.valid && remoteTest.valid {
 							require.NoError(t, err)
 							require.NotNil(t, g)
