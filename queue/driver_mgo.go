@@ -59,6 +59,7 @@ func NewMgoDriver(name string, opts MongoDBOptions) Driver {
 	host, _ := os.Hostname() // nolint
 	return &mgoDriver{
 		name:       name,
+		opts:       opts,
 		instanceID: fmt.Sprintf("%s.%s.%s", name, host, uuid.NewV4()),
 	}
 }
