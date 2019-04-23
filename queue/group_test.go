@@ -666,9 +666,9 @@ func TestQueueGroupOperations(t *testing.T) {
 				case *remoteMongoQueueGroupSingle:
 					// we should be tracking no
 					// local queues
-					assert.Len(t, mg.queues, 2)
+					assert.Len(t, mg.cache.Len(), 2)
 					require.NoError(t, g.Prune(ctx))
-					assert.Len(t, mg.queues, 0)
+					assert.Len(t, mg.cache.Len(), 0)
 				case *remoteMgoQueueGroupSingle:
 					assert.Len(t, mg.queues, 2)
 					require.NoError(t, g.Prune(ctx))

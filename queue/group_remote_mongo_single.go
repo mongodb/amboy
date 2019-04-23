@@ -2,7 +2,6 @@ package queue
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/mongodb/amboy"
@@ -17,10 +16,9 @@ import (
 type remoteMongoQueueGroupSingle struct {
 	canceler context.CancelFunc
 	client   *mongo.Client
-	mu       sync.RWMutex
 	opts     RemoteQueueGroupOptions
 	dbOpts   MongoDBOptions
-	queues   map[string]amboy.Queue
+	cache    Cache
 }
 
 // NewMongoRemoteSingleQueueGroup constructs a new remote queue group. If ttl is 0, the queues will not be
@@ -44,7 +42,7 @@ func NewMongoRemoteSingleQueueGroup(ctx context.Context, opts RemoteQueueGroupOp
 		client:   client,
 		dbOpts:   mdbopts,
 		opts:     opts,
-		queues:   map[string]amboy.Queue{},
+		cache:    NewCache(opts.TTL),
 	}
 
 	if opts.PruneFrequency > 0 {
@@ -88,14 +86,7 @@ func NewMongoRemoteSingleQueueGroup(ctx context.Context, opts RemoteQueueGroupOp
 	return g, nil
 }
 
-func (g *remoteMongoQueueGroupSingle) Len() int {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-
-	return len(g.queues)
-}
-
-func (g *remoteMongoQueueGroupSingle) startQueues(ctx context.Context) error {
+func (g *remoteMongoQueueGroupSingle) getQueues(ctx context.Context) ([]string, error) {
 	cursor, err := g.client.Database(g.dbOpts.DB).Collection(addGroupSufix(g.opts.Prefix)).Aggregate(ctx,
 		[]bson.M{
 			{
@@ -123,7 +114,7 @@ func (g *remoteMongoQueueGroupSingle) startQueues(ctx context.Context) error {
 		},
 	)
 	if err != nil {
-		return errors.WithStack(err)
+		return nil, errors.WithStack(err)
 	}
 
 	out := struct {
@@ -140,8 +131,18 @@ func (g *remoteMongoQueueGroupSingle) startQueues(ctx context.Context) error {
 	}
 	catcher.Add(cursor.Err())
 	catcher.Add(cursor.Close(ctx))
-	grip.NoticeWhen(len(out.Groups) == 0, "no queue groups with active tasks")
-	for _, id := range out.Groups {
+
+	return out.Groups, catcher.Resolve()
+}
+
+func (g *remoteMongoQueueGroupSingle) startQueues(ctx context.Context) error {
+	queues, err := g.getQueues(ctx)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	catcher := grip.NewBasicCatcher()
+	for _, id := range queues {
 		_, err := g.Get(ctx, id)
 		catcher.Add(err)
 	}
@@ -150,17 +151,15 @@ func (g *remoteMongoQueueGroupSingle) startQueues(ctx context.Context) error {
 }
 
 func (g *remoteMongoQueueGroupSingle) Get(ctx context.Context, id string) (amboy.Queue, error) {
-	g.mu.RLock()
-	if queue, ok := g.queues[id]; ok {
-		g.mu.RUnlock()
-		return queue, nil
-	}
-	g.mu.RUnlock()
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	// Check again in case the map was modified after we released the read lock.
-	if queue, ok := g.queues[id]; ok {
-		return queue, nil
+	var queue Remote
+
+	switch q := g.cache.Get(id).(type) {
+	case Remote:
+		queue = q
+	case nil:
+		queue = g.opts.constructor(ctx, id)
+	default:
+		return nil, errors.Errorf("invalid cached queue of type '%T'", q)
 	}
 
 	driver, err := OpenNewMongoGroupDriver(ctx, g.opts.Prefix, g.dbOpts, id, g.client)
@@ -168,13 +167,19 @@ func (g *remoteMongoQueueGroupSingle) Get(ctx context.Context, id string) (amboy
 		return nil, errors.Wrap(err, "problem opening driver for queue")
 	}
 
-	queue := g.opts.constructor(ctx, id)
-
 	if err := queue.SetDriver(driver); err != nil {
 		return nil, errors.Wrap(err, "problem setting driver")
-
 	}
-	g.queues[id] = queue
+
+	if err = g.cache.Set(id, queue, g.opts.TTL); err != nil {
+		// safe to throw away the partially constructed
+		// here, because another won and we  haven't started the workers.
+		if q := g.cache.Get(id); q != nil {
+			return q, nil
+		}
+
+		return nil, errors.Wrap(err, "problem caching queue")
+	}
 
 	if err := queue.Start(ctx); err != nil {
 		return nil, errors.Wrap(err, "problem starting queue")
@@ -184,49 +189,21 @@ func (g *remoteMongoQueueGroupSingle) Get(ctx context.Context, id string) (amboy
 }
 
 func (g *remoteMongoQueueGroupSingle) Put(ctx context.Context, name string, queue amboy.Queue) error {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if _, ok := g.queues[name]; ok {
-		return errors.New("cannot put a queue into group with existing name")
-	}
+	return g.cache.Set(name, queue, 0)
+}
 
-	g.queues[name] = queue
-	return nil
+func (g *remoteMongoQueueGroupSingle) Len() int { return g.cache.Len() }
+
+func (g *remoteMongoQueueGroupSingle) Queues(ctx context.Context) []string {
+	queues, _ := g.getQueues(ctx)
+	return queues
 }
 
 func (g *remoteMongoQueueGroupSingle) Prune(ctx context.Context) error {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, time.Minute)
-	defer cancel()
-
-	for name, queue := range g.queues {
-		if err := ctx.Err(); err != nil {
-			return errors.WithStack(err)
-		}
-		if queue.Stats().IsComplete() {
-			queue.Runner().Close(ctx)
-			delete(g.queues, name)
-		}
-	}
-	return nil
+	return g.cache.Prune(ctx)
 }
 
-func (g *remoteMongoQueueGroupSingle) Close(ctx context.Context) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
-	for name, queue := range g.queues {
-		if err := ctx.Err(); err != nil {
-			return
-		}
-		queue.Runner().Close(ctx)
-		delete(g.queues, name)
-	}
-	g.canceler()
+func (g *remoteMongoQueueGroupSingle) Close(ctx context.Context) error {
+	defer g.canceler()
+	return g.cache.Close(ctx)
 }

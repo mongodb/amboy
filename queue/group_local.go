@@ -80,6 +80,20 @@ func (g *localQueueGroup) Len() int {
 	return len(g.queues)
 }
 
+func (g *localQueueGroup) Queues(_ context.Context) []string {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	out := make([]string, len(g.queues))
+
+	idx := 0
+	for name := range g.queues {
+		out[idx] = name
+		idx++
+	}
+	return out
+}
+
 // Get a queue with the given index. Get sets the last accessed time to now. Note that this means
 // that the caller must add a job to the queue within the TTL, or else it may have attempted to add
 // a job to a closed queue.
@@ -158,7 +172,7 @@ func (g *localQueueGroup) Prune(ctx context.Context) error {
 }
 
 // Close the queues.
-func (g *localQueueGroup) Close(ctx context.Context) {
+func (g *localQueueGroup) Close(ctx context.Context) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.canceler()
@@ -178,8 +192,8 @@ func (g *localQueueGroup) Close(ctx context.Context) {
 	}()
 	select {
 	case <-waitCh:
-		return
+		return nil
 	case <-ctx.Done():
-		return
+		return errors.WithStack(ctx.Err())
 	}
 }

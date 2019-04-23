@@ -1,0 +1,196 @@
+package queue
+
+import (
+	"context"
+	"runtime"
+	"sync"
+	"time"
+
+	"github.com/mongodb/amboy"
+	"github.com/mongodb/grip"
+	"github.com/mongodb/grip/recovery"
+	"github.com/pkg/errors"
+)
+
+type Cache interface {
+	Set(string, amboy.Queue, time.Duration) error
+	Get(string) amboy.Queue
+	Prune(context.Context) error
+	Close(context.Context) error
+	Len() int
+}
+
+type cacheImpl struct {
+	ttl time.Duration
+	mu  *sync.Mutex
+	q   map[string]cacheItem
+}
+
+type cacheItem struct {
+	q    amboy.Queue
+	ttl  time.Duration
+	ts   time.Time
+	name string
+}
+
+func NewCache(ttl time.Duration) Cache {
+	if ttl == 0 {
+		ttl = time.Hour
+	}
+
+	return &cacheImpl{
+		ttl: ttl,
+		mu:  &sync.Mutex{},
+		q:   map[string]cacheItem{},
+	}
+}
+
+func (c *cacheImpl) Len() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return len(c.q)
+}
+
+func (c *cacheImpl) Set(name string, q amboy.Queue, ttl time.Duration) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if _, ok := c.q[name]; ok {
+		return errors.Errorf("queue named '%s' is already cached", name)
+	}
+
+	if ttl == 0 {
+		ttl = c.ttl
+	}
+
+	c.q[name] = cacheItem{
+		q:    q,
+		ttl:  ttl,
+		ts:   time.Now(),
+		name: name,
+	}
+
+	return nil
+}
+
+func (c *cacheImpl) Get(name string) amboy.Queue {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if _, ok := c.q[name]; !ok {
+		return nil
+	}
+
+	item := c.q[name]
+	item.ts = time.Now()
+
+	c.q[name] = item
+
+	return item.q
+}
+
+func (c *cacheImpl) getCacheIterUnsafe() <-chan cacheItem {
+	out := make(chan cacheItem, len(c.q))
+	for _, v := range c.q {
+		out <- v
+	}
+	close(out)
+	return out
+}
+
+func (c *cacheImpl) getCacheIterSafe() <-chan cacheItem {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.getCacheIterUnsafe()
+}
+
+func (c *cacheImpl) Prune(ctx context.Context) error {
+	wg := &sync.WaitGroup{}
+	num := runtime.NumCPU()
+	catcher := grip.NewBasicCatcher()
+	work := c.getCacheIterSafe()
+	wg.Add(num)
+
+	for i := 0; i < runtime.NumCPU(); i++ {
+		go func() {
+			defer recovery.LogStackTraceAndContinue("panic in local queue pruning")
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					catcher.Add(ctx.Err())
+					return
+				case item := <-work:
+					if item.ts.IsZero() {
+						return
+					}
+
+					if time.Since(item.ts) < item.ttl {
+						continue
+					}
+
+					if item.q.Stats().IsComplete() {
+						item.q.Runner().Close(ctx)
+
+						wait := make(chan struct{})
+						func() {
+							defer close(wait)
+							c.mu.Lock()
+							defer c.mu.Unlock()
+							delete(c.q, item.name)
+						}()
+						select {
+						case <-ctx.Done():
+							catcher.Add(ctx.Err())
+							return
+						case <-wait:
+							continue
+						}
+					}
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
+	return catcher.Resolve()
+}
+
+func (c *cacheImpl) Close(ctx context.Context) error {
+	wg := &sync.WaitGroup{}
+	num := runtime.NumCPU()
+	catcher := grip.NewBasicCatcher()
+	wg.Add(num)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	work := c.getCacheIterUnsafe()
+
+	for i := 0; i < runtime.NumCPU(); i++ {
+		go func() {
+			defer recovery.LogStackTraceAndContinue("panic in local queue closing")
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					catcher.Add(ctx.Err())
+					return
+				case item := <-work:
+					if item.ts.IsZero() {
+						return
+					}
+
+					item.q.Runner().Close(ctx)
+				}
+			}
+		}()
+	}
+	wg.Wait()
+
+	c.q = map[string]cacheItem{}
+
+	return catcher.Resolve()
+}

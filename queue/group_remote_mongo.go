@@ -380,7 +380,7 @@ outer:
 }
 
 // Close the queues.
-func (g *remoteMongoQueueGroup) Close(ctx context.Context) {
+func (g *remoteMongoQueueGroup) Close(ctx context.Context) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.canceler()
@@ -401,9 +401,9 @@ func (g *remoteMongoQueueGroup) Close(ctx context.Context) {
 	}()
 	select {
 	case <-waitCh:
-		return
+		return nil
 	case <-ctx.Done():
-		return
+		return errors.WithStack(ctx.Err())
 	}
 }
 
