@@ -739,9 +739,9 @@ func TestQueueGroupOperations(t *testing.T) {
 
 				switch mg := g.(type) {
 				case *remoteMongoQueueGroupSingle:
-					assert.Len(t, mg.queues, 0)
+					assert.Equal(t, 0, mg.Len())
 				case *remoteMgoQueueGroupSingle:
-					assert.Len(t, mg.queues, 0)
+					assert.Equal(t, 0, mg.Len())
 				}
 
 				// Try getting the queues again
@@ -757,13 +757,13 @@ func TestQueueGroupOperations(t *testing.T) {
 				case *remoteMongoQueueGroupSingle:
 					// we should be tracking no
 					// local queues
-					assert.Len(t, mg.queues, 2)
+					assert.Equal(t, 2, mg.Len())
 					require.NoError(t, g.Prune(ctx))
-					assert.Len(t, mg.queues, 0)
+					assert.Equal(t, 0, mg.Len())
 				case *remoteMgoQueueGroupSingle:
-					assert.Len(t, mg.queues, 2)
+					assert.Equal(t, 2, mg.Len())
 					require.NoError(t, g.Prune(ctx))
-					assert.Len(t, mg.queues, 0)
+					assert.Equal(t, 0, mg.Len())
 				default:
 					// Queues should be empty
 					stats1 = q1.Stats()

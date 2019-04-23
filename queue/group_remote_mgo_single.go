@@ -90,6 +90,13 @@ func NewMgoRemoteSingleQueueGroup(ctx context.Context, opts RemoteQueueGroupOpti
 	return g, nil
 }
 
+func (g *remoteMgoQueueGroupSingle) Len() int {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	return len(g.queues)
+}
+
 func (g *remoteMgoQueueGroupSingle) startQueues(ctx context.Context) error {
 	session := g.session.Clone()
 	defer session.Close()

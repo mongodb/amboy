@@ -98,6 +98,13 @@ func NewMgoRemoteQueueGroup(ctx context.Context, opts RemoteQueueGroupOptions, s
 	return g, nil
 }
 
+func (g *remoteMgoQueueGroup) Len() int {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	return len(g.queues)
+}
+
 func (g *remoteMgoQueueGroup) startProcessingRemoteQueue(ctx context.Context, coll string) (Remote, error) {
 	coll = trimJobsSuffix(coll)
 	q := g.opts.constructor(ctx, coll)

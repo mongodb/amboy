@@ -46,13 +46,12 @@ func init() {
 
 //
 type mockJob struct {
-	HasRun    bool `bson:"has_run" json:"has_run" yaml:"has_run"`
-	*job.Base `bson:"job_base" json:"job_base" yaml:"job_base"`
+	job.Base `bson:"job_base" json:"job_base" yaml:"job_base"`
 }
 
 func newMockJob() *mockJob {
 	j := &mockJob{
-		Base: &job.Base{
+		Base: job.Base{
 			JobType: amboy.JobType{
 				Name:    "mock",
 				Version: 1,

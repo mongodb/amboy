@@ -73,6 +73,13 @@ func NewLocalQueueGroup(ctx context.Context, opts LocalQueueGroupOptions) (amboy
 	return g, nil
 }
 
+func (g *localQueueGroup) Len() int {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	return len(g.queues)
+}
+
 // Get a queue with the given index. Get sets the last accessed time to now. Note that this means
 // that the caller must add a job to the queue within the TTL, or else it may have attempted to add
 // a job to a closed queue.
