@@ -33,14 +33,14 @@ func NewGroupCache(ttl time.Duration) GroupCache {
 
 	return &cacheImpl{
 		ttl: ttl,
-		mu:  &sync.Mutex{},
+		mu:  &sync.RWMutex{},
 		q:   map[string]cacheItem{},
 	}
 }
 
 type cacheImpl struct {
 	ttl time.Duration
-	mu  *sync.Mutex
+	mu  *sync.RWMutex
 	q   map[string]cacheItem
 }
 
@@ -52,15 +52,15 @@ type cacheItem struct {
 }
 
 func (c *cacheImpl) Len() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
 	return len(c.q)
 }
 
 func (c *cacheImpl) Names() []string {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
 	out := make([]string, len(c.q))
 	idx := 0

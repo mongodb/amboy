@@ -686,7 +686,7 @@ func TestQueueGroupOperations(t *testing.T) {
 				amboy.WaitCtxInterval(ctx, q1, 10*time.Millisecond)
 				amboy.WaitCtxInterval(ctx, q2, 10*time.Millisecond)
 
-				g.Close(ctx)
+				require.NoError(t, g.Close(ctx))
 			})
 		})
 	}

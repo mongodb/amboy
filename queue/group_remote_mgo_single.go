@@ -91,7 +91,7 @@ func NewMgoRemoteSingleQueueGroup(ctx context.Context, opts RemoteQueueGroupOpti
 func (g *remoteMgoQueueGroupSingle) Len() int { return g.cache.Len() }
 
 func (g *remoteMgoQueueGroupSingle) Queues(ctx context.Context) []string {
-	out, _ := g.getQueues(ctx)
+	out, _ := g.getQueues(ctx) // nolint
 	return out
 }
 
@@ -173,7 +173,7 @@ func (g *remoteMgoQueueGroupSingle) Get(ctx context.Context, id string) (amboy.Q
 		return nil, errors.Wrap(err, "problem opening driver for queue")
 	}
 
-	if err := queue.SetDriver(driver); err != nil {
+	if err = queue.SetDriver(driver); err != nil {
 		return nil, errors.Wrap(err, "problem setting driver")
 	}
 

@@ -165,7 +165,7 @@ func (g *remoteMongoQueueGroupSingle) Get(ctx context.Context, id string) (amboy
 		return nil, errors.Wrap(err, "problem opening driver for queue")
 	}
 
-	if err := queue.SetDriver(driver); err != nil {
+	if err = queue.SetDriver(driver); err != nil {
 		return nil, errors.Wrap(err, "problem setting driver")
 	}
 
@@ -193,7 +193,7 @@ func (g *remoteMongoQueueGroupSingle) Put(ctx context.Context, name string, queu
 func (g *remoteMongoQueueGroupSingle) Len() int { return g.cache.Len() }
 
 func (g *remoteMongoQueueGroupSingle) Queues(ctx context.Context) []string {
-	queues, _ := g.getQueues(ctx)
+	queues, _ := g.getQueues(ctx) // nolint
 	return queues
 }
 
