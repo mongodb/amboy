@@ -303,8 +303,8 @@ func TestSQSFifoQueueRunsJobsOnlyOnce(t *testing.T) {
 		outside = 2
 	)
 
+	wg.Add(outside)
 	for i := 0; i < outside; i++ {
-		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
 			for ii := 0; ii < inside; ii++ {
@@ -347,8 +347,8 @@ func TestMultipleSQSFifoQueueRunsJobsOnlyOnce(t *testing.T) {
 	)
 
 	wg := &sync.WaitGroup{}
+	wg.Add(outside)
 	for i := 0; i < outside; i++ {
-		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
 			for ii := 0; ii < inside; ii++ {
