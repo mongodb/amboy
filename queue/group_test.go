@@ -39,7 +39,7 @@ func TestQueueGroupConstructor(t *testing.T) {
 	for _, test := range []struct {
 		name             string
 		valid            bool
-		localConstructor Constructor
+		localConstructor func(context.Context) (amboy.Queue, error)
 		ttl              time.Duration
 		skipRemote       bool
 	}{
@@ -670,9 +670,9 @@ func TestQueueGroupOperations(t *testing.T) {
 					require.NoError(t, g.Prune(ctx))
 					assert.Len(t, mg.cache.Len(), 0)
 				case *remoteMgoQueueGroupSingle:
-					assert.Len(t, mg.queues, 2)
+					assert.Len(t, mg.cache.Len(), 2)
 					require.NoError(t, g.Prune(ctx))
-					assert.Len(t, mg.queues, 0)
+					assert.Len(t, mg.cache.Len(), 0)
 				default:
 					// Queues should be empty
 					stats1 = q1.Stats()

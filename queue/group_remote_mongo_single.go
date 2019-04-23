@@ -48,8 +48,6 @@ func NewMongoRemoteSingleQueueGroup(ctx context.Context, opts RemoteQueueGroupOp
 	if opts.PruneFrequency > 0 {
 		go func() {
 			defer recovery.LogStackTraceAndContinue("panic in remote queue group ticker")
-			pruneCtx, pruneCancel := context.WithCancel(context.Background())
-			defer pruneCancel()
 			ticker := time.NewTicker(opts.PruneFrequency)
 			defer ticker.Stop()
 			for {
@@ -57,7 +55,7 @@ func NewMongoRemoteSingleQueueGroup(ctx context.Context, opts RemoteQueueGroupOp
 				case <-ctx.Done():
 					return
 				case <-ticker.C:
-					grip.Error(message.WrapError(g.Prune(pruneCtx), "problem pruning remote queue group database"))
+					grip.Error(message.WrapError(g.Prune(ctx), "problem pruning remote queue group database"))
 				}
 			}
 		}()

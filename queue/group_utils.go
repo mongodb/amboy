@@ -17,6 +17,7 @@ type Cache interface {
 	Get(string) amboy.Queue
 	Prune(context.Context) error
 	Close(context.Context) error
+	Names() []string
 	Len() int
 }
 
@@ -50,6 +51,19 @@ func (c *cacheImpl) Len() int {
 	defer c.mu.Unlock()
 
 	return len(c.q)
+}
+
+func (c *cacheImpl) Names() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	out := make([]string, len(c.q))
+	idx := 0
+	for name := range c.q {
+		out[idx] = name
+	}
+
+	return out
 }
 
 func (c *cacheImpl) Set(name string, q amboy.Queue, ttl time.Duration) error {

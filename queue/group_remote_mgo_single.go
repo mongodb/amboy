@@ -90,6 +90,11 @@ func NewMgoRemoteSingleQueueGroup(ctx context.Context, opts RemoteQueueGroupOpti
 
 func (g *remoteMgoQueueGroupSingle) Len() int { return g.cache.Len() }
 
+func (g *remoteMgoQueueGroupSingle) Queues(ctx context.Context) []string {
+	out, _ := g.getQueues(ctx)
+	return out
+}
+
 func (g *remoteMgoQueueGroupSingle) getQueues(ctx context.Context) ([]string, error) {
 	session := g.session.Clone()
 	defer session.Close()
