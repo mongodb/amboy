@@ -227,36 +227,6 @@ func TestQueueGroupConstructor(t *testing.T) {
 				}
 			})
 
-			t.Run("LegacyMgo", func(t *testing.T) {
-				for _, remoteTest := range remoteTests {
-					t.Run(remoteTest.name, func(t *testing.T) {
-						require.NoError(t, err)
-						tctx, cancel := context.WithCancel(ctx)
-						defer cancel()
-						mopts := MongoDBOptions{
-							DB:  remoteTest.db,
-							URI: remoteTest.uri,
-						}
-
-						remoteOpts := RemoteQueueGroupOptions{
-							DefaultWorkers: remoteTest.workers,
-							WorkerPoolSize: remoteTest.workerFunc,
-							Prefix:         remoteTest.prefix,
-							TTL:            test.ttl,
-							PruneFrequency: test.ttl,
-						}
-						g, err := NewMgoRemoteQueueGroup(tctx, remoteOpts, session, mopts) // nolint
-						if test.valid && remoteTest.valid {
-							require.NoError(t, err)
-							require.NotNil(t, g)
-						} else {
-							require.Error(t, err)
-							require.Nil(t, g)
-						}
-					})
-				}
-			})
-
 			t.Run("LegacyMgoMerged", func(t *testing.T) {
 				for _, remoteTest := range remoteTests {
 					t.Run(remoteTest.name, func(t *testing.T) {
@@ -337,37 +307,6 @@ func remoteQueueGroupConstructor(ctx context.Context, ttl time.Duration) (amboy.
 	}
 
 	qg, err := NewMongoRemoteQueueGroup(ctx, opts, client, mopts)
-	return qg, closer, err
-}
-
-func remoteLegacyQueueGroupConstructor(ctx context.Context, ttl time.Duration) (amboy.QueueGroup, queueGroupCloser, error) {
-	mopts := MongoDBOptions{
-		DB:  "amboy_test",
-		URI: "mongodb://localhost:27017",
-	}
-
-	session, err := mgo.DialWithTimeout(mopts.URI, time.Second)
-	if err != nil {
-		return nil, func(_ context.Context) error { return nil }, err
-	}
-
-	closer := func(cctx context.Context) error {
-		defer session.Close()
-		return session.DB(mopts.DB).DropDatabase()
-	}
-
-	opts := RemoteQueueGroupOptions{
-		DefaultWorkers: 1,
-		Prefix:         "prefix",
-		TTL:            ttl,
-		PruneFrequency: ttl / 2,
-	}
-
-	if err = session.DB(mopts.DB).DropDatabase(); err != nil {
-		return nil, closer, err
-	}
-
-	qg, err := NewMgoRemoteQueueGroup(ctx, opts, session, mopts)
 	return qg, closer, err
 }
 
@@ -458,7 +397,6 @@ func TestQueueGroupOperations(t *testing.T) {
 		"Local":           localQueueGroupConstructor,
 		"Mongo":           remoteQueueGroupConstructor,
 		"MongoMerged":     remoteQueueGroupMergedConstructor,
-		"LegacyMgo":       remoteLegacyQueueGroupConstructor,
 		"LegacyMgoMerged": remoteLegacyQueueGroupMergedConstructor,
 	}
 
@@ -608,7 +546,7 @@ func TestQueueGroupOperations(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 
-				g, closer, err := constructor(ctx, time.Second)
+				g, closer, err := constructor(ctx, 2*time.Second)
 				defer func() { require.NoError(t, closer(ctx)) }()
 				require.NoError(t, err)
 				require.NotNil(t, g)
@@ -649,18 +587,18 @@ func TestQueueGroupOperations(t *testing.T) {
 				require.Zero(t, stats2.Blocked)
 				require.Equal(t, 2, stats2.Total)
 
-				require.Equal(t, g.Len(), 2)
+				require.Equal(t, 2, g.Len())
 
 				time.Sleep(2 * time.Second)
 
 				require.NoError(t, g.Prune(ctx))
-				require.Equal(t, g.Len(), 0)
+				require.Equal(t, 0, g.Len())
 			})
 			t.Run("PruneWithTTL", func(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 				defer cancel()
 
-				g, closer, err := constructor(ctx, time.Second)
+				g, closer, err := constructor(ctx, 3*time.Second)
 				defer func() { require.NoError(t, closer(ctx)) }()
 				require.NoError(t, err)
 				require.NotNil(t, g)
@@ -701,13 +639,17 @@ func TestQueueGroupOperations(t *testing.T) {
 				assert.Zero(t, stats2.Pending)
 				assert.Zero(t, stats2.Blocked)
 
-				assert.Equal(t, 2, g.Len())
+				require.Equal(t, 2, g.Len())
 
 				// this is just a way for tests that
 				// prune more quickly to avoid a long sleep.
-				for i := 0; i < 20; i++ {
+				for i := 0; i < 30; i++ {
 					time.Sleep(time.Second)
 
+					if ctx.Err() != nil {
+						grip.Info(ctx.Err())
+						break
+					}
 					if g.Len() == 0 {
 						break
 					}

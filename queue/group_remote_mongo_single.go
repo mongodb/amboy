@@ -45,7 +45,7 @@ func NewMongoRemoteSingleQueueGroup(ctx context.Context, opts RemoteQueueGroupOp
 		cache:    NewGroupCache(opts.TTL),
 	}
 
-	if opts.PruneFrequency > 0 {
+	if opts.PruneFrequency > 0 && opts.TTL > 0 {
 		go func() {
 			defer recovery.LogStackTraceAndContinue("panic in remote queue group ticker")
 			ticker := time.NewTicker(opts.PruneFrequency)

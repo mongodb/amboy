@@ -102,8 +102,14 @@ type listCollectionsOutput struct {
 	Name string `bson:"name"`
 }
 
-// NewMongoRemoteQueueGroup constructs a new remote queue group. If ttl is 0, the queues will not be
-// TTLed except when the client explicitly calls Prune.
+// NewMongoRemoteQueueGroup constructs a new remote queue group. If
+// ttl is 0, the queues will not be TTLed except when the client
+// explicitly calls Prune.
+//
+// The MongoRemoteQueue group creats a new collection for every queue,
+// unlike the other remote queue group implementations. This is
+// probably most viable for lower volume workloads; however, the
+// caching mechanism may be more responsive in some situations.
 func NewMongoRemoteQueueGroup(ctx context.Context, opts RemoteQueueGroupOptions, client *mongo.Client, mdbopts MongoDBOptions) (amboy.QueueGroup, error) {
 	if err := opts.validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid remote queue options")

@@ -103,7 +103,6 @@ func (c *cacheImpl) Get(name string) amboy.Queue {
 
 	item := c.q[name]
 	item.ts = time.Now()
-
 	c.q[name] = item
 
 	return item.q
@@ -164,7 +163,7 @@ func (c *cacheImpl) Prune(ctx context.Context) error {
 						return
 					}
 
-					if time.Since(item.ts) < item.ttl {
+					if item.ttl > 0 && item.ttl > time.Since(item.ts) {
 						continue
 					}
 

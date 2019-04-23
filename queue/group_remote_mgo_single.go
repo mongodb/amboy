@@ -195,7 +195,7 @@ func (g *remoteMgoQueueGroupSingle) Get(ctx context.Context, id string) (amboy.Q
 }
 
 func (g *remoteMgoQueueGroupSingle) Put(ctx context.Context, name string, queue amboy.Queue) error {
-	return g.cache.Set(name, queue, 0)
+	return g.cache.Set(name, queue, g.opts.TTL)
 }
 
 func (g *remoteMgoQueueGroupSingle) Prune(ctx context.Context) error {
