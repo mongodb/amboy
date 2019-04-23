@@ -1,4 +1,4 @@
-gpackage queue
+package queue
 
 import (
 	"context"
