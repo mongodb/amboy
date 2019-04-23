@@ -88,6 +88,13 @@ func NewMongoRemoteSingleQueueGroup(ctx context.Context, opts RemoteQueueGroupOp
 	return g, nil
 }
 
+func (g *remoteMongoQueueGroupSingle) Len() int {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	return len(g.queues)
+}
+
 func (g *remoteMongoQueueGroupSingle) startQueues(ctx context.Context) error {
 	cursor, err := g.client.Database(g.dbOpts.DB).Collection(addGroupSufix(g.opts.Prefix)).Aggregate(ctx,
 		[]bson.M{

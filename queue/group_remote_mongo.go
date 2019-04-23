@@ -172,6 +172,13 @@ func NewMongoRemoteQueueGroup(ctx context.Context, opts RemoteQueueGroupOptions,
 	return g, nil
 }
 
+func (g *remoteMongoQueueGroup) Len() int {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	return len(g.queues)
+}
+
 func (g *remoteMongoQueueGroup) startProcessingRemoteQueue(ctx context.Context, coll string) (Remote, error) {
 	coll = trimJobsSuffix(coll)
 	q := g.opts.constructor(ctx, coll)

@@ -172,6 +172,10 @@ type QueueGroup interface {
 
 	// Close the queues.
 	Close(context.Context)
+
+	// Len returns the number of active queues managed in the
+	// group.
+	Len() int
 }
 
 // Runner describes a simple worker interface for executing jobs in
