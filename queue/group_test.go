@@ -763,7 +763,7 @@ func TestQueueGroupOperations(t *testing.T) {
 				case *remoteMgoQueueGroupSingle:
 					assert.Equal(t, 2, mg.Len())
 					require.NoError(t, g.Prune(ctx))
-					assert.Len(t, 0, mg.Len())
+					assert.Equal(t, 0, mg.Len())
 				default:
 					// Queues should be empty
 					stats1 = q1.Stats()
