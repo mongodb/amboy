@@ -20,11 +20,9 @@ import (
 type remoteMgoQueueGroup struct {
 	canceler context.CancelFunc
 	session  *mgo.Session
-	mu       sync.RWMutex
 	opts     RemoteQueueGroupOptions
 	dbOpts   MongoDBOptions
-	queues   map[string]amboy.Queue
-	ttlMap   map[string]time.Time
+	cache    GroupCache
 }
 
 // NewMgoRemoteQueueGroup constructs a new remote queue group. If ttl is 0, the queues will not be
@@ -49,8 +47,7 @@ func NewMgoRemoteQueueGroup(ctx context.Context, opts RemoteQueueGroupOptions, s
 		session:  session,
 		dbOpts:   mdbopts,
 		opts:     opts,
-		queues:   map[string]amboy.Queue{},
-		ttlMap:   map[string]time.Time{},
+		cache:    NewGroupCache(opts.TTL),
 	}
 
 	if opts.PruneFrequency > 0 && opts.TTL > 0 {
@@ -96,26 +93,15 @@ func NewMgoRemoteQueueGroup(ctx context.Context, opts RemoteQueueGroupOptions, s
 	return g, nil
 }
 
-func (g *remoteMgoQueueGroup) Len() int {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-
-	return len(g.queues)
-}
+func (g *remoteMgoQueueGroup) Len() int { return g.cache.Len() }
 
 func (g *remoteMgoQueueGroup) Queues(ctx context.Context) []string {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-
 	out, _ := g.getExistingCollections(ctx, g.session, g.dbOpts.DB, g.opts.Prefix)
 
 	return out
 }
 
 func (g *remoteMgoQueueGroup) startQueues(ctx context.Context) error {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
 	colls, err := g.getExistingCollections(ctx, g.session, g.dbOpts.DB, g.opts.Prefix)
 	if err != nil {
 		return errors.Wrap(err, "problem getting existing collections")
@@ -125,10 +111,9 @@ func (g *remoteMgoQueueGroup) startQueues(ctx context.Context) error {
 	for _, coll := range colls {
 		q, err := g.startProcessingRemoteQueue(ctx, coll)
 		if err != nil {
-			catcher.Add(errors.Wrap(err, "problem starting queue"))
+			catcher.Wrap(err, "problem starting queue")
 		} else {
-			g.queues[g.idFromCollection(coll)] = q
-			g.ttlMap[g.idFromCollection(coll)] = time.Now()
+			catcher.Add(g.cache.Set(g.idFromCollection(coll), q, 0))
 		}
 	}
 
@@ -136,6 +121,19 @@ func (g *remoteMgoQueueGroup) startQueues(ctx context.Context) error {
 }
 
 func (g *remoteMgoQueueGroup) startProcessingRemoteQueue(ctx context.Context, coll string) (Remote, error) {
+	q, err := g.buildRemoteQueue(ctx, coll)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	if err := q.Start(ctx); err != nil {
+		return nil, errors.Wrap(err, "problem starting queue")
+	}
+
+	return q, nil
+}
+
+func (g *remoteMgoQueueGroup) buildRemoteQueue(ctx context.Context, coll string) (Remote, error) {
 	coll = trimJobsSuffix(coll)
 	q := g.opts.constructor(ctx, coll)
 
@@ -146,10 +144,6 @@ func (g *remoteMgoQueueGroup) startProcessingRemoteQueue(ctx context.Context, co
 	if err := q.SetDriver(d); err != nil {
 		return nil, errors.Wrap(err, "problem setting driver")
 	}
-	if err := q.Start(ctx); err != nil {
-		return nil, errors.Wrap(err, "problem starting queue")
-	}
-
 	return q, nil
 }
 
@@ -172,89 +166,57 @@ func (g *remoteMgoQueueGroup) getExistingCollections(ctx context.Context, sessio
 // that the caller must add a job to the queue within the TTL, or else it may have attempted to add
 // a job to a closed queue.
 func (g *remoteMgoQueueGroup) Get(ctx context.Context, id string) (amboy.Queue, error) {
-	g.mu.RLock()
-	if queue, ok := g.queues[id]; ok {
-		g.ttlMap[id] = time.Now()
-		g.mu.RUnlock()
-		return queue, nil
-	}
-	g.mu.RUnlock()
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	// Check again in case the map was modified after we released the read lock.
-	if queue, ok := g.queues[id]; ok {
-		g.ttlMap[id] = time.Now()
-		return queue, nil
+	q := g.cache.Get(id)
+	if q != nil {
+		return q, nil
 	}
 
-	queue, err := g.startProcessingRemoteQueue(ctx, g.collectionFromID(id))
+	queue, err := g.buildRemoteQueue(ctx, g.collectionFromID(id))
 	if err != nil {
 		return nil, errors.Wrap(err, "problem starting queue")
 	}
-	g.queues[id] = queue
-	g.ttlMap[id] = time.Now()
+
+	err = g.cache.Set(id, queue, g.opts.TTL)
+	if err != nil {
+		return g.cache.Get(id), nil
+	}
+
+	if err := queue.Start(ctx); err != nil {
+		return nil, errors.Wrap(err, "problem starting queue")
+	}
+
 	return queue, nil
 }
 
 // Put a queue at the given index. The caller is responsible for starting thq queue.
 func (g *remoteMgoQueueGroup) Put(ctx context.Context, id string, queue amboy.Queue) error {
-	g.mu.RLock()
-	if _, ok := g.queues[id]; ok {
-		g.mu.RUnlock()
-		return errors.New("a queue already exists at this index")
-	}
-	g.mu.RUnlock()
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	// Check again in case the map was modified after we released the read lock.
-	if _, ok := g.queues[id]; ok {
-		return errors.New("a queue already exists at this index")
-	}
-
-	g.queues[id] = queue
-	g.ttlMap[id] = time.Now()
-	return nil
+	return g.cache.Set(id, queue, g.opts.TTL)
 }
 
 // Prune queues that have no pending work, and have completed work older than the TTL.
 func (g *remoteMgoQueueGroup) Prune(ctx context.Context) error {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	colls, err := g.getExistingCollections(ctx, g.session, g.dbOpts.DB, g.opts.Prefix)
 	if err != nil {
 		return errors.Wrap(err, "problem getting collections")
 	}
-	collsToCheck := []string{}
+
+	work := make(chan string, len(colls))
 	for _, coll := range colls {
-		// This is an optimization. If we've added to the queue recently enough, there's no
-		// need to query its contents, since it cannot be old enough to prune.
-		if t, ok := g.ttlMap[g.idFromCollection(coll)]; !ok || ok && time.Since(t) > g.opts.TTL {
-			collsToCheck = append(collsToCheck, coll)
-		}
+		work <- coll
 	}
+	close(work)
+
 	catcher := grip.NewBasicCatcher()
+
 	wg := &sync.WaitGroup{}
-	collsDeleteChan := make(chan string, len(collsToCheck))
-	collsDropChan := make(chan string, len(collsToCheck))
-
-	for _, coll := range collsToCheck {
-		collsDropChan <- coll
-	}
-	close(collsDropChan)
-
-	wg = &sync.WaitGroup{}
 	for i := 0; i < runtime.NumCPU(); i++ {
 		wg.Add(1)
-		go func(ch chan string) {
+		go func() {
 			defer recovery.LogStackTraceAndContinue("panic in pruning collections")
 			defer wg.Done()
 			session := g.session.Clone()
 			defer session.Close()
-			for nextColl := range collsDropChan {
+			for nextColl := range work {
 				c := session.DB(g.dbOpts.DB).C(nextColl)
 				count, err := c.Find(bson.M{
 					"status.completed": true,
@@ -266,7 +228,7 @@ func (g *remoteMgoQueueGroup) Prune(ctx context.Context) error {
 					return
 				}
 				if count > 0 {
-					return
+					continue
 				}
 				count, err = c.Find(bson.M{"status.completed": false}).Count()
 				if err != nil {
@@ -274,88 +236,21 @@ func (g *remoteMgoQueueGroup) Prune(ctx context.Context) error {
 					return
 				}
 				if count > 0 {
-					return
+					continue
 				}
-				if queue, ok := g.queues[g.idFromCollection(nextColl)]; ok {
-					queue.Runner().Close(ctx)
-					select {
-					case <-ctx.Done():
-						return
-					case ch <- g.idFromCollection(nextColl):
-						// pass
-					}
-				}
-				catcher.Add(c.DropCollection())
-			}
-		}(collsDeleteChan)
-	}
-	wg.Wait()
-	close(collsDeleteChan)
-	for id := range collsDeleteChan {
-		delete(g.queues, id)
-		delete(g.ttlMap, id)
-	}
 
-	// Another prune may have gotten to the collection first, so we should close the queue.
-	queuesDeleteChan := make(chan string, len(g.queues))
-	wg = &sync.WaitGroup{}
-outer:
-	for id, q := range g.queues {
-		for _, coll := range collsToCheck {
-			if id == g.idFromCollection(coll) {
-				continue outer
+				catcher.Add(c.DropCollection())
+				catcher.Add(g.cache.Remove(ctx, nextColl))
 			}
-		}
-		wg.Add(1)
-		go func(queueID string, ch chan string, qu amboy.Queue) {
-			defer recovery.LogStackTraceAndContinue("panic in pruning queues")
-			defer wg.Done()
-			qu.Runner().Close(ctx)
-			select {
-			case <-ctx.Done():
-				return
-			case ch <- queueID:
-				// pass
-			}
-		}(id, queuesDeleteChan, q)
+		}()
 	}
 	wg.Wait()
-	close(queuesDeleteChan)
-	for id := range queuesDeleteChan {
-		delete(g.queues, id)
-		delete(g.ttlMap, id)
-	}
+
 	return catcher.Resolve()
 }
 
 // Close the queues.
-func (g *remoteMgoQueueGroup) Close(ctx context.Context) error {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.canceler()
-	waitCh := make(chan struct{})
-	wg := &sync.WaitGroup{}
-	go func() {
-		defer recovery.LogStackTraceAndContinue("panic in remote queue group closer")
-		for _, queue := range g.queues {
-			wg.Add(1)
-			go func(queue amboy.Queue) {
-				defer recovery.LogStackTraceAndContinue("panic in remote queue group closer")
-				defer wg.Done()
-				queue.Runner().Close(ctx)
-			}(queue)
-		}
-		wg.Wait()
-		g.session.Close()
-		close(waitCh)
-	}()
-	select {
-	case <-waitCh:
-		return nil
-	case <-ctx.Done():
-		return errors.WithStack(ctx.Err())
-	}
-}
+func (g *remoteMgoQueueGroup) Close(ctx context.Context) error { return g.cache.Close(ctx) }
 
 func (g *remoteMgoQueueGroup) collectionFromID(id string) string {
 	return addJobsSuffix(g.opts.Prefix + id)

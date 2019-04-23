@@ -18,7 +18,7 @@ type remoteMongoQueueGroupSingle struct {
 	client   *mongo.Client
 	opts     RemoteQueueGroupOptions
 	dbOpts   MongoDBOptions
-	cache    Cache
+	cache    GroupCache
 }
 
 // NewMongoRemoteSingleQueueGroup constructs a new remote queue group. If ttl is 0, the queues will not be
@@ -42,7 +42,7 @@ func NewMongoRemoteSingleQueueGroup(ctx context.Context, opts RemoteQueueGroupOp
 		client:   client,
 		dbOpts:   mdbopts,
 		opts:     opts,
-		cache:    NewCache(opts.TTL),
+		cache:    NewGroupCache(opts.TTL),
 	}
 
 	if opts.PruneFrequency > 0 {
@@ -153,11 +153,11 @@ func (g *remoteMongoQueueGroupSingle) Get(ctx context.Context, id string) (amboy
 
 	switch q := g.cache.Get(id).(type) {
 	case Remote:
-		queue = q
+		return q, nil
 	case nil:
 		queue = g.opts.constructor(ctx, id)
 	default:
-		return nil, errors.Errorf("invalid cached queue of type '%T'", q)
+		return q, nil
 	}
 
 	driver, err := OpenNewMongoGroupDriver(ctx, g.opts.Prefix, g.dbOpts, id, g.client)

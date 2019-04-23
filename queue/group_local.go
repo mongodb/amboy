@@ -15,7 +15,7 @@ import (
 type localQueueGroup struct {
 	canceler context.CancelFunc
 	opts     LocalQueueGroupOptions
-	cache    Cache
+	cache    GroupCache
 }
 
 // LocalQueueGroupOptions describe options passed to NewLocalQueueGroup.
@@ -38,7 +38,7 @@ func NewLocalQueueGroup(ctx context.Context, opts LocalQueueGroupOptions) (amboy
 	}
 	g := &localQueueGroup{
 		opts:  opts,
-		cache: NewCache(opts.TTL),
+		cache: NewGroupCache(opts.TTL),
 	}
 	ctx, g.canceler = context.WithCancel(ctx)
 
@@ -92,6 +92,10 @@ func (g *localQueueGroup) Get(ctx context.Context, id string) (amboy.Queue, erro
 		}
 
 		return nil, errors.Wrap(err, "problem caching queue")
+	}
+
+	if err = queue.Start(ctx); err != nil {
+		return nil, errors.WithStack(err)
 	}
 
 	return queue, nil

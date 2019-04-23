@@ -608,7 +608,7 @@ func TestQueueGroupOperations(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 
-				g, closer, err := constructor(ctx, 0)
+				g, closer, err := constructor(ctx, time.Second)
 				defer func() { require.NoError(t, closer(ctx)) }()
 				require.NoError(t, err)
 				require.NotNil(t, g)
@@ -649,52 +649,18 @@ func TestQueueGroupOperations(t *testing.T) {
 				require.Zero(t, stats2.Blocked)
 				require.Equal(t, 2, stats2.Total)
 
+				require.Equal(t, g.Len(), 2)
+
 				time.Sleep(2 * time.Second)
 
 				require.NoError(t, g.Prune(ctx))
-
-				// Try getting the queues again
-				q1, err = g.Get(ctx, "five")
-				require.NoError(t, err)
-				require.NotNil(t, q1)
-
-				q2, err = g.Get(ctx, "six")
-				require.NoError(t, err)
-				require.NotNil(t, q2)
-
-				switch mg := g.(type) {
-				case *remoteMongoQueueGroupSingle:
-					// we should be tracking no
-					// local queues
-					assert.Len(t, mg.cache.Len(), 2)
-					require.NoError(t, g.Prune(ctx))
-					assert.Len(t, mg.cache.Len(), 0)
-				case *remoteMgoQueueGroupSingle:
-					assert.Len(t, mg.cache.Len(), 2)
-					require.NoError(t, g.Prune(ctx))
-					assert.Len(t, mg.cache.Len(), 0)
-				default:
-					// Queues should be empty
-					stats1 = q1.Stats()
-					require.Zero(t, stats1.Running)
-					require.Zero(t, stats1.Completed)
-					require.Zero(t, stats1.Pending)
-					require.Zero(t, stats1.Blocked)
-					require.Zero(t, stats1.Total)
-
-					stats2 = q2.Stats()
-					require.Zero(t, stats2.Running)
-					require.Zero(t, stats2.Completed)
-					require.Zero(t, stats2.Pending)
-					require.Zero(t, stats2.Blocked)
-					require.Zero(t, stats2.Total)
-				}
+				require.Equal(t, g.Len(), 0)
 			})
 			t.Run("PruneWithTTL", func(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 				defer cancel()
 
-				g, closer, err := constructor(ctx, 5*time.Second)
+				g, closer, err := constructor(ctx, time.Second)
 				defer func() { require.NoError(t, closer(ctx)) }()
 				require.NoError(t, err)
 				require.NotNil(t, g)
@@ -735,51 +701,19 @@ func TestQueueGroupOperations(t *testing.T) {
 				assert.Zero(t, stats2.Pending)
 				assert.Zero(t, stats2.Blocked)
 
-				time.Sleep(20 * time.Second)
+				assert.Equal(t, 2, g.Len())
 
-				switch mg := g.(type) {
-				case *remoteMongoQueueGroupSingle:
-					assert.Equal(t, 0, mg.Len())
-				case *remoteMgoQueueGroupSingle:
-					assert.Equal(t, 0, mg.Len())
+				// this is just a way for tests that
+				// prune more quickly to avoid a long sleep.
+				for i := 0; i < 20; i++ {
+					time.Sleep(time.Second)
+
+					if g.Len() == 0 {
+						break
+					}
 				}
 
-				// Try getting the queues again
-				q1, err = g.Get(ctx, "seven")
-				require.NoError(t, err)
-				require.NotNil(t, q1)
-
-				q2, err = g.Get(ctx, "eight")
-				require.NoError(t, err)
-				require.NotNil(t, q2)
-
-				switch mg := g.(type) {
-				case *remoteMongoQueueGroupSingle:
-					// we should be tracking no
-					// local queues
-					assert.Equal(t, 2, mg.Len())
-					require.NoError(t, g.Prune(ctx))
-					assert.Equal(t, 0, mg.Len())
-				case *remoteMgoQueueGroupSingle:
-					assert.Equal(t, 2, mg.Len())
-					require.NoError(t, g.Prune(ctx))
-					assert.Equal(t, 0, mg.Len())
-				default:
-					// Queues should be empty
-					stats1 = q1.Stats()
-					require.Zero(t, stats1.Running)
-					require.Zero(t, stats1.Completed)
-					require.Zero(t, stats1.Pending)
-					require.Zero(t, stats1.Blocked)
-					require.Zero(t, stats1.Total)
-
-					stats2 = q2.Stats()
-					require.Zero(t, stats2.Running)
-					require.Zero(t, stats2.Completed)
-					require.Zero(t, stats2.Pending)
-					require.Zero(t, stats2.Blocked)
-					require.Zero(t, stats2.Total)
-				}
+				require.Equal(t, 0, g.Len())
 			})
 			t.Run("Close", func(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)

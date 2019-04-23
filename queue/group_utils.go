@@ -12,13 +12,30 @@ import (
 	"github.com/pkg/errors"
 )
 
-type Cache interface {
+// GroupCache provides a common mechanism for managing collections of
+// queues, for use in specific group cache situations
+type GroupCache interface {
 	Set(string, amboy.Queue, time.Duration) error
 	Get(string) amboy.Queue
+	Remove(context.Context, string) error
 	Prune(context.Context) error
 	Close(context.Context) error
 	Names() []string
 	Len() int
+}
+
+// NewGroupCache produces a GroupCache implementation that supports a
+// default TTL setting, and supports cloning and closing operations.
+func NewGroupCache(ttl time.Duration) GroupCache {
+	if ttl == 0 {
+		ttl = time.Hour
+	}
+
+	return &cacheImpl{
+		ttl: ttl,
+		mu:  &sync.Mutex{},
+		q:   map[string]cacheItem{},
+	}
 }
 
 type cacheImpl struct {
@@ -32,18 +49,6 @@ type cacheItem struct {
 	ttl  time.Duration
 	ts   time.Time
 	name string
-}
-
-func NewCache(ttl time.Duration) Cache {
-	if ttl == 0 {
-		ttl = time.Hour
-	}
-
-	return &cacheImpl{
-		ttl: ttl,
-		mu:  &sync.Mutex{},
-		q:   map[string]cacheItem{},
-	}
 }
 
 func (c *cacheImpl) Len() int {
@@ -102,6 +107,24 @@ func (c *cacheImpl) Get(name string) amboy.Queue {
 	c.q[name] = item
 
 	return item.q
+}
+
+func (c *cacheImpl) Remove(ctx context.Context, name string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if _, ok := c.q[name]; !ok {
+		return nil
+	}
+
+	queue := c.q[name].q
+	if !queue.Stats().IsComplete() {
+		return errors.Errorf("cannot delete in progress queue, '%s'", name)
+	}
+
+	queue.Runner().Close(ctx)
+	delete(c.q, name)
+	return nil
 }
 
 func (c *cacheImpl) getCacheIterUnsafe() <-chan cacheItem {

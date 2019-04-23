@@ -16,7 +16,7 @@ import (
 type remoteMgoQueueGroupSingle struct {
 	canceler context.CancelFunc
 	session  *mgo.Session
-	cache    Cache
+	cache    GroupCache
 	opts     RemoteQueueGroupOptions
 	dbOpts   MongoDBOptions
 }
@@ -44,7 +44,7 @@ func NewMgoRemoteSingleQueueGroup(ctx context.Context, opts RemoteQueueGroupOpti
 		session:  session,
 		dbOpts:   mdbopts,
 		opts:     opts,
-		cache:    NewCache(opts.TTL),
+		cache:    NewGroupCache(opts.TTL),
 	}
 
 	if opts.PruneFrequency > 0 {
@@ -131,11 +131,14 @@ func (g *remoteMgoQueueGroupSingle) getQueues(ctx context.Context) ([]string, er
 		return nil, errors.WithStack(err)
 	}
 
-	if len(out) != 1 {
+	switch len(out) {
+	case 0:
+		return nil, nil
+	case 1:
+		return out[0].Groups, nil
+	default:
 		return nil, errors.New("invalid inventory of existing queues")
 	}
-
-	return out[0].Groups, nil
 }
 
 func (g *remoteMgoQueueGroupSingle) startQueues(ctx context.Context) error {
@@ -158,11 +161,11 @@ func (g *remoteMgoQueueGroupSingle) Get(ctx context.Context, id string) (amboy.Q
 
 	switch q := g.cache.Get(id).(type) {
 	case Remote:
-		queue = q
+		return q, nil
 	case nil:
 		queue = g.opts.constructor(ctx, id)
 	default:
-		return nil, errors.Errorf("invalid cached queue of type '%T'", q)
+		return q, nil
 	}
 
 	driver, err := OpenNewMgoGroupDriver(ctx, g.opts.Prefix, g.dbOpts, id, g.session.Clone())
