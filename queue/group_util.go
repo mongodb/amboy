@@ -72,6 +72,10 @@ func (c *cacheImpl) Names() []string {
 }
 
 func (c *cacheImpl) Set(name string, q amboy.Queue, ttl time.Duration) error {
+	if q == nil {
+		return errors.New("cannot cache nil queue")
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -79,7 +83,7 @@ func (c *cacheImpl) Set(name string, q amboy.Queue, ttl time.Duration) error {
 		return errors.Errorf("queue named '%s' is already cached", name)
 	}
 
-	if ttl == 0 {
+	if ttl <= 0 {
 		ttl = c.ttl
 	}
 
@@ -126,16 +130,16 @@ func (c *cacheImpl) Remove(ctx context.Context, name string) error {
 	return nil
 }
 
-func (c *cacheImpl) getCacheIterUnsafe() <-chan cacheItem {
-	out := make(chan cacheItem, len(c.q))
+func (c *cacheImpl) getCacheIterUnsafe() <-chan *cacheItem {
+	out := make(chan *cacheItem, len(c.q))
 	for _, v := range c.q {
-		out <- v
+		out <- &v
 	}
 	close(out)
 	return out
 }
 
-func (c *cacheImpl) getCacheIterSafe() <-chan cacheItem {
+func (c *cacheImpl) getCacheIterSafe() <-chan *cacheItem {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -159,7 +163,7 @@ func (c *cacheImpl) Prune(ctx context.Context) error {
 					catcher.Add(ctx.Err())
 					return
 				case item := <-work:
-					if item.ts.IsZero() {
+					if item == nil {
 						return
 					}
 
@@ -168,11 +172,13 @@ func (c *cacheImpl) Prune(ctx context.Context) error {
 					}
 
 					if item.q.Stats().IsComplete() {
-						item.q.Runner().Close(ctx)
-
 						wait := make(chan struct{})
-						func() {
+						go func() {
+							defer recovery.LogStackTraceAndContinue("panic in queue waiting")
 							defer close(wait)
+
+							item.q.Runner().Close(ctx)
+
 							c.mu.Lock()
 							defer c.mu.Unlock()
 							delete(c.q, item.name)
@@ -189,7 +195,6 @@ func (c *cacheImpl) Prune(ctx context.Context) error {
 			}
 		}()
 	}
-
 	wg.Wait()
 	return catcher.Resolve()
 }
@@ -215,18 +220,32 @@ func (c *cacheImpl) Close(ctx context.Context) error {
 					catcher.Add(ctx.Err())
 					return
 				case item := <-work:
-					if item.ts.IsZero() {
+					if item == nil {
 						return
 					}
 
-					item.q.Runner().Close(ctx)
+					wait := make(chan struct{})
+					go func() {
+						defer recovery.LogStackTraceAndContinue("panic in queue waiting")
+						defer close(wait)
+						item.q.Runner().Close(ctx)
+					}()
+					select {
+					case <-ctx.Done():
+						catcher.Add(ctx.Err())
+						return
+					case <-wait:
+						continue
+					}
 				}
 			}
 		}()
 	}
 	wg.Wait()
 
-	c.q = map[string]cacheItem{}
+	if !catcher.HasErrors() {
+		c.q = map[string]cacheItem{}
+	}
 
 	return catcher.Resolve()
 }
