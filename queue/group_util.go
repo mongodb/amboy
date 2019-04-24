@@ -27,10 +27,6 @@ type GroupCache interface {
 // NewGroupCache produces a GroupCache implementation that supports a
 // default TTL setting, and supports cloning and closing operations.
 func NewGroupCache(ttl time.Duration) GroupCache {
-	if ttl == 0 {
-		ttl = time.Hour
-	}
-
 	return &cacheImpl{
 		ttl: ttl,
 		mu:  &sync.RWMutex{},
@@ -153,14 +149,14 @@ func (c *cacheImpl) Prune(ctx context.Context) error {
 	work := c.getCacheIterSafe()
 	wg.Add(num)
 
-	for i := 0; i < runtime.NumCPU(); i++ {
+	for i := 0; i < num; i++ {
 		go func() {
 			defer recovery.LogStackTraceAndContinue("panic in local queue pruning")
 			defer wg.Done()
+		outer:
 			for {
 				select {
 				case <-ctx.Done():
-					catcher.Add(ctx.Err())
 					return
 				case item := <-work:
 					if item == nil {
@@ -168,7 +164,7 @@ func (c *cacheImpl) Prune(ctx context.Context) error {
 					}
 
 					if item.ttl > 0 && item.ttl > time.Since(item.ts) {
-						continue
+						continue outer
 					}
 
 					if item.q.Stats().IsComplete() {
@@ -185,7 +181,6 @@ func (c *cacheImpl) Prune(ctx context.Context) error {
 						}()
 						select {
 						case <-ctx.Done():
-							catcher.Add(ctx.Err())
 							return
 						case <-wait:
 							continue
@@ -196,13 +191,13 @@ func (c *cacheImpl) Prune(ctx context.Context) error {
 		}()
 	}
 	wg.Wait()
+	catcher.Add(ctx.Err())
 	return catcher.Resolve()
 }
 
 func (c *cacheImpl) Close(ctx context.Context) error {
 	wg := &sync.WaitGroup{}
 	num := runtime.NumCPU()
-	catcher := grip.NewBasicCatcher()
 	wg.Add(num)
 
 	c.mu.Lock()
@@ -210,14 +205,13 @@ func (c *cacheImpl) Close(ctx context.Context) error {
 
 	work := c.getCacheIterUnsafe()
 
-	for i := 0; i < runtime.NumCPU(); i++ {
+	for i := 0; i < num; i++ {
 		go func() {
 			defer recovery.LogStackTraceAndContinue("panic in local queue closing")
 			defer wg.Done()
 			for {
 				select {
 				case <-ctx.Done():
-					catcher.Add(ctx.Err())
 					return
 				case item := <-work:
 					if item == nil {
@@ -232,7 +226,6 @@ func (c *cacheImpl) Close(ctx context.Context) error {
 					}()
 					select {
 					case <-ctx.Done():
-						catcher.Add(ctx.Err())
 						return
 					case <-wait:
 						continue
@@ -243,9 +236,11 @@ func (c *cacheImpl) Close(ctx context.Context) error {
 	}
 	wg.Wait()
 
-	if !catcher.HasErrors() {
-		c.q = map[string]cacheItem{}
+	if err := ctx.Err(); err != nil {
+		return errors.WithStack(err)
 	}
 
-	return catcher.Resolve()
+	c.q = map[string]cacheItem{}
+
+	return nil
 }

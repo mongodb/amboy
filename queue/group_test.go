@@ -546,7 +546,7 @@ func TestQueueGroupOperations(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 
-				g, closer, err := constructor(ctx, 2*time.Second)
+				g, closer, err := constructor(ctx, time.Second)
 				defer func() { require.NoError(t, closer(ctx)) }()
 				require.NoError(t, err)
 				require.NotNil(t, g)
@@ -573,25 +573,16 @@ func TestQueueGroupOperations(t *testing.T) {
 				amboy.WaitCtxInterval(ctx, q1, 10*time.Millisecond)
 
 				// Queues should have completed work
-				stats1 := q1.Stats()
-				require.Zero(t, stats1.Running)
-				require.Equal(t, 1, stats1.Completed)
-				require.Zero(t, stats1.Pending)
-				require.Zero(t, stats1.Blocked)
-				require.Equal(t, 1, stats1.Total)
-
-				stats2 := q2.Stats()
-				require.Zero(t, stats2.Running)
-				require.Equal(t, 2, stats2.Completed)
-				require.Zero(t, stats2.Pending)
-				require.Zero(t, stats2.Blocked)
-				require.Equal(t, 2, stats2.Total)
+				assert.True(t, q1.Stats().IsComplete())
+				assert.True(t, q2.Stats().IsComplete())
+				assert.Equal(t, 1, q1.Stats().Completed)
+				assert.Equal(t, 2, q2.Stats().Completed)
 
 				require.Equal(t, 2, g.Len())
 
-				time.Sleep(3 * time.Second)
-
+				time.Sleep(2 * time.Second)
 				require.NoError(t, g.Prune(ctx))
+
 				require.Equal(t, 0, g.Len())
 			})
 			t.Run("PruneWithTTL", func(t *testing.T) {
@@ -625,19 +616,10 @@ func TestQueueGroupOperations(t *testing.T) {
 				amboy.WaitCtxInterval(ctx, q2, 100*time.Millisecond)
 
 				// Queues should have completed work
-				stats1 := q1.Stats()
-				require.Equal(t, 1, stats1.Total)
-				assert.Zero(t, stats1.Running)
-				assert.Equal(t, 1, stats1.Completed, stats1.String())
-				assert.Zero(t, stats1.Pending)
-				assert.Zero(t, stats1.Blocked)
-
-				stats2 := q2.Stats()
-				require.Equal(t, 2, stats2.Total)
-				assert.Zero(t, stats2.Running)
-				assert.Equal(t, 2, stats2.Completed, stats2.String())
-				assert.Zero(t, stats2.Pending)
-				assert.Zero(t, stats2.Blocked)
+				assert.True(t, q1.Stats().IsComplete())
+				assert.True(t, q2.Stats().IsComplete())
+				assert.Equal(t, 1, q1.Stats().Completed)
+				assert.Equal(t, 2, q2.Stats().Completed)
 
 				require.Equal(t, 2, g.Len())
 

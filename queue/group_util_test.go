@@ -127,7 +127,7 @@ func TestGroupCache(t *testing.T) {
 						tctx, cancel := context.WithCancel(ctx)
 						cancel()
 
-						require.NoError(t, cache.Set("foo", queue, 0))
+						require.NoError(t, cache.Set("foo", queue, time.Hour))
 						require.Equal(t, 1, cache.Len())
 						require.Error(t, cache.Prune(tctx))
 						require.Equal(t, 1, cache.Len())
