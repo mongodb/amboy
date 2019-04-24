@@ -140,8 +140,8 @@ func IntervalQueueOperation(ctx context.Context, q Queue, interval time.Duration
 	go func() {
 		var err error
 
-		if interval <= 0 {
-			grip.Critical("invalid interval query operation")
+		if interval <= time.Microsecond {
+			grip.Criticalf("invalid interval queue operation '%s'", interval)
 			return
 		}
 
