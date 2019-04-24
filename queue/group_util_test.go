@@ -97,12 +97,14 @@ func TestGroupCache(t *testing.T) {
 				{
 					name: "RemoveQueueWithWork",
 					test: func(t *testing.T, cache GroupCache) {
-						queue := NewLocalUnordered(1)
-						queue.Start(ctx)
-						queue.Put(&sleepJob{sleep: time.Minute})
+						q := NewLocalUnordered(1)
+						require.NoError(t, q.Start(ctx))
+						require.NoError(t, q.Put(&sleepJob{sleep: time.Minute}))
 
-						require.NoError(t, cache.Set("foo", queue, 0))
+						require.NoError(t, cache.Set("foo", q, 1))
+						require.Equal(t, 1, cache.Len())
 						require.Error(t, cache.Remove(ctx, "foo"))
+						require.Equal(t, 1, cache.Len())
 					},
 				},
 				{
