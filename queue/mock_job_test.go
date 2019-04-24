@@ -79,3 +79,14 @@ func (j *jobThatPanics) Run(_ context.Context) {
 	time.Sleep(j.sleep)
 	panic("panic err")
 }
+
+type sleepJob struct {
+	sleep time.Duration
+	job.Base
+}
+
+func (j *sleepJob) Run(_ context.Context) {
+	defer j.MarkComplete()
+
+	time.Sleep(j.sleep)
+}
