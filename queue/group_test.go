@@ -589,7 +589,7 @@ func TestQueueGroupOperations(t *testing.T) {
 
 				require.Equal(t, 2, g.Len())
 
-				time.Sleep(2 * time.Second)
+				time.Sleep(3 * time.Second)
 
 				require.NoError(t, g.Prune(ctx))
 				require.Equal(t, 0, g.Len())
