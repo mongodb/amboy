@@ -516,6 +516,93 @@ func TestQueueSmoke(t *testing.T) {
 
 									}
 									if test.IsRemote && driver.SupportsMulti {
+										t.Run("MultipleBackend", func(t *testing.T) {
+											ctx, cancel := context.WithCancel(bctx)
+											defer cancel()
+
+											qOne := test.Constructor(ctx, size.Size)
+											qTwo := test.Constructor(ctx, size.Size)
+											require.NoError(t, runner.SetPool(qOne, size.Size))
+											require.NoError(t, runner.SetPool(qTwo, size.Size))
+
+											driverID := newDriverID()
+											dcloserOne, err := driver.SetDriver(ctx, qOne, driverID)
+											defer func() { require.NoError(t, dcloserOne(ctx)) }()
+											require.NoError(t, err)
+
+											dcloserTwo, err := driver.SetDriver(ctx, qTwo, driverID)
+											defer func() { require.NoError(t, dcloserTwo(ctx)) }()
+											require.NoError(t, err)
+
+											assert.NoError(t, qOne.Start(ctx))
+											assert.NoError(t, qTwo.Start(ctx))
+
+											num := 200
+											adderProcs := 4
+
+											wg := &sync.WaitGroup{}
+											for o := 0; o < adderProcs; o++ {
+												wg.Add(1)
+												go func(o int) {
+													defer wg.Done()
+													// add a bunch of jobs: half to one queue and half to the other.
+													for i := 0; i < num; i++ {
+														cmd := fmt.Sprintf("echo %d.%d", o, i)
+														j := job.NewShellJob(cmd, "")
+														if i%2 == 0 {
+															assert.NoError(t, qOne.Put(j))
+															assert.Error(t, qOne.Put(j))
+															continue
+														}
+														assert.NoError(t, qTwo.Put(j))
+													}
+												}(o)
+											}
+											wg.Wait()
+
+											num = num * adderProcs
+
+											grip.Info("added jobs to queues")
+
+											// check that both queues see all jobs
+											statsOne := qOne.Stats()
+											statsTwo := qTwo.Stats()
+
+											require.Equal(t, statsOne.Total, num)
+											require.Equal(t, statsTwo.Total, num)
+
+											grip.Infof("before wait statsOne: %+v", statsOne)
+											grip.Infof("before wait statsTwo: %+v", statsTwo)
+
+											// wait for all jobs to complete.
+											amboy.WaitCtxInterval(ctx, qOne, 100*time.Millisecond)
+											amboy.WaitCtxInterval(ctx, qTwo, 100*time.Millisecond)
+
+											grip.Infof("after wait statsOne: %+v", qOne.Stats())
+											grip.Infof("after wait statsTwo: %+v", qTwo.Stats())
+
+											// check that all the results in the queues are are completed,
+											// and unique
+											firstCount := 0
+											results := make(map[string]struct{})
+											for result := range qOne.Results(ctx) {
+												firstCount++
+												assert.True(t, result.Status().Completed)
+												results[result.ID()] = struct{}{}
+											}
+
+											secondCount := 0
+											// make sure that all of the results in the second queue match
+											// the results in the first queue.
+											for result := range qTwo.Results(ctx) {
+												secondCount++
+												assert.True(t, result.Status().Completed)
+												results[result.ID()] = struct{}{}
+											}
+
+											assert.Equal(t, firstCount, secondCount)
+											assert.Equal(t, len(results), firstCount)
+										})
 
 									}
 								})
