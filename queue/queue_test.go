@@ -15,6 +15,8 @@ import (
 	"github.com/mongodb/amboy/job"
 	"github.com/mongodb/amboy/pool"
 	"github.com/mongodb/grip"
+	"github.com/mongodb/grip/level"
+	"github.com/mongodb/grip/send"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/assert"
@@ -23,6 +25,19 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	mgo "gopkg.in/mgo.v2"
 )
+
+const defaultLocalQueueCapcity = 10000
+
+func init() {
+	grip.SetName("amboy.queue.tests")
+	grip.Error(grip.SetSender(send.MakeNative()))
+
+	lvl := grip.GetSender().Level()
+	lvl.Threshold = level.Error
+	_ = grip.GetSender().SetLevel(lvl)
+
+	job.RegisterDefaultJobs()
+}
 
 func newDriverID() string { return strings.Replace(uuid.NewV4().String(), "-", ".", -1) }
 
@@ -45,7 +60,7 @@ func TestQueueSmoke(t *testing.T) {
 
 	for _, test := range []struct {
 		Name        string
-		Constructor func(context.Context, int) amboy.Queue
+		Constructor func(context.Context, int) (amboy.Queue, error)
 
 		MaxSize int
 
@@ -61,65 +76,59 @@ func TestQueueSmoke(t *testing.T) {
 	}{
 		{
 			Name:        "Local",
-			Constructor: func(ctx context.Context, size int) amboy.Queue { return NewLocalUnordered(size) },
+			Constructor: func(ctx context.Context, size int) (amboy.Queue, error) { return NewLocalUnordered(size), nil },
 		},
 		{
 			Name:                "AdaptiveOrdering",
 			OrderedSupported:    true,
 			OrderedStartsBefore: true,
 			WaitUntilSupported:  true,
-			Constructor: func(ctx context.Context, size int) amboy.Queue {
-				return NewAdaptiveOrderedLocalQueue(size, defaultLocalQueueCapcity)
+			Constructor: func(ctx context.Context, size int) (amboy.Queue, error) {
+				return NewAdaptiveOrderedLocalQueue(size, defaultLocalQueueCapcity), nil
 			},
 		},
 		{
 			Name:                "LocalOrdered",
 			OrderedStartsBefore: false,
 			OrderedSupported:    true,
-			Constructor:         func(ctx context.Context, size int) amboy.Queue { return NewLocalOrdered(size) },
+			Constructor:         func(ctx context.Context, size int) (amboy.Queue, error) { return NewLocalOrdered(size), nil },
 		},
 		{
 			Name: "Priority",
-			Constructor: func(ctx context.Context, size int) amboy.Queue {
-				return NewLocalPriorityQueue(size, defaultLocalQueueCapcity)
+			Constructor: func(ctx context.Context, size int) (amboy.Queue, error) {
+				return NewLocalPriorityQueue(size, defaultLocalQueueCapcity), nil
 			},
 		},
 		{
-			Name:        "LimitedSize",
-			Constructor: func(ctx context.Context, size int) amboy.Queue { return NewLocalLimitedSize(size, 1024*size) },
+			Name: "LimitedSize",
+			Constructor: func(ctx context.Context, size int) (amboy.Queue, error) {
+				return NewLocalLimitedSize(size, 1024*size), nil
+			},
 		},
 		{
 			Name: "Shuffled",
-			Constructor: func(ctx context.Context, size int) amboy.Queue {
-				return NewShuffledLocal(size, defaultLocalQueueCapcity)
+			Constructor: func(ctx context.Context, size int) (amboy.Queue, error) {
+				return NewShuffledLocal(size, defaultLocalQueueCapcity), nil
 			},
 		},
 		{
 			Name:        "RemoteUnordered",
 			IsRemote:    true,
-			Constructor: func(ctx context.Context, size int) amboy.Queue { return NewRemoteUnordered(size) },
+			Constructor: func(ctx context.Context, size int) (amboy.Queue, error) { return NewRemoteUnordered(size), nil },
 		},
 		{
 			Name:             "RemoteOrdered",
 			IsRemote:         true,
 			OrderedSupported: true,
-			Constructor:      func(ctx context.Context, size int) amboy.Queue { return NewSimpleRemoteOrdered(size) },
+			Constructor:      func(ctx context.Context, size int) (amboy.Queue, error) { return NewSimpleRemoteOrdered(size), nil },
 		},
-		// {
-		// 	Name:    "SQSFifo",
-		// 	MaxSize: 4,
-		// 	Constructor: func(ctx context.Context, size int) (amboy.Queue, error) {
-		// 		q, err := NewSQSFifoQueue(randomString(4), size)
-		// 		if err != nil {
-		// 			return nil, noopCloser, err
-		// 		}
-		// 		if err := q.SetRunner(pool.NewAbortablePool(size, q)); err != nil {
-		// 			return nil, noopCloser, err
-		// 		}
-
-		// 		return q, noopCloser, nil
-		// 	},
-		// },
+		{
+			Name:    "SQSFifo",
+			MaxSize: 4,
+			Constructor: func(ctx context.Context, size int) (amboy.Queue, error) {
+				return NewSQSFifoQueue(randomString(4), size)
+			},
+		},
 	} {
 		t.Run(test.Name, func(t *testing.T) {
 			for _, driver := range []struct {
@@ -325,7 +334,8 @@ func TestQueueSmoke(t *testing.T) {
 											ctx, cancel := context.WithCancel(bctx)
 											defer cancel()
 
-											q := test.Constructor(ctx, size.Size)
+											q, err := test.Constructor(ctx, size.Size)
+											require.NoError(t, err)
 											require.NoError(t, runner.SetPool(q, size.Size))
 											dcloser, err := driver.SetDriver(ctx, q, newDriverID())
 											defer func() { require.NoError(t, dcloser(ctx)) }()
@@ -394,7 +404,8 @@ func TestQueueSmoke(t *testing.T) {
 											ctx, cancel := context.WithCancel(bctx)
 											defer cancel()
 
-											q := test.Constructor(ctx, size.Size)
+											q, err := test.Constructor(ctx, size.Size)
+											require.NoError(t, err)
 											require.NoError(t, runner.SetPool(q, size.Size))
 
 											dcloser, err := driver.SetDriver(ctx, q, newDriverID())
@@ -453,7 +464,8 @@ func TestQueueSmoke(t *testing.T) {
 											ctx, cancel := context.WithCancel(bctx)
 											defer cancel()
 
-											q := test.Constructor(ctx, size.Size)
+											q, err := test.Constructor(ctx, size.Size)
+											require.NoError(t, err)
 											require.NoError(t, runner.SetPool(q, size.Size))
 
 											dcloser, err := driver.SetDriver(ctx, q, newDriverID())
@@ -514,99 +526,180 @@ func TestQueueSmoke(t *testing.T) {
 												require.NotZero(t, ti.WaitUntil)
 											}
 											assert.True(t, completed > 0)
-
 										})
-
 									}
-									if driver.SupportsMulti && !runner.SkipMulti {
-										t.Run("MultipleBackend", func(t *testing.T) {
-											ctx, cancel := context.WithCancel(bctx)
-											defer cancel()
+									t.Run("OneExecution", func(t *testing.T) {
+										if test.Name == "LocalOrdered" {
+											t.Skip("topological sort deadlocks")
+										}
+										ctx, cancel := context.WithCancel(bctx)
+										defer cancel()
 
-											qOne := test.Constructor(ctx, size.Size)
-											qTwo := test.Constructor(ctx, size.Size)
-											require.NoError(t, runner.SetPool(qOne, size.Size))
-											require.NoError(t, runner.SetPool(qTwo, size.Size))
+										q, err := test.Constructor(ctx, size.Size)
+										require.NoError(t, err)
+										require.NoError(t, runner.SetPool(q, size.Size))
 
-											driverID := newDriverID()
-											dcloserOne, err := driver.SetDriver(ctx, qOne, driverID)
-											defer func() { dcloserOne(ctx) }()
-											require.NoError(t, err)
+										dcloser, err := driver.SetDriver(ctx, q, newDriverID())
+										defer func() { require.NoError(t, dcloser(ctx)) }()
+										require.NoError(t, err)
 
-											dcloserTwo, err := driver.SetDriver(ctx, qTwo, driverID)
-											defer func() { require.NoError(t, dcloserTwo(ctx)) }()
-											require.NoError(t, err)
+										mockJobCounters.Reset()
+										count := 40
 
-											assert.NoError(t, qOne.Start(ctx))
-											assert.NoError(t, qTwo.Start(ctx))
+										if !test.OrderedSupported || test.OrderedStartsBefore {
+											require.NoError(t, q.Start(ctx))
+										}
 
-											num := 200
-											adderProcs := 4
+										for i := 0; i < count; i++ {
+											j := newMockJob()
+											jobID := fmt.Sprintf("%d.%d.mock.single-exec", i, job.GetNumber())
+											j.SetID(jobID)
+											assert.NoError(t, q.Put(j))
+										}
 
-											wg := &sync.WaitGroup{}
-											for o := 0; o < adderProcs; o++ {
-												wg.Add(1)
-												go func(o int) {
-													defer wg.Done()
-													// add a bunch of jobs: half to one queue and half to the other.
-													for i := 0; i < num; i++ {
-														cmd := fmt.Sprintf("echo %d.%d", o, i)
-														j := job.NewShellJob(cmd, "")
-														if i%2 == 0 {
-															assert.NoError(t, qOne.Put(j))
-															assert.Error(t, qOne.Put(j))
-															continue
+										if test.OrderedSupported && !test.OrderedStartsBefore {
+											fmt.Println("starting")
+											require.NoError(t, q.Start(ctx))
+											fmt.Println("started")
+										}
+
+										amboy.WaitCtxInterval(ctx, q, 10*time.Millisecond)
+										assert.Equal(t, count, mockJobCounters.Count())
+									})
+
+									if test.IsRemote {
+										t.Run("Multiple", func(t *testing.T) {
+											for _, multi := range []struct {
+												Name            string
+												Setup           func(context.Context, amboy.Queue, amboy.Queue) (closer, error)
+												MultipleDrivers bool
+											}{
+												{
+													Name:            "TwoDrivers",
+													MultipleDrivers: true,
+													Setup: func(ctx context.Context, qOne, qTwo amboy.Queue) (closer, error) {
+														catcher := grip.NewBasicCatcher()
+														driverID := newDriverID()
+														dcloserOne, err := driver.SetDriver(ctx, qOne, driverID)
+														catcher.Add(err)
+
+														dcloserTwo, err := driver.SetDriver(ctx, qTwo, driverID)
+														catcher.Add(err)
+
+														closer := func(ctx context.Context) error {
+															err := dcloserOne(ctx)
+															grip.Info(dcloserTwo(ctx))
+															return err
 														}
-														assert.NoError(t, qTwo.Put(j))
+
+														return closer, catcher.Resolve()
+													},
+												},
+												{
+													Name: "OneDriver",
+													Setup: func(ctx context.Context, qOne, qTwo amboy.Queue) (closer, error) {
+														catcher := grip.NewBasicCatcher()
+														driverID := newDriverID()
+														dcloserOne, err := driver.SetDriver(ctx, qOne, driverID)
+														catcher.Add(err)
+
+														rq := qOne.(Remote)
+														catcher.Add(qTwo.(Remote).SetDriver(rq.Driver()))
+
+														return dcloserOne, catcher.Resolve()
+													},
+												},
+											} {
+												if multi.MultipleDrivers && !driver.SupportsMulti && size.Name != "Single" {
+													continue
+												}
+												t.Run(multi.Name, func(t *testing.T) {
+													ctx, cancel := context.WithCancel(bctx)
+													defer cancel()
+
+													qOne, err := test.Constructor(ctx, size.Size)
+													require.NoError(t, err)
+													qTwo, err := test.Constructor(ctx, size.Size)
+													require.NoError(t, err)
+													require.NoError(t, runner.SetPool(qOne, size.Size))
+													require.NoError(t, runner.SetPool(qTwo, size.Size))
+
+													closer, err := multi.Setup(ctx, qOne, qTwo)
+													require.NoError(t, err)
+													defer func() { require.NoError(t, closer(ctx)) }()
+
+													assert.NoError(t, qOne.Start(ctx))
+													assert.NoError(t, qTwo.Start(ctx))
+
+													num := 200
+													adderProcs := 4
+
+													wg := &sync.WaitGroup{}
+													for o := 0; o < adderProcs; o++ {
+														wg.Add(1)
+														go func(o int) {
+															defer wg.Done()
+															// add a bunch of jobs: half to one queue and half to the other.
+															for i := 0; i < num; i++ {
+																cmd := fmt.Sprintf("echo %d.%d", o, i)
+																j := job.NewShellJob(cmd, "")
+																if i%2 == 0 {
+																	assert.NoError(t, qOne.Put(j))
+																	assert.Error(t, qOne.Put(j))
+																	continue
+																}
+																assert.NoError(t, qTwo.Put(j))
+															}
+														}(o)
 													}
-												}(o)
+													wg.Wait()
+
+													num = num * adderProcs
+
+													grip.Info("added jobs to queues")
+
+													// check that both queues see all jobs
+													statsOne := qOne.Stats()
+													statsTwo := qTwo.Stats()
+
+													require.Equal(t, statsOne.Total, num)
+													require.Equal(t, statsTwo.Total, num)
+
+													grip.Infof("before wait statsOne: %+v", statsOne)
+													grip.Infof("before wait statsTwo: %+v", statsTwo)
+
+													// wait for all jobs to complete.
+													amboy.WaitCtxInterval(ctx, qOne, 100*time.Millisecond)
+													amboy.WaitCtxInterval(ctx, qTwo, 100*time.Millisecond)
+
+													grip.Infof("after wait statsOne: %+v", qOne.Stats())
+													grip.Infof("after wait statsTwo: %+v", qTwo.Stats())
+
+													// check that all the results in the queues are are completed,
+													// and unique
+													firstCount := 0
+													results := make(map[string]struct{})
+													for result := range qOne.Results(ctx) {
+														firstCount++
+														assert.True(t, result.Status().Completed)
+														results[result.ID()] = struct{}{}
+													}
+
+													secondCount := 0
+													// make sure that all of the results in the second queue match
+													// the results in the first queue.
+													for result := range qTwo.Results(ctx) {
+														secondCount++
+														assert.True(t, result.Status().Completed)
+														results[result.ID()] = struct{}{}
+													}
+
+													assert.Equal(t, firstCount, secondCount)
+													assert.Equal(t, len(results), firstCount)
+												})
 											}
-											wg.Wait()
 
-											num = num * adderProcs
-
-											grip.Info("added jobs to queues")
-
-											// check that both queues see all jobs
-											statsOne := qOne.Stats()
-											statsTwo := qTwo.Stats()
-
-											require.Equal(t, statsOne.Total, num)
-											require.Equal(t, statsTwo.Total, num)
-
-											grip.Infof("before wait statsOne: %+v", statsOne)
-											grip.Infof("before wait statsTwo: %+v", statsTwo)
-
-											// wait for all jobs to complete.
-											amboy.WaitCtxInterval(ctx, qOne, 100*time.Millisecond)
-											amboy.WaitCtxInterval(ctx, qTwo, 100*time.Millisecond)
-
-											grip.Infof("after wait statsOne: %+v", qOne.Stats())
-											grip.Infof("after wait statsTwo: %+v", qTwo.Stats())
-
-											// check that all the results in the queues are are completed,
-											// and unique
-											firstCount := 0
-											results := make(map[string]struct{})
-											for result := range qOne.Results(ctx) {
-												firstCount++
-												assert.True(t, result.Status().Completed)
-												results[result.ID()] = struct{}{}
-											}
-
-											secondCount := 0
-											// make sure that all of the results in the second queue match
-											// the results in the first queue.
-											for result := range qTwo.Results(ctx) {
-												secondCount++
-												assert.True(t, result.Status().Completed)
-												results[result.ID()] = struct{}{}
-											}
-
-											assert.Equal(t, firstCount, secondCount)
-											assert.Equal(t, len(results), firstCount)
 										})
-
 									}
 								})
 

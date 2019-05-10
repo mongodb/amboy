@@ -10,31 +10,34 @@ import (
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/job"
 	"github.com/mongodb/grip"
+	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/assert"
+	"go.mongodb.org/mongo-driver/mongo"
+	mgo "gopkg.in/mgo.v2"
 )
 
-// the cases in this file attempt to test the behavior of the remote tasks.
+func cleanupMgo(dbname, name string, session *mgo.Session) error {
+	start := time.Now()
+	defer session.Close()
 
-func runSmokeRemoteQueuesRunsJobsOnce(ctx context.Context, driver Driver, cleanup func(), assert *assert.Assertions) {
-	q := NewRemoteUnordered(4).(*remoteUnordered)
-
-	assert.NoError(driver.Open(ctx))
-	assert.NoError(q.SetDriver(driver))
-	assert.NoError(q.Start(ctx))
-	const single = 40
-
-	for i := 0; i < single; i++ {
-		j := newMockJob()
-		jobID := fmt.Sprintf("%d.%s.%d", i, driver.ID(), job.GetNumber())
-		j.SetID(jobID)
-		assert.NoError(q.Put(j))
+	if err := session.DB(dbname).C(addJobsSuffix(name)).DropCollection(); err != nil {
+		return errors.WithStack(err)
 	}
 
-	amboy.WaitCtxInterval(ctx, q, 10*time.Millisecond)
-	assert.Equal(single, mockJobCounters.Count())
+	grip.Infof("clean up operation for %s took %s", name, time.Since(start))
+	return nil
+}
 
-	cleanup()
+func cleanupMongo(ctx context.Context, dbname, name string, client *mongo.Client) error {
+	start := time.Now()
+
+	if err := client.Database(dbname).Collection(addJobsSuffix(name)).Drop(ctx); err != nil {
+		return errors.WithStack(err)
+	}
+
+	grip.Infof("clean up operation for %s took %s", name, time.Since(start))
+	return client.Disconnect(ctx)
 }
 
 func runSmokeMultipleQueuesRunJobsOnce(ctx context.Context, drivers []Driver, cleanup func(), assert *assert.Assertions) {
@@ -79,36 +82,6 @@ func runSmokeMultipleQueuesRunJobsOnce(ctx context.Context, drivers []Driver, cl
 
 	assert.Equal(len(drivers)*inside*outside, mockJobCounters.Count())
 	cleanup()
-}
-
-func TestSmokeMgoDriverRemoteQueueRunsJobsOnlyOnce(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	mockJobCounters.Reset()
-	assert := assert.New(t)
-	opts := DefaultMongoDBOptions()
-	opts.DB = "amboy_test"
-	name := uuid.NewV4().String()
-	d := NewMgoDriver(name, opts)
-	cleanup := func() { grip.Alert(cleanupMgo(opts.DB, name, d.(*mgoDriver).session.Clone())) }
-
-	runSmokeRemoteQueuesRunsJobsOnce(ctx, d, cleanup, assert)
-}
-
-func TestSmokeMongoDriverRemoteQueueRunsJobsOnlyOnce(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	mockJobCounters.Reset()
-	assert := assert.New(t)
-	opts := DefaultMongoDBOptions()
-	opts.DB = "amboy_test"
-	name := uuid.NewV4().String()
-	d := NewMongoDriver(name, opts)
-	cleanup := func() { grip.Alert(cleanupMongo(ctx, opts.DB, name, d.(*mongoDriver).client)) }
-
-	runSmokeRemoteQueuesRunsJobsOnce(ctx, d, cleanup, assert)
 }
 
 func TestSmokeMgoDriverRemoteTwoQueueRunsJobsOnlyOnce(t *testing.T) {
@@ -287,89 +260,4 @@ func TestSmokeMgoGroupDriverRemoteManyQueueRunsJobsOnlyOnce(t *testing.T) {
 
 	mockJobCounters.Reset()
 	runSmokeMultipleQueuesRunJobsOnce(ctx, drivers, cleanup, assert)
-}
-
-func TestSQSFifoQueueRunsJobsOnlyOnce(t *testing.T) {
-	assert := assert.New(t)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	q, err := NewSQSFifoQueue(randomString(8), 4)
-	assert.NoError(err)
-	assert.NoError(q.Start(ctx))
-	wg := &sync.WaitGroup{}
-
-	const (
-		inside  = 250
-		outside = 2
-	)
-
-	wg.Add(outside)
-	for i := 0; i < outside; i++ {
-		go func(i int) {
-			defer wg.Done()
-			for ii := 0; ii < inside; ii++ {
-				j := newMockJob()
-				j.SetID(fmt.Sprintf("%d-%d-%d", i, ii, job.GetNumber()))
-				assert.NoError(q.Put(j))
-			}
-		}(i)
-	}
-
-	grip.Notice("waiting to add all jobs")
-	wg.Wait()
-
-	amboy.WaitCtxInterval(ctx, q, 20*time.Second)
-	stats := q.Stats()
-	assert.True(stats.Total <= inside*outside)
-	assert.Equal(stats.Total, stats.Pending+stats.Completed)
-}
-
-func TestMultipleSQSFifoQueueRunsJobsOnlyOnce(t *testing.T) {
-	// case two
-	mockJobCounters.Reset()
-
-	assert := assert.New(t) // nolint
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-
-	defer cancel()
-	name := randomString(8)
-	q, err := NewSQSFifoQueue(name, 4)
-	assert.NoError(err)
-	assert.NoError(q.Start(ctx))
-
-	q2, err := NewSQSFifoQueue(name, 4)
-	assert.NoError(err)
-	assert.NoError(q2.Start(ctx))
-
-	const (
-		inside  = 250
-		outside = 3
-	)
-
-	wg := &sync.WaitGroup{}
-	wg.Add(outside)
-	for i := 0; i < outside; i++ {
-		go func(i int) {
-			defer wg.Done()
-			for ii := 0; ii < inside; ii++ {
-				j := newMockJob()
-				j.SetID(fmt.Sprintf("%d-%d-%d", i, ii, job.GetNumber()))
-				assert.NoError(q2.Put(j))
-			}
-		}(i)
-	}
-	grip.Notice("waiting to add all jobs")
-	wg.Wait()
-
-	grip.Notice("waiting to run jobs")
-
-	amboy.WaitCtxInterval(ctx, q, 10*time.Second)
-	amboy.WaitCtxInterval(ctx, q2, 10*time.Second)
-
-	stats1 := q.Stats()
-	stats2 := q2.Stats()
-	assert.Equal(stats1.Pending, stats2.Pending)
-
-	sum := stats1.Pending + stats2.Pending + stats1.Completed + stats2.Completed
-	assert.Equal(sum, stats1.Total+stats2.Total)
 }
