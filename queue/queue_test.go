@@ -237,19 +237,20 @@ func TestQueueSmoke(t *testing.T) {
 
 				t.Run(driver.Name+"Driver", func(t *testing.T) {
 					for _, runner := range []struct {
-						Name          string
-						SetPool       func(amboy.Queue, int) error
-						MinSize       int
-						MaxSize       int
-						SupportsMulti bool
+						Name      string
+						SetPool   func(amboy.Queue, int) error
+						SkipMulti bool
+						MinSize   int
+						MaxSize   int
 					}{
 						{
 							Name:    "Default",
 							SetPool: func(q amboy.Queue, _ int) error { return nil },
 						},
 						{
-							Name:    "Single",
-							MaxSize: 1,
+							Name:      "Single",
+							SkipMulti: true,
+							MaxSize:   1,
 							SetPool: func(q amboy.Queue, _ int) error {
 								runner := pool.NewSingle()
 								if err := runner.SetQueue(q); err != nil {
@@ -265,9 +266,10 @@ func TestQueueSmoke(t *testing.T) {
 							SetPool: func(q amboy.Queue, size int) error { return q.SetRunner(pool.NewAbortablePool(size, q)) },
 						},
 						{
-							Name:    "RateLimitedSimple",
-							MinSize: 4,
-							MaxSize: 32,
+							Name:      "RateLimitedSimple",
+							MinSize:   4,
+							MaxSize:   32,
+							SkipMulti: true,
 							SetPool: func(q amboy.Queue, size int) error {
 								runner, err := pool.NewSimpleRateLimitedWorkers(size, 10*time.Millisecond, q)
 								if err != nil {
@@ -278,9 +280,10 @@ func TestQueueSmoke(t *testing.T) {
 							},
 						},
 						{
-							Name:    "RateLimitedAverage",
-							MinSize: 4,
-							MaxSize: 16,
+							Name:      "RateLimitedAverage",
+							MinSize:   4,
+							MaxSize:   16,
+							SkipMulti: true,
 							SetPool: func(q amboy.Queue, size int) error {
 								runner, err := pool.NewMovingAverageRateLimitedWorkers(size, size*100, 10*time.Millisecond, q)
 								if err != nil {
@@ -515,7 +518,7 @@ func TestQueueSmoke(t *testing.T) {
 										})
 
 									}
-									if test.IsRemote && driver.SupportsMulti {
+									if driver.SupportsMulti && !runner.SkipMulti {
 										t.Run("MultipleBackend", func(t *testing.T) {
 											ctx, cancel := context.WithCancel(bctx)
 											defer cancel()
@@ -527,7 +530,7 @@ func TestQueueSmoke(t *testing.T) {
 
 											driverID := newDriverID()
 											dcloserOne, err := driver.SetDriver(ctx, qOne, driverID)
-											defer func() { require.NoError(t, dcloserOne(ctx)) }()
+											defer func() { dcloserOne(ctx) }()
 											require.NoError(t, err)
 
 											dcloserTwo, err := driver.SetDriver(ctx, qTwo, driverID)
