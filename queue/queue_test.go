@@ -275,10 +275,9 @@ func TestQueueSmoke(t *testing.T) {
 							SetPool: func(q amboy.Queue, size int) error { return q.SetRunner(pool.NewAbortablePool(size, q)) },
 						},
 						{
-							Name:      "RateLimitedSimple",
-							MinSize:   4,
-							MaxSize:   32,
-							SkipMulti: true,
+							Name:    "RateLimitedSimple",
+							MinSize: 4,
+							MaxSize: 32,
 							SetPool: func(q amboy.Queue, size int) error {
 								runner, err := pool.NewSimpleRateLimitedWorkers(size, 10*time.Millisecond, q)
 								if err != nil {
@@ -558,16 +557,14 @@ func TestQueueSmoke(t *testing.T) {
 										}
 
 										if test.OrderedSupported && !test.OrderedStartsBefore {
-											fmt.Println("starting")
 											require.NoError(t, q.Start(ctx))
-											fmt.Println("started")
 										}
 
 										amboy.WaitCtxInterval(ctx, q, 10*time.Millisecond)
 										assert.Equal(t, count, mockJobCounters.Count())
 									})
 
-									if test.IsRemote {
+									if test.IsRemote && !runner.SkipMulti {
 										t.Run("Multiple", func(t *testing.T) {
 											for _, multi := range []struct {
 												Name            string
