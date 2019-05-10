@@ -24,6 +24,8 @@ import (
 	mgo "gopkg.in/mgo.v2"
 )
 
+func newDriverID() string { return strings.Replace(uuid.NewV4().String(), "-", ".", -1) }
+
 func TestQueueSmoke(t *testing.T) {
 	bctx, bcancel := context.WithCancel(context.Background())
 	defer bcancel()
@@ -43,7 +45,7 @@ func TestQueueSmoke(t *testing.T) {
 
 	for _, test := range []struct {
 		Name        string
-		Constructor func(context.Context, int) (amboy.Queue, closer, error)
+		Constructor func(context.Context, int) amboy.Queue
 
 		MaxSize int
 
@@ -54,571 +56,471 @@ func TestQueueSmoke(t *testing.T) {
 
 		// Support Disabled
 		SkipUnordered bool
+
+		IsRemote bool
 	}{
 		{
-			Name: "Local",
-			Constructor: func(ctx context.Context, size int) (amboy.Queue, closer, error) {
-				return NewLocalUnordered(size), noopCloser, nil
-			},
-		},
-		{
-			Name: "LocalSingle",
-			Constructor: func(ctx context.Context, size int) (amboy.Queue, closer, error) {
-				q := NewLocalUnordered(size)
-				runner := pool.NewSingle()
-				if err := runner.SetQueue(q); err != nil {
-					return nil, noopCloser, err
-				}
-				if err := q.SetRunner(runner); err != nil {
-					return nil, noopCloser, err
-				}
-				return q, noopCloser, nil
-			},
-		},
-		{
-			Name: "RateLimitedSimple",
-			Constructor: func(ctx context.Context, size int) (amboy.Queue, closer, error) {
-				q := NewLocalUnordered(size)
-
-				runner, err := pool.NewSimpleRateLimitedWorkers(size, 10*time.Millisecond, q)
-				if err != nil {
-					return nil, noopCloser, err
-				}
-
-				if err := q.SetRunner(runner); err != nil {
-					return nil, noopCloser, err
-
-				}
-
-				return q, noopCloser, nil
-			},
-		},
-		{
-			Name: "RateLimitedAverage",
-			Constructor: func(ctx context.Context, size int) (amboy.Queue, closer, error) {
-				q := NewLocalUnordered(size)
-
-				runner, err := pool.NewMovingAverageRateLimitedWorkers(size, 100, time.Second, q)
-				if err != nil {
-					return nil, noopCloser, err
-				}
-
-				if err := q.SetRunner(runner); err != nil {
-					return nil, noopCloser, err
-
-				}
-
-				return q, noopCloser, nil
-			},
-		},
-		{
-			Name: "RemoteUnorderedInternal",
-			Constructor: func(ctx context.Context, size int) (amboy.Queue, closer, error) {
-				q := NewRemoteUnordered(size)
-				d := NewInternalDriver()
-				closer := func(ctx context.Context) error {
-					d.Close()
-					return nil
-				}
-				if err := q.SetDriver(d); err != nil {
-					return nil, closer, err
-				}
-
-				return q, closer, nil
-			},
-		},
-		{
-			Name:             "RemoteOrderedInternal",
-			OrderedSupported: true,
-			Constructor: func(ctx context.Context, size int) (amboy.Queue, closer, error) {
-				q := NewSimpleRemoteOrdered(size)
-				d := NewInternalDriver()
-
-				closer := func(ctx context.Context) error {
-					d.Close()
-					return nil
-				}
-
-				if err := q.SetDriver(d); err != nil {
-					return nil, closer, err
-				}
-
-				return q, closer, nil
-			},
-		},
-		{
-			Name:                "RemoteOrderedInternalSingle",
-			OrderedSupported:    true,
-			OrderedStartsBefore: true,
-			Constructor: func(ctx context.Context, size int) (amboy.Queue, closer, error) {
-				q := NewSimpleRemoteOrdered(size)
-				d := NewInternalDriver()
-
-				runner := pool.NewSingle()
-
-				closer := func(ctx context.Context) error {
-					d.Close()
-					return nil
-				}
-
-				if err := runner.SetQueue(q); err != nil {
-					return nil, closer, err
-				}
-
-				if err := q.SetRunner(runner); err != nil {
-					return nil, closer, err
-				}
-
-				if err := q.SetDriver(d); err != nil {
-					return nil, closer, err
-				}
-
-				return q, closer, nil
-			},
+			Name:        "Local",
+			Constructor: func(ctx context.Context, size int) amboy.Queue { return NewLocalUnordered(size) },
 		},
 		{
 			Name:                "AdaptiveOrdering",
 			OrderedSupported:    true,
 			OrderedStartsBefore: true,
 			WaitUntilSupported:  true,
-			Constructor: func(ctx context.Context, size int) (amboy.Queue, closer, error) {
-				q := NewAdaptiveOrderedLocalQueue(size, defaultLocalQueueCapcity)
-
-				return q, noopCloser, nil
+			Constructor: func(ctx context.Context, size int) amboy.Queue {
+				return NewAdaptiveOrderedLocalQueue(size, defaultLocalQueueCapcity)
 			},
 		},
 		{
 			Name:                "LocalOrdered",
 			OrderedStartsBefore: false,
 			OrderedSupported:    true,
-			Constructor: func(ctx context.Context, size int) (amboy.Queue, closer, error) {
-				return NewLocalOrdered(size), noopCloser, nil
-			},
-		},
-		{
-			Name:                "LocalOrderedSingle",
-			OrderedStartsBefore: false,
-			OrderedSupported:    true,
-			Constructor: func(ctx context.Context, size int) (amboy.Queue, closer, error) {
-				q := NewLocalOrdered(size)
-				runner := pool.NewSingle()
-
-				if err := runner.SetQueue(q); err != nil {
-					return nil, noopCloser, err
-				}
-
-				if err := q.SetRunner(runner); err != nil {
-					return nil, noopCloser, err
-				}
-
-				return q, noopCloser, nil
-			},
+			Constructor:         func(ctx context.Context, size int) amboy.Queue { return NewLocalOrdered(size) },
 		},
 		{
 			Name: "Priority",
-			Constructor: func(ctx context.Context, size int) (amboy.Queue, closer, error) {
-				return NewLocalPriorityQueue(size, defaultLocalQueueCapcity), noopCloser, nil
+			Constructor: func(ctx context.Context, size int) amboy.Queue {
+				return NewLocalPriorityQueue(size, defaultLocalQueueCapcity)
 			},
 		},
 		{
-			Name: "PrioritySingle",
-			Constructor: func(ctx context.Context, size int) (amboy.Queue, closer, error) {
-				q := NewLocalPriorityQueue(size, defaultLocalQueueCapcity)
-				runner := pool.NewSingle()
-
-				if err := runner.SetQueue(q); err != nil {
-					return nil, noopCloser, err
-				}
-
-				if err := q.SetRunner(runner); err != nil {
-					return nil, noopCloser, err
-				}
-
-				return q, noopCloser, nil
-			},
-		},
-		{
-			Name: "RemotePriority",
-			Constructor: func(ctx context.Context, size int) (amboy.Queue, closer, error) {
-				q := NewRemoteUnordered(size)
-				d := NewPriorityDriver()
-
-				closer := func(ctx context.Context) error {
-					d.Close()
-					return nil
-				}
-				if err := q.SetDriver(d); err != nil {
-					return nil, closer, err
-				}
-
-				return q, closer, nil
-			},
-		},
-		{
-			Name: "LimitedSize",
-			Constructor: func(ctx context.Context, size int) (amboy.Queue, closer, error) {
-				q := NewLocalLimitedSize(size, 1024*size)
-
-				return q, noopCloser, nil
-			},
+			Name:        "LimitedSize",
+			Constructor: func(ctx context.Context, size int) amboy.Queue { return NewLocalLimitedSize(size, 1024*size) },
 		},
 		{
 			Name: "Shuffled",
-			Constructor: func(ctx context.Context, size int) (amboy.Queue, closer, error) {
-				q := NewShuffledLocal(size, defaultLocalQueueCapcity)
-
-				return q, noopCloser, nil
+			Constructor: func(ctx context.Context, size int) amboy.Queue {
+				return NewShuffledLocal(size, defaultLocalQueueCapcity)
 			},
 		},
 		{
-			Name: "ShuffledSingle",
-			Constructor: func(ctx context.Context, size int) (amboy.Queue, closer, error) {
-				q := NewShuffledLocal(size, defaultLocalQueueCapcity)
-				runner := pool.NewSingle()
-
-				if err := runner.SetQueue(q); err != nil {
-					return nil, noopCloser, err
-				}
-
-				if err := q.SetRunner(runner); err != nil {
-					return nil, noopCloser, err
-				}
-
-				return q, noopCloser, nil
-			},
+			Name:        "RemoteUnordered",
+			IsRemote:    true,
+			Constructor: func(ctx context.Context, size int) amboy.Queue { return NewRemoteUnordered(size) },
 		},
 		{
-			Name:               "Mgo",
-			WaitUntilSupported: true,
-			Constructor: func(ctx context.Context, size int) (amboy.Queue, closer, error) {
-				name := strings.Replace(uuid.NewV4().String(), "-", ".", -1)
-				opts := DefaultMongoDBOptions()
-				opts.DB = "amboy_test"
-				q := NewRemoteUnordered(1)
-				driver, err := OpenNewMgoDriver(ctx, name, opts, session.Clone())
-				if err != nil {
-					return nil, noopCloser, err
-				}
-
-				d := driver.(*mgoDriver)
-				closer := func(ctx context.Context) error {
-					d.Close()
-					return cleanupMgo(opts.DB, name, session.Clone())
-				}
-				if err := q.SetDriver(d); err != nil {
-					return nil, closer, err
-				}
-
-				return q, closer, nil
-			},
-		},
-		{
-			Name:               "Mongo",
-			WaitUntilSupported: true,
-			Constructor: func(ctx context.Context, size int) (amboy.Queue, closer, error) {
-				name := strings.Replace(uuid.NewV4().String(), "-", ".", -1)
-				opts := DefaultMongoDBOptions()
-				opts.DB = "amboy_test"
-				q := NewRemoteUnordered(1)
-				driver, err := OpenNewMongoDriver(ctx, name, opts, client)
-				if err != nil {
-					return nil, noopCloser, err
-				}
-
-				d := driver.(*mongoDriver)
-				closer := func(ctx context.Context) error {
-					d.Close()
-
-					if err := client.Database(opts.DB).Collection(addJobsSuffix(name)).Drop(ctx); err != nil {
-						return errors.WithStack(err)
-					}
-
-					return nil
-				}
-				if err := q.SetDriver(d); err != nil {
-					return nil, closer, err
-				}
-
-				return q, closer, nil
-			},
-		},
-		{
-			Name:    "SQSFifo",
-			MaxSize: 4,
-			Constructor: func(ctx context.Context, size int) (amboy.Queue, closer, error) {
-				q, err := NewSQSFifoQueue(randomString(4), size)
-				if err != nil {
-					return nil, noopCloser, err
-				}
-				if err := q.SetRunner(pool.NewAbortablePool(size, q)); err != nil {
-					return nil, noopCloser, err
-				}
-
-				return q, noopCloser, nil
-			},
+			Name:             "RemoteOrdered",
+			IsRemote:         true,
+			OrderedSupported: true,
+			Constructor:      func(ctx context.Context, size int) amboy.Queue { return NewSimpleRemoteOrdered(size) },
 		},
 		// {
-		// 	Name:                "MongoOrdered",
-		// 	OrderedStartsBefore: true,
-		// 	OrderedSupported:    true,
-		// 	Constructor: func(ctx context.Context, size int) (amboy.Queue, closer, error) {
-		// 		name := strings.Replace(uuid.NewV4().String(), "-", ".", -1)
-		// 		opts := DefaultMongoDBOptions()
-		// 		opts.DB = "amboy_test"
-		// 		q := NewSimpleRemoteOrdered(size)
-		// 		driver, err := OpenNewMongoDriver(ctx, name, opts, client)
+		// 	Name:    "SQSFifo",
+		// 	MaxSize: 4,
+		// 	Constructor: func(ctx context.Context, size int) (amboy.Queue, error) {
+		// 		q, err := NewSQSFifoQueue(randomString(4), size)
 		// 		if err != nil {
 		// 			return nil, noopCloser, err
 		// 		}
-
-		// 		d := driver.(*mongoDriver)
-		// 		closer := func(ctx context.Context) error {
-		// 			d.Close()
-
-		// 			if err := client.Database(opts.DB).Collection(addJobsSuffix(name)).Drop(ctx); err != nil {
-		// 				return errors.WithStack(err)
-		// 			}
-
-		// 			return nil
-		// 		}
-		// 		if err := q.SetDriver(d); err != nil {
-		// 			return nil, closer, err
-		// 		}
-
-		// 		return q, closer, nil
-		// 	},
-		// },
-		// {
-		// 	Name:                "MgoOrdered",
-		// 	WaitUntilSupported:  true,
-		// 	OrderedStartsBefore: true,
-		// 	OrderedSupported:    true,
-		// 	Constructor: func(ctx context.Context, size int) (amboy.Queue, closer, error) {
-		// 		name := strings.Replace(uuid.NewV4().String(), "-", ".", -1)
-		// 		opts := DefaultMongoDBOptions()
-		// 		opts.DB = "amboy_test"
-		// 		q := NewSimpleRemoteOrdered(size)
-		// 		driver, err := OpenNewMgoDriver(ctx, name, opts, session.Clone())
-		// 		if err != nil {
+		// 		if err := q.SetRunner(pool.NewAbortablePool(size, q)); err != nil {
 		// 			return nil, noopCloser, err
 		// 		}
 
-		// 		d := driver.(*mgoDriver)
-		// 		closer := func(ctx context.Context) error {
-		// 			d.Close()
-		// 			return cleanupMgo(opts.DB, name, session.Clone())
-		// 		}
-		// 		if err := q.SetDriver(d); err != nil {
-		// 			return nil, closer, err
-		// 		}
-
-		// 		return q, closer, nil
+		// 		return q, noopCloser, nil
 		// 	},
 		// },
 	} {
 		t.Run(test.Name, func(t *testing.T) {
-			for _, size := range []struct {
-				Name string
-				Size int
+			for _, driver := range []struct {
+				Name               string
+				SetDriver          func(context.Context, amboy.Queue, string) (closer, error)
+				SupportsLocal      bool
+				SupportsMulti      bool
+				WaitUntilSupported bool
+				SkipOrdered        bool
 			}{
-				{Name: "Single", Size: 1},
-				{Name: "Double", Size: 2},
-				{Name: "Quad", Size: 4},
-				{Name: "Octo", Size: 8},
-				{Name: "DoubleOcto", Size: 16},
-				{Name: "QuadDoubleOcto", Size: 32},
-				{Name: "OctoOcto", Size: 64},
+				{
+					Name:          "No",
+					SupportsLocal: true,
+					SetDriver:     func(ctx context.Context, q amboy.Queue, name string) (closer, error) { return noopCloser, nil },
+				},
+				{
+					Name: "Internal",
+					SetDriver: func(ctx context.Context, q amboy.Queue, name string) (closer, error) {
+						remote, ok := q.(Remote)
+						if !ok {
+							return nil, errors.New("invalid queue type")
+						}
+
+						d := NewInternalDriver()
+						closer := func(ctx context.Context) error {
+							d.Close()
+							return nil
+						}
+
+						return closer, remote.SetDriver(d)
+					},
+				},
+				{
+					Name: "Priority",
+					SetDriver: func(ctx context.Context, q amboy.Queue, name string) (closer, error) {
+						remote, ok := q.(Remote)
+						if !ok {
+							return nil, errors.New("invalid queue type")
+						}
+
+						d := NewPriorityDriver()
+						closer := func(ctx context.Context) error {
+							d.Close()
+							return nil
+						}
+
+						return closer, remote.SetDriver(d)
+					},
+				},
+				{
+					Name:               "Mgo",
+					WaitUntilSupported: true,
+					SupportsMulti:      true,
+					SetDriver: func(ctx context.Context, q amboy.Queue, name string) (closer, error) {
+						remote, ok := q.(Remote)
+						if !ok {
+							return nil, errors.New("invalid queue type")
+						}
+						opts := DefaultMongoDBOptions()
+						opts.DB = "amboy_test"
+
+						driver, err := OpenNewMgoDriver(ctx, name, opts, session.Clone())
+						if err != nil {
+							return nil, err
+						}
+
+						d := driver.(*mgoDriver)
+						closer := func(ctx context.Context) error {
+							d.Close()
+							return session.DB(opts.DB).C(addJobsSuffix(name)).DropCollection()
+						}
+
+						return closer, remote.SetDriver(d)
+					},
+				},
+				{
+					Name:               "Mongo",
+					WaitUntilSupported: true,
+					SupportsMulti:      true,
+					SetDriver: func(ctx context.Context, q amboy.Queue, name string) (closer, error) {
+						remote, ok := q.(Remote)
+						if !ok {
+							return nil, errors.New("invalid queue type")
+						}
+
+						opts := DefaultMongoDBOptions()
+						opts.DB = "amboy_test"
+
+						driver, err := OpenNewMongoDriver(ctx, name, opts, client)
+						if err != nil {
+							return nil, err
+						}
+
+						d := driver.(*mongoDriver)
+						closer := func(ctx context.Context) error {
+							d.Close()
+							return client.Database(opts.DB).Collection(addJobsSuffix(name)).Drop(ctx)
+						}
+
+						return closer, remote.SetDriver(d)
+
+					},
+				},
+				// {
+				// 	Name: "MongoGroup",
+				// 	SetDriver: func(ctx context.Context, q amboy.Queue) (closer, error) {}
+				// },
 			} {
-				if test.MaxSize > 0 && size.Size > test.MaxSize {
+				if test.IsRemote == driver.SupportsLocal {
 					continue
 				}
-				t.Run(size.Name, func(t *testing.T) {
-					if !test.SkipUnordered {
-						t.Run("UnorderedWorkload", func(t *testing.T) {
-							ctx, cancel := context.WithCancel(bctx)
-							defer cancel()
+				if test.OrderedSupported && driver.SkipOrdered {
+					continue
+				}
 
-							q, qcloser, err := test.Constructor(ctx, size.Size)
-							defer func() { require.NoError(t, qcloser(ctx)) }()
-							require.NoError(t, err)
-
-							if test.OrderedSupported && !test.OrderedStartsBefore {
-								// pass
-							} else {
-								require.NoError(t, q.Start(ctx))
-							}
-
-							testNames := []string{"test", "second", "workers", "forty-two", "true", "false", ""}
-							numJobs := size.Size * len(testNames)
-
-							wg := &sync.WaitGroup{}
-
-							for i := 0; i < size.Size; i++ {
-								wg.Add(1)
-								go func(num int) {
-									defer wg.Done()
-									for _, name := range testNames {
-										cmd := fmt.Sprintf("echo %s.%d", name, num)
-										j := job.NewShellJob(cmd, "")
-										assert.NoError(t, q.Put(j),
-											fmt.Sprintf("with %d workers", num))
-										_, ok := q.Get(j.ID())
-										assert.True(t, ok)
-									}
-								}(i)
-							}
-							wg.Wait()
-							if test.OrderedSupported && !test.OrderedStartsBefore {
-								require.NoError(t, q.Start(ctx))
-							}
-							time.Sleep(100 * time.Millisecond)
-
-							amboy.WaitCtxInterval(ctx, q, 100*time.Millisecond)
-
-							assert.Equal(t, numJobs, q.Stats().Total, fmt.Sprintf("with %d workers", size.Size))
-
-							amboy.WaitCtxInterval(ctx, q, 100*time.Millisecond)
-
-							grip.Infof("workers complete for %d worker smoke test", size.Size)
-							assert.Equal(t, numJobs, q.Stats().Completed, fmt.Sprintf("%+v", q.Stats()))
-							for result := range q.Results(ctx) {
-								assert.True(t, result.Status().Completed, fmt.Sprintf("with %d workers", size.Size))
-
-								// assert that we had valid time info persisted
-								ti := result.TimeInfo()
-								assert.NotZero(t, ti.Start)
-								assert.NotZero(t, ti.End)
-							}
-
-							statCounter := 0
-							for stat := range q.JobStats(ctx) {
-								statCounter++
-								assert.True(t, stat.ID != "")
-							}
-							assert.Equal(t, numJobs, statCounter, fmt.Sprintf("want jobStats for every job"))
-
-							grip.Infof("completed results check for %d worker smoke test", size.Size)
-						})
-					}
-					if test.OrderedSupported {
-						t.Run("OrderedWorkload", func(t *testing.T) {
-							ctx, cancel := context.WithCancel(bctx)
-							defer cancel()
-
-							q, qcloser, err := test.Constructor(ctx, size.Size)
-							defer func() { require.NoError(t, qcloser(ctx)) }()
-							require.NoError(t, err)
-
-							var lastJobName string
-
-							testNames := []string{"amboy", "cusseta", "jasper", "sardis", "dublin"}
-
-							numJobs := size.Size / 2 * len(testNames)
-
-							tempDir, err := ioutil.TempDir("", strings.Join([]string{"amboy-ordered-queue-smoke-test",
-								uuid.NewV4().String()}, "-"))
-							require.NoError(t, err)
-							defer os.RemoveAll(tempDir)
-
-							if test.OrderedStartsBefore {
-								require.NoError(t, q.Start(ctx))
-							}
-							for i := 0; i < size.Size/2; i++ {
-								for _, name := range testNames {
-									fn := filepath.Join(tempDir, fmt.Sprintf("%s.%d", name, i))
-									cmd := fmt.Sprintf("echo %s", fn)
-									j := job.NewShellJob(cmd, fn)
-									if lastJobName != "" {
-										require.NoError(t, j.Dependency().AddEdge(lastJobName))
-									}
-									lastJobName = j.ID()
-
-									require.NoError(t, q.Put(j))
+				t.Run(driver.Name+"Driver", func(t *testing.T) {
+					for _, runner := range []struct {
+						Name          string
+						SetPool       func(amboy.Queue, int) error
+						MinSize       int
+						MaxSize       int
+						SupportsMulti bool
+					}{
+						{
+							Name:    "Default",
+							SetPool: func(q amboy.Queue, _ int) error { return nil },
+						},
+						{
+							Name:    "Single",
+							MaxSize: 1,
+							SetPool: func(q amboy.Queue, _ int) error {
+								runner := pool.NewSingle()
+								if err := runner.SetQueue(q); err != nil {
+									return err
 								}
-							}
 
-							if !test.OrderedStartsBefore {
-								require.NoError(t, q.Start(ctx))
-							}
+								return q.SetRunner(runner)
+							},
+						},
+						{
+							Name:    "Abortable",
+							MinSize: 4,
+							SetPool: func(q amboy.Queue, size int) error { return q.SetRunner(pool.NewAbortablePool(size, q)) },
+						},
+						{
+							Name:    "RateLimitedSimple",
+							MinSize: 4,
+							MaxSize: 32,
+							SetPool: func(q amboy.Queue, size int) error {
+								runner, err := pool.NewSimpleRateLimitedWorkers(size, 10*time.Millisecond, q)
+								if err != nil {
+									return nil
+								}
 
-							require.Equal(t, numJobs, q.Stats().Total, fmt.Sprintf("with %d workers", size.Size))
-							amboy.WaitCtxInterval(ctx, q, 50*time.Millisecond)
-							require.Equal(t, numJobs, q.Stats().Completed, fmt.Sprintf("%+v", q.Stats()))
-							for result := range q.Results(ctx) {
-								require.True(t, result.Status().Completed, fmt.Sprintf("with %d workers", size.Size))
-							}
+								return q.SetRunner(runner)
+							},
+						},
+						{
+							Name:    "RateLimitedAverage",
+							MinSize: 4,
+							MaxSize: 16,
+							SetPool: func(q amboy.Queue, size int) error {
+								runner, err := pool.NewMovingAverageRateLimitedWorkers(size, size*100, 10*time.Millisecond, q)
+								if err != nil {
+									return nil
+								}
 
-							statCounter := 0
-							for stat := range q.JobStats(ctx) {
-								statCounter++
-								require.True(t, stat.ID != "")
-							}
-							require.Equal(t, statCounter, numJobs)
-						})
-					}
-					if test.WaitUntilSupported {
-						t.Run("WaitUntil", func(t *testing.T) {
-							ctx, cancel := context.WithCancel(bctx)
-							defer cancel()
-
-							q, qcloser, err := test.Constructor(ctx, size.Size)
-							defer func() { require.NoError(t, qcloser(ctx)) }()
-							require.NoError(t, err)
-
-							require.NoError(t, q.Start(ctx))
-
-							testNames := []string{"test", "second", "workers", "forty-two", "true", "false", ""}
-							numJobs := size.Size * len(testNames)
-
-							wg := &sync.WaitGroup{}
-
-							for i := 0; i < size.Size; i++ {
-								wg.Add(1)
-								go func(num int) {
-									defer wg.Done()
-									for _, name := range testNames {
-										cmd := fmt.Sprintf("echo %s.%d.a", name, num)
-										j := job.NewShellJob(cmd, "")
-										ti := j.TimeInfo()
-										require.Zero(t, ti.WaitUntil)
-										require.NoError(t, q.Put(j), fmt.Sprintf("(a) with %d workers", num))
-										_, ok := q.Get(j.ID())
-										require.True(t, ok)
-
-										cmd = fmt.Sprintf("echo %s.%d.b", name, num)
-										j2 := job.NewShellJob(cmd, "")
-										j2.UpdateTimeInfo(amboy.JobTimeInfo{
-											WaitUntil: time.Now().Add(time.Hour),
-										})
-										ti2 := j2.TimeInfo()
-										require.NotZero(t, ti2.WaitUntil)
-										require.NoError(t, q.Put(j2), fmt.Sprintf("(b) with %d workers", num))
-										_, ok = q.Get(j2.ID())
-										require.True(t, ok)
-									}
-								}(i)
-							}
-							wg.Wait()
-
-							require.Equal(t, numJobs*2, q.Stats().Total, fmt.Sprintf("with %d workers", size.Size))
-
-							// wait for things to finish
-							time.Sleep(time.Second)
-
-							completed := 0
-							for result := range q.Results(ctx) {
-								status := result.Status()
-								ti := result.TimeInfo()
-
-								if status.Completed || status.InProgress {
-									completed++
-									require.Zero(t, ti.WaitUntil)
+								return q.SetRunner(runner)
+							},
+						},
+					} {
+						t.Run(runner.Name+"Pool", func(t *testing.T) {
+							for _, size := range []struct {
+								Name string
+								Size int
+							}{
+								{Name: "One", Size: 1},
+								{Name: "Two", Size: 2},
+								{Name: "Four", Size: 4},
+								{Name: "Eight", Size: 8},
+								{Name: "Sixteen", Size: 16},
+								{Name: "ThirtyTwo", Size: 32},
+								{Name: "SixtyFour", Size: 64},
+							} {
+								if test.MaxSize > 0 && size.Size > test.MaxSize {
 									continue
 								}
 
-								require.NotZero(t, ti.WaitUntil)
+								if runner.MinSize > 0 && runner.MinSize > size.Size {
+									continue
+								}
+
+								if runner.MaxSize > 0 && runner.MaxSize < size.Size {
+									continue
+								}
+
+								t.Run(size.Name, func(t *testing.T) {
+									if !test.SkipUnordered {
+										t.Run("Unordered", func(t *testing.T) {
+											ctx, cancel := context.WithCancel(bctx)
+											defer cancel()
+
+											q := test.Constructor(ctx, size.Size)
+											require.NoError(t, runner.SetPool(q, size.Size))
+											dcloser, err := driver.SetDriver(ctx, q, newDriverID())
+											defer func() { require.NoError(t, dcloser(ctx)) }()
+											require.NoError(t, err)
+
+											if test.OrderedSupported && !test.OrderedStartsBefore {
+												// pass
+											} else {
+												require.NoError(t, q.Start(ctx))
+											}
+
+											testNames := []string{"test", "second", "workers", "forty-two", "true", "false", ""}
+											numJobs := size.Size * len(testNames)
+
+											wg := &sync.WaitGroup{}
+
+											for i := 0; i < size.Size; i++ {
+												wg.Add(1)
+												go func(num int) {
+													defer wg.Done()
+													for _, name := range testNames {
+														cmd := fmt.Sprintf("echo %s.%d", name, num)
+														j := job.NewShellJob(cmd, "")
+														assert.NoError(t, q.Put(j),
+															fmt.Sprintf("with %d workers", num))
+														_, ok := q.Get(j.ID())
+														assert.True(t, ok)
+													}
+												}(i)
+											}
+											wg.Wait()
+											if test.OrderedSupported && !test.OrderedStartsBefore {
+												require.NoError(t, q.Start(ctx))
+											}
+											time.Sleep(100 * time.Millisecond)
+
+											amboy.WaitCtxInterval(ctx, q, 100*time.Millisecond)
+
+											assert.Equal(t, numJobs, q.Stats().Total, fmt.Sprintf("with %d workers", size.Size))
+
+											amboy.WaitCtxInterval(ctx, q, 100*time.Millisecond)
+
+											grip.Infof("workers complete for %d worker smoke test", size.Size)
+											assert.Equal(t, numJobs, q.Stats().Completed, fmt.Sprintf("%+v", q.Stats()))
+											for result := range q.Results(ctx) {
+												assert.True(t, result.Status().Completed, fmt.Sprintf("with %d workers", size.Size))
+
+												// assert that we had valid time info persisted
+												ti := result.TimeInfo()
+												assert.NotZero(t, ti.Start)
+												assert.NotZero(t, ti.End)
+											}
+
+											statCounter := 0
+											for stat := range q.JobStats(ctx) {
+												statCounter++
+												assert.True(t, stat.ID != "")
+											}
+											assert.Equal(t, numJobs, statCounter, fmt.Sprintf("want jobStats for every job"))
+
+											grip.Infof("completed results check for %d worker smoke test", size.Size)
+										})
+									}
+									if test.OrderedSupported && !driver.SkipOrdered {
+										t.Run("Ordered", func(t *testing.T) {
+											ctx, cancel := context.WithCancel(bctx)
+											defer cancel()
+
+											q := test.Constructor(ctx, size.Size)
+											require.NoError(t, runner.SetPool(q, size.Size))
+
+											dcloser, err := driver.SetDriver(ctx, q, newDriverID())
+											defer func() { require.NoError(t, dcloser(ctx)) }()
+											require.NoError(t, err)
+
+											var lastJobName string
+
+											testNames := []string{"amboy", "cusseta", "jasper", "sardis", "dublin"}
+
+											numJobs := size.Size / 2 * len(testNames)
+
+											tempDir, err := ioutil.TempDir("", strings.Join([]string{"amboy-ordered-queue-smoke-test",
+												uuid.NewV4().String()}, "-"))
+											require.NoError(t, err)
+											defer os.RemoveAll(tempDir)
+
+											if test.OrderedStartsBefore {
+												require.NoError(t, q.Start(ctx))
+											}
+											for i := 0; i < size.Size/2; i++ {
+												for _, name := range testNames {
+													fn := filepath.Join(tempDir, fmt.Sprintf("%s.%d", name, i))
+													cmd := fmt.Sprintf("echo %s", fn)
+													j := job.NewShellJob(cmd, fn)
+													if lastJobName != "" {
+														require.NoError(t, j.Dependency().AddEdge(lastJobName))
+													}
+													lastJobName = j.ID()
+
+													require.NoError(t, q.Put(j))
+												}
+											}
+
+											if !test.OrderedStartsBefore {
+												require.NoError(t, q.Start(ctx))
+											}
+
+											require.Equal(t, numJobs, q.Stats().Total, fmt.Sprintf("with %d workers", size.Size))
+											amboy.WaitCtxInterval(ctx, q, 50*time.Millisecond)
+											require.Equal(t, numJobs, q.Stats().Completed, fmt.Sprintf("%+v", q.Stats()))
+											for result := range q.Results(ctx) {
+												require.True(t, result.Status().Completed, fmt.Sprintf("with %d workers", size.Size))
+											}
+
+											statCounter := 0
+											for stat := range q.JobStats(ctx) {
+												statCounter++
+												require.True(t, stat.ID != "")
+											}
+											require.Equal(t, statCounter, numJobs)
+										})
+									}
+									if test.WaitUntilSupported || driver.WaitUntilSupported {
+										t.Run("WaitUntil", func(t *testing.T) {
+											ctx, cancel := context.WithCancel(bctx)
+											defer cancel()
+
+											q := test.Constructor(ctx, size.Size)
+											require.NoError(t, runner.SetPool(q, size.Size))
+
+											dcloser, err := driver.SetDriver(ctx, q, newDriverID())
+											defer func() { require.NoError(t, dcloser(ctx)) }()
+											require.NoError(t, err)
+
+											require.NoError(t, q.Start(ctx))
+
+											testNames := []string{"test", "second", "workers", "forty-two", "true", "false", ""}
+											numJobs := size.Size * len(testNames)
+
+											wg := &sync.WaitGroup{}
+
+											for i := 0; i < size.Size; i++ {
+												wg.Add(1)
+												go func(num int) {
+													defer wg.Done()
+													for _, name := range testNames {
+														cmd := fmt.Sprintf("echo %s.%d.a", name, num)
+														j := job.NewShellJob(cmd, "")
+														ti := j.TimeInfo()
+														require.Zero(t, ti.WaitUntil)
+														require.NoError(t, q.Put(j), fmt.Sprintf("(a) with %d workers", num))
+														_, ok := q.Get(j.ID())
+														require.True(t, ok)
+
+														cmd = fmt.Sprintf("echo %s.%d.b", name, num)
+														j2 := job.NewShellJob(cmd, "")
+														j2.UpdateTimeInfo(amboy.JobTimeInfo{
+															WaitUntil: time.Now().Add(time.Hour),
+														})
+														ti2 := j2.TimeInfo()
+														require.NotZero(t, ti2.WaitUntil)
+														require.NoError(t, q.Put(j2), fmt.Sprintf("(b) with %d workers", num))
+														_, ok = q.Get(j2.ID())
+														require.True(t, ok)
+													}
+												}(i)
+											}
+											wg.Wait()
+
+											require.Equal(t, numJobs*2, q.Stats().Total, fmt.Sprintf("with %d workers", size.Size))
+
+											// wait for things to finish
+											time.Sleep(time.Second)
+
+											completed := 0
+											for result := range q.Results(ctx) {
+												status := result.Status()
+												ti := result.TimeInfo()
+
+												if status.Completed || status.InProgress {
+													completed++
+													require.Zero(t, ti.WaitUntil)
+													continue
+												}
+
+												require.NotZero(t, ti.WaitUntil)
+											}
+											assert.True(t, completed > 0)
+
+										})
+
+									}
+									if test.IsRemote && driver.SupportsMulti {
+
+									}
+								})
+
 							}
-							assert.True(t, completed > 0)
 
 						})
 

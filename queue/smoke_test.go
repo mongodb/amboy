@@ -27,7 +27,7 @@ func init() {
 	grip.Error(grip.SetSender(send.MakeNative()))
 
 	lvl := grip.GetSender().Level()
-	lvl.Threshold = level.Notice
+	lvl.Threshold = level.Error
 	_ = grip.GetSender().SetLevel(lvl)
 
 	job.RegisterDefaultJobs()
@@ -41,7 +41,7 @@ const defaultLocalQueueCapcity = 10000
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-func runMultiQueueSingleBackEndSmokeTest(ctx context.Context, qOne, qTwo amboy.Queue, shared bool, assert *assert.Assertions) {
+func runMultiQueueSingleBackEndSmokeTest(ctx context.Context, qOne, qTwo amboy.Queue, assert *assert.Assertions) {
 	assert.NoError(qOne.Start(ctx))
 	assert.NoError(qTwo.Start(ctx))
 
@@ -76,12 +76,8 @@ func runMultiQueueSingleBackEndSmokeTest(ctx context.Context, qOne, qTwo amboy.Q
 	statsOne := qOne.Stats()
 	statsTwo := qTwo.Stats()
 
-	if shared {
-		assert.Equal(statsOne.Total, num)
-		assert.Equal(statsTwo.Total, num)
-	} else {
-		assert.Equal(statsOne.Total+statsTwo.Total, num)
-	}
+	assert.Equal(statsOne.Total, num)
+	assert.Equal(statsTwo.Total, num)
 
 	grip.Infof("before wait statsOne: %+v", statsOne)
 	grip.Infof("before wait statsTwo: %+v", statsTwo)
@@ -112,9 +108,8 @@ func runMultiQueueSingleBackEndSmokeTest(ctx context.Context, qOne, qTwo amboy.Q
 		results[result.ID()] = struct{}{}
 	}
 
-	if !shared {
-		assert.Equal(firstCount+secondCount, len(results))
-	}
+	assert.Equal(firstCount, secondCount)
+	assert.Equal(len(results), firstCount)
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -135,15 +130,15 @@ func TestSmokeMultipleMgoDriverRemoteUnorderedQueuesWithTheSameName(t *testing.T
 	// create queues with two runners, mongodb backed drivers, and
 	// configure injectors
 	qOne := NewRemoteUnordered(runtime.NumCPU() / 2)
-	dOne := NewMgoDriver(name+"-one", opts).(*mgoDriver)
+	dOne := NewMgoDriver(name, opts).(*mgoDriver)
 	qTwo := NewRemoteUnordered(runtime.NumCPU() / 2)
-	dTwo := NewMgoDriver(name+"-two", opts).(*mgoDriver)
+	dTwo := NewMgoDriver(name, opts).(*mgoDriver)
 	assert.NoError(dOne.Open(ctx))
 	assert.NoError(dTwo.Open(ctx))
 	assert.NoError(qOne.SetDriver(dOne))
 	assert.NoError(qTwo.SetDriver(dTwo))
 
-	runMultiQueueSingleBackEndSmokeTest(ctx, qOne, qTwo, false, assert)
+	runMultiQueueSingleBackEndSmokeTest(ctx, qOne, qTwo, assert)
 
 	// release runner/driver resources.
 	cancel()
@@ -164,15 +159,15 @@ func TestSmokeMultipleMongoDriverRemoteUnorderedQueuesWithTheSameName(t *testing
 	// create queues with two runners, mongodb backed drivers, and
 	// configure injectors
 	qOne := NewRemoteUnordered(runtime.NumCPU() / 2)
-	dOne := NewMongoDriver(name+"-one", opts).(*mongoDriver)
+	dOne := NewMongoDriver(name, opts).(*mongoDriver)
 	qTwo := NewRemoteUnordered(runtime.NumCPU() / 2)
-	dTwo := NewMongoDriver(name+"-two", opts).(*mongoDriver)
+	dTwo := NewMongoDriver(name, opts).(*mongoDriver)
 	assert.NoError(dOne.Open(ctx))
 	assert.NoError(dTwo.Open(ctx))
 	assert.NoError(qOne.SetDriver(dOne))
 	assert.NoError(qTwo.SetDriver(dTwo))
 
-	runMultiQueueSingleBackEndSmokeTest(ctx, qOne, qTwo, false, assert)
+	runMultiQueueSingleBackEndSmokeTest(ctx, qOne, qTwo, assert)
 
 	// do cleanup.
 	grip.Error(cleanupMongo(ctx, opts.DB, name, dOne.client))
@@ -193,15 +188,15 @@ func TestSmokeMultipleMgoBackedRemoteUnorderedQueuesWithTheSameName(t *testing.T
 	// create queues with two runners, mongodb backed drivers, and
 	// configure injectors
 	qOne := NewRemoteUnordered(runtime.NumCPU() / 2)
-	dOne := NewMgoDriver(name+"-one", opts).(*mgoDriver)
+	dOne := NewMgoDriver(name, opts).(*mgoDriver)
 	qTwo := NewRemoteUnordered(runtime.NumCPU() / 2)
-	dTwo := NewMgoDriver(name+"-two", opts).(*mgoDriver)
+	dTwo := NewMgoDriver(name, opts).(*mgoDriver)
 	assert.NoError(dOne.Open(ctx))
 	assert.NoError(dTwo.Open(ctx))
 	assert.NoError(qOne.SetDriver(dOne))
 	assert.NoError(qTwo.SetDriver(dTwo))
 
-	runMultiQueueSingleBackEndSmokeTest(ctx, qOne, qTwo, false, assert)
+	runMultiQueueSingleBackEndSmokeTest(ctx, qOne, qTwo, assert)
 
 	// release runner/driver resources.
 	cancel()
@@ -222,15 +217,15 @@ func TestSmokeMultipleMongoBackedRemoteUnorderedQueuesWithTheSameName(t *testing
 	// create queues with two runners, mongodb backed drivers, and
 	// configure injectors
 	qOne := NewRemoteUnordered(runtime.NumCPU() / 2)
-	dOne := NewMongoDriver(name+"-one", opts).(*mongoDriver)
+	dOne := NewMongoDriver(name, opts).(*mongoDriver)
 	qTwo := NewRemoteUnordered(runtime.NumCPU() / 2)
-	dTwo := NewMongoDriver(name+"-two", opts).(*mongoDriver)
+	dTwo := NewMongoDriver(name, opts).(*mongoDriver)
 	assert.NoError(dOne.Open(ctx))
 	assert.NoError(dTwo.Open(ctx))
 	assert.NoError(qOne.SetDriver(dOne))
 	assert.NoError(qTwo.SetDriver(dTwo))
 
-	runMultiQueueSingleBackEndSmokeTest(ctx, qOne, qTwo, false, assert)
+	runMultiQueueSingleBackEndSmokeTest(ctx, qOne, qTwo, assert)
 
 	// do cleanup.
 	grip.Error(cleanupMongo(ctx, opts.DB, name, dOne.client))
@@ -255,7 +250,7 @@ func TestSmokeMultipleLocalBackedRemoteOrderedQueuesWithOneDriver(t *testing.T) 
 	assert.NoError(qOne.SetDriver(d))
 	assert.NoError(qTwo.SetDriver(d))
 
-	runMultiQueueSingleBackEndSmokeTest(ctx, qOne, qTwo, true, assert)
+	runMultiQueueSingleBackEndSmokeTest(ctx, qOne, qTwo, assert)
 	defer cancel()
 	d.Close()
 }
@@ -272,15 +267,15 @@ func TestSmokeMultipleMgoDriverRemoteOrderedQueuesWithTheSameName(t *testing.T) 
 	// create queues with two runners, mongodb backed drivers, and
 	// configure injectors
 	qOne := NewSimpleRemoteOrdered(runtime.NumCPU() / 2)
-	dOne := NewMgoDriver(name+"-one", opts).(*mgoDriver)
+	dOne := NewMgoDriver(name, opts).(*mgoDriver)
 	qTwo := NewSimpleRemoteOrdered(runtime.NumCPU() / 2)
-	dTwo := NewMgoDriver(name+"-two", opts).(*mgoDriver)
+	dTwo := NewMgoDriver(name, opts).(*mgoDriver)
 	assert.NoError(dOne.Open(ctx))
 	assert.NoError(dTwo.Open(ctx))
 	assert.NoError(qOne.SetDriver(dOne))
 	assert.NoError(qTwo.SetDriver(dTwo))
 
-	runMultiQueueSingleBackEndSmokeTest(ctx, qOne, qTwo, false, assert)
+	runMultiQueueSingleBackEndSmokeTest(ctx, qOne, qTwo, assert)
 
 	// release runner/driver resources.
 	cancel()
@@ -302,15 +297,15 @@ func TestSmokeMultipleMongoDriverRemoteOrderedQueuesWithTheSameName(t *testing.T
 	// create queues with two runners, mongodb backed drivers, and
 	// configure injectors
 	qOne := NewSimpleRemoteOrdered(runtime.NumCPU() / 2)
-	dOne := NewMongoDriver(name+"-one", opts).(*mongoDriver)
+	dOne := NewMongoDriver(name, opts).(*mongoDriver)
 	qTwo := NewSimpleRemoteOrdered(runtime.NumCPU() / 2)
-	dTwo := NewMongoDriver(name+"-two", opts).(*mongoDriver)
+	dTwo := NewMongoDriver(name, opts).(*mongoDriver)
 	assert.NoError(dOne.Open(ctx))
 	assert.NoError(dTwo.Open(ctx))
 	assert.NoError(qOne.SetDriver(dOne))
 	assert.NoError(qTwo.SetDriver(dTwo))
 
-	runMultiQueueSingleBackEndSmokeTest(ctx, qOne, qTwo, false, assert)
+	runMultiQueueSingleBackEndSmokeTest(ctx, qOne, qTwo, assert)
 
 	// do cleanup.
 	grip.Error(cleanupMongo(ctx, opts.DB, name, dOne.client))
@@ -333,7 +328,7 @@ func TestSmokeMultipleLocalBackedRemoteUnorderedQueuesWithOneDriver(t *testing.T
 	assert.NoError(qOne.SetDriver(d))
 	assert.NoError(qTwo.SetDriver(d))
 
-	runMultiQueueSingleBackEndSmokeTest(ctx, qOne, qTwo, true, assert)
+	runMultiQueueSingleBackEndSmokeTest(ctx, qOne, qTwo, assert)
 }
 
 func TestSmokeMultipleQueuesWithPriorityDriver(t *testing.T) {
@@ -347,7 +342,7 @@ func TestSmokeMultipleQueuesWithPriorityDriver(t *testing.T) {
 	assert.NoError(qOne.SetDriver(d))
 	assert.NoError(qTwo.SetDriver(d))
 
-	runMultiQueueSingleBackEndSmokeTest(ctx, qOne, qTwo, true, assert)
+	runMultiQueueSingleBackEndSmokeTest(ctx, qOne, qTwo, assert)
 }
 
 func cleanupMgo(dbname, name string, session *mgo.Session) error {
