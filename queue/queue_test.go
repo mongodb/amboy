@@ -321,7 +321,7 @@ func DefaultDriverTestCases(client *mongo.Client, session *mgo.Session) []Driver
 							d.(*mongoGroupDriver).Close()
 						}
 					}
-					return client.Database(opts.DB).Drop(ctx)
+					return client.Database(opts.DB).Collection(addGroupSufix(name)).Drop(ctx)
 				}
 
 				return out, closer, catcher.Resolve()
@@ -343,7 +343,7 @@ func DefaultDriverTestCases(client *mongo.Client, session *mgo.Session) []Driver
 				d := driver.(*mongoGroupDriver)
 				closer := func(ctx context.Context) error {
 					d.Close()
-					return client.Database(opts.DB).Drop(ctx)
+					return client.Database(opts.DB).Collection(addGroupSufix(name)).Drop(ctx)
 				}
 
 				return closer, remote.SetDriver(d)
@@ -373,7 +373,7 @@ func DefaultDriverTestCases(client *mongo.Client, session *mgo.Session) []Driver
 							d.(*mgoGroupDriver).Close()
 						}
 					}
-					return session.DB(opts.DB).DropDatabase()
+					return session.DB(opts.DB).C(addGroupSufix(name)).DropCollection()
 				}
 
 				return out, closer, catcher.Resolve()
@@ -395,7 +395,7 @@ func DefaultDriverTestCases(client *mongo.Client, session *mgo.Session) []Driver
 				d := driver.(*mgoGroupDriver)
 				closer := func(ctx context.Context) error {
 					d.Close()
-					return session.DB(opts.DB).DropDatabase()
+					return session.DB(opts.DB).C(addGroupSufix(name)).DropCollection()
 				}
 
 				return closer, remote.SetDriver(d)
@@ -474,7 +474,7 @@ func DefaultSizeTestCases() []SizeTestCase {
 func DefaultMultipleExecututionTestCases(driver DriverTestCase) []MultipleExecutionTestCase {
 	return []MultipleExecutionTestCase{
 		{
-			Name:            "TwoDrivers",
+			Name:            "MultiTwoDrivers",
 			MultipleDrivers: true,
 			Setup: func(ctx context.Context, qOne, qTwo amboy.Queue) (TestCloser, error) {
 				catcher := grip.NewBasicCatcher()
@@ -495,7 +495,7 @@ func DefaultMultipleExecututionTestCases(driver DriverTestCase) []MultipleExecut
 			},
 		},
 		{
-			Name: "OneDriver",
+			Name: "MultiOneDriver",
 			Setup: func(ctx context.Context, qOne, qTwo amboy.Queue) (TestCloser, error) {
 				catcher := grip.NewBasicCatcher()
 				driverID := newDriverID()
