@@ -580,9 +580,9 @@ func TestQueueSmoke(t *testing.T) {
 										OneExecutionTest(bctx, t, test, driver, runner, size)
 									})
 
-									if test.IsRemote && !runner.SkipMulti {
+									if test.IsRemote && driver.SupportsMulti && !runner.SkipMulti {
 										for _, multi := range DefaultMultipleExecututionTestCases(driver) {
-											if multi.MultipleDrivers && !driver.SupportsMulti && size.Name != "Single" {
+											if multi.MultipleDrivers && size.Name != "Single" {
 												continue
 											}
 											t.Run(multi.Name, func(t *testing.T) {
@@ -594,6 +594,7 @@ func TestQueueSmoke(t *testing.T) {
 											ManyQueueTest(bctx, t, test, driver, runner, size)
 										})
 									}
+
 								})
 							}
 						})
