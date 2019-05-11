@@ -340,7 +340,7 @@ func DefaultDriverTestCases(client *mongo.Client, session *mgo.Session) []Driver
 					return nil, err
 				}
 
-				d := driver.(*mongoDriver)
+				d := driver.(*mongoGroupDriver)
 				closer := func(ctx context.Context) error {
 					d.Close()
 					return client.Database(opts.DB).Drop(ctx)
@@ -370,7 +370,7 @@ func DefaultDriverTestCases(client *mongo.Client, session *mgo.Session) []Driver
 				closer := func(ctx context.Context) error {
 					for _, d := range out {
 						if d != nil {
-							d.(*mongoGroupDriver).Close()
+							d.(*mgoGroupDriver).Close()
 						}
 					}
 					return session.DB(opts.DB).DropDatabase()
@@ -392,7 +392,7 @@ func DefaultDriverTestCases(client *mongo.Client, session *mgo.Session) []Driver
 					return nil, err
 				}
 
-				d := driver.(*mongoDriver)
+				d := driver.(*mgoGroupDriver)
 				closer := func(ctx context.Context) error {
 					d.Close()
 					return session.DB(opts.DB).DropDatabase()
