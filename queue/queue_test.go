@@ -73,6 +73,7 @@ func TestQueueSmoke(t *testing.T) {
 		SkipUnordered bool
 
 		IsRemote bool
+		Skip     bool
 	}{
 		{
 			Name:        "Local",
@@ -125,11 +126,16 @@ func TestQueueSmoke(t *testing.T) {
 		{
 			Name:    "SQSFifo",
 			MaxSize: 4,
+			Skip:    true,
 			Constructor: func(ctx context.Context, size int) (amboy.Queue, error) {
 				return NewSQSFifoQueue(randomString(4), size)
 			},
 		},
 	} {
+		if test.Skip {
+			continue
+		}
+
 		t.Run(test.Name, func(t *testing.T) {
 			for _, driver := range []struct {
 				Name               string
@@ -246,11 +252,12 @@ func TestQueueSmoke(t *testing.T) {
 
 				t.Run(driver.Name+"Driver", func(t *testing.T) {
 					for _, runner := range []struct {
-						Name      string
-						SetPool   func(amboy.Queue, int) error
-						SkipMulti bool
-						MinSize   int
-						MaxSize   int
+						Name       string
+						SetPool    func(amboy.Queue, int) error
+						SkipRemote bool
+						SkipMulti  bool
+						MinSize    int
+						MaxSize    int
 					}{
 						{
 							Name:    "Default",
@@ -288,10 +295,11 @@ func TestQueueSmoke(t *testing.T) {
 							},
 						},
 						{
-							Name:      "RateLimitedAverage",
-							MinSize:   4,
-							MaxSize:   16,
-							SkipMulti: true,
+							Name:       "RateLimitedAverage",
+							MinSize:    4,
+							MaxSize:    16,
+							SkipMulti:  true,
+							SkipRemote: true,
 							SetPool: func(q amboy.Queue, size int) error {
 								runner, err := pool.NewMovingAverageRateLimitedWorkers(size, size*100, 10*time.Millisecond, q)
 								if err != nil {
@@ -302,6 +310,10 @@ func TestQueueSmoke(t *testing.T) {
 							},
 						},
 					} {
+						if test.IsRemote && runner.SkipRemote {
+							continue
+						}
+
 						t.Run(runner.Name+"Pool", func(t *testing.T) {
 							for _, size := range []struct {
 								Name string
@@ -509,7 +521,7 @@ func TestQueueSmoke(t *testing.T) {
 											require.Equal(t, numJobs*2, q.Stats().Total, fmt.Sprintf("with %d workers", size.Size))
 
 											// wait for things to finish
-											time.Sleep(time.Second)
+											time.Sleep(2 * time.Second)
 
 											completed := 0
 											for result := range q.Results(ctx) {
@@ -521,10 +533,8 @@ func TestQueueSmoke(t *testing.T) {
 													require.Zero(t, ti.WaitUntil)
 													continue
 												}
-
-												require.NotZero(t, ti.WaitUntil)
 											}
-											assert.True(t, completed > 0)
+											assert.Equal(t, numJobs, completed)
 										})
 									}
 									t.Run("OneExecution", func(t *testing.T) {
