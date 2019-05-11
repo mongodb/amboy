@@ -3,7 +3,6 @@ package queue
 import (
 	"context"
 	"fmt"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -23,9 +22,6 @@ type SQSFifoQueueSuite struct {
 }
 
 func TestSQSFifoQueueSuite(t *testing.T) {
-	if os.Getenv("EVR_TASK_ID") != "" {
-		t.Skip("evergreen test environment not configured with credentials")
-	}
 	suite.Run(t, new(SQSFifoQueueSuite))
 }
 

@@ -576,6 +576,7 @@ func TestQueueSmoke(t *testing.T) {
 											WaitUntilTest(bctx, t, test, driver, runner, size)
 										})
 									}
+
 									t.Run("OneExecution", func(t *testing.T) {
 										OneExecutionTest(bctx, t, test, driver, runner, size)
 									})
@@ -594,7 +595,6 @@ func TestQueueSmoke(t *testing.T) {
 											ManyQueueTest(bctx, t, test, driver, runner, size)
 										})
 									}
-
 								})
 							}
 						})
