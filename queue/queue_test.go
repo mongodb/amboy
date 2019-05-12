@@ -885,8 +885,16 @@ func MultiExecutionTest(bctx context.Context, t *testing.T, test QueueTestCase, 
 	statsOne := qOne.Stats()
 	statsTwo := qTwo.Stats()
 
-	require.Equal(t, statsOne.Total, num)
-	require.Equal(t, statsTwo.Total, num)
+	shouldExit := false
+	if !assert.Equal(t, num, statsOne.Total) {
+		shouldExit = true
+	}
+	if assert.Equal(t, num, statsTwo.Total) {
+		shouldExit = true
+	}
+	if shouldExit {
+		return
+	}
 
 	grip.Infof("before wait statsOne: %+v", statsOne)
 	grip.Infof("before wait statsTwo: %+v", statsTwo)
@@ -962,12 +970,7 @@ func ManyQueueTest(bctx context.Context, t *testing.T, test QueueTestCase, drive
 				for iii := 0; iii < inside; iii++ {
 					j := newMockJob()
 					j.SetID(fmt.Sprintf("%d-%d-%d-%d", f, s, iii, job.GetNumber()))
-					if iii%2 == 0 {
-						assert.NoError(t, queues[0].Put(j))
-					} else {
-						assert.NoError(t, queues[1].Put(j))
-					}
-
+					assert.NoError(t, queues[0].Put(j))
 				}
 			}(i, ii)
 		}
