@@ -431,7 +431,7 @@ func DefaultPoolTestCases() []PoolTestCase {
 		{
 			Name:    "RateLimitedSimple",
 			MinSize: 4,
-			MaxSize: 32,
+			MaxSize: 16,
 			SetPool: func(q amboy.Queue, size int) error {
 				runner, err := pool.NewSimpleRateLimitedWorkers(size, 10*time.Millisecond, q)
 				if err != nil {
@@ -793,7 +793,7 @@ func WaitUntilTest(bctx context.Context, t *testing.T, test QueueTestCase, drive
 	stats := q.Stats()
 	require.Equal(t, numJobs*2, stats.Total, "with %d workers [%+v]", size.Size, stats)
 
-	// wait for things to finish
+	// waitC for things to finish
 	time.Sleep(2 * time.Second)
 
 	completed := 0
