@@ -750,11 +750,19 @@ func WaitUntilTest(bctx context.Context, t *testing.T, test QueueTestCase, drive
 	require.NoError(t, q.Start(ctx))
 
 	testNames := []string{"test", "second", "workers", "forty-two", "true", "false"}
-	numJobs := size.Size * len(testNames)
+
+	sz := size.Size
+	if sz > 16 {
+		sz = 16
+	} else if sz < 2 {
+		sz = 2
+	}
+
+	numJobs := sz * len(testNames)
 
 	wg := &sync.WaitGroup{}
 
-	for i := 0; i < size.Size; i++ {
+	for i := 0; i < sz; i++ {
 		wg.Add(1)
 		go func(num int) {
 			defer wg.Done()
@@ -937,6 +945,7 @@ func ManyQueueTest(bctx context.Context, t *testing.T, test QueueTestCase, drive
 	} else if sz < 2 {
 		sz = 2
 	}
+
 	drivers, closer, err := driver.Constructor(ctx, driverID, sz)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, closer(ctx)) }()
