@@ -308,10 +308,10 @@ func DefaultDriverTestCases(client *mongo.Client, session *mgo.Session) []Driver
 				out := []Driver{}
 				catcher := grip.NewBasicCatcher()
 				for i := 0; i < size; i++ {
-					driver, err := OpenNewMongoGroupDriver(ctx, name, opts, "one", client)
+					driver, err := OpenNewMongoGroupDriver(ctx, name, opts, name+"one", client)
 					catcher.Add(err)
 					out = append(out, driver)
-					driver, err = OpenNewMongoGroupDriver(ctx, name, opts, "two", client)
+					driver, err = OpenNewMongoGroupDriver(ctx, name, opts, name+"two", client)
 					catcher.Add(err)
 					out = append(out, driver)
 				}
@@ -335,7 +335,7 @@ func DefaultDriverTestCases(client *mongo.Client, session *mgo.Session) []Driver
 				opts := DefaultMongoDBOptions()
 				opts.DB = "amboy_test"
 
-				driver, err := OpenNewMongoGroupDriver(ctx, name, opts, "three", client)
+				driver, err := OpenNewMongoGroupDriver(ctx, name, opts, name+"three", client)
 				if err != nil {
 					return nil, err
 				}
@@ -346,7 +346,7 @@ func DefaultDriverTestCases(client *mongo.Client, session *mgo.Session) []Driver
 					return client.Database(opts.DB).Collection(addGroupSufix(name)).Drop(ctx)
 				}
 
-				return closer, remote.SetDriver(d)
+				return closer, remote.SetDriver(driver)
 			},
 		},
 		{
@@ -360,10 +360,10 @@ func DefaultDriverTestCases(client *mongo.Client, session *mgo.Session) []Driver
 				out := []Driver{}
 				catcher := grip.NewBasicCatcher()
 				for i := 0; i < size; i++ {
-					driver, err := OpenNewMgoGroupDriver(ctx, name, opts, "four", session.Clone())
+					driver, err := OpenNewMgoGroupDriver(ctx, name, opts, name+"four", session.Clone())
 					catcher.Add(err)
 					out = append(out, driver)
-					driver, err = OpenNewMgoGroupDriver(ctx, name, opts, "five", session.Clone())
+					driver, err = OpenNewMgoGroupDriver(ctx, name, opts, name+"five", session.Clone())
 					catcher.Add(err)
 					out = append(out, driver)
 				}
@@ -387,7 +387,7 @@ func DefaultDriverTestCases(client *mongo.Client, session *mgo.Session) []Driver
 				opts := DefaultMongoDBOptions()
 				opts.DB = "amboy_test"
 
-				driver, err := OpenNewMgoGroupDriver(ctx, name, opts, "six", session.Clone())
+				driver, err := OpenNewMgoGroupDriver(ctx, name, opts, name+"six", session.Clone())
 				if err != nil {
 					return nil, err
 				}
@@ -398,7 +398,7 @@ func DefaultDriverTestCases(client *mongo.Client, session *mgo.Session) []Driver
 					return session.DB(opts.DB).C(addGroupSufix(name)).DropCollection()
 				}
 
-				return closer, remote.SetDriver(d)
+				return closer, remote.SetDriver(driver)
 			},
 		},
 	}
@@ -591,9 +591,11 @@ func TestQueueSmoke(t *testing.T) {
 											})
 										}
 
-										t.Run("ManyQueues", func(t *testing.T) {
-											ManyQueueTest(bctx, t, test, driver, runner, size)
-										})
+										if size.Size < 8 {
+											t.Run("ManyQueues", func(t *testing.T) {
+												ManyQueueTest(bctx, t, test, driver, runner, size)
+											})
+										}
 									}
 								})
 							}
@@ -747,7 +749,7 @@ func WaitUntilTest(bctx context.Context, t *testing.T, test QueueTestCase, drive
 
 	require.NoError(t, q.Start(ctx))
 
-	testNames := []string{"test", "second", "workers", "forty-two", "true", "false", ""}
+	testNames := []string{"test", "second", "workers", "forty-two", "true", "false"}
 	numJobs := size.Size * len(testNames)
 
 	wg := &sync.WaitGroup{}
@@ -780,7 +782,8 @@ func WaitUntilTest(bctx context.Context, t *testing.T, test QueueTestCase, drive
 	}
 	wg.Wait()
 
-	require.Equal(t, numJobs*2, q.Stats().Total, fmt.Sprintf("with %d workers", size.Size))
+	stats := q.Stats()
+	require.Equal(t, numJobs*2, stats.Total, "with %d workers [%+v]", size.Size, stats)
 
 	// wait for things to finish
 	time.Sleep(2 * time.Second)
@@ -868,10 +871,10 @@ func MultiExecutionTest(bctx context.Context, t *testing.T, test QueueTestCase, 
 				j := job.NewShellJob(cmd, "")
 				if i%2 == 0 {
 					assert.NoError(t, qOne.Put(j))
-					assert.Error(t, qOne.Put(j))
-					continue
+				} else {
+					assert.NoError(t, qTwo.Put(j))
 				}
-				assert.NoError(t, qTwo.Put(j))
+
 			}
 		}(o)
 	}
@@ -881,30 +884,24 @@ func MultiExecutionTest(bctx context.Context, t *testing.T, test QueueTestCase, 
 
 	grip.Info("added jobs to queues")
 
+	// wait for all jobs to complete.
+	amboy.WaitCtxInterval(ctx, qOne, 100*time.Millisecond)
+	amboy.WaitCtxInterval(ctx, qTwo, 100*time.Millisecond)
+
 	// check that both queues see all jobs
 	statsOne := qOne.Stats()
 	statsTwo := qTwo.Stats()
 
-	shouldExit := false
-	if !assert.Equal(t, num, statsOne.Total) {
+	var shouldExit bool
+	if !assert.Equal(t, num, statsOne.Total, "ONE: %+v", statsOne) {
 		shouldExit = true
 	}
-	if assert.Equal(t, num, statsTwo.Total) {
+	if !assert.Equal(t, num, statsTwo.Total, "TWO: %+v", statsTwo) {
 		shouldExit = true
 	}
 	if shouldExit {
 		return
 	}
-
-	grip.Infof("before wait statsOne: %+v", statsOne)
-	grip.Infof("before wait statsTwo: %+v", statsTwo)
-
-	// wait for all jobs to complete.
-	amboy.WaitCtxInterval(ctx, qOne, 100*time.Millisecond)
-	amboy.WaitCtxInterval(ctx, qTwo, 100*time.Millisecond)
-
-	grip.Infof("after wait statsOne: %+v", qOne.Stats())
-	grip.Infof("after wait statsTwo: %+v", qTwo.Stats())
 
 	// check that all the results in the queues are are completed,
 	// and unique
