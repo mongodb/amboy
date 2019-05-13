@@ -794,7 +794,7 @@ func WaitUntilTest(bctx context.Context, t *testing.T, test QueueTestCase, drive
 	require.Equal(t, numJobs*2, stats.Total, "with %d workers [%+v]", size.Size, stats)
 
 	// waitC for things to finish
-	time.Sleep(2 * time.Second)
+	time.Sleep(3 * time.Second)
 
 	completed := 0
 	for result := range q.Results(ctx) {
