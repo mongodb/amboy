@@ -648,7 +648,6 @@ func UnorderedTest(bctx context.Context, t *testing.T, test QueueTestCase, drive
 	if test.OrderedSupported && !test.OrderedStartsBefore {
 		require.NoError(t, q.Start(ctx))
 	}
-	time.Sleep(100 * time.Millisecond)
 
 	amboy.WaitCtxInterval(ctx, q, 100*time.Millisecond)
 
