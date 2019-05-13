@@ -54,7 +54,7 @@ func NewMgoGroupDriver(name string, opts MongoDBOptions, group string) Driver {
 func OpenNewMgoGroupDriver(ctx context.Context, name string, opts MongoDBOptions, group string, session *mgo.Session) (Driver, error) {
 	d := NewMgoGroupDriver(name, opts, group).(*mgoGroupDriver)
 
-	if err := d.start(ctx, session.Copy()); err != nil {
+	if err := d.start(ctx, session.Clone()); err != nil {
 		return nil, errors.Wrap(err, "problem starting driver")
 	}
 
