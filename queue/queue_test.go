@@ -254,6 +254,7 @@ func DefaultDriverTestCases(client *mongo.Client, session *mgo.Session) []Driver
 			Constructor: func(ctx context.Context, name string, size int) ([]Driver, TestCloser, error) {
 				opts := DefaultMongoDBOptions()
 				opts.DB = "amboy_test"
+				opts.Format = amboy.BSON2
 
 				var err error
 				out := make([]Driver, size)
@@ -304,6 +305,7 @@ func DefaultDriverTestCases(client *mongo.Client, session *mgo.Session) []Driver
 			Constructor: func(ctx context.Context, name string, size int) ([]Driver, TestCloser, error) {
 				opts := DefaultMongoDBOptions()
 				opts.DB = "amboy_test"
+				opts.Format = amboy.BSON2
 
 				out := []Driver{}
 				catcher := grip.NewBasicCatcher()
@@ -397,6 +399,113 @@ func DefaultDriverTestCases(client *mongo.Client, session *mgo.Session) []Driver
 				closer := func(ctx context.Context) error {
 					d.Close()
 					return session.DB(opts.DB).C(addGroupSufix(name)).DropCollection()
+				}
+
+				return closer, remote.SetDriver(driver)
+			},
+		},
+		{
+			Name:               "MongoMGOBSON",
+			WaitUntilSupported: true,
+			SupportsMulti:      true,
+			Constructor: func(ctx context.Context, name string, size int) ([]Driver, TestCloser, error) {
+				opts := DefaultMongoDBOptions()
+				opts.DB = "amboy_test"
+				opts.Format = amboy.BSON
+
+				var err error
+				out := make([]Driver, size)
+				catcher := grip.NewBasicCatcher()
+				for i := 0; i < size; i++ {
+					out[i], err = OpenNewMongoDriver(ctx, name, opts, client)
+					catcher.Add(err)
+				}
+				closer := func(ctx context.Context) error {
+					for _, d := range out {
+						if d != nil {
+							d.(*mongoDriver).Close()
+						}
+					}
+					return client.Database(opts.DB).Collection(addJobsSuffix(name)).Drop(ctx)
+				}
+
+				return out, closer, catcher.Resolve()
+			},
+			SetDriver: func(ctx context.Context, q amboy.Queue, name string) (TestCloser, error) {
+				remote, ok := q.(Remote)
+				if !ok {
+					return nil, errors.New("invalid queue type")
+				}
+
+				opts := DefaultMongoDBOptions()
+				opts.DB = "amboy_test"
+				opts.Format = amboy.BSON
+
+				driver, err := OpenNewMongoDriver(ctx, name, opts, client)
+				if err != nil {
+					return nil, err
+				}
+
+				d := driver.(*mongoDriver)
+				closer := func(ctx context.Context) error {
+					d.Close()
+					return client.Database(opts.DB).Collection(addJobsSuffix(name)).Drop(ctx)
+				}
+
+				return closer, remote.SetDriver(d)
+
+			},
+		},
+		{
+			Name:               "MongoGroupMGOBSON",
+			WaitUntilSupported: true,
+			SupportsMulti:      true,
+			Constructor: func(ctx context.Context, name string, size int) ([]Driver, TestCloser, error) {
+				opts := DefaultMongoDBOptions()
+				opts.DB = "amboy_test"
+				opts.Format = amboy.BSON
+
+				out := []Driver{}
+				catcher := grip.NewBasicCatcher()
+				for i := 0; i < size; i++ {
+					driver, err := OpenNewMongoGroupDriver(ctx, name, opts, name+"one", client)
+					catcher.Add(err)
+					out = append(out, driver)
+					driver, err = OpenNewMongoGroupDriver(ctx, name, opts, name+"two", client)
+					catcher.Add(err)
+					out = append(out, driver)
+				}
+				closer := func(ctx context.Context) error {
+					for _, d := range out {
+						if d != nil {
+							d.(*mongoGroupDriver).Close()
+						}
+					}
+					return client.Database(opts.DB).Collection(addGroupSufix(name)).Drop(ctx)
+				}
+
+				return out, closer, catcher.Resolve()
+			},
+			SetDriver: func(ctx context.Context, q amboy.Queue, name string) (TestCloser, error) {
+				remote, ok := q.(Remote)
+				if !ok {
+					return nil, errors.New("invalid queue type")
+				}
+
+				opts := DefaultMongoDBOptions()
+				opts.DB = "amboy_test"
+				opts.CheckWaitUntil = true
+				opts.Format = amboy.BSON
+
+				driver, err := OpenNewMongoGroupDriver(ctx, name, opts, name+"three", client)
+				if err != nil {
+					return nil, err
+				}
+
+				d := driver.(*mongoGroupDriver)
+				closer := func(ctx context.Context) error {
+					d.Close()
+					return client.Database(opts.DB).Collection(addGroupSufix(name)).Drop(ctx)
 				}
 
 				return closer, remote.SetDriver(driver)
