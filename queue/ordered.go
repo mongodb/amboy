@@ -365,6 +365,9 @@ func (q *depGraphOrderedLocal) jobDispatch(ctx context.Context, orderedJobs []gr
 
 // Complete marks a job as complete in the context of this queue instance.
 func (q *depGraphOrderedLocal) Complete(ctx context.Context, j amboy.Job) {
+	if ctx.Err() != nil {
+		return
+	}
 	grip.Debugf("marking job (%s) as complete", j.ID())
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
