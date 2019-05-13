@@ -334,6 +334,7 @@ func DefaultDriverTestCases(client *mongo.Client, session *mgo.Session) []Driver
 
 				opts := DefaultMongoDBOptions()
 				opts.DB = "amboy_test"
+				opts.CheckWaitUntil = true
 
 				driver, err := OpenNewMongoGroupDriver(ctx, name, opts, name+"three", client)
 				if err != nil {
@@ -767,7 +768,7 @@ func WaitUntilTest(bctx context.Context, t *testing.T, test QueueTestCase, drive
 		go func(num int) {
 			defer wg.Done()
 			for _, name := range testNames {
-				cmd := fmt.Sprintf("echo %s.%d.a", name, num)
+				cmd := fmt.Sprintf("echo %s.%d.default", name, num)
 				j := job.NewShellJob(cmd, "")
 				ti := j.TimeInfo()
 				require.Zero(t, ti.WaitUntil)
@@ -775,7 +776,7 @@ func WaitUntilTest(bctx context.Context, t *testing.T, test QueueTestCase, drive
 				_, ok := q.Get(j.ID())
 				require.True(t, ok)
 
-				cmd = fmt.Sprintf("echo %s.%d.b", name, num)
+				cmd = fmt.Sprintf("echo %s.%d.waiter", name, num)
 				j2 := job.NewShellJob(cmd, "")
 				j2.UpdateTimeInfo(amboy.JobTimeInfo{
 					WaitUntil: time.Now().Add(time.Hour),
@@ -790,23 +791,45 @@ func WaitUntilTest(bctx context.Context, t *testing.T, test QueueTestCase, drive
 	}
 	wg.Wait()
 
-	stats := q.Stats()
-	require.Equal(t, numJobs*2, stats.Total, "with %d workers [%+v]", size.Size, stats)
-
 	// waitC for things to finish
-	time.Sleep(3 * time.Second)
+	const (
+		interval = 100 * time.Millisecond
+		maxTime  = 3 * time.Second
+	)
+	var dur time.Duration
+	timer := time.NewTimer(interval)
+	defer timer.Stop()
+waitLoop:
+	for {
+		select {
+		case <-ctx.Done():
+			break waitLoop
+		case <-timer.C:
+			dur += interval
+			stat := q.Stats()
+			if stat.Completed >= numJobs {
+				break waitLoop
+			}
+
+			if dur >= maxTime {
+				break waitLoop
+			}
+
+			timer.Reset(interval)
+		}
+	}
 
 	completed := 0
 	for result := range q.Results(ctx) {
 		status := result.Status()
 		ti := result.TimeInfo()
 
-		if status.Completed || status.InProgress {
+		if status.Completed {
 			completed++
 			require.Zero(t, ti.WaitUntil)
-			continue
 		}
 	}
+
 	assert.Equal(t, numJobs, completed)
 }
 
