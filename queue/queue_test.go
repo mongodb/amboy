@@ -845,7 +845,7 @@ func OrderedTest(bctx context.Context, t *testing.T, test QueueTestCase, driver 
 }
 
 func WaitUntilTest(bctx context.Context, t *testing.T, test QueueTestCase, driver DriverTestCase, runner PoolTestCase, size SizeTestCase) {
-	ctx, cancel := context.WithCancel(bctx)
+	ctx, cancel := context.WithTimeout(bctx, 2*time.Minute)
 	defer cancel()
 
 	q, err := test.Constructor(ctx, size.Size)
