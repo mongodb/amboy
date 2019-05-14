@@ -725,8 +725,8 @@ func UnorderedTest(bctx context.Context, t *testing.T, test QueueTestCase, drive
 	require.NoError(t, err)
 	require.NoError(t, runner.SetPool(q, size.Size))
 	dcloser, err := driver.SetDriver(ctx, q, newDriverID())
-	defer func() { require.NoError(t, dcloser(ctx)) }()
 	require.NoError(t, err)
+	defer func() { require.NoError(t, dcloser(ctx)) }()
 
 	if test.OrderedSupported && !test.OrderedStartsBefore {
 		// pass
@@ -794,8 +794,8 @@ func OrderedTest(bctx context.Context, t *testing.T, test QueueTestCase, driver 
 	require.NoError(t, runner.SetPool(q, size.Size))
 
 	dcloser, err := driver.SetDriver(ctx, q, newDriverID())
-	defer func() { require.NoError(t, dcloser(ctx)) }()
 	require.NoError(t, err)
+	defer func() { require.NoError(t, dcloser(ctx)) }()
 
 	var lastJobName string
 
@@ -853,8 +853,8 @@ func WaitUntilTest(bctx context.Context, t *testing.T, test QueueTestCase, drive
 	require.NoError(t, runner.SetPool(q, size.Size))
 
 	dcloser, err := driver.SetDriver(ctx, q, newDriverID())
-	defer func() { require.NoError(t, dcloser(ctx)) }()
 	require.NoError(t, err)
+	defer func() { require.NoError(t, dcloser(ctx)) }()
 
 	require.NoError(t, q.Start(ctx))
 
@@ -953,8 +953,8 @@ func OneExecutionTest(bctx context.Context, t *testing.T, test QueueTestCase, dr
 	require.NoError(t, runner.SetPool(q, size.Size))
 
 	dcloser, err := driver.SetDriver(ctx, q, newDriverID())
-	defer func() { require.NoError(t, dcloser(ctx)) }()
 	require.NoError(t, err)
+	defer func() { require.NoError(t, dcloser(ctx)) }()
 
 	mockJobCounters.Reset()
 	count := 40
