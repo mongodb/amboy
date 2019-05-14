@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"testing"
 	"time"
 
@@ -30,13 +31,13 @@ func TestQueueGroup(t *testing.T) {
 	defer cancel()
 
 	const mdburl = "mongodb://localhost:27017"
-	client, err := mongo.NewClient(options.Client().ApplyURI(mdburl).SetConnectTimeout(2 * time.Second))
-	require.NoError(t, err)
+	client, cerr := mongo.NewClient(options.Client().ApplyURI(mdburl).SetConnectTimeout(2 * time.Second))
+	require.NoError(t, cerr)
 	require.NoError(t, client.Connect(bctx))
 	defer func() { require.NoError(t, client.Disconnect(bctx)) }()
 
-	session, err := mgo.DialWithTimeout(mdburl, 2*time.Second)
-	require.NoError(t, err)
+	session, merr := mgo.DialWithTimeout(mdburl, 2*time.Second)
+	require.NoError(t, merr)
 	defer session.Close()
 
 	t.Run("Constructor", func(t *testing.T) {
@@ -176,7 +177,6 @@ func TestQueueGroup(t *testing.T) {
 				t.Run("Mongo", func(t *testing.T) {
 					for _, remoteTest := range remoteTests {
 						t.Run(remoteTest.name, func(t *testing.T) {
-							require.NoError(t, err)
 							ctx, cancel := context.WithCancel(bctx)
 							defer cancel()
 							mopts := MongoDBOptions{
@@ -207,7 +207,6 @@ func TestQueueGroup(t *testing.T) {
 				t.Run("MongoMerged", func(t *testing.T) {
 					for _, remoteTest := range remoteTests {
 						t.Run(remoteTest.name, func(t *testing.T) {
-							require.NoError(t, err)
 							ctx, cancel := context.WithCancel(bctx)
 							defer cancel()
 							mopts := MongoDBOptions{
@@ -238,7 +237,6 @@ func TestQueueGroup(t *testing.T) {
 				t.Run("LegacyMgoMerged", func(t *testing.T) {
 					for _, remoteTest := range remoteTests {
 						t.Run(remoteTest.name, func(t *testing.T) {
-							require.NoError(t, err)
 							ctx, cancel := context.WithCancel(bctx)
 							defer cancel()
 							mopts := MongoDBOptions{
@@ -303,11 +301,11 @@ func TestQueueGroup(t *testing.T) {
 						PruneFrequency: ttl,
 					}
 
-					if err = client.Database(mopts.DB).Drop(ctx); err != nil {
+					if err := client.Database(mopts.DB).Drop(ctx); err != nil {
 						return nil, closer, err
 					}
 
-					if err = client.Ping(ctx, nil); err != nil {
+					if err := client.Ping(ctx, nil); err != nil {
 						return nil, closer, errors.Wrap(err, "server not pingable")
 					}
 
@@ -340,11 +338,11 @@ func TestQueueGroup(t *testing.T) {
 						PruneFrequency: ttl,
 					}
 
-					if err = client.Database(mopts.DB).Drop(ctx); err != nil {
+					if err := client.Database(mopts.DB).Drop(ctx); err != nil {
 						return nil, closer, err
 					}
 
-					if err = client.Ping(ctx, nil); err != nil {
+					if err := client.Ping(ctx, nil); err != nil {
 						return nil, closer, errors.Wrap(err, "server not pingable")
 					}
 
@@ -376,7 +374,7 @@ func TestQueueGroup(t *testing.T) {
 						PruneFrequency: ttl / 2,
 					}
 
-					if err = session.DB(mopts.DB).DropDatabase(); err != nil {
+					if err := session.DB(mopts.DB).DropDatabase(); err != nil {
 						return nil, closer, err
 					}
 
@@ -527,6 +525,10 @@ func TestQueueGroup(t *testing.T) {
 					require.Len(t, resultsQ4, 2)
 				})
 				t.Run("Prune", func(t *testing.T) {
+					if runtime.GOOS == "windows" && group.Name == "Mongo" {
+						t.Skip("legacy implementation performs poorly on windows")
+					}
+
 					ctx, cancel := context.WithCancel(context.Background())
 					defer cancel()
 
@@ -666,7 +668,7 @@ func TestQueueGroup(t *testing.T) {
 			}
 
 			for i := 0; i < 10; i++ {
-				_, err = client.Database("amboy_group_test").Collection(fmt.Sprintf("gen-%d.jobs", i)).InsertOne(ctx, bson.M{"foo": "bar"})
+				_, err := client.Database("amboy_group_test").Collection(fmt.Sprintf("gen-%d.jobs", i)).InsertOne(ctx, bson.M{"foo": "bar"})
 				require.NoError(t, err)
 			}
 			remoteOpts := RemoteQueueGroupOptions{
@@ -675,7 +677,7 @@ func TestQueueGroup(t *testing.T) {
 				TTL:            time.Second,
 				PruneFrequency: time.Second,
 			}
-			_, err = NewMongoRemoteQueueGroup(ctx, remoteOpts, client, mopts)
+			_, err := NewMongoRemoteQueueGroup(ctx, remoteOpts, client, mopts)
 			require.NoError(t, err)
 			time.Sleep(time.Second)
 			for i := 0; i < 10; i++ {
