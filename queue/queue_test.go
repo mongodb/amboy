@@ -163,6 +163,7 @@ func DefaultDriverTestCases(client *mongo.Client, session *mgo.Session) []Driver
 			Constructor: func(ctx context.Context, name string, size int) ([]Driver, TestCloser, error) {
 				return nil, func(_ context.Context) error { return nil }, errors.New("not supported")
 			},
+			SkipOrdered: true,
 			SetDriver: func(ctx context.Context, q amboy.Queue, name string) (TestCloser, error) {
 				remote, ok := q.(Remote)
 				if !ok {
@@ -725,8 +726,8 @@ func UnorderedTest(bctx context.Context, t *testing.T, test QueueTestCase, drive
 	require.NoError(t, err)
 	require.NoError(t, runner.SetPool(q, size.Size))
 	dcloser, err := driver.SetDriver(ctx, q, newDriverID())
-	defer func() { require.NoError(t, dcloser(ctx)) }()
 	require.NoError(t, err)
+	defer func() { require.NoError(t, dcloser(ctx)) }()
 
 	if test.OrderedSupported && !test.OrderedStartsBefore {
 		// pass
@@ -794,8 +795,8 @@ func OrderedTest(bctx context.Context, t *testing.T, test QueueTestCase, driver 
 	require.NoError(t, runner.SetPool(q, size.Size))
 
 	dcloser, err := driver.SetDriver(ctx, q, newDriverID())
-	defer func() { require.NoError(t, dcloser(ctx)) }()
 	require.NoError(t, err)
+	defer func() { require.NoError(t, dcloser(ctx)) }()
 
 	var lastJobName string
 
@@ -853,8 +854,8 @@ func WaitUntilTest(bctx context.Context, t *testing.T, test QueueTestCase, drive
 	require.NoError(t, runner.SetPool(q, size.Size))
 
 	dcloser, err := driver.SetDriver(ctx, q, newDriverID())
-	defer func() { require.NoError(t, dcloser(ctx)) }()
 	require.NoError(t, err)
+	defer func() { require.NoError(t, dcloser(ctx)) }()
 
 	require.NoError(t, q.Start(ctx))
 
@@ -945,7 +946,7 @@ func OneExecutionTest(bctx context.Context, t *testing.T, test QueueTestCase, dr
 	if test.Name == "LocalOrdered" {
 		t.Skip("topological sort deadlocks")
 	}
-	ctx, cancel := context.WithCancel(bctx)
+	ctx, cancel := context.WithTimeout(bctx, 2*time.Minute)
 	defer cancel()
 
 	q, err := test.Constructor(ctx, size.Size)
@@ -953,8 +954,8 @@ func OneExecutionTest(bctx context.Context, t *testing.T, test QueueTestCase, dr
 	require.NoError(t, runner.SetPool(q, size.Size))
 
 	dcloser, err := driver.SetDriver(ctx, q, newDriverID())
-	defer func() { require.NoError(t, dcloser(ctx)) }()
 	require.NoError(t, err)
+	defer func() { require.NoError(t, dcloser(ctx)) }()
 
 	mockJobCounters.Reset()
 	count := 40
@@ -974,12 +975,12 @@ func OneExecutionTest(bctx context.Context, t *testing.T, test QueueTestCase, dr
 		require.NoError(t, q.Start(ctx))
 	}
 
-	amboy.WaitCtxInterval(ctx, q, 10*time.Millisecond)
+	amboy.WaitCtxInterval(ctx, q, 100*time.Millisecond)
 	assert.Equal(t, count, mockJobCounters.Count())
 }
 
 func MultiExecutionTest(bctx context.Context, t *testing.T, test QueueTestCase, driver DriverTestCase, runner PoolTestCase, size SizeTestCase, multi MultipleExecutionTestCase) {
-	ctx, cancel := context.WithCancel(bctx)
+	ctx, cancel := context.WithTimeout(bctx, 2*time.Minute)
 	defer cancel()
 
 	qOne, err := test.Constructor(ctx, size.Size)
