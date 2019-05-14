@@ -945,7 +945,7 @@ func OneExecutionTest(bctx context.Context, t *testing.T, test QueueTestCase, dr
 	if test.Name == "LocalOrdered" {
 		t.Skip("topological sort deadlocks")
 	}
-	ctx, cancel := context.WithCancel(bctx)
+	ctx, cancel := context.WithTimeout(bctx, 2*time.Minute)
 	defer cancel()
 
 	q, err := test.Constructor(ctx, size.Size)
@@ -974,12 +974,12 @@ func OneExecutionTest(bctx context.Context, t *testing.T, test QueueTestCase, dr
 		require.NoError(t, q.Start(ctx))
 	}
 
-	amboy.WaitCtxInterval(ctx, q, 10*time.Millisecond)
+	amboy.WaitCtxInterval(ctx, q, 100*time.Millisecond)
 	assert.Equal(t, count, mockJobCounters.Count())
 }
 
 func MultiExecutionTest(bctx context.Context, t *testing.T, test QueueTestCase, driver DriverTestCase, runner PoolTestCase, size SizeTestCase, multi MultipleExecutionTestCase) {
-	ctx, cancel := context.WithCancel(bctx)
+	ctx, cancel := context.WithTimeout(bctx, 2*time.Minute)
 	defer cancel()
 
 	qOne, err := test.Constructor(ctx, size.Size)
