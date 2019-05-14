@@ -13,10 +13,12 @@ import (
 )
 
 type dbQueueStat struct {
-	opts       queue.MongoDBOptions
-	name       string
-	client     *mongo.Client
-	collection *mongo.Collection
+	opts         queue.MongoDBOptions
+	name         string
+	client       *mongo.Client
+	collection   *mongo.Collection
+	filterGroups bool
+	groupName    string
 }
 
 // NewDBQueueState produces a queue Reporter for (remote) queues that persist
@@ -33,6 +35,27 @@ func NewDBQueueState(ctx context.Context, name string, opts queue.MongoDBOptions
 	}
 
 	db, err := MakeDBQueueState(ctx, name, opts, client)
+	if err != nil {
+		return nil, errors.Wrap(err, "problem building reporting interface")
+	}
+
+	return db, nil
+}
+
+// NewDBQueueGroupState produces a queue Reporter for a (remote)
+// queue group queue. This implementation does not interact with a queue
+// directly, and reports by interacting with the database directly.
+func NewDBQueueGroupState(ctx context.Context, name string, opts queue.MongoDBOptions, group string) (Reporter, error) {
+	client, err := mongo.NewClient(options.Client().ApplyURI(opts.URI).SetConnectTimeout(time.Second))
+	if err != nil {
+		return nil, errors.Wrap(err, "problem constructing mongodb client")
+	}
+
+	if err = client.Connect(ctx); err != nil {
+		return nil, errors.Wrap(err, "problem connecting to database")
+	}
+
+	db, err := MakeDBQueueGroupState(ctx, name, opts, group, client)
 	if err != nil {
 		return nil, errors.Wrap(err, "problem building reporting interface")
 	}
@@ -58,6 +81,31 @@ func MakeDBQueueState(ctx context.Context, name string, opts queue.MongoDBOption
 		opts:       opts,
 		client:     client,
 		collection: client.Database(opts.DB).Collection(addJobsSuffix(name)),
+	}
+
+	return db, nil
+}
+
+// MakeDBQueueGroupState make it possible to produce a queue reporter
+// for a specific queue in a queue group with an existing database Connection.
+// This operations runs the "ping" command and will return an error if
+// there is no session or no active server.
+func MakeDBQueueGroupState(ctx context.Context, name string, opts queue.MongoDBOptions, group string, client *mongo.Client) (Reporter, error) {
+	if client == nil {
+		return nil, errors.New("cannot make a reporter without a client")
+	}
+
+	if err := client.Ping(ctx, nil); err != nil {
+		return nil, errors.Wrap(err, "could not establish a connection with the database")
+	}
+
+	db := &dbQueueStat{
+		name:         name,
+		opts:         opts,
+		client:       client,
+		collection:   client.Database(opts.DB).Collection(addGroupSuffix(name)),
+		filterGroups: true,
+		groupName:    group,
 	}
 
 	return db, nil
@@ -181,34 +229,37 @@ func (db *dbQueueStat) JobStatus(ctx context.Context, f CounterFilter) (*JobStat
 
 	var counters []JobCounters
 
+	match := bson.M{
+		"status.completed": false,
+	}
+
+	if db.filterGroups {
+		match["group"] = db.groupName
+	}
+
 	switch f {
 	case InProgress:
+		match["status.in_prog"] = true
 		counters, err = db.aggregateCounters(ctx,
-			bson.M{"$match": bson.M{
-				"status.completed": false,
-				"status.in_prog":   true,
-			}},
+			bson.M{"$match": match},
 			bson.M{"$group": bson.M{
 				"_id":   "$type",
 				"count": bson.M{"$sum": 1},
 			}})
 	case Pending:
+		match["status.in_prog"] = false
 		counters, err = db.aggregateCounters(ctx,
-			bson.M{"$match": bson.M{
-				"status.completed": false,
-				"status.in_prog":   false,
-			}},
+			bson.M{"$match": match},
 			bson.M{"$group": bson.M{
 				"_id":   "$type",
 				"count": bson.M{"$sum": 1},
 			}})
 	case Stale:
+		match["status.in_prog"] = true
+		match["status.mod_ts"] = bson.M{"$gt": time.Now().Add(-queue.LockTimeout)}
+
 		counters, err = db.aggregateCounters(ctx,
-			bson.M{"$match": bson.M{
-				"status.completed": false,
-				"status.in_prog":   true,
-				"status.mod_ts":    bson.M{"$gt": time.Now().Add(-queue.LockTimeout)},
-			}},
+			bson.M{"$match": match},
 			bson.M{"$group": bson.M{
 				"_id":   "$type",
 				"count": bson.M{"$sum": 1},
@@ -306,27 +357,26 @@ func (db *dbQueueStat) JobIDsByState(ctx context.Context, jobType string, f Coun
 	}
 
 	var ids []string
+	query := bson.M{
+		"type":             jobType,
+		"status.completed": false,
+	}
+
+	if db.filterGroups {
+		query["group"] = db.groupName
+	}
 
 	switch f {
 	case InProgress:
-		ids, err = db.findJobs(ctx, bson.M{
-			"type":             jobType,
-			"status.completed": false,
-			"status.in_prog":   true,
-		})
+		query["status.in_prog"] = true
+		ids, err = db.findJobs(ctx, query)
 	case Pending:
-		ids, err = db.findJobs(ctx, bson.M{
-			"type":             jobType,
-			"status.completed": false,
-			"status.in_prog":   false,
-		})
+		query["status.in_prog"] = false
+		ids, err = db.findJobs(ctx, query)
 	case Stale:
-		ids, err = db.findJobs(ctx, bson.M{
-			"type":             jobType,
-			"status.completed": false,
-			"status.in_prog":   true,
-			"status.mod_ts":    bson.M{"$gt": time.Now().Add(-queue.LockTimeout)},
-		})
+		query["status.in_prog"] = true
+		query["status.mod_ts"] = bson.M{"$gt": time.Now().Add(-queue.LockTimeout)}
+		ids, err = db.findJobs(ctx, query)
 
 	default:
 		return nil, errors.New("invalid job status filter")
@@ -357,14 +407,20 @@ func (db *dbQueueStat) RecentErrors(ctx context.Context, window time.Duration, f
 
 	now := time.Now()
 
+	match := bson.M{
+		"status.completed": true,
+		"status.err_count": bson.M{"$gt": 0},
+		"time_info.end":    bson.M{"$gt": now.Add(-window)},
+	}
+
+	if db.filterGroups {
+		match["group"] = db.groupName
+	}
+
 	switch f {
 	case UniqueErrors:
 		reports, err = db.aggregateErrors(ctx,
-			bson.M{"$match": bson.M{
-				"status.completed": true,
-				"status.err_count": bson.M{"$gt": 0},
-				"time_info.end":    bson.M{"$gt": now.Add(-window)},
-			}},
+			bson.M{"$match": match},
 			bson.M{"$group": bson.M{
 				"_id":     "$type",
 				"count":   bson.M{"$sum": 1},
@@ -374,11 +430,7 @@ func (db *dbQueueStat) RecentErrors(ctx context.Context, window time.Duration, f
 			}})
 	case AllErrors:
 		reports, err = db.aggregateErrors(ctx,
-			bson.M{"$match": bson.M{
-				"status.completed": true,
-				"status.err_count": bson.M{"$gt": 0},
-				"time_info.end":    bson.M{"$gt": now.Add(-window)},
-			}},
+			bson.M{"$match": match},
 			bson.M{"$group": bson.M{
 				"_id":     "$type",
 				"count":   bson.M{"$sum": 1},
@@ -396,11 +448,7 @@ func (db *dbQueueStat) RecentErrors(ctx context.Context, window time.Duration, f
 			}})
 	case StatsOnly:
 		reports, err = db.aggregateErrors(ctx,
-			bson.M{"$match": bson.M{
-				"status.completed": true,
-				"status.err_count": bson.M{"$gt": 0},
-				"time_info.end":    bson.M{"$gt": now.Add(-window)},
-			}},
+			bson.M{"$match": match},
 			bson.M{"$group": bson.M{
 				"_id":     "$type",
 				"count":   bson.M{"$sum": 1},
@@ -437,15 +485,21 @@ func (db *dbQueueStat) RecentJobErrors(ctx context.Context, jobType string, wind
 
 	now := time.Now()
 
+	match := bson.M{
+		"type":             jobType,
+		"status.completed": true,
+		"status.err_count": bson.M{"$gt": 0},
+		"time_info.end":    bson.M{"$gt": now.Add(-window)},
+	}
+
+	if db.filterGroups {
+		match["group"] = db.groupName
+	}
+
 	switch f {
 	case UniqueErrors:
 		reports, err = db.aggregateErrors(ctx,
-			bson.M{"$match": bson.M{
-				"type":             jobType,
-				"status.completed": true,
-				"status.err_count": bson.M{"$gt": 0},
-				"time_info.end":    bson.M{"$gt": now.Add(-window)},
-			}},
+			bson.M{"$match": match},
 			bson.M{"$group": bson.M{
 				"_id":     nil,
 				"count":   bson.M{"$sum": 1},
@@ -455,12 +509,7 @@ func (db *dbQueueStat) RecentJobErrors(ctx context.Context, jobType string, wind
 			}})
 	case AllErrors:
 		reports, err = db.aggregateErrors(ctx,
-			bson.M{"$match": bson.M{
-				"type":             jobType,
-				"status.completed": true,
-				"status.err_count": bson.M{"$gt": 0},
-				"time_info.end":    bson.M{"$gt": now.Add(-window)},
-			}},
+			bson.M{"$match": match},
 			bson.M{"$group": bson.M{
 				"_id":     nil,
 				"count":   bson.M{"$sum": 1},
@@ -478,12 +527,7 @@ func (db *dbQueueStat) RecentJobErrors(ctx context.Context, jobType string, wind
 			}})
 	case StatsOnly:
 		reports, err = db.aggregateErrors(ctx,
-			bson.M{"$match": bson.M{
-				"type":             jobType,
-				"status.completed": true,
-				"status.err_count": bson.M{"$gt": 0},
-				"time_info.end":    bson.M{"$gt": now.Add(-window)},
-			}},
+			bson.M{"$match": match},
 			bson.M{"$group": bson.M{
 				"_id":     nil,
 				"count":   bson.M{"$sum": 1},
