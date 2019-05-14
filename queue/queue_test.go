@@ -163,6 +163,7 @@ func DefaultDriverTestCases(client *mongo.Client, session *mgo.Session) []Driver
 			Constructor: func(ctx context.Context, name string, size int) ([]Driver, TestCloser, error) {
 				return nil, func(_ context.Context) error { return nil }, errors.New("not supported")
 			},
+			SkipOrdered: true,
 			SetDriver: func(ctx context.Context, q amboy.Queue, name string) (TestCloser, error) {
 				remote, ok := q.(Remote)
 				if !ok {
