@@ -70,7 +70,10 @@ func TestReportingSuiteBackedByMongoDB(t *testing.T) {
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(opts.URI))
 	require.NoError(t, err)
 	s.factory = func() Reporter {
-		reporter, err := MakeDBQueueState(ctx, name, opts, client)
+		reporter, err := MakeDBQueueState(ctx, DBQueueReporterOptions{
+			Options: opts,
+			Name:    name,
+		}, client)
 		require.NoError(t, err)
 		return reporter
 	}
@@ -92,7 +95,7 @@ func TestReportingSuiteBackedByMongoDB(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func TestReportingSuiteBackedByMongoDBGroup(t *testing.T) {
+func TestReportingSuiteBackedByMongoDBSingleGroup(t *testing.T) {
 	s := new(ReportingSuite)
 	name := uuid.NewV4().String()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -102,7 +105,48 @@ func TestReportingSuiteBackedByMongoDBGroup(t *testing.T) {
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(opts.URI))
 	require.NoError(t, err)
 	s.factory = func() Reporter {
-		reporter, err := MakeDBQueueGroupState(ctx, name, opts, "foo", client)
+		reporter, err := MakeDBQueueState(ctx, DBQueueReporterOptions{
+			Options:     opts,
+			Name:        name,
+			Group:       "foo",
+			SingleGroup: true,
+		}, client)
+		require.NoError(t, err)
+		return reporter
+	}
+
+	s.setup = func() {
+		remote := queue.NewRemoteUnordered(2)
+		driver, err := queue.OpenNewMongoGroupDriver(ctx, name, opts, "foo", client)
+		require.NoError(t, err)
+		require.NoError(t, remote.SetDriver(driver))
+		s.queue = remote
+	}
+
+	s.cleanup = func() error {
+		require.NoError(t, client.Disconnect(ctx))
+		s.queue.Runner().Close(ctx)
+		return nil
+	}
+
+	suite.Run(t, s)
+}
+
+func TestReportingSuiteBackedByMongoDBMultiGroup(t *testing.T) {
+	s := new(ReportingSuite)
+	name := uuid.NewV4().String()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	opts := queue.DefaultMongoDBOptions()
+	opts.DB = "amboy_test"
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(opts.URI))
+	require.NoError(t, err)
+	s.factory = func() Reporter {
+		reporter, err := MakeDBQueueState(ctx, DBQueueReporterOptions{
+			Options:  opts,
+			Name:     name,
+			ByGroups: true,
+		}, client)
 		require.NoError(t, err)
 		return reporter
 	}
