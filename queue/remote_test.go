@@ -148,7 +148,7 @@ func (s *RemoteUnorderedSuite) TestJobsDoNotCompleteWithCanceledQueueContext() {
 	s.NotNil(s.queue.Driver())
 
 	ctx, cancel := context.WithCancel(context.Background())
-	s.queue.Start(ctx)
+	s.NoError(s.queue.Start(ctx))
 
 	j1 := job.NewShellJob("echo foo", "")
 	name := j1.ID()
