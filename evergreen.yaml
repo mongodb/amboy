@@ -279,12 +279,12 @@ buildvariants:
       - name: ".test"
 
   - name: macos
-    display_name: macOS 10.12
+    display_name: macOS 10.14
     expansions:
       mongodb_url: https://fastdl.mongodb.org/osx/mongodb-osx-ssl-x86_64-3.6.4.tgz
       build_env: " DISABLE_COVERAGE=yes GOROOT=/opt/golang/go1.9 PATH=/opt/golang/go1.9/bin:$PATH"
     run_on:
-      - macos-1012
+      - macos-1014
     tasks:
       - ".dist"
       - ".test"
