@@ -60,13 +60,14 @@ func ScheduleJobsFromGeneratorFactory(op func() <-chan Job) QueueOperation {
 		catcher := grip.NewCatcher()
 
 		jobs := op()
+	waitLoop:
 		for {
 			select {
 			case j := <-jobs:
 				catcher.Add(q.Put(ctx, j))
 			case <-ctx.Done():
 				catcher.Add(ctx.Err())
-				break
+				break waitLoop
 			}
 		}
 		return catcher.Resolve()

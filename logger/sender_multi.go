@@ -17,10 +17,11 @@ type multiQueueSender struct {
 	send.Base
 }
 
-func newMultiSender(q amboy.Queue, senders []send.Sender) *multiQueueSender {
+func newMultiSender(ctx context.Context, q amboy.Queue, senders []send.Sender) *multiQueueSender {
 	return &multiQueueSender{
 		senders: senders,
 		queue:   q,
+		ctx:     ctx,
 		Base:    *send.NewBase(""),
 	}
 }
@@ -37,8 +38,8 @@ func newMultiSender(q amboy.Queue, senders []send.Sender) *multiQueueSender {
 // each constituent sender independently. This means that if a single
 // sender is blocking, then that sender may prevent other senders from
 // receiving the message.
-func MakeQueueMultiSender(q amboy.Queue, senders ...send.Sender) send.Sender {
-	return newMultiSender(q, senders)
+func MakeQueueMultiSender(ctx context.Context, q amboy.Queue, senders ...send.Sender) send.Sender {
+	return newMultiSender(ctx, q, senders)
 }
 
 // NewQueueMultiSender returns a queue-backed wrapper of a group of
@@ -47,9 +48,9 @@ func MakeQueueMultiSender(q amboy.Queue, senders ...send.Sender) send.Sender {
 // pending messages unsent.
 func NewQueueMultiSender(ctx context.Context, workers, capacity int, senders ...send.Sender) (send.Sender, error) {
 	q := queue.NewLocalLimitedSize(workers, capacity)
-	s := newMultiSender(q, senders)
+	s := newMultiSender(ctx, q, senders)
 
-	s.ctx, s.canceler = context.WithCancel(ctx)
+	s.ctx, s.canceler = context.WithCancel(s.ctx)
 	if err := q.Start(s.ctx); err != nil {
 		return nil, err
 	}

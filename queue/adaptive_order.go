@@ -139,7 +139,8 @@ func (q *adaptiveLocalOrdering) Results(ctx context.Context) <-chan amboy.Job {
 
 	select {
 	case <-ctx.Done():
-		out, _ := <-ret
+		out := make(chan amboy.Job)
+		close(out)
 		return out
 	case q.operations <- op:
 		return <-ret
@@ -167,7 +168,8 @@ func (q *adaptiveLocalOrdering) JobStats(ctx context.Context) <-chan amboy.JobSt
 
 	select {
 	case <-ctx.Done():
-		out, _ := <-ret
+		out := make(chan amboy.JobStatusInfo)
+		close(out)
 		return out
 	case q.operations <- op:
 		return <-ret
@@ -194,8 +196,7 @@ func (q *adaptiveLocalOrdering) Stats(ctx context.Context) amboy.QueueStats {
 
 	select {
 	case <-ctx.Done():
-		out, _ := <-ret
-		return out
+		return amboy.QueueStats{}
 	case q.operations <- op:
 		return <-ret
 	}
@@ -246,8 +247,7 @@ func (q *adaptiveLocalOrdering) Next(ctx context.Context) amboy.Job {
 
 	select {
 	case <-ctx.Done():
-		out, _ := <-ret
-		return out
+		return nil
 	case q.operations <- op:
 		return <-ret
 	}

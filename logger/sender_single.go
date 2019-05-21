@@ -16,10 +16,11 @@ type queueSender struct {
 	send.Sender
 }
 
-func newSender(q amboy.Queue, sender send.Sender) *queueSender {
+func newSender(ctx context.Context, q amboy.Queue, sender send.Sender) *queueSender {
 	return &queueSender{
 		Sender: sender,
 		queue:  q,
+		ctx:    ctx,
 	}
 }
 
@@ -34,7 +35,9 @@ func newSender(q amboy.Queue, sender send.Sender) *queueSender {
 //
 // In the event that the sender's Put method returns an error, the
 // message (and its error) will be logged directly (and synchronously)
-func MakeQueueSender(q amboy.Queue, sender send.Sender) send.Sender { return newSender(q, sender) }
+func MakeQueueSender(ctx context.Context, q amboy.Queue, sender send.Sender) send.Sender {
+	return newSender(ctx, q, sender)
+}
 
 // NewQueueBackedSender creates a new LimitedSize queue, and creates a
 // sender implementation wrapping this sender. The queue is not shared.
@@ -44,9 +47,9 @@ func MakeQueueSender(q amboy.Queue, sender send.Sender) send.Sender { return new
 // queue to empty.
 func NewQueueBackedSender(ctx context.Context, sender send.Sender, workers, capacity int) (send.Sender, error) {
 	q := queue.NewLocalLimitedSize(workers, capacity)
-	s := newSender(q, sender)
+	s := newSender(ctx, q, sender)
 
-	s.ctx, s.canceler = context.WithCancel(ctx)
+	s.ctx, s.canceler = context.WithCancel(s.ctx)
 	if err := q.Start(s.ctx); err != nil {
 		return nil, err
 	}
