@@ -83,7 +83,7 @@ func (q *shuffledLocal) reactor(ctx context.Context) {
 
 // Put adds a job to the queue, and returns errors if the queue hasn't
 // started or if a job with the same ID value already exists.
-func (q *shuffledLocal) Put(j amboy.Job) error {
+func (q *shuffledLocal) Put(ctx context.Context, j amboy.Job) error {
 	id := j.ID()
 
 	if !q.Started() {
@@ -119,7 +119,7 @@ func (q *shuffledLocal) Put(j amboy.Job) error {
 
 // Get returns a job based on the specified ID. Considers all pending,
 // completed, and in progress jobs.
-func (q *shuffledLocal) Get(name string) (amboy.Job, bool) {
+func (q *shuffledLocal) Get(ctx context.Context, name string) (amboy.Job, bool) {
 	if !q.Started() {
 		return nil, false
 	}
@@ -231,7 +231,7 @@ func (q *shuffledLocal) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo
 
 // Stats returns a standard report on the number of pending, running,
 // and completed jobs processed by the queue.
-func (q *shuffledLocal) Stats() amboy.QueueStats {
+func (q *shuffledLocal) Stats(ctx context.Context) amboy.QueueStats {
 	if !q.Started() {
 		return amboy.QueueStats{}
 	}

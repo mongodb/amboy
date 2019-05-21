@@ -73,13 +73,13 @@ func (q *adaptiveLocalOrdering) reactor(ctx context.Context) {
 	}
 }
 
-func (q *adaptiveLocalOrdering) Put(j amboy.Job) error {
+func (q *adaptiveLocalOrdering) Put(ctx context.Context, j amboy.Job) error {
 	if !q.Started() {
 		return errors.New("cannot add job to unopened queue")
 	}
 
 	out := make(chan error)
-	q.operations <- func(ctx context.Context, items *adaptiveOrderItems, fixed *fixedStorage) {
+	op := func(ctx context.Context, items *adaptiveOrderItems, fixed *fixedStorage) {
 		j.UpdateTimeInfo(amboy.JobTimeInfo{
 			Created: time.Now(),
 		})
@@ -87,26 +87,35 @@ func (q *adaptiveLocalOrdering) Put(j amboy.Job) error {
 		close(out)
 	}
 
-	return <-out
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case q.operations <- op:
+		return <-out
+	}
 }
 
-func (q *adaptiveLocalOrdering) Get(name string) (amboy.Job, bool) {
+func (q *adaptiveLocalOrdering) Get(ctx context.Context, name string) (amboy.Job, bool) {
 	if !q.Started() {
 		return nil, false
 	}
 
 	ret := make(chan amboy.Job)
-
-	q.operations <- func(ctx context.Context, items *adaptiveOrderItems, fixed *fixedStorage) {
+	op := func(ctx context.Context, items *adaptiveOrderItems, fixed *fixedStorage) {
 		defer close(ret)
 		if j, ok := items.jobs[name]; ok {
 			ret <- j
 		}
 	}
 
-	job, ok := <-ret
+	select {
+	case <-ctx.Done():
+		return nil, false
+	case q.operations <- op:
+		job, ok := <-ret
 
-	return job, ok
+		return job, ok
+	}
 
 }
 func (q *adaptiveLocalOrdering) Results(ctx context.Context) <-chan amboy.Job {
@@ -152,7 +161,7 @@ func (q *adaptiveLocalOrdering) JobStats(ctx context.Context) <-chan amboy.JobSt
 	return <-ret
 }
 
-func (q *adaptiveLocalOrdering) Stats() amboy.QueueStats {
+func (q *adaptiveLocalOrdering) Stats(ctx context.Context) amboy.QueueStats {
 	if !q.Started() {
 		return amboy.QueueStats{}
 	}

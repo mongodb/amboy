@@ -10,6 +10,7 @@ import (
 )
 
 type queueSender struct {
+	ctx      context.Context
 	queue    amboy.Queue
 	canceler context.CancelFunc
 	send.Sender
@@ -45,8 +46,8 @@ func NewQueueBackedSender(ctx context.Context, sender send.Sender, workers, capa
 	q := queue.NewLocalLimitedSize(workers, capacity)
 	s := newSender(q, sender)
 
-	ctx, s.canceler = context.WithCancel(ctx)
-	if err := q.Start(ctx); err != nil {
+	s.ctx, s.canceler = context.WithCancel(ctx)
+	if err := q.Start(s.ctx); err != nil {
 		return nil, err
 	}
 
@@ -55,7 +56,7 @@ func NewQueueBackedSender(ctx context.Context, sender send.Sender, workers, capa
 
 func (s *queueSender) Send(m message.Composer) {
 	if s.Level().ShouldLog(m) {
-		err := s.queue.Put(NewSendMessageJob(m, s.Sender))
+		err := s.queue.Put(s.ctx, NewSendMessageJob(m, s.Sender))
 
 		if err != nil {
 			s.Send(message.NewErrorWrap(err, m.String()))

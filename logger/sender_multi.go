@@ -10,6 +10,7 @@ import (
 )
 
 type multiQueueSender struct {
+	ctx      context.Context
 	queue    amboy.Queue
 	senders  []send.Sender
 	canceler context.CancelFunc
@@ -48,8 +49,8 @@ func NewQueueMultiSender(ctx context.Context, workers, capacity int, senders ...
 	q := queue.NewLocalLimitedSize(workers, capacity)
 	s := newMultiSender(q, senders)
 
-	ctx, s.canceler = context.WithCancel(ctx)
-	if err := q.Start(ctx); err != nil {
+	s.ctx, s.canceler = context.WithCancel(ctx)
+	if err := q.Start(s.ctx); err != nil {
 		return nil, err
 	}
 
@@ -57,7 +58,7 @@ func NewQueueMultiSender(ctx context.Context, workers, capacity int, senders ...
 }
 
 func (s *multiQueueSender) Send(m message.Composer) {
-	s.ErrorHandler(s.queue.Put(NewMultiSendMessageJob(m, s.senders)), m)
+	s.ErrorHandler(s.queue.Put(s.ctx, NewMultiSendMessageJob(m, s.senders)), m)
 }
 
 func (s *multiQueueSender) Close() error {
