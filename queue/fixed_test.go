@@ -38,23 +38,24 @@ func (s *LimitedSizeQueueSuite) SetupTest() {
 }
 
 func (s *LimitedSizeQueueSuite) TestBufferForPendingWorkEqualToCapacityForResults() {
-	s.False(s.queue.Started())
-	s.queue.Runner().Close(context.TODO())
-	s.Nil(s.queue.channel)
-	s.Error(s.queue.Put(job.NewShellJob("sleep 10", "")))
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	s.False(s.queue.Started())
+	s.queue.Runner().Close(ctx)
+	s.Nil(s.queue.channel)
+	s.Error(s.queue.Put(ctx, job.NewShellJob("sleep 10", "")))
+
 	s.NoError(s.queue.Start(ctx))
 	for i := 0; i < s.numCapacity+s.numWorkers+1; i++ {
-		err := s.queue.Put(job.NewShellJob("sleep 10", ""))
+		err := s.queue.Put(ctx, job.NewShellJob("sleep 10", ""))
 		if len(s.queue.channel) != s.numCapacity {
 			s.NoError(err)
 		}
 	}
 
 	s.Len(s.queue.channel, s.numCapacity)
-	s.Error(s.queue.Put(job.NewShellJob("sleep 10", "")))
+	s.Error(s.queue.Put(ctx, job.NewShellJob("sleep 10", "")))
 }
 
 func (s *LimitedSizeQueueSuite) TestCallingStartMultipleTimesDoesNotImpactState() {

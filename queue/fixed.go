@@ -196,6 +196,7 @@ func (q *limitedSizeLocal) Complete(ctx context.Context, j amboy.Job) {
 	if len(q.toDelete) == q.capacity-1 {
 		delete(q.storage, <-q.toDelete)
 	}
+
 	q.toDelete <- j.ID()
 }
 

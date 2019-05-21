@@ -9,6 +9,7 @@ import (
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/pool"
 	"github.com/mongodb/grip"
+	"github.com/mongodb/grip/recovery"
 	"github.com/pkg/errors"
 )
 
@@ -51,12 +52,14 @@ func (q *adaptiveLocalOrdering) Start(ctx context.Context) error {
 }
 
 func (q *adaptiveLocalOrdering) reactor(ctx context.Context) {
+	defer recovery.LogStackTraceAndExit("adaptive ordering amboy queue reactor")
+
 	items := &adaptiveOrderItems{
 		jobs: make(map[string]amboy.Job),
 	}
 	fixed := newFixedStorage(q.capacity)
 
-	timer := time.NewTimer(10 * time.Second)
+	timer := time.NewTimer(time.Second)
 	defer timer.Stop()
 
 	for {
@@ -65,7 +68,6 @@ func (q *adaptiveLocalOrdering) reactor(ctx context.Context) {
 			return
 		case op := <-q.operations:
 			op(ctx, items, fixed)
-			timer.Reset(time.Minute)
 		case <-timer.C:
 			items.refilter(ctx)
 			timer.Reset(time.Minute)
@@ -121,7 +123,7 @@ func (q *adaptiveLocalOrdering) Get(ctx context.Context, name string) (amboy.Job
 func (q *adaptiveLocalOrdering) Results(ctx context.Context) <-chan amboy.Job {
 	ret := make(chan chan amboy.Job)
 
-	q.operations <- func(opctx context.Context, items *adaptiveOrderItems, fixed *fixedStorage) {
+	op := func(opctx context.Context, items *adaptiveOrderItems, fixed *fixedStorage) {
 		out := make(chan amboy.Job, len(items.jobs))
 		defer close(ret)
 		defer close(out)
@@ -135,13 +137,18 @@ func (q *adaptiveLocalOrdering) Results(ctx context.Context) <-chan amboy.Job {
 		ret <- out
 	}
 
-	return <-ret
+	select {
+	case <-ctx.Done():
+		out, _ := <-ret
+		return out
+	case q.operations <- op:
+		return <-ret
+	}
 }
 
 func (q *adaptiveLocalOrdering) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 	ret := make(chan chan amboy.JobStatusInfo)
-
-	q.operations <- func(opctx context.Context, items *adaptiveOrderItems, fixed *fixedStorage) {
+	op := func(opctx context.Context, items *adaptiveOrderItems, fixed *fixedStorage) {
 		out := make(chan amboy.JobStatusInfo, len(items.jobs))
 		defer close(out)
 		defer close(ret)
@@ -158,7 +165,13 @@ func (q *adaptiveLocalOrdering) JobStats(ctx context.Context) <-chan amboy.JobSt
 		ret <- out
 	}
 
-	return <-ret
+	select {
+	case <-ctx.Done():
+		out, _ := <-ret
+		return out
+	case q.operations <- op:
+		return <-ret
+	}
 }
 
 func (q *adaptiveLocalOrdering) Stats(ctx context.Context) amboy.QueueStats {
@@ -167,7 +180,7 @@ func (q *adaptiveLocalOrdering) Stats(ctx context.Context) amboy.QueueStats {
 	}
 
 	ret := make(chan amboy.QueueStats)
-	q.operations <- func(ctx context.Context, items *adaptiveOrderItems, fixed *fixedStorage) {
+	op := func(ctx context.Context, items *adaptiveOrderItems, fixed *fixedStorage) {
 		defer close(ret)
 		stat := amboy.QueueStats{
 			Total:     len(items.jobs),
@@ -179,14 +192,19 @@ func (q *adaptiveLocalOrdering) Stats(ctx context.Context) amboy.QueueStats {
 		ret <- stat
 	}
 
-	return <-ret
+	select {
+	case <-ctx.Done():
+		out, _ := <-ret
+		return out
+	case q.operations <- op:
+		return <-ret
+	}
 }
 
 func (q *adaptiveLocalOrdering) Started() bool { return q.operations != nil }
 func (q *adaptiveLocalOrdering) Next(ctx context.Context) amboy.Job {
 	ret := make(chan amboy.Job)
-
-	q.operations <- func(ctx context.Context, items *adaptiveOrderItems, fixed *fixedStorage) {
+	op := func(ctx context.Context, items *adaptiveOrderItems, fixed *fixedStorage) {
 		defer close(ret)
 
 		timer := time.NewTimer(0)
@@ -225,7 +243,14 @@ func (q *adaptiveLocalOrdering) Next(ctx context.Context) amboy.Job {
 			}
 		}
 	}
-	return <-ret
+
+	select {
+	case <-ctx.Done():
+		out, _ := <-ret
+		return out
+	case q.operations <- op:
+		return <-ret
+	}
 }
 
 func (q *adaptiveLocalOrdering) Complete(ctx context.Context, j amboy.Job) {
@@ -233,7 +258,7 @@ func (q *adaptiveLocalOrdering) Complete(ctx context.Context, j amboy.Job) {
 		return
 	}
 	wait := make(chan struct{})
-	q.operations <- func(ctx context.Context, items *adaptiveOrderItems, fixed *fixedStorage) {
+	op := func(ctx context.Context, items *adaptiveOrderItems, fixed *fixedStorage) {
 		id := j.ID()
 		items.completed = append(items.completed, id)
 		items.jobs[id] = j
@@ -247,7 +272,12 @@ func (q *adaptiveLocalOrdering) Complete(ctx context.Context, j amboy.Job) {
 
 		close(wait)
 	}
-	<-wait
+
+	select {
+	case <-ctx.Done():
+	case q.operations <- op:
+		<-wait
+	}
 }
 
 func (q *adaptiveLocalOrdering) Runner() amboy.Runner { return q.runner }

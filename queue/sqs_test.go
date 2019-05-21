@@ -26,6 +26,9 @@ func TestSQSFifoQueueSuite(t *testing.T) {
 }
 
 func (s *SQSFifoQueueSuite) SetupTest() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	var err error
 	s.queue, err = NewSQSFifoQueue(randomString(4), 4)
 	s.NoError(err)
@@ -33,9 +36,9 @@ func (s *SQSFifoQueueSuite) SetupTest() {
 	s.NoError(r.SetQueue(s.queue))
 	s.NoError(s.queue.SetRunner(r))
 	s.Equal(r, s.queue.Runner())
-	s.NoError(s.queue.Start(context.Background()))
+	s.NoError(s.queue.Start(ctx))
 
-	stats := s.queue.Stats()
+	stats := s.queue.Stats(ctx)
 	s.Equal(0, stats.Total)
 	s.Equal(0, stats.Running)
 	s.Equal(0, stats.Pending)
@@ -43,17 +46,21 @@ func (s *SQSFifoQueueSuite) SetupTest() {
 
 	j := job.NewShellJob("echo true", "")
 	s.jobID = j.ID()
-	s.NoError(s.queue.Put(j))
+	s.NoError(s.queue.Put(ctx, j))
 }
 
 func (s *SQSFifoQueueSuite) TestPutMethodErrorsForDuplicateJobs() {
-	job, ok := s.queue.Get(s.jobID)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	job, ok := s.queue.Get(ctx, s.jobID)
 	s.True(ok)
-	s.Error(s.queue.Put(job))
+	s.Error(s.queue.Put(ctx, job))
 }
 
 func (s *SQSFifoQueueSuite) TestGetMethodReturnsRequestedJob() {
-	job, ok := s.queue.Get(s.jobID)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	job, ok := s.queue.Get(ctx, s.jobID)
 	s.True(ok)
 	s.NotNil(job)
 	s.Equal(s.jobID, job.ID())
@@ -65,8 +72,11 @@ func (s *SQSFifoQueueSuite) TestCannotSetRunnerWhenQueueStarted() {
 }
 
 func (s *SQSFifoQueueSuite) TestCompleteMethodChangesStatsAndResults() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	j := job.NewShellJob("echo true", "")
-	s.NoError(s.queue.Put(j))
+	s.NoError(s.queue.Put(ctx, j))
 	s.queue.Complete(context.Background(), j)
 
 	counter := 0
@@ -76,7 +86,7 @@ func (s *SQSFifoQueueSuite) TestCompleteMethodChangesStatsAndResults() {
 		s.Equal(j.ID(), job.ID())
 		counter++
 	}
-	stats := s.queue.Stats()
+	stats := s.queue.Stats(ctx)
 	s.Equal(1, stats.Completed)
 	s.Equal(1, counter)
 }
@@ -102,7 +112,7 @@ func TestSQSFifoQueueRunsJobsOnlyOnce(t *testing.T) {
 			for ii := 0; ii < inside; ii++ {
 				j := newMockJob()
 				j.SetID(fmt.Sprintf("%d-%d-%d", i, ii, job.GetNumber()))
-				assert.NoError(q.Put(j))
+				assert.NoError(q.Put(ctx, j))
 			}
 		}(i)
 	}
@@ -110,8 +120,8 @@ func TestSQSFifoQueueRunsJobsOnlyOnce(t *testing.T) {
 	grip.Notice("waiting to add all jobs")
 	wg.Wait()
 
-	amboy.WaitCtxInterval(ctx, q, 20*time.Second)
-	stats := q.Stats()
+	amboy.WaitInterval(ctx, q, 20*time.Second)
+	stats := q.Stats(ctx)
 	assert.True(stats.Total <= inside*outside)
 	assert.Equal(stats.Total, stats.Pending+stats.Completed)
 }
@@ -146,7 +156,7 @@ func TestMultipleSQSFifoQueueRunsJobsOnlyOnce(t *testing.T) {
 			for ii := 0; ii < inside; ii++ {
 				j := newMockJob()
 				j.SetID(fmt.Sprintf("%d-%d-%d", i, ii, job.GetNumber()))
-				assert.NoError(q2.Put(j))
+				assert.NoError(q2.Put(ctx, j))
 			}
 		}(i)
 	}
@@ -155,11 +165,11 @@ func TestMultipleSQSFifoQueueRunsJobsOnlyOnce(t *testing.T) {
 
 	grip.Notice("waiting to run jobs")
 
-	amboy.WaitCtxInterval(ctx, q, 10*time.Second)
-	amboy.WaitCtxInterval(ctx, q2, 10*time.Second)
+	amboy.WaitInterval(ctx, q, 10*time.Second)
+	amboy.WaitInterval(ctx, q2, 10*time.Second)
 
-	stats1 := q.Stats()
-	stats2 := q2.Stats()
+	stats1 := q.Stats(ctx)
+	stats2 := q2.Stats(ctx)
 	assert.Equal(stats1.Pending, stats2.Pending)
 
 	sum := stats1.Pending + stats2.Pending + stats1.Completed + stats2.Completed
