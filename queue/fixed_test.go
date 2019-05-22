@@ -2,7 +2,9 @@ package queue
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/mongodb/amboy/job"
 	"github.com/mongodb/amboy/pool"
@@ -38,7 +40,7 @@ func (s *LimitedSizeQueueSuite) SetupTest() {
 }
 
 func (s *LimitedSizeQueueSuite) TestBufferForPendingWorkEqualToCapacityForResults() {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
 	s.False(s.queue.Started())
@@ -47,15 +49,25 @@ func (s *LimitedSizeQueueSuite) TestBufferForPendingWorkEqualToCapacityForResult
 	s.Error(s.queue.Put(ctx, job.NewShellJob("sleep 10", "")))
 
 	s.NoError(s.queue.Start(ctx))
-	for i := 0; i < s.numCapacity+s.numWorkers+1; i++ {
+	for i := 0; i < 100*s.numCapacity*s.numWorkers; i++ {
+		var outcome bool
 		err := s.queue.Put(ctx, job.NewShellJob("sleep 10", ""))
-		if len(s.queue.channel) != s.numCapacity {
-			s.NoError(err)
+		if i <= s.numWorkers+s.numCapacity {
+			outcome = s.NoError(err, "idx=%d", i)
+		} else {
+			outcome = s.Error(err, "idx=%d", i)
+		}
+
+		if !outcome {
+			break
 		}
 	}
 
 	s.Len(s.queue.channel, s.numCapacity)
+	s.True(len(s.queue.storage) == s.numCapacity+(s.numWorkers+1), fmt.Sprintf("storage=%d", len(s.queue.storage)))
 	s.Error(s.queue.Put(ctx, job.NewShellJob("sleep 10", "")))
+	s.True(len(s.queue.storage) == s.numCapacity+(s.numWorkers+1), fmt.Sprintf("storage=%d", len(s.queue.storage)))
+	s.Len(s.queue.channel, s.numCapacity)
 }
 
 func (s *LimitedSizeQueueSuite) TestCallingStartMultipleTimesDoesNotImpactState() {
