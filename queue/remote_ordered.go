@@ -117,7 +117,7 @@ func (q *remoteSimpleOrdered) Next(ctx context.Context) amboy.Job {
 				edges := dep.Edges()
 				grip.Debugf("job %s is blocked. eep! [%v]", id, edges)
 				if len(edges) == 1 {
-					dj, ok := q.Get(edges[0])
+					dj, ok := q.Get(ctx, edges[0])
 					if ok {
 						// might need to make this non-blocking.
 						q.channel <- dj

@@ -409,12 +409,12 @@ func TestQueueGroup(t *testing.T) {
 					j3 := job.NewShellJob("true", "")
 
 					// Add j1 to q1. Add j2 and j3 to q2.
-					require.NoError(t, q1.Put(j1))
-					require.NoError(t, q2.Put(j2))
-					require.NoError(t, q2.Put(j3))
+					require.NoError(t, q1.Put(ctx, j1))
+					require.NoError(t, q2.Put(ctx, j2))
+					require.NoError(t, q2.Put(ctx, j3))
 
-					amboy.WaitCtxInterval(ctx, q1, 100*time.Millisecond)
-					amboy.WaitCtxInterval(ctx, q2, 100*time.Millisecond)
+					amboy.WaitInterval(ctx, q1, 100*time.Millisecond)
+					amboy.WaitInterval(ctx, q2, 100*time.Millisecond)
 
 					resultsQ1 := []amboy.Job{}
 					for result := range q1.Results(ctx) {
@@ -485,12 +485,12 @@ func TestQueueGroup(t *testing.T) {
 					j3 := job.NewShellJob("true", "")
 
 					// Add j1 to q3. Add j2 and j3 to q4.
-					require.NoError(t, q3.Put(j1))
-					require.NoError(t, q4.Put(j2))
-					require.NoError(t, q4.Put(j3))
+					require.NoError(t, q3.Put(ctx, j1))
+					require.NoError(t, q4.Put(ctx, j2))
+					require.NoError(t, q4.Put(ctx, j3))
 
-					amboy.WaitCtxInterval(ctx, q3, 10*time.Millisecond)
-					amboy.WaitCtxInterval(ctx, q4, 10*time.Millisecond)
+					amboy.WaitInterval(ctx, q3, 10*time.Millisecond)
+					amboy.WaitInterval(ctx, q4, 10*time.Millisecond)
 
 					resultsQ3 := []amboy.Job{}
 					for result := range q3.Results(ctx) {
@@ -551,18 +551,18 @@ func TestQueueGroup(t *testing.T) {
 					j3 := job.NewShellJob("true", "")
 
 					// Add j1 to q1. Add j2 and j3 to q2.
-					require.NoError(t, q1.Put(j1))
-					require.NoError(t, q2.Put(j2))
-					require.NoError(t, q2.Put(j3))
+					require.NoError(t, q1.Put(ctx, j1))
+					require.NoError(t, q2.Put(ctx, j2))
+					require.NoError(t, q2.Put(ctx, j3))
 
-					amboy.WaitCtxInterval(ctx, q2, 10*time.Millisecond)
-					amboy.WaitCtxInterval(ctx, q1, 10*time.Millisecond)
+					amboy.WaitInterval(ctx, q2, 10*time.Millisecond)
+					amboy.WaitInterval(ctx, q1, 10*time.Millisecond)
 
 					// Queues should have completed work
-					assert.True(t, q1.Stats().IsComplete())
-					assert.True(t, q2.Stats().IsComplete())
-					assert.Equal(t, 1, q1.Stats().Completed)
-					assert.Equal(t, 2, q2.Stats().Completed)
+					assert.True(t, q1.Stats(ctx).IsComplete())
+					assert.True(t, q2.Stats(ctx).IsComplete())
+					assert.Equal(t, 1, q1.Stats(ctx).Completed)
+					assert.Equal(t, 2, q2.Stats(ctx).Completed)
 
 					require.Equal(t, 2, g.Len())
 
@@ -594,18 +594,18 @@ func TestQueueGroup(t *testing.T) {
 					j3 := job.NewShellJob("true", "")
 
 					// Add j1 to q1. Add j2 and j3 to q2.
-					require.NoError(t, q1.Put(j1))
-					require.NoError(t, q2.Put(j2))
-					require.NoError(t, q2.Put(j3))
+					require.NoError(t, q1.Put(ctx, j1))
+					require.NoError(t, q2.Put(ctx, j2))
+					require.NoError(t, q2.Put(ctx, j3))
 
-					amboy.WaitCtxInterval(ctx, q1, 100*time.Millisecond)
-					amboy.WaitCtxInterval(ctx, q2, 100*time.Millisecond)
+					amboy.WaitInterval(ctx, q1, 100*time.Millisecond)
+					amboy.WaitInterval(ctx, q2, 100*time.Millisecond)
 
 					// Queues should have completed work
-					assert.True(t, q1.Stats().IsComplete())
-					assert.True(t, q2.Stats().IsComplete())
-					assert.Equal(t, 1, q1.Stats().Completed)
-					assert.Equal(t, 2, q2.Stats().Completed)
+					assert.True(t, q1.Stats(ctx).IsComplete())
+					assert.True(t, q2.Stats(ctx).IsComplete())
+					assert.Equal(t, 1, q1.Stats(ctx).Completed)
+					assert.Equal(t, 2, q2.Stats(ctx).Completed)
 
 					require.Equal(t, 2, g.Len())
 
@@ -647,12 +647,12 @@ func TestQueueGroup(t *testing.T) {
 					j3 := job.NewShellJob("true", "")
 
 					// Add j1 to q1. Add j2 and j3 to q2.
-					require.NoError(t, q1.Put(j1))
-					require.NoError(t, q2.Put(j2))
-					require.NoError(t, q2.Put(j3))
+					require.NoError(t, q1.Put(ctx, j1))
+					require.NoError(t, q2.Put(ctx, j2))
+					require.NoError(t, q2.Put(ctx, j3))
 
-					amboy.WaitCtxInterval(ctx, q1, 10*time.Millisecond)
-					amboy.WaitCtxInterval(ctx, q2, 10*time.Millisecond)
+					amboy.WaitInterval(ctx, q1, 10*time.Millisecond)
+					amboy.WaitInterval(ctx, q2, 10*time.Millisecond)
 
 					require.NoError(t, g.Close(ctx))
 				})

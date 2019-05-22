@@ -747,9 +747,9 @@ func UnorderedTest(bctx context.Context, t *testing.T, test QueueTestCase, drive
 			for _, name := range testNames {
 				cmd := fmt.Sprintf("echo %s.%d", name, num)
 				j := job.NewShellJob(cmd, "")
-				assert.NoError(t, q.Put(j),
+				assert.NoError(t, q.Put(ctx, j),
 					fmt.Sprintf("with %d workers", num))
-				_, ok := q.Get(j.ID())
+				_, ok := q.Get(ctx, j.ID())
 				assert.True(t, ok)
 			}
 		}(i)
@@ -759,14 +759,14 @@ func UnorderedTest(bctx context.Context, t *testing.T, test QueueTestCase, drive
 		require.NoError(t, q.Start(ctx))
 	}
 
-	amboy.WaitCtxInterval(ctx, q, 100*time.Millisecond)
+	amboy.WaitInterval(ctx, q, 100*time.Millisecond)
 
-	assert.Equal(t, numJobs, q.Stats().Total, fmt.Sprintf("with %d workers", size.Size))
+	assert.Equal(t, numJobs, q.Stats(ctx).Total, fmt.Sprintf("with %d workers", size.Size))
 
-	amboy.WaitCtxInterval(ctx, q, 100*time.Millisecond)
+	amboy.WaitInterval(ctx, q, 100*time.Millisecond)
 
 	grip.Infof("workers complete for %d worker smoke test", size.Size)
-	assert.Equal(t, numJobs, q.Stats().Completed, fmt.Sprintf("%+v", q.Stats()))
+	assert.Equal(t, numJobs, q.Stats(ctx).Completed, fmt.Sprintf("%+v", q.Stats(ctx)))
 	for result := range q.Results(ctx) {
 		assert.True(t, result.Status().Completed, fmt.Sprintf("with %d workers", size.Size))
 
@@ -822,7 +822,7 @@ func OrderedTest(bctx context.Context, t *testing.T, test QueueTestCase, driver 
 			}
 			lastJobName = j.ID()
 
-			require.NoError(t, q.Put(j))
+			require.NoError(t, q.Put(ctx, j))
 		}
 	}
 
@@ -830,9 +830,9 @@ func OrderedTest(bctx context.Context, t *testing.T, test QueueTestCase, driver 
 		require.NoError(t, q.Start(ctx))
 	}
 
-	require.Equal(t, numJobs, q.Stats().Total, fmt.Sprintf("with %d workers", size.Size))
-	amboy.WaitCtxInterval(ctx, q, 50*time.Millisecond)
-	require.Equal(t, numJobs, q.Stats().Completed, fmt.Sprintf("%+v", q.Stats()))
+	require.Equal(t, numJobs, q.Stats(ctx).Total, fmt.Sprintf("with %d workers", size.Size))
+	amboy.WaitInterval(ctx, q, 50*time.Millisecond)
+	require.Equal(t, numJobs, q.Stats(ctx).Completed, fmt.Sprintf("%+v", q.Stats(ctx)))
 	for result := range q.Results(ctx) {
 		require.True(t, result.Status().Completed, fmt.Sprintf("with %d workers", size.Size))
 	}
@@ -881,8 +881,8 @@ func WaitUntilTest(bctx context.Context, t *testing.T, test QueueTestCase, drive
 				j := job.NewShellJob(cmd, "")
 				ti := j.TimeInfo()
 				require.Zero(t, ti.WaitUntil)
-				require.NoError(t, q.Put(j), fmt.Sprintf("(a) with %d workers", num))
-				_, ok := q.Get(j.ID())
+				require.NoError(t, q.Put(ctx, j), fmt.Sprintf("(a) with %d workers", num))
+				_, ok := q.Get(ctx, j.ID())
 				require.True(t, ok)
 
 				cmd = fmt.Sprintf("echo %s.%d.waiter", name, num)
@@ -892,8 +892,8 @@ func WaitUntilTest(bctx context.Context, t *testing.T, test QueueTestCase, drive
 				})
 				ti2 := j2.TimeInfo()
 				require.NotZero(t, ti2.WaitUntil)
-				require.NoError(t, q.Put(j2), fmt.Sprintf("(b) with %d workers", num))
-				_, ok = q.Get(j2.ID())
+				require.NoError(t, q.Put(ctx, j2), fmt.Sprintf("(b) with %d workers", num))
+				_, ok = q.Get(ctx, j2.ID())
 				require.True(t, ok)
 			}
 		}(i)
@@ -915,7 +915,7 @@ waitLoop:
 			break waitLoop
 		case <-timer.C:
 			dur += interval
-			stat := q.Stats()
+			stat := q.Stats(ctx)
 			if stat.Completed >= numJobs {
 				break waitLoop
 			}
@@ -968,14 +968,14 @@ func OneExecutionTest(bctx context.Context, t *testing.T, test QueueTestCase, dr
 		j := newMockJob()
 		jobID := fmt.Sprintf("%d.%d.mock.single-exec", i, job.GetNumber())
 		j.SetID(jobID)
-		assert.NoError(t, q.Put(j))
+		assert.NoError(t, q.Put(ctx, j))
 	}
 
 	if test.OrderedSupported && !test.OrderedStartsBefore {
 		require.NoError(t, q.Start(ctx))
 	}
 
-	amboy.WaitCtxInterval(ctx, q, 100*time.Millisecond)
+	amboy.WaitInterval(ctx, q, 100*time.Millisecond)
 	assert.Equal(t, count, mockJobCounters.Count())
 }
 
@@ -1010,9 +1010,9 @@ func MultiExecutionTest(bctx context.Context, t *testing.T, test QueueTestCase, 
 				cmd := fmt.Sprintf("echo %d.%d", o, i)
 				j := job.NewShellJob(cmd, "")
 				if i%2 == 0 {
-					assert.NoError(t, qOne.Put(j))
+					assert.NoError(t, qOne.Put(ctx, j))
 				} else {
-					assert.NoError(t, qTwo.Put(j))
+					assert.NoError(t, qTwo.Put(ctx, j))
 				}
 
 			}
@@ -1025,12 +1025,12 @@ func MultiExecutionTest(bctx context.Context, t *testing.T, test QueueTestCase, 
 	grip.Info("added jobs to queues")
 
 	// wait for all jobs to complete.
-	amboy.WaitCtxInterval(ctx, qOne, 100*time.Millisecond)
-	amboy.WaitCtxInterval(ctx, qTwo, 100*time.Millisecond)
+	amboy.WaitInterval(ctx, qOne, 100*time.Millisecond)
+	amboy.WaitInterval(ctx, qTwo, 100*time.Millisecond)
 
 	// check that both queues see all jobs
-	statsOne := qOne.Stats()
-	statsTwo := qTwo.Stats()
+	statsOne := qOne.Stats(ctx)
+	statsTwo := qTwo.Stats(ctx)
 
 	var shouldExit bool
 	if !assert.Equal(t, num, statsOne.Total, "ONE: %+v", statsOne) {
@@ -1108,7 +1108,7 @@ func ManyQueueTest(bctx context.Context, t *testing.T, test QueueTestCase, drive
 				for iii := 0; iii < inside; iii++ {
 					j := newMockJob()
 					j.SetID(fmt.Sprintf("%d-%d-%d-%d", f, s, iii, job.GetNumber()))
-					assert.NoError(t, queues[0].Put(j))
+					assert.NoError(t, queues[0].Put(ctx, j))
 				}
 			}(i, ii)
 		}
@@ -1120,7 +1120,7 @@ func ManyQueueTest(bctx context.Context, t *testing.T, test QueueTestCase, drive
 	grip.Notice("waiting to run jobs")
 
 	for _, q := range queues {
-		amboy.WaitCtxInterval(ctx, q, 20*time.Millisecond)
+		amboy.WaitInterval(ctx, q, 20*time.Millisecond)
 	}
 
 	assert.Equal(t, len(drivers)*inside*outside, mockJobCounters.Count())

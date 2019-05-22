@@ -130,7 +130,7 @@ func (c *cacheImpl) Remove(ctx context.Context, name string) error {
 	}
 
 	queue := c.q[name].q
-	if !queue.Stats().IsComplete() {
+	if !queue.Stats(ctx).IsComplete() {
 		return errors.Errorf("cannot delete in progress queue, '%s'", name)
 	}
 
@@ -180,7 +180,7 @@ func (c *cacheImpl) Prune(ctx context.Context) error {
 						continue outer
 					}
 
-					if item.q.Stats().IsComplete() {
+					if item.q.Stats(ctx).IsComplete() {
 						wait := make(chan struct{})
 						go func() {
 							defer recovery.LogStackTraceAndContinue("panic in queue waiting")
