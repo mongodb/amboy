@@ -117,6 +117,7 @@ lint-%:$(buildDir)/output.%.lint
 #    tests have compile and runtime deps. This varable has everything
 #    that the tests actually need to run. (The "build" target is
 #    intentional and makes these targets rerun as expected.)
+testBuildEnv := GOCACHE=$(abspath $(buildDir)/.cache)
 testArgs := -test.v --test.timeout=30m
 ifneq (,$(RUN_TEST))
 testArgs += -test.run='$(RUN_TEST)'
@@ -133,14 +134,14 @@ coverDeps := $(addprefix $(gopath)/src/,$(coverDeps))
 #    implementation for package coverage and test running,mongodb to produce
 #    and save test output.
 $(buildDir)/test.%:$(testSrcFiles) $(coverDeps)
-	go test $(if $(DISABLE_COVERAGE),,-covermode=count) -c -o $@ ./$(subst -,/,$*)
+	$(testBuildEnv) go test $(if $(DISABLE_COVERAGE),,-covermode=count) -c -o $@ ./$(subst -,/,$*)
 $(buildDir)/race.%:$(testSrcFiles)
-	go test -race -c -o $@ ./$(subst -,/,$*)
+	$(testBuildEnv) go test -race -c -o $@ ./$(subst -,/,$*)
 #  targets to run any tests in the top-level package
 $(buildDir)/test.$(name):$(testSrcFiles) $(coverDeps)
-	go test $(if $(DISABLE_COVERAGE),,-covermode=count) -c -o $@ ./
+	$(testBuildEnv) go test $(if $(DISABLE_COVERAGE),,-covermode=count) -c -o $@ ./
 $(buildDir)/race.$(name):$(testSrcFiles)
-	go test -race -c -o $@ ./
+	$(testBuildEnv) go test -race -c -o $@ ./
 #  targets to run the tests and report the output
 $(buildDir)/output.%.test:$(buildDir)/test.% .FORCE
 	$(testRunEnv) ./$< $(testArgs) 2>&1 | tee $@
