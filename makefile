@@ -41,9 +41,18 @@ lintArgs += --exclude="should check returned error before deferring .*\.Close"
 ######################################################################
 
 
+# start environment setup
+gopath := $(GOPATH)
+gocache := $(abspath $(buildDir)/.cache)
+ifeq ($(OS),Windows_NT)
+gocache := $(shell cygpath -m $(gocache)
+gopath := $(shell cygpath -m $(gopath))
+endif
+# end environment setup
+
+
 # start dependency installation tools
 #   implementation details for being able to lazily install dependencies
-gopath := $(shell go env GOPATH)
 lintDeps := $(addprefix $(gopath)/src/,$(lintDeps))
 srcFiles := makefile $(shell find . -name "*.go" -not -path "./$(buildDir)/*" -not -name "*_test.go")
 testSrcFiles := makefile $(shell find . -name "*.go" -not -path "./$(buildDir)/*")
@@ -113,11 +122,12 @@ lint-%:$(buildDir)/output.%.lint
 # end convienence targets
 
 
+
 # start test and coverage artifacts
 #    tests have compile and runtime deps. This varable has everything
 #    that the tests actually need to run. (The "build" target is
 #    intentional and makes these targets rerun as expected.)
-testBuildEnv := GOCACHE=$(abspath $(buildDir)/.cache)
+testBuildEnv := GOCACHE=$(gocache)
 testArgs := -test.v --test.timeout=30m
 ifneq (,$(RUN_TEST))
 testArgs += -test.run='$(RUN_TEST)'
