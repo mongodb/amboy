@@ -45,9 +45,10 @@ lintArgs += --exclude="should check returned error before deferring .*\.Close"
 gopath := $(GOPATH)
 gocache := $(abspath $(buildDir)/.cache)
 ifeq ($(OS),Windows_NT)
-gocache := $(shell cygpath -m $(gocache)
+gocache := $(shell cygpath -m $(gocache))
 gopath := $(shell cygpath -m $(gopath))
 endif
+buildEnv := GOCACHE=$(gocache)
 # end environment setup
 
 
@@ -66,7 +67,7 @@ $(gopath)/src/%:
 	@-[ ! -d $(gopath) ] && mkdir -p $(gopath) || true
 	go get $(subst $(gopath)/src/,,$@)
 $(buildDir)/run-linter:buildscripts/run-linter.go $(buildDir)/.lintSetup
-	go build -o $@ $<
+	$(buildEnv) go build -o $@ $<
 $(buildDir)/.lintSetup:$(lintDeps)
 	@mkdir -p $(buildDir)
 	@-$(gopath)/bin/gometalinter --install >/dev/null && touch $@
@@ -76,9 +77,9 @@ $(buildDir)/.lintSetup:$(lintDeps)
 # userfacing targets for basic build and development operations
 lint:$(buildDir)/output.lint
 build:$(deps) $(srcFiles) $(gopath)/src/$(projectPath)
-	go build $(subst $(name),,$(subst -,/,$(foreach pkg,$(packages),./$(pkg))))
+	$(buildEnv) go build $(subst $(name),,$(subst -,/,$(foreach pkg,$(packages),./$(pkg))))
 build-race:$(deps) $(srcFiles) $(gopath)/src/$(projectPath)
-	go build -race $(subst $(name),,$(subst -,/,$(foreach pkg,$(packages),./$(pkg))))
+	$(buildEnv) go build -race $(subst $(name),,$(subst -,/,$(foreach pkg,$(packages),./$(pkg))))
 test:$(testOutput)
 race:$(raceOutput)
 coverage:$(coverageOutput)
@@ -101,9 +102,9 @@ $(gopath)/src/$(projectPath):$(gopath)/src/$(orgPath)
 $(name):$(buildDir)/$(name)
 	@[ -L $@ ] || ln -s $< $@
 $(buildDir)/$(name):$(gopath)/src/$(projectPath) $(srcFiles) $(deps)
-	go build -o $@ main/$(name).go
+	$(buildEnv) go build -o $@ main/$(name).go
 $(buildDir)/$(name).race:$(gopath)/src/$(projectPath) $(srcFiles) $(deps)
-	go build -race -o $@ main/$(name).go
+	$(buildEnv) go build -race -o $@ main/$(name).go
 # end main build
 
 
@@ -127,8 +128,7 @@ lint-%:$(buildDir)/output.%.lint
 #    tests have compile and runtime deps. This varable has everything
 #    that the tests actually need to run. (The "build" target is
 #    intentional and makes these targets rerun as expected.)
-testBuildEnv := GOCACHE=$(gocache)
-testArgs := -test.v --test.timeout=30m
+testArgs := -test.v --test.timeout=1h
 ifneq (,$(RUN_TEST))
 testArgs += -test.run='$(RUN_TEST)'
 endif
@@ -144,14 +144,14 @@ coverDeps := $(addprefix $(gopath)/src/,$(coverDeps))
 #    implementation for package coverage and test running,mongodb to produce
 #    and save test output.
 $(buildDir)/test.%:$(testSrcFiles) $(coverDeps)
-	$(testBuildEnv) go test $(if $(DISABLE_COVERAGE),,-covermode=count) -c -o $@ ./$(subst -,/,$*)
+	$(buildEnv) go test $(if $(DISABLE_COVERAGE),,-covermode=count) -c -o $@ ./$(subst -,/,$*)
 $(buildDir)/race.%:$(testSrcFiles)
-	$(testBuildEnv) go test -race -c -o $@ ./$(subst -,/,$*)
+	$(buildEnv) go test -race -c -o $@ ./$(subst -,/,$*)
 #  targets to run any tests in the top-level package
 $(buildDir)/test.$(name):$(testSrcFiles) $(coverDeps)
-	$(testBuildEnv) go test $(if $(DISABLE_COVERAGE),,-covermode=count) -c -o $@ ./
+	$(buildEnv) go test $(if $(DISABLE_COVERAGE),,-covermode=count) -c -o $@ ./
 $(buildDir)/race.$(name):$(testSrcFiles)
-	$(testBuildEnv) go test -race -c -o $@ ./
+	$(buildEnv) go test -race -c -o $@ ./
 #  targets to run the tests and report the output
 $(buildDir)/output.%.test:$(buildDir)/test.% .FORCE
 	$(testRunEnv) ./$< $(testArgs) 2>&1 | tee $@
