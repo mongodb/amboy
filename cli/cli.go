@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/mongodb/amboy/rest"
 	"github.com/pkg/errors"
@@ -45,7 +46,7 @@ func (o *ServiceOptions) reportingFlags(base ...cli.Flag) []cli.Flag {
 		},
 		cli.StringFlag{
 			Name:  prefixFlagName,
-			Usage: "specify the service prefix for the reporting service",
+			Usage: "Specify the service prefix for the reporting service.",
 			Value: o.ReportingPrefix,
 		},
 	}...)
@@ -55,12 +56,12 @@ func (o *ServiceOptions) managementFlags(base ...cli.Flag) []cli.Flag {
 	return append(base, []cli.Flag{
 		cli.StringFlag{
 			Name:  serviceURLFlagName,
-			Usage: "Specify the base URL of the service",
+			Usage: "Specify the base URL of the service.",
 			Value: o.BaseURL,
 		},
 		cli.StringFlag{
 			Name:  prefixFlagName,
-			Usage: "specify the service prefix for the management service",
+			Usage: "Specify the service prefix for the management service.",
 			Value: o.ManagementPrefix,
 		},
 	}...)
@@ -71,8 +72,7 @@ func (o *ServiceOptions) withReportingClient(ctx context.Context, c *cli.Context
 		o.Client = http.DefaultClient
 	}
 
-	url := c.String(serviceURLFlagName) + c.String(prefixFlagName)
-	client := rest.NewReportingClientFromExisting(o.Client, url)
+	client := rest.NewReportingClientFromExisting(o.Client, getCLIPath(c))
 
 	return errors.WithStack(op(client))
 }
@@ -82,8 +82,11 @@ func (o *ServiceOptions) withManagementClient(ctx context.Context, c *cli.Contex
 		o.Client = http.DefaultClient
 	}
 
-	url := c.String(serviceURLFlagName) + c.String(prefixFlagName)
-	client := rest.NewManagementClientFromExisting(o.Client, url)
+	client := rest.NewManagementClientFromExisting(o.Client, getCLIPath(c))
 
 	return errors.WithStack(op(client))
+}
+
+func getCLIPath(c *cli.Context) string {
+	return strings.TrimRight(c.String(serviceURLFlagName), "/") + "/" + strings.TrimLeft(c.String(prefixFlagName), "/")
 }

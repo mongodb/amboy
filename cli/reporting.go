@@ -30,7 +30,7 @@ func reportingJobStatus(opts *ServiceOptions) cli.Command {
 			cli.StringFlag{
 				Name:  "filter",
 				Value: "in-progress",
-				Usage: "specify the process filter, can be 'in-progress' (default), 'pending', or 'stale'",
+				Usage: "specify the process filter, can be 'in-progress', 'pending', or 'stale'",
 			},
 		),
 		Action: func(c *cli.Context) error {
@@ -73,7 +73,7 @@ func reportingRecentTiming(opts *ServiceOptions) cli.Command {
 			cli.StringFlag{
 				Name:  "filter",
 				Value: "completed",
-				Usage: "specify the runtime filter, can be 'completed' (default), 'latency', or 'running'",
+				Usage: "specify the runtime filter, can be 'completed', 'latency', or 'running'",
 			},
 		),
 		Action: func(c *cli.Context) error {
@@ -112,7 +112,7 @@ func reportingJobIDs(opts *ServiceOptions) cli.Command {
 			cli.StringFlag{
 				Name:  "filter",
 				Value: "in-progress",
-				Usage: "specify the process filter, can be 'in-progress' (default), 'pending', or 'stale'",
+				Usage: "specify the process filter, can be 'in-progress', 'pending', or 'stale'",
 			},
 		),
 		Action: func(c *cli.Context) error {
@@ -160,7 +160,7 @@ func reportingRecentErrors(opts *ServiceOptions) cli.Command {
 			cli.StringFlag{
 				Name:  "filter",
 				Value: "unique-errors",
-				Usage: "specify the process filter, can be 'unique-errors' (default), 'all-errors', or 'stats-only'",
+				Usage: "specify the process filter, can be 'unique-errors', 'all-errors', or 'stats-only'",
 			},
 		),
 		Action: func(c *cli.Context) error {
