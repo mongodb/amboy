@@ -11,8 +11,6 @@ import (
 	"github.com/urfave/cli"
 )
 
-// TODO: add flags/options to each command as defined below
-
 func reports(opts *ServiceOptions) cli.Command {
 	return cli.Command{
 		Name: "report",
