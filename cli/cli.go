@@ -38,7 +38,7 @@ const (
 )
 
 func (o *ServiceOptions) reportingFlags(base ...cli.Flag) []cli.Flag {
-	return append(base, []cli.Flag{
+	return append(base,
 		cli.StringFlag{
 			Name:  serviceURLFlagName,
 			Usage: "Specify the base URL of the service",
@@ -49,11 +49,11 @@ func (o *ServiceOptions) reportingFlags(base ...cli.Flag) []cli.Flag {
 			Usage: "Specify the service prefix for the reporting service.",
 			Value: o.ReportingPrefix,
 		},
-	}...)
+	)
 }
 
 func (o *ServiceOptions) managementFlags(base ...cli.Flag) []cli.Flag {
-	return append(base, []cli.Flag{
+	return append(base,
 		cli.StringFlag{
 			Name:  serviceURLFlagName,
 			Usage: "Specify the base URL of the service.",
@@ -64,7 +64,7 @@ func (o *ServiceOptions) managementFlags(base ...cli.Flag) []cli.Flag {
 			Usage: "Specify the service prefix for the management service.",
 			Value: o.ManagementPrefix,
 		},
-	}...)
+	)
 }
 
 func (o *ServiceOptions) withReportingClient(ctx context.Context, c *cli.Context, op func(client *rest.ReportingClient) error) error {
