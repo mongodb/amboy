@@ -39,6 +39,7 @@ type MongoDBOptions struct {
 	SkipIndexBuilds bool
 	Format          amboy.Format
 	WaitInterval    time.Duration
+	TTL             time.Duration
 }
 
 // DefaultMongoDBOptions constructs a new options object with default
@@ -53,5 +54,6 @@ func DefaultMongoDBOptions() MongoDBOptions {
 		SkipIndexBuilds: false,
 		WaitInterval:    time.Second,
 		Format:          amboy.BSON,
+		TTL:             90 * 24 * time.Hour,
 	}
 }
