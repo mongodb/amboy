@@ -128,6 +128,10 @@ func (d *mgoGroupDriver) setupDB() error {
 		return nil
 	}
 
+	if d.opts.TTL == 0 {
+		d.opts.TTL = DefaultMongoDBOptions().TTL
+	}
+
 	catcher := grip.NewCatcher()
 	session, jobs := d.getJobsCollection()
 	defer session.Close()
@@ -149,6 +153,10 @@ func (d *mgoGroupDriver) setupDB() error {
 	catcher.Add(jobs.EnsureIndexKey(indexKey...))
 	catcher.Add(jobs.EnsureIndexKey("group", "status.mod_ts"))
 	catcher.Add(jobs.EnsureIndexKey("status.completed", "status.mod_ts"))
+	catcher.Add(jobs.EnsureIndex(mgo.Index{
+		Key:         []string{"time_info.created"},
+		ExpireAfter: d.opts.TTL,
+	}))
 
 	return errors.Wrap(catcher.Resolve(), "problem building indexes")
 }

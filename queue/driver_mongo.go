@@ -120,6 +120,11 @@ func (d *mongoDriver) setupDB(ctx context.Context) error {
 		return nil
 	}
 
+	if d.opts.TTL == 0 {
+		d.opts.TTL = DefaultMongoDBOptions().TTL
+	}
+	ttl := int32(d.opts.TTL / time.Second)
+
 	keys := bsonx.Doc{
 		{
 			Key:   "status.completed",
@@ -155,6 +160,17 @@ func (d *mongoDriver) setupDB(ctx context.Context) error {
 					Key:   "status.mod_ts",
 					Value: bsonx.Int32(1),
 				},
+			},
+		},
+		mongo.IndexModel{
+			Keys: bsonx.Doc{
+				{
+					Key:   "time_info.created",
+					Value: bsonx.Int32(1),
+				},
+			},
+			Options: &options.IndexOptions{
+				ExpireAfterSeconds: &ttl,
 			},
 		},
 	})
