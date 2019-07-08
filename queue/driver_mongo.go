@@ -120,11 +120,6 @@ func (d *mongoDriver) setupDB(ctx context.Context) error {
 		return nil
 	}
 
-	if d.opts.TTL == 0 {
-		d.opts.TTL = DefaultMongoDBOptions().TTL
-	}
-	ttl := int32(d.opts.TTL / time.Second)
-
 	keys := bsonx.Doc{
 		{
 			Key:   "status.completed",
@@ -164,6 +159,7 @@ func (d *mongoDriver) setupDB(ctx context.Context) error {
 		},
 	}
 	if d.opts.TTL > 0 {
+		ttl := int32(d.opts.TTL / time.Second)
 		indexes = append(indexes, mongo.IndexModel{
 			Keys: bsonx.Doc{
 				{
