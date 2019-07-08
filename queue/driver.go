@@ -39,7 +39,10 @@ type MongoDBOptions struct {
 	SkipIndexBuilds bool
 	Format          amboy.Format
 	WaitInterval    time.Duration
-	TTL             time.Duration
+	// TTL sets the number of seconds for a TTL index on the "info.created"
+	// field. If set to zero, the TTL index will not be created and
+	// and documents may live forever in the database.
+	TTL time.Duration
 }
 
 // DefaultMongoDBOptions constructs a new options object with default
