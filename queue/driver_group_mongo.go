@@ -160,7 +160,7 @@ func (d *mongoGroupDriver) setupDB(ctx context.Context) error {
 		})
 	}
 
-	_, err := d.getCollection().Indexes().CreateMany(ctx, []mongo.IndexModel{
+	indexes := []mongo.IndexModel{
 		mongo.IndexModel{
 			Keys: keys,
 		},
@@ -188,7 +188,9 @@ func (d *mongoGroupDriver) setupDB(ctx context.Context) error {
 				},
 			},
 		},
-		mongo.IndexModel{
+	}
+	if d.opts.TTL > 0 {
+		indexes = append(indexes, mongo.IndexModel{
 			Keys: bsonx.Doc{
 				{
 					Key:   "time_info.created",
@@ -198,8 +200,9 @@ func (d *mongoGroupDriver) setupDB(ctx context.Context) error {
 			Options: &options.IndexOptions{
 				ExpireAfterSeconds: &ttl,
 			},
-		},
-	})
+		})
+	}
+	_, err := d.getCollection().Indexes().CreateMany(ctx, indexes)
 
 	return errors.Wrap(err, "problem building indexes")
 }
