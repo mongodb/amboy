@@ -145,7 +145,7 @@ func (d *mongoDriver) setupDB(ctx context.Context) error {
 		})
 	}
 
-	indexes := []model.IndexModel{
+	indexes := []mongo.IndexModel{
 		mongo.IndexModel{
 			Keys: keys,
 		},
