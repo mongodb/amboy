@@ -468,6 +468,23 @@ RETRY:
 					// try for the next thing in the iterator if we can
 					continue CURSOR
 				}
+
+				if job.TimeInfo().IsStale() {
+					res, err := d.getCollection().DeleteOne(ctx, bson.M{"_id": job.ID()})
+					msg := message.Fields{
+						"id":          d.instanceID,
+						"service":     "amboy.queue.mongo",
+						"num_deleted": res.DeletedCount,
+						"message":     "found stale job",
+						"operation":   "job staleness check",
+						"job":         job.ID(),
+						"job_type":    job.Type().Name,
+					}
+					grip.Warning(message.WrapError(err, msg))
+					grip.NoticeWhen(err == nil, msg)
+					continue CURSOR
+				}
+
 				break CURSOR
 			}
 

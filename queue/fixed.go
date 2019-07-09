@@ -8,6 +8,7 @@ import (
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/pool"
 	"github.com/mongodb/grip"
+	"github.com/mongodb/grip/message"
 	"github.com/pkg/errors"
 )
 
@@ -50,6 +51,14 @@ func (q *limitedSizeLocal) Put(ctx context.Context, j amboy.Job) error {
 		return errors.Errorf("queue not open. could not add %s", j.ID())
 	}
 
+	j.UpdateTimeInfo(amboy.JobTimeInfo{
+		Created: time.Now(),
+	})
+
+	if err := j.TimeInfo().Validate(); err != nil {
+		return errors.Wrap(err, "invalid job timeinfo")
+	}
+
 	name := j.ID()
 
 	q.mu.RLock()
@@ -58,10 +67,6 @@ func (q *limitedSizeLocal) Put(ctx context.Context, j amboy.Job) error {
 		return errors.Errorf("cannot dispatch '%s', already complete", name)
 	}
 	q.mu.RUnlock()
-
-	j.UpdateTimeInfo(amboy.JobTimeInfo{
-		Created: time.Now(),
-	})
 
 	select {
 	case <-ctx.Done():
@@ -90,11 +95,26 @@ func (q *limitedSizeLocal) Get(ctx context.Context, name string) (amboy.Job, boo
 // implementations to fetch work. This operation blocks until a job is
 // available or the context is canceled.
 func (q *limitedSizeLocal) Next(ctx context.Context) amboy.Job {
-	select {
-	case job := <-q.channel:
-		return job
-	case <-ctx.Done():
-		return nil
+	for {
+		select {
+		case job := <-q.channel:
+			if job.TimeInfo().IsStale() {
+				q.mu.Lock()
+				delete(q.storage, job.ID())
+				q.mu.Unlock()
+
+				grip.Notice(message.Fields{
+					"state":    "stale",
+					"job":      job.ID(),
+					"job_type": job.Type().Name,
+				})
+				continue
+			}
+			return job
+		case <-ctx.Done():
+			return nil
+		}
+
 	}
 }
 

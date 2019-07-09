@@ -458,6 +458,21 @@ func (d *mgoDriver) Next(ctx context.Context) amboy.Job {
 				continue
 			}
 
+			if job.TimeInfo().IsStale() {
+				err = jobs.RemoveId(job.ID())
+				msg := message.Fields{
+					"id":        d.instanceID,
+					"service":   "amboy.queue.mgo",
+					"message":   "found stale job",
+					"operation": "job staleness check",
+					"job":       job.ID(),
+					"job_type":  job.Type().Name,
+				}
+				grip.Warning(message.WrapError(err, msg))
+				grip.NoticeWhen(err == nil, msg)
+				continue
+			}
+
 			if err = iter.Close(); err != nil {
 				grip.Warning(message.WrapError(err, message.Fields{
 					"id":        d.instanceID,

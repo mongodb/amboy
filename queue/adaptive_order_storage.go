@@ -85,6 +85,11 @@ func (items *adaptiveOrderItems) updateWaiting(ctx context.Context) {
 			continue
 		}
 
+		if ti.DispatchBy.After(now) {
+			delete(items.jobs, id)
+			continue
+		}
+
 		if status.Completed || status.InProgress {
 			items.completed = append(items.completed, id)
 			continue
@@ -117,6 +122,11 @@ func (items *adaptiveOrderItems) updateStalled(ctx context.Context) {
 
 		job, ok := items.jobs[id]
 		if !ok {
+			continue
+		}
+
+		if job.TimeInfo().DispatchBy.After(time.Now()) {
+			delete(items.jobs, id)
 			continue
 		}
 

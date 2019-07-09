@@ -80,11 +80,16 @@ func (q *adaptiveLocalOrdering) Put(ctx context.Context, j amboy.Job) error {
 		return errors.New("cannot add job to unopened queue")
 	}
 
+	j.UpdateTimeInfo(amboy.JobTimeInfo{
+		Created: time.Now(),
+	})
+
+	if err := j.TimeInfo().Validate(); err != nil {
+		return errors.Wrap(err, "invalid job timeinfo")
+	}
+
 	out := make(chan error)
 	op := func(ctx context.Context, items *adaptiveOrderItems, fixed *fixedStorage) {
-		j.UpdateTimeInfo(amboy.JobTimeInfo{
-			Created: time.Now(),
-		})
 		out <- items.add(j)
 		close(out)
 	}
