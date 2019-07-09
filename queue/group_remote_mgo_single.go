@@ -114,6 +114,10 @@ func (g *remoteMgoQueueGroupSingle) getQueues(ctx context.Context) ([]string, er
 						"status.completed": true,
 						"status.mod_ts":    bson.M{"$gte": time.Now().Add(-g.opts.TTL)},
 					},
+					{
+						"status.in_prog": true,
+						"status.mod_ts":  bson.M{"$lte": time.Now().Add(-LockTimeout)},
+					},
 				},
 			},
 		},
