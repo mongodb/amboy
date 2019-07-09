@@ -181,9 +181,10 @@ func (s *OrderedQueueSuite) TestPuttingAJobIntoAQueueImpactsStats() {
 	s.NoError(s.queue.Put(ctx, j))
 
 	jReturn, ok := s.queue.Get(ctx, j.ID())
-	s.True(ok)
+	s.Require().True(ok)
 
-	jActual := jReturn.(*job.ShellJob)
+	jActual, ok := jReturn.(*job.ShellJob)
+	s.Rquire().True(ok)
 
 	j.Base.SetDependency(jActual.Dependency())
 
