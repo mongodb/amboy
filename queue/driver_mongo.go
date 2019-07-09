@@ -120,11 +120,6 @@ func (d *mongoDriver) setupDB(ctx context.Context) error {
 		return nil
 	}
 
-	if d.opts.TTL == 0 {
-		d.opts.TTL = DefaultMongoDBOptions().TTL
-	}
-	ttl := int32(d.opts.TTL / time.Second)
-
 	keys := bsonx.Doc{
 		{
 			Key:   "status.completed",
@@ -150,7 +145,7 @@ func (d *mongoDriver) setupDB(ctx context.Context) error {
 		})
 	}
 
-	_, err := d.getCollection().Indexes().CreateMany(ctx, []mongo.IndexModel{
+	indexes := []mongo.IndexModel{
 		mongo.IndexModel{
 			Keys: keys,
 		},
@@ -162,7 +157,10 @@ func (d *mongoDriver) setupDB(ctx context.Context) error {
 				},
 			},
 		},
-		mongo.IndexModel{
+	}
+	if d.opts.TTL > 0 {
+		ttl := int32(d.opts.TTL / time.Second)
+		indexes = append(indexes, mongo.IndexModel{
 			Keys: bsonx.Doc{
 				{
 					Key:   "time_info.created",
@@ -172,8 +170,9 @@ func (d *mongoDriver) setupDB(ctx context.Context) error {
 			Options: &options.IndexOptions{
 				ExpireAfterSeconds: &ttl,
 			},
-		},
-	})
+		})
+	}
+	_, err := d.getCollection().Indexes().CreateMany(ctx, indexes)
 
 	return errors.Wrap(err, "problem building indexes")
 }
