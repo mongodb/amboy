@@ -113,11 +113,11 @@ func (j JobTimeInfo) Duration() time.Duration { return j.End.Sub(j.Start) }
 
 // IsStale determines if the job is too old to be dispatched, and if
 // so, queues may remove or drop the job entirely.
-func (j JobTimeInfo) IsStale() bool { return j.DispatchBy.After(time.Now()) }
+func (j JobTimeInfo) IsStale() bool { return !j.DispatchBy.After(time.Now()) }
 
 // IsDispatchable determines if the job should be delayed based on the
 // value of WaitUntil.
-func (j JobTimeInfo) IsDispatchable() bool { return j.WaitUntil.After(time.Now()) }
+func (j JobTimeInfo) IsDispatchable() bool { return !j.WaitUntil.After(time.Now()) }
 
 // Validate ensures that the structure has reasonable values set.
 func (j JobTimeInfo) Validate() error {
