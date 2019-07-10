@@ -83,8 +83,9 @@ func (q *priorityLocalQueue) Next(ctx context.Context) amboy.Job {
 			}
 
 			q.counters.Lock()
-			defer q.counters.Unlock()
 			q.counters.started++
+			q.counters.Unlock()
+
 			return job
 		}
 	}

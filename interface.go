@@ -125,7 +125,7 @@ func (j JobTimeInfo) Validate() error {
 
 	catcher.NewWhen(!j.DispatchBy.IsZero() && j.WaitUntil.After(j.DispatchBy), "invalid for wait_until to be after dispatch_by")
 	catcher.NewWhen(j.Created.IsZero(), "must specify non-zero created timestamp")
-	catcher.NewWhen(j.MaxTime < 0, "must specify positive")
+	catcher.NewWhen(j.MaxTime < 0, "must specify 0 or positive max_time")
 
 	return catcher.Resolve()
 }

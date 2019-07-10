@@ -125,7 +125,7 @@ func (items *adaptiveOrderItems) updateStalled(ctx context.Context) {
 			continue
 		}
 
-		if job.TimeInfo().DispatchBy.After(time.Now()) {
+		if job.TimeInfo().IsStale() {
 			delete(items.jobs, id)
 			continue
 		}
