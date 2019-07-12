@@ -481,7 +481,9 @@ RETRY:
 				}
 
 				if job.TimeInfo().IsStale() {
-					res, err := d.getCollection().DeleteOne(ctx, bson.M{"_id": job.ID()})
+					var res *mongo.DeleteResult
+
+					res, err = d.getCollection().DeleteOne(ctx, bson.M{"_id": job.ID()})
 					msg := message.Fields{
 						"id":          d.instanceID,
 						"service":     "amboy.queue.mongo",
