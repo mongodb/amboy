@@ -442,15 +442,16 @@ func (d *mongoGroupDriver) Next(ctx context.Context) amboy.Job {
 		},
 	}
 
+	timeLimits := bson.M{}
+	now := time.Now()
 	if d.opts.CheckWaitUntil {
-		qd = bson.M{
-			"$and": []bson.M{
-				qd,
-				{"$or": []bson.M{
-					{"time_info.wait_until": bson.M{"$lte": time.Now()}},
-					{"time_info.wait_until": bson.M{"$exists": false}}},
-				},
-			}}
+		timeLimits["time_info.wait_until"] = bson.M{"$lte": now}
+	}
+	if d.opts.CheckDispatchBy {
+		timeLimits["time_info.dispatch_by"] = bson.M{"$gt": now}
+	}
+	if len(timeLimits) > 0 {
+		qd = bson.M{"$and": []bson.M{qd, timeLimits}}
 	}
 
 	opts := options.Find().SetBatchSize(4)
