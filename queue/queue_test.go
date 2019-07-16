@@ -44,25 +44,27 @@ func newDriverID() string { return strings.Replace(uuid.NewV4().String(), "-", "
 type TestCloser func(context.Context) error
 
 type QueueTestCase struct {
-	Name                string
-	Constructor         func(context.Context, int) (amboy.Queue, error)
-	MaxSize             int
-	OrderedSupported    bool
-	OrderedStartsBefore bool
-	WaitUntilSupported  bool
-	SkipUnordered       bool
-	IsRemote            bool
-	Skip                bool
+	Name                    string
+	Constructor             func(context.Context, int) (amboy.Queue, error)
+	MaxSize                 int
+	OrderedSupported        bool
+	OrderedStartsBefore     bool
+	WaitUntilSupported      bool
+	DispatchBeforeSupported bool
+	SkipUnordered           bool
+	IsRemote                bool
+	Skip                    bool
 }
 
 type DriverTestCase struct {
-	Name               string
-	SetDriver          func(context.Context, amboy.Queue, string) (TestCloser, error)
-	Constructor        func(context.Context, string, int) ([]Driver, TestCloser, error)
-	SupportsLocal      bool
-	SupportsMulti      bool
-	WaitUntilSupported bool
-	SkipOrdered        bool
+	Name                    string
+	SetDriver               func(context.Context, amboy.Queue, string) (TestCloser, error)
+	Constructor             func(context.Context, string, int) ([]Driver, TestCloser, error)
+	SupportsLocal           bool
+	SupportsMulti           bool
+	WaitUntilSupported      bool
+	DispatchBeforeSupported bool
+	SkipOrdered             bool
 }
 
 type PoolTestCase struct {
@@ -88,14 +90,17 @@ type SizeTestCase struct {
 func DefaultQueueTestCases() []QueueTestCase {
 	return []QueueTestCase{
 		{
-			Name:        "Local",
-			Constructor: func(ctx context.Context, size int) (amboy.Queue, error) { return NewLocalUnordered(size), nil },
+			Name:                    "Local",
+			WaitUntilSupported:      true,
+			DispatchBeforeSupported: true,
+			Constructor:             func(ctx context.Context, size int) (amboy.Queue, error) { return NewLocalUnordered(size), nil },
 		},
 		{
-			Name:                "AdaptiveOrdering",
-			OrderedSupported:    true,
-			OrderedStartsBefore: true,
-			WaitUntilSupported:  true,
+			Name:                    "AdaptiveOrdering",
+			OrderedSupported:        true,
+			OrderedStartsBefore:     true,
+			WaitUntilSupported:      true,
+			DispatchBeforeSupported: true,
 			Constructor: func(ctx context.Context, size int) (amboy.Queue, error) {
 				return NewAdaptiveOrderedLocalQueue(size, defaultLocalQueueCapcity), nil
 			},
@@ -113,7 +118,9 @@ func DefaultQueueTestCases() []QueueTestCase {
 			},
 		},
 		{
-			Name: "LimitedSize",
+			Name:                    "LimitedSize",
+			WaitUntilSupported:      true,
+			DispatchBeforeSupported: true,
 			Constructor: func(ctx context.Context, size int) (amboy.Queue, error) {
 				return NewLocalLimitedSize(size, 1024*size), nil
 			},
@@ -159,25 +166,25 @@ func DefaultDriverTestCases(client *mongo.Client, session *mgo.Session) []Driver
 			},
 		},
 		// {
-		// 	Name: "Internal",
-		// 	Constructor: func(ctx context.Context, name string, size int) ([]Driver, TestCloser, error) {
-		// 		return nil, func(_ context.Context) error { return nil }, errors.New("not supported")
-		// 	},
-		// 	SkipOrdered: true,
-		// 	SetDriver: func(ctx context.Context, q amboy.Queue, name string) (TestCloser, error) {
-		// 		remote, ok := q.(Remote)
-		// 		if !ok {
-		// 			return nil, errors.New("invalid queue type")
-		// 		}
+		//	Name: "Internal",
+		//	Constructor: func(ctx context.Context, name string, size int) ([]Driver, TestCloser, error) {
+		//		return nil, func(_ context.Context) error { return nil }, errors.New("not supported")
+		//	},
+		//	SkipOrdered: true,
+		//	SetDriver: func(ctx context.Context, q amboy.Queue, name string) (TestCloser, error) {
+		//		remote, ok := q.(Remote)
+		//		if !ok {
+		//			return nil, errors.New("invalid queue type")
+		//		}
 
-		// 		d := NewInternalDriver()
-		// 		closer := func(ctx context.Context) error {
-		// 			d.Close()
-		// 			return nil
-		// 		}
+		//		d := NewInternalDriver()
+		//		closer := func(ctx context.Context) error {
+		//			d.Close()
+		//			return nil
+		//		}
 
-		// 		return closer, remote.SetDriver(d)
-		// 	},
+		//		return closer, remote.SetDriver(d)
+		//	},
 		// },
 		{
 			Name: "Priority",
@@ -688,6 +695,12 @@ func TestQueueSmoke(t *testing.T) {
 										})
 									}
 
+									if test.DispatchBeforeSupported || driver.DispatchBeforeSupported {
+										t.Run("DispatchBefore", func(t *testing.T) {
+											DispatchBeforeTest(bctx, t, test, driver, runner, size)
+										})
+									}
+
 									t.Run("OneExecution", func(t *testing.T) {
 										OneExecutionTest(bctx, t, test, driver, runner, size)
 									})
@@ -940,6 +953,10 @@ waitLoop:
 	}
 
 	assert.Equal(t, numJobs, completed)
+}
+
+func DispatchBeforeTest(bctx context.Context, t *testing.T, test QueueTestCase, driver DriverTestCase, runner PoolTestCase, size SizeTestCase) {
+	t.Skip("not implemented")
 }
 
 func OneExecutionTest(bctx context.Context, t *testing.T, test QueueTestCase, driver DriverTestCase, runner PoolTestCase, size SizeTestCase) {

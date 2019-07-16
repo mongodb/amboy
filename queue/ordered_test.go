@@ -11,11 +11,7 @@ import (
 	"github.com/mongodb/amboy/dependency"
 	"github.com/mongodb/amboy/job"
 	"github.com/mongodb/amboy/pool"
-	"github.com/mongodb/grip"
-	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/suite"
-	mgo "gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
 )
 
 type OrderedQueueSuite struct {
@@ -39,48 +35,6 @@ func TestLocalOrderedQueueSuiteThreeWorker(t *testing.T) {
 	s := &OrderedQueueSuite{}
 	s.size = 3
 	s.setup = func() { s.queue = NewLocalOrdered(s.size) }
-	suite.Run(t, s)
-}
-
-func TestRemoteMgoOrderedQueueSuiteFourWorkers(t *testing.T) {
-	s := &OrderedQueueSuite{}
-	name := "test-" + uuid.NewV4().String()
-	uri := "mongodb://localhost"
-	opts := DefaultMongoDBOptions()
-	opts.DB = "amboy_test"
-	ctx, cancel := context.WithCancel(context.Background())
-
-	session, err := mgo.Dial(uri)
-	if err != nil || session == nil {
-		t.Fatal("problem configuring connection to:", uri)
-	}
-	defer session.Close()
-
-	s.size = 4
-
-	s.setup = func() {
-		remote := NewSimpleRemoteOrdered(s.size).(*remoteSimpleOrdered)
-		d := NewMgoDriver(name, opts)
-		s.Require().NoError(d.Open(ctx))
-		s.Require().NoError(remote.SetDriver(d))
-		s.queue = remote
-		s.Require().NotNil(remote.remoteBase)
-	}
-
-	s.tearDown = func() {
-		cancel()
-
-		grip.Error(session.DB("amboy_test").C(addJobsSuffix(name)).DropCollection())
-		grip.Error(session.DB("amboy_test").C(name + ".locks").DropCollection())
-	}
-
-	s.reset = func() {
-		_, err = session.DB("amboy_test").C(addJobsSuffix(name)).RemoveAll(bson.M{})
-		grip.Error(err)
-		_, err = session.DB("amboy_test").C(name + ".locks").RemoveAll(bson.M{})
-		grip.Error(err)
-	}
-
 	suite.Run(t, s)
 }
 
