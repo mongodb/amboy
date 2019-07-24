@@ -124,11 +124,7 @@ func (j JobTimeInfo) IsStale() bool {
 // IsDispatchable determines if the job should be delayed based on the
 // value of WaitUntil.
 func (j JobTimeInfo) IsDispatchable() bool {
-	if j.WaitUntil.IsZero() {
-		return true
-	}
-
-	return j.WaitUntil.After(time.Now())
+	return time.Now().After(j.WaitUntil)
 }
 
 // Validate ensures that the structure has reasonable values set.

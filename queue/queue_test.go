@@ -947,6 +947,12 @@ waitLoop:
 		}
 	}
 
+	stats := q.Stats(ctx)
+	grip.Alert(stats)
+	require.Equal(t, numJobs*2, stats.Total)
+	require.Equal(t, numJobs, stats.Completed)
+	require.Equal(t, numJobs, stats.Pending)
+
 	completed := 0
 	for result := range q.Results(ctx) {
 		status := result.Status()
@@ -954,7 +960,9 @@ waitLoop:
 
 		if status.Completed {
 			completed++
-			require.Zero(t, ti.WaitUntil)
+			require.True(t, ti.WaitUntil.IsZero(), "val=%s id=%s", ti.WaitUntil, result.ID())
+		} else {
+			require.False(t, ti.WaitUntil.IsZero(), "val=%s id=%s", ti.WaitUntil, result.ID())
 		}
 	}
 
@@ -962,8 +970,6 @@ waitLoop:
 }
 
 func DispatchBeforeTest(bctx context.Context, t *testing.T, test QueueTestCase, driver DriverTestCase, runner PoolTestCase, size SizeTestCase) {
-	t.Skip("not implemented")
-
 	ctx, cancel := context.WithTimeout(bctx, 2*time.Minute)
 	defer cancel()
 

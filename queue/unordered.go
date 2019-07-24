@@ -22,6 +22,7 @@ import (
 	"github.com/mongodb/amboy/pool"
 	"github.com/mongodb/grip"
 	"github.com/mongodb/grip/message"
+	"github.com/mongodb/grip/recovery"
 	"github.com/pkg/errors"
 )
 
@@ -159,12 +160,21 @@ func (q *unorderedLocal) Next(ctx context.Context) amboy.Job {
 		case <-ctx.Done():
 			return nil
 		case job := <-q.channel:
-			if job.TimeInfo().IsStale() {
+			ti := job.TimeInfo()
+			if ti.IsStale() {
 				grip.Notice(message.Fields{
-					"state":    "stale",
+					"state":    "stale, discard",
 					"job":      job.ID(),
 					"job_type": job.Type().Name,
 				})
+				continue
+			}
+
+			if !ti.IsDispatchable() {
+				go func() {
+					defer recovery.LogStackTraceAndContinue("re-queue waiting job", job.ID())
+					q.channel <- job
+				}()
 				continue
 			}
 
