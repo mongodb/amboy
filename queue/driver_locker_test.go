@@ -84,10 +84,17 @@ func (s *LockManagerSuite) TestLocksArePerJob() {
 
 func (s *LockManagerSuite) TestLockReachesTimeout() {
 	j := job.NewShellJob("echo hello", "")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
 	s.NoError(s.driver.Put(s.ctx, j))
 
-	s.NoError(s.lm.Lock(s.ctx, j))
-	time.Sleep(s.lm.timeout * 3)
+	// pass it with a canceled
+	// context to disable the pinger
+	s.NoError(s.lm.Lock(ctx, j))
+	s.Error(s.lm.Lock(s.ctx, j))
+	time.Sleep(s.lm.timeout * 10)
 	s.NoError(s.lm.Lock(s.ctx, j))
 }
 
@@ -135,6 +142,6 @@ func (s *LockManagerSuite) TestPanicJobIsUnlocked() {
 	s.NoError(s.lm.Lock(s.ctx, j))
 
 	for i := 0; i < 10; i++ {
-		s.Error(s.lm.Lock(s.ctx, j), "idx=%d => %+v", i, j)
+		s.Require().Error(s.lm.Lock(s.ctx, j), "idx=%d => %+v", i, j)
 	}
 }

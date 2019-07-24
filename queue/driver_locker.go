@@ -206,12 +206,13 @@ func (l *lockManager) Lock(ctx context.Context, j amboy.Job) error {
 
 	stat := job.Status()
 
-	// previous versions of this allowed operation allowed one
-	// client to "take" the lock more than once. This covered a
-	// deadlock/bug in queue implementations in marking jobs
-	// complete, *and* allowed queues implementations with more
-	// than one worker, to potentially repeat work.
 	if stat.InProgress && stat.ModificationTime.Add(l.timeout).After(time.Now()) {
+		// previous versions of this allowed operation allowed one
+		// client to "take" the lock more than once. This covered a
+		// deadlock/bug in queue implementations in marking jobs
+		// complete, *and* allowed queues implementations with more
+		// than one worker, to potentially repeat work.
+
 		return errors.Errorf("cannot take lock, for job: '%s', job locked at %s by %s",
 			j.ID(), stat.ModificationTime, stat.Owner)
 	}
