@@ -948,7 +948,6 @@ waitLoop:
 	}
 
 	stats := q.Stats(ctx)
-	grip.Alert(stats)
 	require.Equal(t, numJobs*2, stats.Total)
 	require.Equal(t, numJobs, stats.Completed)
 	require.Equal(t, numJobs, stats.Pending)
@@ -988,15 +987,15 @@ func DispatchBeforeTest(bctx context.Context, t *testing.T, test QueueTestCase, 
 		ti := j.TimeInfo()
 
 		if i%2 == 0 {
-			ti.DispatchBy = time.Now().Add(100 * time.Millisecond)
+			ti.DispatchBy = time.Now().Add(time.Second)
 		} else {
-			ti.DispatchBy = time.Now().Add(-100 * time.Millisecond)
+			ti.DispatchBy = time.Now().Add(-time.Second)
 		}
 		j.UpdateTimeInfo(ti)
 		require.NoError(t, q.Put(ctx, j))
 	}
 
-	time.Sleep(150 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 	stats := q.Stats(ctx)
 	assert.Equal(t, 2*size.Size, stats.Total)
 	assert.Equal(t, size.Size, stats.Completed)
