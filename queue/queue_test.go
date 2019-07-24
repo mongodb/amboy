@@ -949,8 +949,7 @@ waitLoop:
 
 	stats := q.Stats(ctx)
 	require.Equal(t, numJobs*2, stats.Total)
-	require.Equal(t, numJobs, stats.Completed)
-	require.Equal(t, numJobs, stats.Pending)
+	assert.Equal(t, numJobs, stats.Completed)
 
 	completed := 0
 	for result := range q.Results(ctx) {
@@ -999,7 +998,6 @@ func DispatchBeforeTest(bctx context.Context, t *testing.T, test QueueTestCase, 
 	stats := q.Stats(ctx)
 	assert.Equal(t, 2*size.Size, stats.Total)
 	assert.Equal(t, size.Size, stats.Completed)
-	assert.Equal(t, size.Size, stats.Pending)
 }
 
 func OneExecutionTest(bctx context.Context, t *testing.T, test QueueTestCase, driver DriverTestCase, runner PoolTestCase, size SizeTestCase) {

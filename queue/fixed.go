@@ -9,6 +9,7 @@ import (
 	"github.com/mongodb/amboy/pool"
 	"github.com/mongodb/grip"
 	"github.com/mongodb/grip/message"
+	"github.com/mongodb/grip/recovery"
 	"github.com/pkg/errors"
 )
 
@@ -26,6 +27,9 @@ type limitedSizeLocal struct {
 	toDelete chan string
 	capacity int
 	storage  map[string]amboy.Job
+
+	deletedCount int
+	staleCount   int
 
 	runner amboy.Runner
 	mu     sync.RWMutex
@@ -61,21 +65,19 @@ func (q *limitedSizeLocal) Put(ctx context.Context, j amboy.Job) error {
 
 	name := j.ID()
 
-	q.mu.RLock()
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
 	if _, ok := q.storage[name]; ok {
 		q.mu.RUnlock()
 		return errors.Errorf("cannot dispatch '%s', already complete", name)
 	}
-	q.mu.RUnlock()
 
 	select {
 	case <-ctx.Done():
 		return errors.Wrapf(ctx.Err(), "queue full, cannot add %s", name)
 	case q.channel <- j:
-		q.mu.Lock()
-		defer q.mu.Unlock()
 		q.storage[name] = j
-
 		return nil
 	}
 }
@@ -98,9 +100,11 @@ func (q *limitedSizeLocal) Next(ctx context.Context) amboy.Job {
 	for {
 		select {
 		case job := <-q.channel:
-			if job.TimeInfo().IsStale() {
+			ti := job.TimeInfo()
+			if ti.IsStale() {
 				q.mu.Lock()
 				delete(q.storage, job.ID())
+				q.staleCount++
 				q.mu.Unlock()
 
 				grip.Notice(message.Fields{
@@ -110,6 +114,15 @@ func (q *limitedSizeLocal) Next(ctx context.Context) amboy.Job {
 				})
 				continue
 			}
+
+			if !ti.IsDispatchable() {
+				go func() {
+					defer recovery.LogStackTraceAndContinue("re-queue waiting job", job.ID())
+					q.channel <- job
+				}()
+				continue
+			}
+
 			return job
 		case <-ctx.Done():
 			return nil
@@ -194,8 +207,8 @@ func (q *limitedSizeLocal) Stats(ctx context.Context) amboy.QueueStats {
 	defer q.mu.RUnlock()
 
 	s := amboy.QueueStats{
-		Total:     len(q.storage),
-		Completed: len(q.toDelete),
+		Total:     len(q.storage) + q.staleCount,
+		Completed: len(q.toDelete) + q.deletedCount,
 		Pending:   len(q.channel),
 	}
 	s.Running = s.Total - s.Completed - s.Pending
@@ -215,6 +228,7 @@ func (q *limitedSizeLocal) Complete(ctx context.Context, j amboy.Job) {
 
 	if len(q.toDelete) == q.capacity-1 {
 		delete(q.storage, <-q.toDelete)
+		q.deletedCount++
 	}
 
 	q.toDelete <- j.ID()
