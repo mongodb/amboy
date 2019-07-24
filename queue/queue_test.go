@@ -65,6 +65,7 @@ type DriverTestCase struct {
 	WaitUntilSupported      bool
 	DispatchBeforeSupported bool
 	SkipOrdered             bool
+	Skip                    bool
 }
 
 type PoolTestCase struct {
@@ -165,27 +166,28 @@ func DefaultDriverTestCases(client *mongo.Client, session *mgo.Session) []Driver
 				return func(_ context.Context) error { return nil }, nil
 			},
 		},
-		// {
-		//	Name: "Internal",
-		//	Constructor: func(ctx context.Context, name string, size int) ([]Driver, TestCloser, error) {
-		//		return nil, func(_ context.Context) error { return nil }, errors.New("not supported")
-		//	},
-		//	SkipOrdered: true,
-		//	SetDriver: func(ctx context.Context, q amboy.Queue, name string) (TestCloser, error) {
-		//		remote, ok := q.(Remote)
-		//		if !ok {
-		//			return nil, errors.New("invalid queue type")
-		//		}
+		{
+			Name: "Internal",
+			Constructor: func(ctx context.Context, name string, size int) ([]Driver, TestCloser, error) {
+				return nil, func(_ context.Context) error { return nil }, errors.New("not supported")
+			},
+			SkipOrdered: true,
+			SkipAll:     true,
+			SetDriver: func(ctx context.Context, q amboy.Queue, name string) (TestCloser, error) {
+				remote, ok := q.(Remote)
+				if !ok {
+					return nil, errors.New("invalid queue type")
+				}
 
-		//		d := NewInternalDriver()
-		//		closer := func(ctx context.Context) error {
-		//			d.Close()
-		//			return nil
-		//		}
+				d := NewInternalDriver()
+				closer := func(ctx context.Context) error {
+					d.Close()
+					return nil
+				}
 
-		//		return closer, remote.SetDriver(d)
-		//	},
-		// },
+				return closer, remote.SetDriver(d)
+			},
+		},
 		{
 			Name: "Priority",
 			Constructor: func(ctx context.Context, name string, size int) ([]Driver, TestCloser, error) {
@@ -651,6 +653,10 @@ func TestQueueSmoke(t *testing.T) {
 
 		t.Run(test.Name, func(t *testing.T) {
 			for _, driver := range DefaultDriverTestCases(client, session) {
+				if driver.Skip {
+					continue
+				}
+
 				if test.IsRemote == driver.SupportsLocal {
 					continue
 				}

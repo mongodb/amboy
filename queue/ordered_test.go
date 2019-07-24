@@ -38,7 +38,7 @@ func TestLocalOrderedQueueSuiteThreeWorker(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func TestRemoteInternalOrderedQueueSuite(t *testing.T) {
+func TestRemotePriorityOrderedQueueSuite(t *testing.T) {
 	s := &OrderedQueueSuite{}
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -64,7 +64,7 @@ func TestRemoteInternalOrderedQueueSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func TestRemotePriorityOrderedQueueSuite(t *testing.T) {
+func TestRemoteInternalOrderedQueueSuite(t *testing.T) {
 	s := &OrderedQueueSuite{}
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -137,7 +137,8 @@ func (s *OrderedQueueSuite) TestPuttingAJobIntoAQueueImpactsStats() {
 	jReturn, ok := s.queue.Get(ctx, j.ID())
 	s.True(ok)
 
-	jActual := jReturn.(*job.ShellJob)
+	jActual, ok := jReturn.(*job.ShellJob)
+	s.Rewquire().True(ok)
 
 	j.Base.SetDependency(jActual.Dependency())
 
