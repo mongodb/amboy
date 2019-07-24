@@ -127,11 +127,7 @@ func (s *LockManagerSuite) TestPanicJobIsUnlocked() {
 	cancel()
 	time.Sleep(10 * s.lm.timeout)
 
-	lastMod = j.Status().ModificationCount
-	s.True(lastMod >= 2, "%d", lastMod)
-
 	s.NoError(s.lm.Lock(ctx, j), "%+v", j)
-
 	lastMod = j.Status().ModificationCount
 
 	time.Sleep(200 * time.Millisecond)
