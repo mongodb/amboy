@@ -172,7 +172,7 @@ func DefaultDriverTestCases(client *mongo.Client, session *mgo.Session) []Driver
 				return nil, func(_ context.Context) error { return nil }, errors.New("not supported")
 			},
 			SkipOrdered: true,
-			SkipAll:     true,
+			Skip:        true,
 			SetDriver: func(ctx context.Context, q amboy.Queue, name string) (TestCloser, error) {
 				remote, ok := q.(Remote)
 				if !ok {
@@ -963,6 +963,38 @@ waitLoop:
 
 func DispatchBeforeTest(bctx context.Context, t *testing.T, test QueueTestCase, driver DriverTestCase, runner PoolTestCase, size SizeTestCase) {
 	t.Skip("not implemented")
+
+	ctx, cancel := context.WithTimeout(bctx, 2*time.Minute)
+	defer cancel()
+
+	q, err := test.Constructor(ctx, size.Size)
+	require.NoError(t, err)
+	require.NoError(t, runner.SetPool(q, size.Size))
+
+	dcloser, err := driver.SetDriver(ctx, q, newDriverID())
+	require.NoError(t, err)
+	defer func() { require.NoError(t, dcloser(ctx)) }()
+
+	require.NoError(t, q.Start(ctx))
+
+	for i := 0; i < 2*size.Size; i++ {
+		j := job.NewShellJob("ls", "")
+		ti := j.TimeInfo()
+
+		if i%2 == 0 {
+			ti.DispatchBy = time.Now().Add(100 * time.Millisecond)
+		} else {
+			ti.DispatchBy = time.Now().Add(-100 * time.Millisecond)
+		}
+		j.UpdateTimeInfo(ti)
+		require.NoError(t, q.Put(ctx, j))
+	}
+
+	time.Sleep(150 * time.Millisecond)
+	stats := q.Stats(ctx)
+	assert.Equal(t, 2*size.Size, stats.Total)
+	assert.Equal(t, size.Size, stats.Completed)
+	assert.Equal(t, size.Size, stats.Pending)
 }
 
 func OneExecutionTest(bctx context.Context, t *testing.T, test QueueTestCase, driver DriverTestCase, runner PoolTestCase, size SizeTestCase) {
