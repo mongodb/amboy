@@ -69,7 +69,6 @@ func (q *limitedSizeLocal) Put(ctx context.Context, j amboy.Job) error {
 	defer q.mu.Unlock()
 
 	if _, ok := q.storage[name]; ok {
-		q.mu.RUnlock()
 		return errors.Errorf("cannot dispatch '%s', already complete", name)
 	}
 
