@@ -140,6 +140,9 @@ func (d *mgoDriver) setupDB() error {
 	if d.opts.CheckWaitUntil {
 		indexKey = append(indexKey, "time_info.wait_until")
 	}
+	if d.opts.CheckDispatchBy {
+		indexKey = append(indexKey, "time_info.dispatch_by")
+	}
 
 	// priority must be at the end for the sort
 	if d.opts.Priority {
@@ -404,7 +407,10 @@ func (d *mgoDriver) Next(ctx context.Context) amboy.Job {
 		timeLimits["time_info.wait_until"] = bson.M{"$lte": now}
 	}
 	if d.opts.CheckDispatchBy {
-		timeLimits["time_info.dispatch_by"] = bson.M{"$gt": now}
+		timeLimits["$or"] = []bson.M{
+			{"time_info.dispatch_by": bson.M{"$gt": now}},
+			{"time_info.dispatch_by": time.Time{}},
+		}
 	}
 	if len(timeLimits) > 0 {
 		qd = bson.M{"$and": []bson.M{qd, timeLimits}}

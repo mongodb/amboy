@@ -121,8 +121,8 @@ func (j JobTimeInfo) IsStale() bool {
 	return j.DispatchBy.Before(time.Now())
 }
 
-// IsDispatchable determines if the job should be delayed based on the
-// value of WaitUntil.
+// IsDispatchable determines if the job should be dispatched based on
+// the value of WaitUntil.
 func (j JobTimeInfo) IsDispatchable() bool {
 	return time.Now().After(j.WaitUntil)
 }
