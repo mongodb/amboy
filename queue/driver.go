@@ -36,6 +36,7 @@ type MongoDBOptions struct {
 	DB              string
 	Priority        bool
 	CheckWaitUntil  bool
+	CheckDispatchBy bool
 	SkipIndexBuilds bool
 	Format          amboy.Format
 	WaitInterval    time.Duration

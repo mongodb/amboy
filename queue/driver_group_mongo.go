@@ -147,6 +147,13 @@ func (d *mongoGroupDriver) setupDB(ctx context.Context) error {
 		})
 	}
 
+	if d.opts.CheckDispatchBy {
+		keys = append(keys, bsonx.Elem{
+			Key:   "time_info.dispatch_by",
+			Value: bsonx.Int32(1),
+		})
+	}
+
 	// priority must be at the end for the sort
 	if d.opts.Priority {
 		keys = append(keys, bsonx.Elem{
@@ -441,15 +448,19 @@ func (d *mongoGroupDriver) Next(ctx context.Context) amboy.Job {
 		},
 	}
 
+	timeLimits := bson.M{}
+	now := time.Now()
 	if d.opts.CheckWaitUntil {
-		qd = bson.M{
-			"$and": []bson.M{
-				qd,
-				{"$or": []bson.M{
-					{"time_info.wait_until": bson.M{"$lte": time.Now()}},
-					{"time_info.wait_until": bson.M{"$exists": false}}},
-				},
-			}}
+		timeLimits["time_info.wait_until"] = bson.M{"$lte": now}
+	}
+	if d.opts.CheckDispatchBy {
+		timeLimits["$or"] = []bson.M{
+			{"time_info.dispatch_by": bson.M{"$gt": now}},
+			{"time_info.dispatch_by": time.Time{}},
+		}
+	}
+	if len(timeLimits) > 0 {
+		qd = bson.M{"$and": []bson.M{qd, timeLimits}}
 	}
 
 	opts := options.Find().SetBatchSize(4)
