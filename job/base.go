@@ -21,12 +21,13 @@ interface, or needing more constrained options for some values
 package job
 
 import (
-	"errors"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/dependency"
+	"github.com/pkg/errors"
 )
 
 // Base is a type that all new checks should compose, and provides
@@ -102,6 +103,35 @@ func (b *Base) ID() string {
 	defer b.mutex.RUnlock()
 
 	return b.TaskID
+}
+
+func (b *Base) Lock(id string) error {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	if b.status.InProgress && time.Since(b.status.ModificationTime) < amboy.LockTimeout && b.status.Owner != id {
+		return errors.Errorf("cannot take lock for '%s' because lock has been held for %s by %s",
+			id, time.Since(b.status.ModificationTime), b.status.Owner)
+	}
+	b.status.InProgress = true
+	b.status.Owner = id
+	b.status.ModificationTime = time.Now()
+	b.status.ModificationCount++
+	return nil
+}
+
+func (b *Base) Unlock(id string) {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	if b.status.InProgress && time.Since(b.status.ModificationTime) < amboy.LockTimeout && b.status.Owner != id {
+		return
+	}
+
+	b.status.InProgress = false
+	b.status.ModificationTime = time.Now()
+	b.status.ModificationCount++
+	b.status.Owner = ""
 }
 
 // Type returns the JobType specification for this object, and

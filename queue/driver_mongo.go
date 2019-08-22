@@ -28,8 +28,6 @@ type mongoDriver struct {
 	instanceID string
 	mu         sync.RWMutex
 	canceler   context.CancelFunc
-
-	LockManager
 }
 
 // NewMongoDriver constructs a MongoDB backed queue driver
@@ -83,8 +81,6 @@ func (d *mongoDriver) Open(ctx context.Context) error {
 }
 
 func (d *mongoDriver) start(ctx context.Context, client *mongo.Client) error {
-	d.LockManager = NewLockManager(ctx, d)
-
 	dCtx, cancel := context.WithCancel(ctx)
 	d.canceler = cancel
 
@@ -270,29 +266,6 @@ func (d *mongoDriver) Save(ctx context.Context, j amboy.Job) error {
 	return nil
 }
 
-func (d *mongoDriver) SaveStatus(ctx context.Context, j amboy.Job, stat amboy.JobStatusInfo) error {
-	id := j.ID()
-	query := getAtomicQuery(d.instanceID, id, stat.ModificationCount)
-	stat.Owner = d.instanceID
-	stat.ModificationCount++
-	stat.ErrorCount = len(stat.Errors)
-	stat.ModificationTime = time.Now()
-	timeInfo := j.TimeInfo()
-
-	res, err := d.getCollection().UpdateOne(ctx, query, bson.M{"$set": bson.M{"status": stat, "time_info": timeInfo}})
-	if err != nil {
-		return errors.Wrapf(err, "problem updating status document for %s", id)
-	}
-
-	if res.MatchedCount == 0 {
-		return errors.Errorf("did not update any status documents [id=%s, matched=%d, modified=%d]", id, res.MatchedCount, res.ModifiedCount)
-	}
-
-	j.SetStatus(stat)
-
-	return nil
-}
-
 func (d *mongoDriver) Jobs(ctx context.Context) <-chan amboy.Job {
 	output := make(chan amboy.Job)
 	go func() {
@@ -410,7 +383,7 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 			},
 			{
 				"status.completed": false,
-				"status.mod_ts":    bson.M{"$lte": time.Now().Add(-LockTimeout)},
+				"status.mod_ts":    bson.M{"$lte": time.Now().Add(-amboy.LockTimeout)},
 				"status.in_prog":   true,
 			},
 		},

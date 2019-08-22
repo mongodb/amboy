@@ -15,6 +15,7 @@ package queue
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 	"github.com/mongodb/grip/message"
 	"github.com/mongodb/grip/recovery"
 	"github.com/pkg/errors"
+	uuid "github.com/satori/go.uuid"
 )
 
 // LocalUnordered implements a local-only, channel based, queue
@@ -33,12 +35,12 @@ type unorderedLocal struct {
 	started      bool
 	numCompleted int
 	numStarted   int
+	id           string
 	channel      chan amboy.Job
 	tasks        struct {
 		m map[string]amboy.Job
 		sync.RWMutex
 	}
-
 	runner amboy.Runner
 }
 
@@ -61,6 +63,7 @@ func NewLocalUnordered(workers int) amboy.Queue {
 
 	q := &unorderedLocal{
 		channel: make(chan amboy.Job, bufferSize),
+		id:      fmt.Sprintf("queue.local.unordered.%s", uuid.NewV4().String()),
 	}
 
 	q.tasks.m = make(map[string]amboy.Job)
@@ -70,6 +73,8 @@ func NewLocalUnordered(workers int) amboy.Queue {
 
 	return q
 }
+
+func (q *unorderedLocal) ID() string { return q.id }
 
 // Put adds a job to the amboy.Job Queue. Returns an error if the
 // Queue has not yet started or if an amboy.Job with the
@@ -106,6 +111,24 @@ func (q *unorderedLocal) Put(ctx context.Context, j amboy.Job) error {
 		return nil
 	}
 
+}
+
+func (q *unorderedLocal) Save(ctx context.Context, j amboy.Job) error {
+	name := j.ID()
+
+	if !q.started {
+		return errors.Errorf("cannot add %s because queue has not started", name)
+	}
+
+	q.tasks.Lock()
+	defer q.tasks.Unlock()
+
+	if _, ok := q.tasks.m[name]; !ok {
+		return errors.Errorf("cannot add %s, because a job does not exist with that name", name)
+	}
+
+	q.tasks.m[name] = j
+	return nil
 }
 
 // Runner returns the embedded task runner.
