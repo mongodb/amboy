@@ -10,6 +10,7 @@ import (
 	"github.com/mongodb/grip"
 	"github.com/mongodb/grip/message"
 	"github.com/mongodb/grip/recovery"
+	"github.com/pkg/errors"
 )
 
 type workUnit struct {
@@ -50,13 +51,24 @@ func runJob(ctx context.Context, job amboy.Job, q amboy.Queue, startAt time.Time
 		defer cancel()
 	}
 
-	job.Run(ctx)
+	if err := job.Lock(q.ID()); err != nil {
+		job.AddError(errors.Wrap(err, "problem locking job"))
+		return
+	}
+	if err := q.Save(ctx, job); err != nil {
+		job.AddError(errors.Wrap(err, "problem saving job state"))
+		return
+	}
 
+	// TODO: start lock pinging thread
+
+	job.Run(ctx)
 	// we want the final end time to include
 	// marking complete, but setting it twice is
 	// necessary for some queues
 	ti.End = time.Now()
 	job.UpdateTimeInfo(ti)
+	job.Unlock(q.ID())
 
 	q.Complete(ctx, job)
 	ti.End = time.Now()
