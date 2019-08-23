@@ -55,6 +55,7 @@ func (s *SenderSuite) SetupTest() {
 	s.Require().NoError(err)
 
 	s.senders["multi"], err = NewQueueMultiSender(ctx, 2, 128, s.mock)
+	s.Require().NoError(err)
 
 	s.queue = queue.NewLocalLimitedSize(4, 128)
 	s.NoError(s.queue.Start(ctx))
