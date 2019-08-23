@@ -880,7 +880,6 @@ func WaitUntilTest(bctx context.Context, t *testing.T, test QueueTestCase, drive
 	} else if sz < 2 {
 		sz = 2
 	}
-	sz = 1
 	numJobs := sz * len(testNames)
 	wg := &sync.WaitGroup{}
 
