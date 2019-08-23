@@ -2,7 +2,6 @@ package queue
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/mongodb/amboy"
@@ -39,10 +38,6 @@ func NewRemoteUnordered(size int) Remote {
 	grip.Infof("creating new remote job queue with %d workers", size)
 
 	return q
-}
-
-func (q *remoteUnordered) ID() string {
-	return fmt.Sprintf("remote.unordered.%s.%s", q.driverType, q.driver.ID())
 }
 
 // Next returns a Job from the queue. Returns a nil Job object if the

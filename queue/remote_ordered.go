@@ -2,7 +2,6 @@ package queue
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/mongodb/amboy"
@@ -34,10 +33,6 @@ func NewSimpleRemoteOrdered(size int) Remote {
 	grip.Infof("creating new remote job queue with %d workers", size)
 
 	return q
-}
-
-func (q *remoteSimpleOrdered) ID() string {
-	return fmt.Sprintf("remote.ordered.simple.%s.%s", q.driverType, q.driver.ID())
 }
 
 // Next contains the unique implementation details of the

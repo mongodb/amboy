@@ -85,19 +85,17 @@ func runJob(ctx context.Context, job amboy.Job, q amboy.Queue, startAt time.Time
 		}
 	}()
 
-	// TODO: start lock pinging thread
-
 	job.Run(ctx)
 	// we want the final end time to include
 	// marking complete, but setting it twice is
 	// necessary for some queues
 	ti.End = time.Now()
 	job.UpdateTimeInfo(ti)
-	job.Unlock(q.ID())
 
 	stopPing()
 
 	q.Complete(ctx, job)
+
 	ti.End = time.Now()
 	job.UpdateTimeInfo(ti)
 }

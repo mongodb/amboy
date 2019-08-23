@@ -31,6 +31,8 @@ func newRemoteBase() *remoteBase {
 	}
 }
 
+func (q *remoteBase) ID() string { return q.driver.ID() }
+
 // Put adds a Job to the queue. It is generally an error to add the
 // same job to a queue more than once, but this depends on the
 // implementation of the underlying driver.
@@ -128,7 +130,6 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
 			return
 		case <-timer.C:
 			stat := j.Status()
-			stat.InProgress = false
 			stat.Completed = true
 			j.SetStatus(stat)
 
