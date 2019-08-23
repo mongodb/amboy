@@ -19,7 +19,7 @@ type workUnit struct {
 }
 
 func executeJob(ctx context.Context, id string, job amboy.Job, q amboy.Queue) {
-	runJob(ctx, job, q, time.Now())
+	didRun := runJob(ctx, job, q, time.Now())
 
 	r := message.Fields{
 		"job":           job.ID(),
@@ -28,6 +28,7 @@ func executeJob(ctx context.Context, id string, job amboy.Job, q amboy.Queue) {
 		"queue_type":    fmt.Sprintf("%T", q),
 		"stat":          job.Status(),
 		"pool":          id,
+		"executed":      didRun,
 	}
 	if err := job.Error(); err != nil {
 		r["error"] = err.Error()
@@ -38,11 +39,15 @@ func executeJob(ctx context.Context, id string, job amboy.Job, q amboy.Queue) {
 
 }
 
-func runJob(ctx context.Context, job amboy.Job, q amboy.Queue, startAt time.Time) {
+func runJob(ctx context.Context, job amboy.Job, q amboy.Queue, startAt time.Time) bool {
 	ti := amboy.JobTimeInfo{
 		Start: time.Now(),
 	}
 	job.UpdateTimeInfo(ti)
+	defer func() {
+		ti.End = time.Now()
+		job.UpdateTimeInfo(ti)
+	}()
 
 	maxTime := job.TimeInfo().MaxTime
 	if maxTime > 0 {
@@ -53,11 +58,11 @@ func runJob(ctx context.Context, job amboy.Job, q amboy.Queue, startAt time.Time
 
 	if err := job.Lock(q.ID()); err != nil {
 		job.AddError(errors.Wrap(err, "problem locking job"))
-		return
+		return false
 	}
 	if err := q.Save(ctx, job); err != nil {
 		job.AddError(errors.Wrap(err, "problem saving job state"))
-		return
+		return false
 	}
 
 	pingerCtx, stopPing := context.WithCancel(ctx)
@@ -86,6 +91,7 @@ func runJob(ctx context.Context, job amboy.Job, q amboy.Queue, startAt time.Time
 	}()
 
 	job.Run(ctx)
+
 	// we want the final end time to include
 	// marking complete, but setting it twice is
 	// necessary for some queues
@@ -96,8 +102,7 @@ func runJob(ctx context.Context, job amboy.Job, q amboy.Queue, startAt time.Time
 
 	q.Complete(ctx, job)
 
-	ti.End = time.Now()
-	job.UpdateTimeInfo(ti)
+	return true
 }
 
 func worker(ctx context.Context, id string, jobs <-chan workUnit, q amboy.Queue, wg *sync.WaitGroup) {
