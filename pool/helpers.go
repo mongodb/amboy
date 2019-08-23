@@ -53,10 +53,12 @@ func runJob(ctx context.Context, job amboy.Job, q amboy.Queue, startAt time.Time
 
 	if err := job.Lock(q.ID()); err != nil {
 		job.AddError(errors.Wrap(err, "problem locking job"))
+		fmt.Println("lock")
 		return
 	}
 	if err := q.Save(ctx, job); err != nil {
 		job.AddError(errors.Wrap(err, "problem saving job state"))
+		fmt.Println("save", err)
 		return
 	}
 
