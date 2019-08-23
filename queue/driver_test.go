@@ -226,7 +226,7 @@ func (s *DriverSuite) TestNextMethodReturnsJob() {
 
 	if s.NotNil(nj) {
 		s.Equal(j.ID(), nj.ID())
-		s.NoError(s.driver.Lock(s.ctx, j))
+		s.NoError(j.Lock(s.driver.ID()))
 	}
 }
 
