@@ -175,7 +175,7 @@ func TestReportingSuiteBackedByQueueMethods(t *testing.T) {
 	s := new(ReportingSuite)
 	s.setup = func() {
 		s.queue = queue.NewLocalLimitedSize(2, 128)
-		s.queue.Start(ctx)
+		s.Require().NoError(s.queue.Start(ctx))
 	}
 
 	s.factory = func() Reporter {
