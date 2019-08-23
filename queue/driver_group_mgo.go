@@ -219,8 +219,6 @@ func (d *mgoGroupDriver) Save(_ context.Context, j amboy.Job) error {
 	defer session.Close()
 
 	stat := j.Status()
-	stat.Owner = d.instanceID
-	stat.ModificationCount++
 	stat.ErrorCount = len(stat.Errors)
 	stat.ModificationTime = time.Now()
 	j.SetStatus(stat)
