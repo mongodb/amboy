@@ -1020,7 +1020,6 @@ func OneExecutionTest(bctx context.Context, t *testing.T, test QueueTestCase, dr
 		jobID := fmt.Sprintf("%d.%d.mock.single-exec", i, job.GetNumber())
 		j.SetID(jobID)
 		assert.NoError(t, q.Put(ctx, j))
-		fmt.Println(jobID)
 	}
 
 	if test.OrderedSupported && !test.OrderedStartsBefore {
