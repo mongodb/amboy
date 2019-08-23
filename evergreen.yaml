@@ -178,6 +178,9 @@ tasks:
   - <<: *run-go-test-suite
     name: test-rest
     tags: ["test"]
+  - <<: *run-go-test-suite
+    name: test-logger
+    tags: ["test"]
   - <<: *run-go-test-suite-with-mongodb
     name: test-queue
     tags: ["test"]
@@ -191,6 +194,9 @@ tasks:
     tags: ["race"]
   - <<: *run-go-test-suite
     name: race-rest
+    tags: ["race"]
+  - <<: *run-go-test-suite
+    name: race-logger
     tags: ["race"]
   - <<: *run-go-test-suite
     name: race-registry
