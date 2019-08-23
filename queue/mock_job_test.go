@@ -3,7 +3,6 @@ package queue
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/dependency"
@@ -66,27 +65,4 @@ func (j *mockJob) Run(_ context.Context) {
 	defer j.MarkComplete()
 
 	mockJobCounters.Inc()
-}
-
-type jobThatPanics struct {
-	sleep time.Duration
-	job.Base
-}
-
-func (j *jobThatPanics) Run(_ context.Context) {
-	defer j.MarkComplete()
-
-	time.Sleep(j.sleep)
-	panic("panic err")
-}
-
-type sleepJob struct {
-	sleep time.Duration
-	job.Base
-}
-
-func (j *sleepJob) Run(_ context.Context) {
-	defer j.MarkComplete()
-
-	time.Sleep(j.sleep)
 }

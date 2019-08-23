@@ -53,14 +53,37 @@ func runJob(ctx context.Context, job amboy.Job, q amboy.Queue, startAt time.Time
 
 	if err := job.Lock(q.ID()); err != nil {
 		job.AddError(errors.Wrap(err, "problem locking job"))
-		fmt.Println("lock")
 		return
 	}
 	if err := q.Save(ctx, job); err != nil {
 		job.AddError(errors.Wrap(err, "problem saving job state"))
-		fmt.Println("save", err)
 		return
 	}
+
+	pingerCtx, stopPing := context.WithCancel(ctx)
+	go func() {
+		iters := 0
+		timer := time.NewTimer(amboy.LockTimeout / 2)
+		defer timer.Stop()
+		for {
+			select {
+			case <-pingerCtx.Done():
+				return
+			case <-timer.C:
+				if err := job.Lock(q.ID()); err != nil {
+					job.AddError(errors.Wrapf(err, "problem pinging job lock on cycle #%d", iters))
+					return
+				}
+				if err := q.Save(ctx, job); err != nil {
+					job.AddError(errors.Wrapf(err, "problem saving job for lock ping on cycle #%d", iters))
+					return
+				}
+
+				timer.Reset(amboy.LockTimeout / 2)
+			}
+			iters++
+		}
+	}()
 
 	// TODO: start lock pinging thread
 
@@ -71,6 +94,8 @@ func runJob(ctx context.Context, job amboy.Job, q amboy.Queue, startAt time.Time
 	ti.End = time.Now()
 	job.UpdateTimeInfo(ti)
 	job.Unlock(q.ID())
+
+	stopPing()
 
 	q.Complete(ctx, job)
 	ti.End = time.Now()

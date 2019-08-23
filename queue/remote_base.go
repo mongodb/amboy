@@ -16,7 +16,6 @@ type remoteBase struct {
 	started    bool
 	driver     Driver
 	driverType string
-	id         string
 	channel    chan amboy.Job
 	blocked    map[string]struct{}
 	dispatched map[string]struct{}

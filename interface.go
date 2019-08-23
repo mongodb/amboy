@@ -8,6 +8,8 @@ import (
 	"github.com/mongodb/grip"
 )
 
+// LockTimeout describes the period of time that a queue will respect
+// a stale lock from another queue before beginning work on a job.
 const LockTimeout = 5 * time.Minute
 
 // Job describes a unit of work. Implementations of Job instances are

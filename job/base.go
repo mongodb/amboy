@@ -105,6 +105,11 @@ func (b *Base) ID() string {
 	return b.TaskID
 }
 
+// Lock allows pools to modify the state of a job before saving it to
+// the queue to take the lock. The value of the argument should
+// uniquely identify the runtime instance of the queue that holds the
+// lock, and the method returns an error if the lock cannot be
+// acquired.
 func (b *Base) Lock(id string) error {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
@@ -120,6 +125,8 @@ func (b *Base) Lock(id string) error {
 	return nil
 }
 
+// Unlock attempts to remove the current lock state in the job, if
+// possible.
 func (b *Base) Unlock(id string) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
