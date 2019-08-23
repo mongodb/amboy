@@ -66,6 +66,7 @@ func runJob(ctx context.Context, job amboy.Job, q amboy.Queue, startAt time.Time
 	}
 
 	pingerCtx, stopPing := context.WithCancel(ctx)
+	defer stopPing()
 	go func() {
 		defer recovery.LogStackTraceAndContinue("background lock ping", job.ID())
 		iters := 0
