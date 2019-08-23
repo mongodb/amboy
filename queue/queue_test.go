@@ -859,8 +859,6 @@ func OrderedTest(bctx context.Context, t *testing.T, test QueueTestCase, driver 
 }
 
 func WaitUntilTest(bctx context.Context, t *testing.T, test QueueTestCase, driver DriverTestCase, runner PoolTestCase, size SizeTestCase) {
-	t.Skip("wait until test integration test is flawed")
-
 	ctx, cancel := context.WithTimeout(bctx, 2*time.Minute)
 	defer cancel()
 
@@ -882,9 +880,8 @@ func WaitUntilTest(bctx context.Context, t *testing.T, test QueueTestCase, drive
 	} else if sz < 2 {
 		sz = 2
 	}
-
+	sz = 1
 	numJobs := sz * len(testNames)
-	sz = 1 // hack to prevent deadlock, REMOVE
 	wg := &sync.WaitGroup{}
 
 	for i := 0; i < sz; i++ {
@@ -943,7 +940,7 @@ waitLoop:
 	}
 
 	stats := q.Stats(ctx)
-	require.Equal(t, numJobs*2, stats.Total)
+	require.Equal(t, numJobs*2, stats.Total, "%+v", stats)
 	assert.Equal(t, numJobs, stats.Completed)
 
 	completed := 0
