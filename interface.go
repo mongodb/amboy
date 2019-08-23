@@ -153,7 +153,7 @@ func (j JobTimeInfo) Validate() error {
 // organization properties.
 type Queue interface {
 	// Used to add a job to the queue. Should only error if the
-	// Queue cannot accept jobs or if the job already exists in a
+	// Queue cannot accept jobs if the job already exists in a
 	// queue.
 	Put(context.Context, Job) error
 

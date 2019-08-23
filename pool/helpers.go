@@ -67,14 +67,15 @@ func runJob(ctx context.Context, job amboy.Job, q amboy.Queue, startAt time.Time
 
 	pingerCtx, stopPing := context.WithCancel(ctx)
 	go func() {
+		defer recovery.LogStackTraceAndContinue("background lock ping", job.ID())
 		iters := 0
-		timer := time.NewTimer(amboy.LockTimeout / 2)
-		defer timer.Stop()
+		ticker := time.NewTicker(amboy.LockTimeout / 2)
+		defer ticker.Stop()
 		for {
 			select {
 			case <-pingerCtx.Done():
 				return
-			case <-timer.C:
+			case <-ticker.C:
 				if err := job.Lock(q.ID()); err != nil {
 					job.AddError(errors.Wrapf(err, "problem pinging job lock on cycle #%d", iters))
 					return
@@ -83,8 +84,6 @@ func runJob(ctx context.Context, job amboy.Job, q amboy.Queue, startAt time.Time
 					job.AddError(errors.Wrapf(err, "problem saving job for lock ping on cycle #%d", iters))
 					return
 				}
-
-				timer.Reset(amboy.LockTimeout / 2)
 			}
 			iters++
 		}
