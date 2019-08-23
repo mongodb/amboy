@@ -190,8 +190,6 @@ func (p *ewmaRateLimiting) addCanceler(id string, cancel context.CancelFunc) {
 }
 
 func (p *ewmaRateLimiting) runJob(ctx context.Context, j amboy.Job) time.Duration {
-	start := time.Now()
-
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithCancel(ctx)
 	p.addCanceler(j.ID(), cancel)
