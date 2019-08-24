@@ -33,7 +33,7 @@ func init() {
 	grip.SetName("amboy.queue.tests")
 	grip.Error(grip.SetSender(send.MakeNative()))
 
-	if testing.Verbose() {
+	if !testing.Verbose() {
 		lvl := grip.GetSender().Level()
 		lvl.Threshold = level.Error
 		_ = grip.GetSender().SetLevel(lvl)
