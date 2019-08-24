@@ -293,6 +293,7 @@ buildvariants:
       test_timeout: 15m
     run_on:
       - macos-1014
+      - macos-1014-i7
     tasks:
       - ".dist"
       - ".test"
@@ -301,6 +302,16 @@ buildvariants:
     display_name: Windows
     run_on:
       - windows-64-vs2017-compile
+      - windows-64-vs2017-test
+      - windows-64-vs2017-compile-m5
+      - windows-64-vs2015-compile
+      - windows-64-vs2015-large
+      - windows-64-vs2015-small
+      - windows-64-vs2015-test
+      - windows-64-vs2013-compile
+      - windows-64-vs2013-test
+      - windows-64-vs2010-compile
+      - windows-64-vs2010-test
     expansions:
       test_timeout: 15m
       build_env: "GOROOT=c:/golang/go1.12 DISABLE_COVERAGE=yes PATH=/cygdrive/c/golang/go1.12/bin:$PATH"

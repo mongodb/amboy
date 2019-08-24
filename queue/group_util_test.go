@@ -116,7 +116,8 @@ func TestGroupCache(t *testing.T) {
 				{
 					name: "PruneOne",
 					test: func(t *testing.T, cache GroupCache) {
-						require.NoError(t, cache.Set("foo", queue, 1))
+						require.NoError(t, cache.Set("foo", queue, time.Millisecond))
+						time.Sleep(2 * time.Millisecond)
 						require.NoError(t, cache.Prune(ctx))
 						require.Zero(t, cache.Len())
 					},

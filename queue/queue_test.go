@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -32,9 +33,11 @@ func init() {
 	grip.SetName("amboy.queue.tests")
 	grip.Error(grip.SetSender(send.MakeNative()))
 
-	lvl := grip.GetSender().Level()
-	lvl.Threshold = level.Error
-	_ = grip.GetSender().SetLevel(lvl)
+	if testing.Verbose() {
+		lvl := grip.GetSender().Level()
+		lvl.Threshold = level.Error
+		_ = grip.GetSender().SetLevel(lvl)
+	}
 
 	job.RegisterDefaultJobs()
 }
@@ -675,6 +678,10 @@ func TestQueueSmoke(t *testing.T) {
 								}
 
 								if runner.MaxSize > 0 && runner.MaxSize < size.Size {
+									continue
+								}
+
+								if size.Size > 8 && (runtime.GOOS == "windows" || runtime.GOOS == "darwin" || testing.Short()) {
 									continue
 								}
 
