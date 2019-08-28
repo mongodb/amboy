@@ -185,7 +185,7 @@ func (d *mgoDriver) Get(_ context.Context, name string) (amboy.Job, error) {
 }
 
 func getAtomicQuery(owner, jobName string, modCount int) bson.M {
-	timeoutTs := time.Now().Add(-amboy.LockTimeout).UTC().Round(time.Millisecond)
+	timeoutTs := time.Now().Add(-amboy.LockTimeout)
 
 	return bson.M{
 		"_id": jobName,
