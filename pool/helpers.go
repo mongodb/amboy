@@ -78,7 +78,7 @@ func runJob(ctx context.Context, job amboy.Job, q amboy.Queue, startAt time.Time
 	go func() {
 		defer recovery.LogStackTraceAndContinue("background lock ping", job.ID())
 		iters := 0
-		ticker := time.NewTicker(amboy.LockTimeout / 2)
+		ticker := time.NewTicker(amboy.LockTimeout / 4)
 		defer ticker.Stop()
 		for {
 			select {
