@@ -100,6 +100,12 @@ func runJob(ctx context.Context, job amboy.Job, q amboy.Queue, startAt time.Time
 					jcancel()
 					return
 				}
+				grip.Debug(message.Fields{
+					"queue_id":  q.ID(),
+					"job_id":    job.ID(),
+					"ping_iter": iters,
+					"stat":      job.Status(),
+				})
 			}
 			iters++
 		}
