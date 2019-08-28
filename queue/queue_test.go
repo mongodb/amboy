@@ -730,6 +730,9 @@ func TestQueueSmoke(t *testing.T) {
 									}
 
 									t.Run("SaveLockingCheck", func(t *testing.T) {
+										if test.OrderedSupported && !test.OrderedStartsBefore {
+											t.Skip("test does not support queues where queues don't accept work after dispatching")
+										}
 										ctx, cancel := context.WithCancel(bctx)
 										defer cancel()
 
