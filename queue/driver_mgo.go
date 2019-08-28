@@ -236,6 +236,7 @@ func (d *mgoDriver) Save(_ context.Context, j amboy.Job) error {
 
 	stat := j.Status()
 	stat.ErrorCount = len(stat.Errors)
+	stat.ModificationTime = time.Now()
 	j.SetStatus(stat)
 
 	job, err := registry.MakeJobInterchange(j, d.opts.Format)
