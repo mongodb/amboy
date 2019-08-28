@@ -167,10 +167,12 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
 			}
 
 			j.AddError(err)
+
 			q.mutex.Lock()
 			defer q.mutex.Unlock()
 			delete(q.blocked, id)
 			delete(q.dispatched, id)
+
 			return
 		}
 

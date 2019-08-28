@@ -767,7 +767,6 @@ func TestQueueSmoke(t *testing.T) {
 								})
 							}
 						})
-
 					}
 				})
 			}
