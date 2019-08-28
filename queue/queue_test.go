@@ -753,6 +753,13 @@ func TestQueueSmoke(t *testing.T) {
 										require.NoError(t, j.Lock(q.ID()))
 										require.NoError(t, q.Save(ctx, j))
 
+										if test.IsRemote {
+											// this errors because you can't save if you've double-locked.
+											require.NoError(t, j.Lock(q.ID()))
+											require.NoError(t, j.Lock(q.ID()))
+											require.Error(t, q.Save(ctx, j))
+										}
+
 										for i := 0; i < 25; i++ {
 											j, ok := q.Get(ctx, j.ID())
 											require.True(t, ok)
