@@ -185,16 +185,21 @@ func (d *mgoDriver) Get(_ context.Context, name string) (amboy.Job, error) {
 }
 
 func getAtomicQuery(owner, jobName string, modCount int) bson.M {
-	timeoutTs := time.Now().Add(-amboy.LockTimeout)
+	timeoutTs := time.Now().Add(-amboy.LockTimeout).UTC().Round(time.Millisecond)
 
 	return bson.M{
 		"_id": jobName,
 		"$or": []bson.M{
 			// owner and modcount should match, which
 			// means there's an active lock but we own it.
+			//
+			// The modcount is +1 in the case that we're
+			// looking to update and update the modcount
+			// (rather than just save, as in the Complete
+			// case).
 			{
 				"status.owner":     owner,
-				"status.mod_count": modCount,
+				"status.mod_count": bson.M{"$in": []int{modCount, modCount - 1}},
 				"status.mod_ts":    bson.M{"$gt": timeoutTs},
 			},
 			// modtime is older than the lock timeout,
@@ -231,7 +236,6 @@ func (d *mgoDriver) Save(_ context.Context, j amboy.Job) error {
 
 	stat := j.Status()
 	stat.ErrorCount = len(stat.Errors)
-	stat.ModificationTime = time.Now()
 	j.SetStatus(stat)
 
 	job, err := registry.MakeJobInterchange(j, d.opts.Format)

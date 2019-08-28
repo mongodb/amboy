@@ -728,9 +728,46 @@ func TestQueueSmoke(t *testing.T) {
 											})
 										}
 									}
+
+									t.Run("SaveLockingCheck", func(t *testing.T) {
+										ctx, cancel := context.WithCancel(bctx)
+										defer cancel()
+
+										q, err := test.Constructor(ctx, size.Size)
+										require.NoError(t, err)
+										require.NoError(t, runner.SetPool(q, size.Size))
+
+										dcloser, err := driver.SetDriver(ctx, q, newDriverID())
+										require.NoError(t, err)
+										defer func() { require.NoError(t, dcloser(ctx)) }()
+
+										j := amboy.Job(job.NewShellJob("sleep 300", ""))
+										j.UpdateTimeInfo(amboy.JobTimeInfo{
+											WaitUntil: time.Now().Add(4 * amboy.LockTimeout),
+										})
+										require.NoError(t, q.Put(ctx, j))
+
+										require.NoError(t, j.Lock(q.ID()))
+										require.NoError(t, q.Save(ctx, j))
+
+										for i := 0; i < 25; i++ {
+											j, ok := q.Get(ctx, j.ID())
+											require.True(t, ok)
+											require.NoError(t, j.Lock(q.ID()))
+											require.NoError(t, q.Save(ctx, j))
+										}
+
+										j, ok := q.Get(ctx, j.ID())
+										require.True(t, ok)
+
+										require.NoError(t, j.Error())
+										q.Complete(ctx, j)
+										require.NoError(t, j.Error())
+									})
 								})
 							}
 						})
+
 					}
 				})
 			}

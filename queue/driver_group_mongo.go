@@ -257,7 +257,6 @@ func (d *mongoGroupDriver) Save(ctx context.Context, j amboy.Job) error {
 	name := j.ID()
 	stat := j.Status()
 	stat.ErrorCount = len(stat.Errors)
-	stat.ModificationTime = time.Now()
 	j.SetStatus(stat)
 
 	job, err := registry.MakeJobInterchange(j, d.opts.Format)
