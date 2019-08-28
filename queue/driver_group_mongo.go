@@ -255,7 +255,6 @@ func buildCompoundID(n, id string) string               { return fmt.Sprintf("%s
 
 func (d *mongoGroupDriver) Save(ctx context.Context, j amboy.Job) error {
 	name := j.ID()
-
 	stat := j.Status()
 	stat.ErrorCount = len(stat.Errors)
 	stat.ModificationTime = time.Now()

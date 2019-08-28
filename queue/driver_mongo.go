@@ -232,7 +232,6 @@ func isMongoDupKey(err error) bool {
 
 func (d *mongoDriver) Save(ctx context.Context, j amboy.Job) error {
 	name := j.ID()
-
 	stat := j.Status()
 	stat.ErrorCount = len(stat.Errors)
 	stat.ModificationTime = time.Now()
