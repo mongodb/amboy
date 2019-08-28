@@ -740,11 +740,11 @@ func TestQueueSmoke(t *testing.T) {
 										dcloser, err := driver.SetDriver(ctx, q, newDriverID())
 										require.NoError(t, err)
 										defer func() { require.NoError(t, dcloser(ctx)) }()
-
 										j := amboy.Job(job.NewShellJob("sleep 300", ""))
 										j.UpdateTimeInfo(amboy.JobTimeInfo{
 											WaitUntil: time.Now().Add(4 * amboy.LockTimeout),
 										})
+										require.NoError(t, q.Start(ctx))
 										require.NoError(t, q.Put(ctx, j))
 
 										require.NoError(t, j.Lock(q.ID()))
