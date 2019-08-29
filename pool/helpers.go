@@ -3,6 +3,7 @@ package pool
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -12,6 +13,16 @@ import (
 	"github.com/mongodb/grip/recovery"
 	"github.com/pkg/errors"
 )
+
+const (
+	nilJobWaitIntervalMax = time.Second
+	baseJobInterval       = time.Millisecond
+)
+
+func jitterNilJobWait() time.Duration {
+	return time.Duration(rand.Int63n(int64(nilJobWaitIntervalMax)))
+
+}
 
 func executeJob(ctx context.Context, id string, job amboy.Job, q amboy.Queue) {
 	res := runJob(ctx, job, q, time.Now())
@@ -122,7 +133,7 @@ func runJob(ctx context.Context, job amboy.Job, q amboy.Queue, startAt time.Time
 	return
 }
 
-func worker(bctx context.Context, id string, jobs <-chan amboy.Job, q amboy.Queue, wg *sync.WaitGroup) {
+func worker(bctx context.Context, id string, q amboy.Queue, wg *sync.WaitGroup) {
 	var (
 		err    error
 		job    amboy.Job
@@ -141,7 +152,7 @@ func worker(bctx context.Context, id string, jobs <-chan amboy.Job, q amboy.Queu
 				q.Complete(bctx, job)
 			}
 			// start a replacement worker.
-			go worker(bctx, id, jobs, q, wg)
+			go worker(bctx, id, q, wg)
 		}
 
 		if cancel != nil {
@@ -149,51 +160,23 @@ func worker(bctx context.Context, id string, jobs <-chan amboy.Job, q amboy.Queu
 		}
 	}()
 
+	timer := time.NewTimer(baseJobInterval)
+	defer timer.Stop()
 	for {
 		select {
 		case <-bctx.Done():
 			return
-		case job = <-jobs:
+		case <-timer.C:
+			job := q.Next(bctx)
 			if job == nil {
+				timer.Reset(jitterNilJobWait())
 				continue
 			}
 
 			ctx, cancel = context.WithCancel(bctx)
 			executeJob(ctx, id, job, q)
 			cancel()
+			timer.Reset(baseJobInterval)
 		}
 	}
-}
-
-func startWorkerServer(ctx context.Context, q amboy.Queue, wg *sync.WaitGroup) <-chan amboy.Job {
-	output := make(chan amboy.Job)
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				job := q.Next(ctx)
-				if job == nil {
-					continue
-				}
-
-				if job.Status().Completed {
-					grip.Debug(message.Fields{
-						"message":    "completed job dispatched from the queue",
-						"job":        job.ID(),
-						"queue_type": fmt.Sprintf("%T", q),
-						"stat":       job.Status(),
-					})
-					continue
-				}
-				output <- job
-			}
-		}
-	}()
-
-	return output
 }

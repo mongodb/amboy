@@ -85,17 +85,15 @@ func (p *simpleRateLimited) Start(ctx context.Context) error {
 
 	ctx, p.canceler = context.WithCancel(ctx)
 
-	jobs := startWorkerServer(ctx, p.queue, &p.wg)
-
 	// start some threads
 	for w := 1; w <= p.size; w++ {
-		go p.worker(ctx, jobs)
+		go p.worker(ctx)
 		grip.Debugf("started rate limited worker %d of %d ", w, p.size)
 	}
 	return nil
 }
 
-func (p *simpleRateLimited) worker(bctx context.Context, jobs <-chan amboy.Job) {
+func (p *simpleRateLimited) worker(bctx context.Context) {
 	var (
 		err    error
 		ctx    context.Context
@@ -117,7 +115,7 @@ func (p *simpleRateLimited) worker(bctx context.Context, jobs <-chan amboy.Job) 
 				p.queue.Complete(bctx, job)
 			}
 			// start a replacement worker.
-			go p.worker(bctx, jobs)
+			go p.worker(bctx)
 		}
 		if cancel != nil {
 			cancel()
@@ -131,19 +129,16 @@ func (p *simpleRateLimited) worker(bctx context.Context, jobs <-chan amboy.Job) 
 		case <-bctx.Done():
 			return
 		case <-timer.C:
-			select {
-			case <-bctx.Done():
-				return
-			case job = <-jobs:
-				if job == nil {
-					continue
-				}
-				ctx, cancel = context.WithCancel(bctx)
-				executeJob(ctx, "rate-limited-simple", job, p.queue)
-
-				cancel()
-				timer.Reset(p.interval)
+			job := p.queue.Next(bctx)
+			if job == nil {
+				timer.Reset(jitterNilJobWait())
+				continue
 			}
+			ctx, cancel = context.WithCancel(bctx)
+			executeJob(ctx, "rate-limited-simple", job, p.queue)
+
+			cancel()
+			timer.Reset(p.interval)
 		}
 	}
 }
