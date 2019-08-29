@@ -168,7 +168,6 @@ func worker(bctx context.Context, id string, jobs <-chan amboy.Job, q amboy.Queu
 
 func startWorkerServer(ctx context.Context, q amboy.Queue, wg *sync.WaitGroup) <-chan amboy.Job {
 	output := make(chan amboy.Job)
-	timer := time.NewTimer(0)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -179,7 +178,7 @@ func startWorkerServer(ctx context.Context, q amboy.Queue, wg *sync.WaitGroup) <
 			default:
 				job := q.Next(ctx)
 				if job == nil {
-					timer.Reset(time.Duration(rand.Int63n(int64(time.Second))))
+					time.Sleep(time.Duration(rand.Int63n(int64(100 * time.Millisecond))))
 					continue
 				}
 
@@ -190,7 +189,6 @@ func startWorkerServer(ctx context.Context, q amboy.Queue, wg *sync.WaitGroup) <
 						"queue_type": fmt.Sprintf("%T", q),
 						"stat":       job.Status(),
 					})
-					timer.Reset(0)
 					continue
 				}
 
@@ -198,7 +196,6 @@ func startWorkerServer(ctx context.Context, q amboy.Queue, wg *sync.WaitGroup) <
 				case <-ctx.Done():
 					return
 				case output <- job:
-					timer.Reset(0)
 					continue
 				}
 			}
