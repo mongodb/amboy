@@ -3,7 +3,6 @@ package pool
 import (
 	"context"
 	"math"
-	"math/rand"
 	"strings"
 	"sync"
 	"time"
@@ -166,22 +165,17 @@ func (p *ewmaRateLimiting) worker(bctx context.Context) {
 		case <-bctx.Done():
 			return
 		case <-timer.C:
-			select {
-			case <-bctx.Done():
-				return
-			default:
-				job := p.queue.Next(bctx)
-				if job == nil {
-					timer.Reset(time.Duration(rand.Int63n(int64(time.Second))))
-					continue
-				}
-
-				ctx, cancel = context.WithCancel(bctx)
-				interval := p.runJob(ctx, job)
-				cancel()
-
-				timer.Reset(interval)
+			job := p.queue.Next(bctx)
+			if job == nil {
+				timer.Reset(jitterNilJobWait())
+				continue
 			}
+
+			ctx, cancel = context.WithCancel(bctx)
+			interval := p.runJob(ctx, job)
+			cancel()
+
+			timer.Reset(interval)
 		}
 	}
 }

@@ -129,21 +129,16 @@ func (p *simpleRateLimited) worker(bctx context.Context) {
 		case <-bctx.Done():
 			return
 		case <-timer.C:
-			select {
-			case <-bctx.Done():
-				return
-			default:
-				job := p.queue.Next(bctx)
-				if job == nil {
-					timer.Reset(p.interval / 2)
-					continue
-				}
-				ctx, cancel = context.WithCancel(bctx)
-				executeJob(ctx, "rate-limited-simple", job, p.queue)
-
-				cancel()
-				timer.Reset(p.interval)
+			job := p.queue.Next(bctx)
+			if job == nil {
+				timer.Reset(jitterNilJobWait())
+				continue
 			}
+			ctx, cancel = context.WithCancel(bctx)
+			executeJob(ctx, "rate-limited-simple", job, p.queue)
+
+			cancel()
+			timer.Reset(p.interval)
 		}
 	}
 }

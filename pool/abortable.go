@@ -2,7 +2,6 @@ package pool
 
 import (
 	"context"
-	"math/rand"
 	"sync"
 	"time"
 
@@ -147,20 +146,22 @@ func (p *abortablePool) worker(bctx context.Context) {
 		}
 	}()
 
+	timer := time.NewTimer(baseJobInterval)
 	for {
 		select {
 		case <-bctx.Done():
 			return
-		default:
+		case <-timer.C:
 			job := p.queue.Next(bctx)
 			if job == nil {
-				time.Sleep(time.Duration(rand.Int63n(int64(time.Second))))
+				timer.Reset(jitterNilJobWait())
 				continue
 			}
 
 			ctx, cancel = context.WithCancel(bctx)
 			p.runJob(ctx, job)
 			cancel()
+			timer.Reset(baseJobInterval)
 		}
 	}
 }

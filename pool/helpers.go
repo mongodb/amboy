@@ -14,6 +14,16 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	nilJobWaitIntervalMax = time.Second
+	baseJobInterval       = time.Millisecond
+)
+
+func jitterNilJobWait() time.Duration {
+	return time.Duration(rand.Int63n(int64(nilJobWaitIntervalMax)))
+
+}
+
 func executeJob(ctx context.Context, id string, job amboy.Job, q amboy.Queue) {
 	res := runJob(ctx, job, q, time.Now())
 	ti := job.TimeInfo()
@@ -150,20 +160,23 @@ func worker(bctx context.Context, id string, q amboy.Queue, wg *sync.WaitGroup) 
 		}
 	}()
 
+	timer := time.NewTimer(baseJobInterval)
+	defer timer.Stop()
 	for {
 		select {
 		case <-bctx.Done():
 			return
-		default:
+		case <-timer.C:
 			job := q.Next(bctx)
 			if job == nil {
-				time.Sleep(time.Duration(rand.Int63n(int64(time.Second))))
+				timer.Reset(jitterNilJobWait())
 				continue
 			}
 
 			ctx, cancel = context.WithCancel(bctx)
 			executeJob(ctx, id, job, q)
 			cancel()
+			timer.Reset(baseJobInterval)
 		}
 	}
 }
