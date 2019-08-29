@@ -51,7 +51,7 @@ func (s *LocalWorkersSuite) TestPanicJobsDoNotPanicHarness() {
 	defer cancel()
 	wg := &sync.WaitGroup{}
 
-	s.queue.toProcess = jobsChanWithPanicingJobs(ctx, 10)
+	s.queue.toProcess = jobsChanWithPanicingJobs(ctx, s.size)
 	s.NotPanics(func() { worker(ctx, "test-local", s.queue, wg) })
 }
 
