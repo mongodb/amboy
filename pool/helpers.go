@@ -178,7 +178,7 @@ func startWorkerServer(ctx context.Context, q amboy.Queue, wg *sync.WaitGroup) <
 			default:
 				job := q.Next(ctx)
 				if job == nil {
-					time.Sleep(time.Duration(rand.Int63n(int64(100 * time.Millisecond))))
+					time.Sleep(time.Duration(rand.Int63n(int64(time.Second))))
 					continue
 				}
 
