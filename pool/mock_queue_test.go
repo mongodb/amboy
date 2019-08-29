@@ -187,7 +187,7 @@ func (j *jobThatPanics) Run(_ context.Context) {
 	panic("panic err")
 }
 
-func jobsChanWithPanicingJobs(ctx context.Context, num int) <-chan amboy.Job {
+func jobsChanWithPanicingJobs(ctx context.Context, num int) chan amboy.Job {
 	out := make(chan amboy.Job)
 
 	go func() {
