@@ -2,7 +2,9 @@ package pool
 
 import (
 	"context"
+	"math/rand"
 	"sync"
+	"time"
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/grip"
@@ -104,19 +106,17 @@ func (p *abortablePool) Start(ctx context.Context) error {
 
 	workerCtx, cancel := context.WithCancel(ctx)
 	p.canceler = cancel
-	jobs := startWorkerServer(workerCtx, p.queue, &p.wg)
-
 	p.started = true
 
 	for w := 1; w <= p.size; w++ {
-		go p.worker(workerCtx, jobs)
+		go p.worker(workerCtx)
 		grip.Debugf("started worker %d of %d waiting for jobs", w, p.size)
 	}
 
 	return nil
 }
 
-func (p *abortablePool) worker(bctx context.Context, jobs <-chan amboy.Job) {
+func (p *abortablePool) worker(bctx context.Context) {
 	var (
 		err    error
 		job    amboy.Job
@@ -139,7 +139,7 @@ func (p *abortablePool) worker(bctx context.Context, jobs <-chan amboy.Job) {
 			}
 
 			// start a replacement worker
-			go p.worker(bctx, jobs)
+			go p.worker(bctx)
 		}
 
 		if cancel != nil {
@@ -151,8 +151,10 @@ func (p *abortablePool) worker(bctx context.Context, jobs <-chan amboy.Job) {
 		select {
 		case <-bctx.Done():
 			return
-		case job = <-jobs:
+		default:
+			job := p.queue.Next(bctx)
 			if job == nil {
+				time.Sleep(time.Duration(rand.Int63n(int64(time.Second))))
 				continue
 			}
 

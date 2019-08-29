@@ -123,7 +123,7 @@ func runJob(ctx context.Context, job amboy.Job, q amboy.Queue, startAt time.Time
 	return
 }
 
-func worker(bctx context.Context, id string, jobs <-chan amboy.Job, q amboy.Queue, wg *sync.WaitGroup) {
+func worker(bctx context.Context, id string, q amboy.Queue, wg *sync.WaitGroup) {
 	var (
 		err    error
 		job    amboy.Job
@@ -142,7 +142,7 @@ func worker(bctx context.Context, id string, jobs <-chan amboy.Job, q amboy.Queu
 				q.Complete(bctx, job)
 			}
 			// start a replacement worker.
-			go worker(bctx, id, jobs, q, wg)
+			go worker(bctx, id, q, wg)
 		}
 
 		if cancel != nil {
@@ -154,8 +154,10 @@ func worker(bctx context.Context, id string, jobs <-chan amboy.Job, q amboy.Queu
 		select {
 		case <-bctx.Done():
 			return
-		case job = <-jobs:
+		default:
+			job := q.Next(bctx)
 			if job == nil {
+				time.Sleep(time.Duration(rand.Int63n(int64(time.Second))))
 				continue
 			}
 
@@ -164,43 +166,4 @@ func worker(bctx context.Context, id string, jobs <-chan amboy.Job, q amboy.Queu
 			cancel()
 		}
 	}
-}
-
-func startWorkerServer(ctx context.Context, q amboy.Queue, wg *sync.WaitGroup) <-chan amboy.Job {
-	output := make(chan amboy.Job)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				job := q.Next(ctx)
-				if job == nil {
-					time.Sleep(time.Duration(rand.Int63n(int64(time.Second))))
-					continue
-				}
-
-				if job.Status().Completed {
-					grip.Debug(message.Fields{
-						"message":    "completed job dispatched from the queue",
-						"job":        job.ID(),
-						"queue_type": fmt.Sprintf("%T", q),
-						"stat":       job.Status(),
-					})
-					continue
-				}
-
-				select {
-				case <-ctx.Done():
-					return
-				case output <- job:
-					continue
-				}
-			}
-		}
-	}()
-
-	return output
 }
