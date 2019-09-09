@@ -932,8 +932,22 @@ func DispatchBeforeTest(bctx context.Context, t *testing.T, test QueueTestCase, 
 		j.UpdateTimeInfo(ti)
 		require.NoError(t, q.Put(ctx, j))
 	}
+	ticker := time.NewTicker(5 * time.Millisecond)
+	defer ticker.Stop()
 
-	time.Sleep(100 * time.Millisecond)
+waitLoop:
+	for {
+		select {
+		case <-ctx.Done():
+			break waitLoop
+		case <-ticker.C:
+			stat := q.Stats(ctx)
+			if stat.Completed == size.Size {
+				break waitLoop
+			}
+		}
+	}
+
 	stats := q.Stats(ctx)
 	assert.Equal(t, 2*size.Size, stats.Total)
 	assert.Equal(t, size.Size, stats.Completed)
