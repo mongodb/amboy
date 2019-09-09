@@ -10,7 +10,6 @@ import (
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/job"
 	"github.com/mongodb/amboy/pool"
-	"github.com/mongodb/grip"
 	"github.com/satori/go.uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -65,26 +64,27 @@ func TestRemoteUnorderedMongoSuite(t *testing.T) {
 	name := "test-" + uuid.NewV4().String()
 	opts := DefaultMongoDBOptions()
 	opts.DB = "amboy_test"
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://localhost:27017").SetConnectTimeout(time.Second))
+	require.NoError(t, err)
+
+	err = client.Connect(ctx)
+	require.NoError(t, err)
+	defer client.Disconnect(ctx)
+
+	require.NoError(t, client.Database(opts.DB).Drop(ctx))
+
 	tests.driverConstructor = func() Driver {
-		return NewMongoDriver(name, opts)
+		d, err := OpenNewMongoDriver(ctx, name, opts, client)
+		require.NoError(t, err)
+		return d
 	}
 
 	tests.tearDown = func() {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-
-		client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://localhost:27017").SetConnectTimeout(time.Second))
-		if err != nil {
-			grip.Error(err)
-			return
-		}
-
-		if err := client.Connect(ctx); err != nil {
-			grip.Error(err)
-			return
-		}
-		defer client.Disconnect(ctx)
-		grip.Error(client.Database(opts.DB).Drop(ctx))
+		require.NoError(t, client.Database(opts.DB).Drop(ctx))
 
 	}
 
@@ -148,34 +148,6 @@ func (s *RemoteUnorderedSuite) TestJobPutIntoQueueFetchableViaGetMethod() {
 		s.Equal(j.WorkingDir, nj.WorkingDir)
 		s.Equal(j.Type(), nj.Type())
 	}
-}
-
-func (s *RemoteUnorderedSuite) TestJobsDoNotCompleteWithCanceledQueueContext() {
-	s.NoError(s.queue.SetDriver(s.driver))
-	s.NotNil(s.queue.Driver())
-
-	ctx, cancel := context.WithCancel(context.Background())
-	s.NoError(s.queue.Start(ctx))
-
-	j1 := job.NewShellJob("echo foo", "")
-	name := j1.ID()
-	s.NoError(s.queue.Put(ctx, j1))
-	amboy.WaitInterval(ctx, s.queue, 10*time.Millisecond)
-	fetchedJob, ok := s.queue.Get(ctx, name)
-	nj := fetchedJob.(*job.ShellJob)
-	s.True(ok)
-	s.True(nj.Status().Completed, "before canceling the context, a job will complete")
-
-	cancel()
-
-	j2 := job.NewShellJob("echo foo", "")
-	name = j2.ID()
-	s.NoError(s.queue.Put(ctx, j2))
-	amboy.WaitInterval(ctx, s.queue, 10*time.Millisecond)
-	fetchedJob, ok = s.queue.Get(ctx, name)
-	nj = fetchedJob.(*job.ShellJob)
-	s.True(ok)
-	s.False(nj.Status().Completed, "after canceling the context, a job will not complete")
 }
 
 func (s *RemoteUnorderedSuite) TestGetMethodHandlesMissingJobs() {
@@ -304,7 +276,7 @@ func (s *RemoteUnorderedSuite) TestStartMethodCanBeCalledMultipleTimes() {
 
 func (s *RemoteUnorderedSuite) TestNextMethodSkipsLockedJobs() {
 	s.require.NoError(s.queue.SetDriver(s.driver))
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	numLocked := 0
@@ -334,27 +306,31 @@ func (s *RemoteUnorderedSuite) TestNextMethodSkipsLockedJobs() {
 	go s.queue.jobServer(ctx)
 
 	observed := 0
+	startAt := time.Now()
 checkResults:
 	for {
-		select {
-		case <-ctx.Done():
+		if time.Since(startAt) >= time.Second {
 			break checkResults
-		default:
-			work := s.queue.Next(ctx)
-			if work == nil {
-				continue checkResults
-			}
-			observed++
-
-			_, ok := lockedJobs[work.ID()]
-			s.False(ok, fmt.Sprintf("%s\n\tjob: %+v\n\tqueue: %+v",
-				work.ID(), work.Status(), s.queue.Stats(ctx)))
-
-			if observed == created || observed+numLocked == created {
-				break checkResults
-			}
 		}
+
+		nctx, ncancel := context.WithTimeout(ctx, 100*time.Millisecond)
+		work := s.queue.Next(nctx)
+		ncancel()
+		if work == nil {
+			continue checkResults
+		}
+		observed++
+
+		_, ok := lockedJobs[work.ID()]
+		s.False(ok, fmt.Sprintf("%s\n\tjob: %+v\n\tqueue: %+v",
+			work.ID(), work.Status(), s.queue.Stats(ctx)))
+
+		if observed == created || observed+numLocked == created {
+			break checkResults
+		}
+
 	}
+	s.require.NoError(ctx.Err())
 	qStat := s.queue.Stats(ctx)
 	s.True(qStat.Running >= numLocked)
 	s.True(qStat.Total == created)
