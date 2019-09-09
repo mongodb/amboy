@@ -206,55 +206,6 @@ func DefaultDriverTestCases(client *mongo.Client, session *mgo.Session) []Driver
 			},
 		},
 		{
-			Name:               "Mgo",
-			WaitUntilSupported: true,
-			SupportsMulti:      true,
-			Constructor: func(ctx context.Context, name string, size int) ([]Driver, TestCloser, error) {
-				opts := DefaultMongoDBOptions()
-				opts.DB = "amboy_test"
-
-				var err error
-				out := make([]Driver, size)
-				catcher := grip.NewBasicCatcher()
-				for i := 0; i < size; i++ {
-					out[i], err = OpenNewMgoDriver(ctx, name, opts, session.Clone())
-					catcher.Add(err)
-				}
-				closer := func(ctx context.Context) error {
-					for _, d := range out {
-						if d != nil {
-							d.(*mgoDriver).Close()
-						}
-					}
-					return session.DB(opts.DB).C(addJobsSuffix(name)).DropCollection()
-				}
-
-				return out, closer, catcher.Resolve()
-			},
-			SetDriver: func(ctx context.Context, q amboy.Queue, name string) (TestCloser, error) {
-				remote, ok := q.(Remote)
-				if !ok {
-					return nil, errors.New("invalid queue type")
-				}
-
-				opts := DefaultMongoDBOptions()
-				opts.DB = "amboy_test"
-
-				driver, err := OpenNewMgoDriver(ctx, name, opts, session.Clone())
-				if err != nil {
-					return nil, err
-				}
-
-				d := driver.(*mgoDriver)
-				closer := func(ctx context.Context) error {
-					d.Close()
-					return session.DB(opts.DB).C(addJobsSuffix(name)).DropCollection()
-				}
-
-				return closer, remote.SetDriver(d)
-			},
-		},
-		{
 			Name:               "Mongo",
 			WaitUntilSupported: true,
 			SupportsMulti:      true,
@@ -354,58 +305,6 @@ func DefaultDriverTestCases(client *mongo.Client, session *mgo.Session) []Driver
 				closer := func(ctx context.Context) error {
 					d.Close()
 					return client.Database(opts.DB).Collection(addGroupSufix(name)).Drop(ctx)
-				}
-
-				return closer, remote.SetDriver(driver)
-			},
-		},
-		{
-			Name:               "MgoGroup",
-			WaitUntilSupported: true,
-			SupportsMulti:      true,
-			Constructor: func(ctx context.Context, name string, size int) ([]Driver, TestCloser, error) {
-				opts := DefaultMongoDBOptions()
-				opts.DB = "amboy_test"
-
-				out := []Driver{}
-				catcher := grip.NewBasicCatcher()
-				for i := 0; i < size; i++ {
-					driver, err := OpenNewMgoGroupDriver(ctx, name, opts, name+"four", session.Clone())
-					catcher.Add(err)
-					out = append(out, driver)
-					driver, err = OpenNewMgoGroupDriver(ctx, name, opts, name+"five", session.Clone())
-					catcher.Add(err)
-					out = append(out, driver)
-				}
-				closer := func(ctx context.Context) error {
-					for _, d := range out {
-						if d != nil {
-							d.(*mgoGroupDriver).Close()
-						}
-					}
-					return session.DB(opts.DB).C(addGroupSufix(name)).DropCollection()
-				}
-
-				return out, closer, catcher.Resolve()
-			},
-			SetDriver: func(ctx context.Context, q amboy.Queue, name string) (TestCloser, error) {
-				remote, ok := q.(Remote)
-				if !ok {
-					return nil, errors.New("invalid queue type")
-				}
-
-				opts := DefaultMongoDBOptions()
-				opts.DB = "amboy_test"
-
-				driver, err := OpenNewMgoGroupDriver(ctx, name, opts, name+"six", session.Clone())
-				if err != nil {
-					return nil, err
-				}
-
-				d := driver.(*mgoGroupDriver)
-				closer := func(ctx context.Context) error {
-					d.Close()
-					return session.DB(opts.DB).C(addGroupSufix(name)).DropCollection()
 				}
 
 				return closer, remote.SetDriver(driver)

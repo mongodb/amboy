@@ -14,7 +14,8 @@ import (
 	"github.com/satori/go.uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"gopkg.in/mgo.v2"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func init() {
@@ -62,26 +63,29 @@ func TestRemoteUnorderedPriorityDriverSuite(t *testing.T) {
 func TestRemoteUnorderedMgoSuite(t *testing.T) {
 	tests := new(RemoteUnorderedSuite)
 	name := "test-" + uuid.NewV4().String()
-	uri := "mongodb://localhost"
 	opts := DefaultMongoDBOptions()
 	opts.DB = "amboy_test"
 	tests.driverConstructor = func() Driver {
-		return NewMgoDriver(name, opts)
+		return NewMongoDriver(name, opts)
 	}
 
 	tests.tearDown = func() {
-		session, err := mgo.Dial(uri)
-		defer session.Close()
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://localhost:27017").SetConnectTimeout(time.Second))
 		if err != nil {
 			grip.Error(err)
 			return
 		}
 
-		err = session.DB(opts.DB).DropDatabase()
-		if err != nil {
+		if err := client.Connect(ctx); err != nil {
 			grip.Error(err)
 			return
 		}
+		defer client.Disconnect(ctx)
+		grip.Error(client.Database(opts.DB).Drop(ctx))
+
 	}
 
 	suite.Run(t, tests)
