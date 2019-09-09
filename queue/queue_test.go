@@ -98,6 +98,7 @@ func DefaultQueueTestCases() []QueueTestCase {
 			OrderedStartsBefore:     true,
 			WaitUntilSupported:      true,
 			DispatchBeforeSupported: true,
+			MaxSize:                 16,
 			Constructor: func(ctx context.Context, size int) (amboy.Queue, error) {
 				return NewAdaptiveOrderedLocalQueue(size, defaultLocalQueueCapcity), nil
 			},
