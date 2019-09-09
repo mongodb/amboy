@@ -16,7 +16,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	mgo "gopkg.in/mgo.v2"
 )
 
 type queueGroupCloser func(context.Context) error
@@ -35,10 +34,6 @@ func TestQueueGroup(t *testing.T) {
 	require.NoError(t, cerr)
 	require.NoError(t, client.Connect(bctx))
 	defer func() { require.NoError(t, client.Disconnect(bctx)) }()
-
-	session, merr := mgo.DialWithTimeout(mdburl, 2*time.Second)
-	require.NoError(t, merr)
-	defer session.Close()
 
 	t.Run("Constructor", func(t *testing.T) {
 		for _, test := range []struct {

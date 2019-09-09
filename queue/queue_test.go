@@ -24,7 +24,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	mgo "gopkg.in/mgo.v2"
 )
 
 const defaultLocalQueueCapcity = 10000
@@ -151,7 +150,7 @@ func DefaultQueueTestCases() []QueueTestCase {
 	}
 }
 
-func DefaultDriverTestCases(client *mongo.Client, session *mgo.Session) []DriverTestCase {
+func DefaultDriverTestCases(client *mongo.Client) []DriverTestCase {
 	return []DriverTestCase{
 		{
 			Name:          "No",
@@ -532,10 +531,6 @@ func TestQueueSmoke(t *testing.T) {
 	bctx, bcancel := context.WithCancel(context.Background())
 	defer bcancel()
 
-	session, err := mgo.DialWithTimeout("mongodb://localhost:27017", time.Second)
-	require.NoError(t, err)
-	defer session.Close()
-
 	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://localhost:27017").SetConnectTimeout(time.Second))
 	require.NoError(t, err)
 	require.NoError(t, client.Connect(bctx))
@@ -548,7 +543,7 @@ func TestQueueSmoke(t *testing.T) {
 		}
 
 		t.Run(test.Name, func(t *testing.T) {
-			for _, driver := range DefaultDriverTestCases(client, session) {
+			for _, driver := range DefaultDriverTestCases(client) {
 				if driver.Skip {
 					continue
 				}

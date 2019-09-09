@@ -60,7 +60,7 @@ func TestRemoteUnorderedPriorityDriverSuite(t *testing.T) {
 	suite.Run(t, tests)
 }
 
-func TestRemoteUnorderedMgoSuite(t *testing.T) {
+func TestRemoteUnorderedMongoSuite(t *testing.T) {
 	tests := new(RemoteUnorderedSuite)
 	name := "test-" + uuid.NewV4().String()
 	opts := DefaultMongoDBOptions()
