@@ -240,8 +240,7 @@ func (d *mongoDriver) Close() {
 	}
 }
 
-func buildCompoundJobID(n string, job amboy.Job) string { return buildCompoundID(n, job.ID()) }
-func buildCompoundID(n, id string) string               { return fmt.Sprintf("%s.%s", n, id) }
+func buildCompoundID(n, id string) string { return fmt.Sprintf("%s.%s", n, id) }
 
 func (d *mongoDriver) getIDFromName(name string) string {
 	if d.opts.UseGroups {
