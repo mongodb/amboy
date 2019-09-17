@@ -201,7 +201,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 					Client:  client,
 				}
 				opts.MDB.Format = amboy.BSON2
-				opts.MDB.GroupName = ""
+				opts.MDB.GroupName = "group." + name
 				opts.MDB.UseGroups = true
 				q, err := NewMongoDBQueue(ctx, opts)
 				if err != nil {
