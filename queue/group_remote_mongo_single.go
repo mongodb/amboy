@@ -16,14 +16,14 @@ import (
 type remoteMongoQueueGroupSingle struct {
 	canceler context.CancelFunc
 	client   *mongo.Client
-	opts     RemoteQueueGroupOptions
+	opts     MongoDBQueueGroupOptions
 	dbOpts   MongoDBOptions
 	cache    GroupCache
 }
 
-// NewMongoRemoteSingleQueueGroup constructs a new remote queue group. If ttl is 0, the queues will not be
+// NewMongoDBSingleQueueGroup constructs a new remote queue group. If ttl is 0, the queues will not be
 // TTLed except when the client explicitly calls Prune.
-func NewMongoRemoteSingleQueueGroup(ctx context.Context, opts RemoteQueueGroupOptions, client *mongo.Client, mdbopts MongoDBOptions) (amboy.QueueGroup, error) {
+func NewMongoDBSingleQueueGroup(ctx context.Context, opts MongoDBQueueGroupOptions, client *mongo.Client, mdbopts MongoDBOptions) (amboy.QueueGroup, error) {
 	if err := opts.validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid remote queue options")
 	}

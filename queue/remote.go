@@ -9,10 +9,10 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-// RemoteCreationArguments describes the options passed to the remote
+// MongoQueueCreationOptions describes the options passed to the remote
 // queue, that store jobs in a remote persistence layer to support
 // distributed systems of workers.
-type RemoteCreationArguments struct {
+type MongoDBQueueCreationOptions struct {
 	Size    int
 	Name    string
 	Ordered bool
@@ -20,19 +20,19 @@ type RemoteCreationArguments struct {
 	Client  *mongo.Client
 }
 
-// NewRemoteQueue builds a new queue backed by a remote storage. These
-// queues allow workers running in multiple processes to service
-// shared workloads in multiple processes.
-func NewRemoteQueue(ctx context.Context, args RemoteCreationArguments) (amboy.Queue, error) {
-	if err := args.Validate(); err != nil {
+// NewMongoDBQueue builds a new queue that persists jobs to a MongoDB
+// instance. These queues allow workers running in multiple processes
+// to service shared workloads in multiple processes.
+func NewMongoDBQueue(ctx context.Context, opts MongoDBQueueCreationOptions) (amboy.Queue, error) {
+	if err := opts.Validate(); err != nil {
 		return nil, errors.WithStack(err)
 	}
 
-	return args.build(ctx)
+	return opts.build(ctx)
 }
 
 // Validate ensure that the arguments defined are valid.
-func (opts *RemoteCreationArguments) Validate() error {
+func (opts *MongoDBQueueCreationOptions) Validate() error {
 	catcher := grip.NewBasicCatcher()
 
 	catcher.NewWhen(opts.Name == "", "must specify a name")
@@ -43,7 +43,7 @@ func (opts *RemoteCreationArguments) Validate() error {
 	return catcher.Resolve()
 }
 
-func (opts *RemoteCreationArguments) build(ctx context.Context) (amboy.Queue, error) {
+func (opts *MongoDBQueueCreationOptions) build(ctx context.Context) (amboy.Queue, error) {
 	var driver remoteQueueDriver
 	var err error
 

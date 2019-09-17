@@ -22,14 +22,14 @@ type remoteMongoQueueGroup struct {
 	canceler context.CancelFunc
 	client   *mongo.Client
 	mu       sync.RWMutex
-	opts     RemoteQueueGroupOptions
+	opts     MongoDBQueueGroupOptions
 	dbOpts   MongoDBOptions
 	queues   map[string]amboy.Queue
 	ttlMap   map[string]time.Time
 }
 
-// RemoteQueueGroupOptions describe options passed to NewRemoteQueueGroup.
-type RemoteQueueGroupOptions struct {
+// MongoDBQueueGroupOptions describe options passed to NewRemoteQueueGroup.
+type MongoDBQueueGroupOptions struct {
 	// Prefix is a string prepended to the queue collections.
 	Prefix string
 
@@ -56,7 +56,7 @@ type RemoteQueueGroupOptions struct {
 	TTL time.Duration
 }
 
-func (opts *RemoteQueueGroupOptions) constructor(ctx context.Context, name string) remoteQueue {
+func (opts *MongoDBQueueGroupOptions) constructor(ctx context.Context, name string) remoteQueue {
 	workers := opts.DefaultWorkers
 	if opts.WorkerPoolSize != nil {
 		workers = opts.WorkerPoolSize(name)
@@ -72,7 +72,7 @@ func (opts *RemoteQueueGroupOptions) constructor(ctx context.Context, name strin
 	return newRemoteUnordered(workers)
 }
 
-func (opts RemoteQueueGroupOptions) validate() error {
+func (opts MongoDBQueueGroupOptions) validate() error {
 	catcher := grip.NewBasicCatcher()
 	if opts.TTL < 0 {
 		catcher.New("ttl must be greater than or equal to 0")
@@ -102,15 +102,15 @@ type listCollectionsOutput struct {
 	Name string `bson:"name"`
 }
 
-// NewMongoRemoteQueueGroup constructs a new remote queue group. If
+// NewMongoDBQueueGroup constructs a new remote queue group. If
 // ttl is 0, the queues will not be TTLed except when the client
 // explicitly calls Prune.
 //
-// The MongoRemoteQueue group creats a new collection for every queue,
+// The MongoDBRemoteQueue group creats a new collection for every queue,
 // unlike the other remote queue group implementations. This is
 // probably most viable for lower volume workloads; however, the
 // caching mechanism may be more responsive in some situations.
-func NewMongoRemoteQueueGroup(ctx context.Context, opts RemoteQueueGroupOptions, client *mongo.Client, mdbopts MongoDBOptions) (amboy.QueueGroup, error) {
+func NewMongoDBQueueGroup(ctx context.Context, opts MongoDBQueueGroupOptions, client *mongo.Client, mdbopts MongoDBOptions) (amboy.QueueGroup, error) {
 	if err := opts.validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid remote queue options")
 	}

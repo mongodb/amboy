@@ -160,7 +160,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 			Name:     "MongoUnordered",
 			IsRemote: true,
 			Constructor: func(ctx context.Context, name string, size int) (amboy.Queue, TestCloser, error) {
-				opts := RemoteCreationArguments{
+				opts := MongoDBQueueCreationOptions{
 					Size:    size,
 					Name:    name,
 					Ordered: false,
@@ -168,7 +168,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 					Client:  client,
 				}
 				opts.MDB.Format = amboy.BSON2
-				q, err := NewRemoteQueue(ctx, opts)
+				q, err := NewMongoDBQueue(ctx, opts)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -193,7 +193,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 			Name:     "MongoGroupUnordered",
 			IsRemote: true,
 			Constructor: func(ctx context.Context, name string, size int) (amboy.Queue, TestCloser, error) {
-				opts := RemoteCreationArguments{
+				opts := MongoDBQueueCreationOptions{
 					Size:    size,
 					Name:    name,
 					Ordered: false,
@@ -203,7 +203,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 				opts.MDB.Format = amboy.BSON2
 				opts.MDB.GroupName = ""
 				opts.MDB.UseGroups = true
-				q, err := NewRemoteQueue(ctx, opts)
+				q, err := NewMongoDBQueue(ctx, opts)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -229,7 +229,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 			IsRemote: true,
 			MaxSize:  32,
 			Constructor: func(ctx context.Context, name string, size int) (amboy.Queue, TestCloser, error) {
-				opts := RemoteCreationArguments{
+				opts := MongoDBQueueCreationOptions{
 					Size:    size,
 					Name:    name,
 					Ordered: false,
@@ -237,7 +237,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 					Client:  client,
 				}
 				opts.MDB.Format = amboy.BSON
-				q, err := NewRemoteQueue(ctx, opts)
+				q, err := NewMongoDBQueue(ctx, opts)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -262,7 +262,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 			Name:     "MongoOrdered",
 			IsRemote: true,
 			Constructor: func(ctx context.Context, name string, size int) (amboy.Queue, TestCloser, error) {
-				opts := RemoteCreationArguments{
+				opts := MongoDBQueueCreationOptions{
 					Size:    size,
 					Name:    name,
 					Ordered: true,
@@ -270,7 +270,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 					Client:  client,
 				}
 				opts.MDB.Format = amboy.BSON2
-				q, err := NewRemoteQueue(ctx, opts)
+				q, err := NewMongoDBQueue(ctx, opts)
 				if err != nil {
 					return nil, nil, err
 				}
