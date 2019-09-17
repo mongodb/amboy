@@ -764,7 +764,7 @@ func OneExecutionTest(bctx context.Context, t *testing.T, test QueueTestCase, ru
 	ctx, cancel := context.WithTimeout(bctx, 2*time.Minute)
 	defer cancel()
 
-	q, closer, err := test.Constructor(ctx, size.Size)
+	q, closer, err := test.Constructor(ctx, newDriverID(), size.Size)
 	require.NoError(t, err)
 	require.NoError(t, runner.SetPool(q, size.Size))
 

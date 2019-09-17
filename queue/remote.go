@@ -9,8 +9,9 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-// RemoteCreationArguments descripts the options passed to the remote
-// queue. These
+// RemoteCreationArguments describes the options passed to the remote
+// queue, that store jobs in a remote persistence layer to support
+// distributed systems of workers.
 type RemoteCreationArguments struct {
 	Size    int
 	Name    string
@@ -30,6 +31,7 @@ func NewRemoteQueue(ctx context.Context, args RemoteCreationArguments) (amboy.Qu
 	return args.build(ctx)
 }
 
+// Validate ensure that the arguments defined are valid.
 func (opts *RemoteCreationArguments) Validate() error {
 	catcher := grip.NewBasicCatcher()
 
