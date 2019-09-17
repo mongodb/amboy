@@ -56,7 +56,7 @@ type RemoteQueueGroupOptions struct {
 	TTL time.Duration
 }
 
-func (opts *RemoteQueueGroupOptions) constructor(ctx context.Context, name string) Remote {
+func (opts *RemoteQueueGroupOptions) constructor(ctx context.Context, name string) remoteQueue {
 	workers := opts.DefaultWorkers
 	if opts.WorkerPoolSize != nil {
 		workers = opts.WorkerPoolSize(name)
@@ -66,10 +66,10 @@ func (opts *RemoteQueueGroupOptions) constructor(ctx context.Context, name strin
 	}
 
 	if opts.Ordered {
-		return NewSimpleRemoteOrdered(workers)
+		return newSimpleRemoteOrdered(workers)
 	}
 
-	return NewRemoteUnordered(workers)
+	return newRemoteUnordered(workers)
 }
 
 func (opts RemoteQueueGroupOptions) validate() error {
@@ -217,11 +217,11 @@ func (g *remoteMongoQueueGroup) Queues(ctx context.Context) []string {
 	return out
 }
 
-func (g *remoteMongoQueueGroup) startProcessingRemoteQueue(ctx context.Context, coll string) (Remote, error) {
+func (g *remoteMongoQueueGroup) startProcessingRemoteQueue(ctx context.Context, coll string) (amboy.Queue, error) {
 	coll = trimJobsSuffix(coll)
 	q := g.opts.constructor(ctx, coll)
 
-	d, err := OpenNewMongoDriver(ctx, coll, g.dbOpts, g.client)
+	d, err := openNewMongoDriver(ctx, coll, g.dbOpts, g.client)
 	if err != nil {
 		return nil, errors.Wrap(err, "problem opening driver")
 	}

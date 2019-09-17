@@ -149,10 +149,10 @@ func (g *remoteMongoQueueGroupSingle) startQueues(ctx context.Context) error {
 }
 
 func (g *remoteMongoQueueGroupSingle) Get(ctx context.Context, id string) (amboy.Queue, error) {
-	var queue Remote
+	var queue remoteQueue
 
 	switch q := g.cache.Get(id).(type) {
-	case Remote:
+	case remoteQueue:
 		return q, nil
 	case nil:
 		queue = g.opts.constructor(ctx, id)
@@ -160,7 +160,7 @@ func (g *remoteMongoQueueGroupSingle) Get(ctx context.Context, id string) (amboy
 		return q, nil
 	}
 
-	driver, err := OpenNewMongoGroupDriver(ctx, g.opts.Prefix, g.dbOpts, id, g.client)
+	driver, err := openNewMongoGroupDriver(ctx, g.opts.Prefix, g.dbOpts, id, g.client)
 	if err != nil {
 		return nil, errors.Wrap(err, "problem opening driver for queue")
 	}

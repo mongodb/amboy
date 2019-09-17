@@ -7,9 +7,9 @@ import (
 	"github.com/mongodb/amboy"
 )
 
-// Driver describes the interface between a queue and an out of
+// remoteQueueDriver describes the interface between a queue and an out of
 // process persistence layer, like a database.
-type Driver interface {
+type remoteQueueDriver interface {
 	ID() string
 	Open(context.Context) error
 	Close()
