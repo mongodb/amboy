@@ -173,6 +173,9 @@ tasks:
     name: test-registry
     tags: ["test"]
   - <<: *run-go-test-suite
+    name: test-reporting
+    tags: ["test"]
+  - <<: *run-go-test-suite
     name: test-pool
     tags: ["test"]
   - <<: *run-go-test-suite
@@ -191,6 +194,9 @@ tasks:
     tags: ["race"]
   - <<: *run-go-test-suite
     name: race-job
+    tags: ["race"]
+  - <<: *run-go-test-suite
+    name: race-reporting
     tags: ["race"]
   - <<: *run-go-test-suite
     name: race-rest
@@ -292,7 +298,6 @@ buildvariants:
       test_timeout: 15m
     run_on:
       - macos-1014
-      - macos-1014-i7
     tasks:
       - ".dist"
       - ".test"
