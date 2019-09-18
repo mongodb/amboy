@@ -9,7 +9,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-// MongoQueueCreationOptions describes the options passed to the remote
+// MongoDBQueueCreationOptions describes the options passed to the remote
 // queue, that store jobs in a remote persistence layer to support
 // distributed systems of workers.
 type MongoDBQueueCreationOptions struct {

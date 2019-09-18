@@ -69,12 +69,6 @@ type PoolTestCase struct {
 	MaxSize    int
 }
 
-type MultipleExecutionTestCase struct {
-	Name            string
-	Setup           func(context.Context, amboy.Queue, amboy.Queue) (TestCloser, error)
-	MultipleDrivers bool
-}
-
 type SizeTestCase struct {
 	Name string
 	Size int
