@@ -173,9 +173,6 @@ tasks:
     name: test-registry
     tags: ["test"]
   - <<: *run-go-test-suite
-    name: test-reporting
-    tags: ["test"]
-  - <<: *run-go-test-suite
     name: test-pool
     tags: ["test"]
   - <<: *run-go-test-suite
@@ -187,6 +184,9 @@ tasks:
   - <<: *run-go-test-suite-with-mongodb
     name: test-queue
     tags: ["test"]
+  - <<: *run-go-test-suite-with-mongodb
+    name: test-reporting
+    tags: ["test"]
     
   # run the suites with the race detector (one variant only)
   - <<: *run-go-test-suite
@@ -194,9 +194,6 @@ tasks:
     tags: ["race"]
   - <<: *run-go-test-suite
     name: race-job
-    tags: ["race"]
-  - <<: *run-go-test-suite
-    name: race-reporting
     tags: ["race"]
   - <<: *run-go-test-suite
     name: race-rest
@@ -212,6 +209,9 @@ tasks:
     tags: ["race"]
   - <<: *run-go-test-suite-with-mongodb
     name: race-queue
+    tags: ["race"]
+  - <<: *run-go-test-suite-with-mongodb
+    name: race-reporting
     tags: ["race"]
 
 post:
