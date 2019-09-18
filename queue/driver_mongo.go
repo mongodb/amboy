@@ -33,7 +33,7 @@ type mongoDriver struct {
 // NewMongoDriver constructs a MongoDB backed queue driver
 // implementation using the go.mongodb.org/mongo-driver as the
 // database interface.
-func NewMongoDriver(name string, opts MongoDBOptions) Driver {
+func newMongoDriver(name string, opts MongoDBOptions) remoteQueueDriver {
 	host, _ := os.Hostname() // nolint
 
 	if !opts.Format.IsValid() {
@@ -47,11 +47,11 @@ func NewMongoDriver(name string, opts MongoDBOptions) Driver {
 	}
 }
 
-// OpenNewMongoDriver constructs and opens a new MongoDB driver instance
+// openNewMongoDriver constructs and opens a new MongoDB driver instance
 // using the specified session. It is equivalent to calling
 // NewMongoDriver() and calling driver.Open().
-func OpenNewMongoDriver(ctx context.Context, name string, opts MongoDBOptions, client *mongo.Client) (Driver, error) {
-	d := NewMongoDriver(name, opts).(*mongoDriver)
+func openNewMongoDriver(ctx context.Context, name string, opts MongoDBOptions, client *mongo.Client) (remoteQueueDriver, error) {
+	d := newMongoDriver(name, opts).(*mongoDriver)
 
 	if err := d.start(ctx, client); err != nil {
 		return nil, errors.Wrap(err, "problem starting driver")
@@ -60,11 +60,11 @@ func OpenNewMongoDriver(ctx context.Context, name string, opts MongoDBOptions, c
 	return d, nil
 }
 
-// NewMongoGroupDriver is similar to the MongoDriver, except it
+// newMongoGroupDriver is similar to the MongoDriver, except it
 // prefixes job ids with a prefix and adds the group field to the
 // documents in the database which makes it possible to manage
 // distinct queues with a single MongoDB collection.
-func NewMongoGroupDriver(name string, opts MongoDBOptions, group string) Driver {
+func newMongoGroupDriver(name string, opts MongoDBOptions, group string) remoteQueueDriver {
 	host, _ := os.Hostname() // nolint
 
 	if !opts.Format.IsValid() {
@@ -83,8 +83,8 @@ func NewMongoGroupDriver(name string, opts MongoDBOptions, group string) Driver 
 // OpenNewMongoGroupDriver constructs and opens a new MongoDB driver instance
 // using the specified session. It is equivalent to calling
 // NewMongoGroupDriver() and calling driver.Open().
-func OpenNewMongoGroupDriver(ctx context.Context, name string, opts MongoDBOptions, group string, client *mongo.Client) (Driver, error) {
-	d, ok := NewMongoGroupDriver(name, opts, group).(*mongoDriver)
+func openNewMongoGroupDriver(ctx context.Context, name string, opts MongoDBOptions, group string, client *mongo.Client) (remoteQueueDriver, error) {
+	d, ok := newMongoGroupDriver(name, opts, group).(*mongoDriver)
 	if !ok {
 		return nil, errors.New("amboy programmer error: incorrect constructor")
 	}
