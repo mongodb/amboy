@@ -224,9 +224,7 @@ func (d *mongoDriver) setupDB(ctx context.Context) error {
 					Value: bsonx.Int32(1),
 				},
 			},
-			Options: &options.IndexOptions{
-				ExpireAfterSeconds: &ttl,
-			},
+			Options: options.Index().SetExpireAfterSeconds(ttl),
 		})
 	}
 	_, err := d.getCollection().Indexes().CreateMany(ctx, indexes)
