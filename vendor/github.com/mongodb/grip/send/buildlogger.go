@@ -163,10 +163,12 @@ func (c *BuildloggerConfig) GetTestLogURL() string {
 	return fmt.Sprintf("%s/build/%s/test/%s", c.URL, c.buildID, c.testID)
 }
 
+// GetBuildID returns the build ID for the log currently in use.
 func (c *BuildloggerConfig) GetBuildID() string {
 	return c.buildID
 }
 
+// GetTestID returns the test ID for the log currently in use.
 func (c *BuildloggerConfig) GetTestID() string {
 	return c.testID
 }
@@ -270,7 +272,7 @@ func (b *buildlogger) Send(m message.Composer) {
 		}
 
 		if err := b.postLines(bytes.NewBuffer(out)); err != nil {
-			b.ErrorHandler(err, message.NewBytesMessage(b.level.Default, out))
+			b.ErrorHandler()(err, message.NewBytesMessage(b.level.Default, out))
 		}
 	}
 }

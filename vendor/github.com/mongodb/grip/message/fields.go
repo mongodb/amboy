@@ -147,10 +147,9 @@ func (m *fieldMessage) String() string {
 	}
 
 	if m.cachedOutput == "" {
-		const tmpl = "%s='%v'"
 		out := []string{}
 		if m.message != "" {
-			out = append(out, fmt.Sprintf(tmpl, FieldsMsgName, m.message))
+			out = append(out, fmt.Sprintf("%s='%s'", FieldsMsgName, m.message))
 		}
 
 		for k, v := range m.fields {
@@ -164,10 +163,14 @@ func (m *fieldMessage) String() string {
 				continue
 			}
 
-			out = append(out, fmt.Sprintf(tmpl, k, v))
+			if str, ok := v.(fmt.Stringer); ok {
+				out = append(out, fmt.Sprintf("%s='%s'", k, str.String()))
+			} else {
+				out = append(out, fmt.Sprintf("%s='%v'", k, v))
+			}
 		}
 
-		sort.Sort(sort.StringSlice(out))
+		sort.Strings(out)
 
 		m.cachedOutput = fmt.Sprintf("[%s]", strings.Join(out, " "))
 	}
