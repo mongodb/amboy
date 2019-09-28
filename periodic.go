@@ -193,7 +193,7 @@ func waitUntilInterval(ctx context.Context, startAt time.Time, interval time.Dur
 		}
 	}
 
-	timer := time.NewTimer(-time.Now().Sub(startAt))
+	timer := time.NewTimer(-time.Since(startAt))
 	defer timer.Stop()
 
 	select {
