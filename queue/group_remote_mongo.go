@@ -77,7 +77,7 @@ func (opts *MongoDBQueueGroupOptions) constructor(ctx context.Context, name stri
 
 	if opts.Abortable {
 		p := pool.NewAbortablePool(workers, q)
-		_ = q.SetRunner(p)
+		grip.Debug(q.SetRunner(p))
 	}
 
 	return q
