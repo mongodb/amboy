@@ -158,23 +158,32 @@ func (d *mongoDriver) getCollection() *mongo.Collection {
 }
 
 func (d *mongoDriver) setupDB(ctx context.Context) error {
-	if d.opts.SkipIndexBuilds {
-		return nil
+	indexes := []mongo.IndexModel{}
+	if !d.opts.SkipQueueIndexBuilds {
+		indexes = append(indexes, d.queueIndexes()...)
+	}
+	if !d.opts.SkipReportingIndexBuilds {
+		indexes = append(indexes, d.reportingIndexes()...)
 	}
 
+	if len(indexes) > 0 {
+		_, err := d.getCollection().Indexes().CreateMany(ctx, indexes)
+		return errors.Wrap(err, "problem building indexes")
+	}
+
+	return nil
+}
+
+func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 	keys := bsonx.Doc{}
-	modKeys := bsonx.Doc{}
 
 	if d.opts.UseGroups {
 		keys = append(keys, bsonx.Elem{
 			Key:   "group",
 			Value: bsonx.Int32(1),
 		})
-		modKeys = append(modKeys, bsonx.Elem{
-			Key:   "group",
-			Value: bsonx.Int32(1),
-		})
 	}
+
 	keys = append(keys,
 		bsonx.Elem{
 			Key:   "status.completed",
@@ -185,26 +194,6 @@ func (d *mongoDriver) setupDB(ctx context.Context) error {
 			Value: bsonx.Int32(1),
 		})
 
-	modKeys = append(modKeys, bsonx.Elem{
-		Key:   "status.mod_ts",
-		Value: bsonx.Int32(1),
-	})
-
-	if d.opts.CheckWaitUntil {
-		keys = append(keys, bsonx.Elem{
-			Key:   "time_info.wait_until",
-			Value: bsonx.Int32(1),
-		})
-	}
-
-	if d.opts.CheckDispatchBy {
-		keys = append(keys, bsonx.Elem{
-			Key:   "time_info.dispatch_by",
-			Value: bsonx.Int32(1),
-		})
-	}
-
-	// priority must be at the end for the sort
 	if d.opts.Priority {
 		keys = append(keys, bsonx.Elem{
 			Key:   "priority",
@@ -212,14 +201,20 @@ func (d *mongoDriver) setupDB(ctx context.Context) error {
 		})
 	}
 
-	indexes := []mongo.IndexModel{
-		mongo.IndexModel{
-			Keys: keys,
-		},
-		mongo.IndexModel{
-			Keys: modKeys,
-		},
+	if d.opts.CheckWaitUntil {
+		keys = append(keys, bsonx.Elem{
+			Key:   "time_info.wait_until",
+			Value: bsonx.Int32(1),
+		})
+	} else if d.opts.CheckDispatchBy {
+		keys = append(keys, bsonx.Elem{
+			Key:   "time_info.dispatch_by",
+			Value: bsonx.Int32(1),
+		})
 	}
+
+	indexes := []mongo.IndexModel{mongo.IndexModel{Keys: keys}}
+
 	if d.opts.TTL > 0 {
 		ttl := int32(d.opts.TTL / time.Second)
 		indexes = append(indexes, mongo.IndexModel{
@@ -232,9 +227,118 @@ func (d *mongoDriver) setupDB(ctx context.Context) error {
 			Options: options.Index().SetExpireAfterSeconds(ttl),
 		})
 	}
-	_, err := d.getCollection().Indexes().CreateMany(ctx, indexes)
 
-	return errors.Wrap(err, "problem building indexes")
+	return indexes
+}
+
+func (d *mongoDriver) reportingIndexes() []mongo.IndexModel {
+	indexes := []mongo.IndexModel{}
+	completedInProgModTs := bsonx.Doc{}
+	completedEnd := bsonx.Doc{}
+	completedCreated := bsonx.Doc{}
+	typeCompletedInProgModTs := bsonx.Doc{}
+	typeCompletedEnd := bsonx.Doc{}
+
+	if d.opts.UseGroups {
+		completedInProgModTs = append(completedInProgModTs, bsonx.Elem{
+			Key:   "group",
+			Value: bsonx.Int32(1),
+		})
+		completedEnd = append(completedEnd, bsonx.Elem{
+			Key:   "group",
+			Value: bsonx.Int32(1),
+		})
+		completedCreated = append(completedCreated, bsonx.Elem{
+			Key:   "group",
+			Value: bsonx.Int32(1),
+		})
+		typeCompletedInProgModTs = append(typeCompletedInProgModTs, bsonx.Elem{
+			Key:   "group",
+			Value: bsonx.Int32(1),
+		})
+		typeCompletedEnd = append(typeCompletedEnd, bsonx.Elem{
+			Key:   "group",
+			Value: bsonx.Int32(1),
+		})
+	}
+
+	completedInProgModTs = append(completedInProgModTs,
+		bsonx.Elem{
+			Key:   "status.completed",
+			Value: bsonx.Int32(1),
+		},
+		bsonx.Elem{
+			Key:   "status.in_prog",
+			Value: bsonx.Int32(1),
+		},
+		bsonx.Elem{
+			Key:   "status.mod_ts",
+			Value: bsonx.Int32(1),
+		},
+	)
+	indexes = append(indexes, mongo.IndexModel{Keys: completedInProgModTs})
+
+	completedEnd = append(completedEnd,
+		bsonx.Elem{
+			Key:   "status.completed",
+			Value: bsonx.Int32(1),
+		},
+		bsonx.Elem{
+			Key:   "time_info.end",
+			Value: bsonx.Int32(1),
+		},
+	)
+	indexes = append(indexes, mongo.IndexModel{Keys: completedEnd})
+
+	completedCreated = append(completedCreated,
+		bsonx.Elem{
+			Key:   "status.completed",
+			Value: bsonx.Int32(1),
+		},
+		bsonx.Elem{
+			Key:   "time_info.created",
+			Value: bsonx.Int32(1),
+		},
+	)
+	indexes = append(indexes, mongo.IndexModel{Keys: completedCreated})
+
+	typeCompletedInProgModTs = append(typeCompletedInProgModTs,
+		bsonx.Elem{
+			Key:   "type",
+			Value: bsonx.Int32(1),
+		},
+		bsonx.Elem{
+			Key:   "status.completed",
+			Value: bsonx.Int32(1),
+		},
+		bsonx.Elem{
+			Key:   "status.in_prog",
+			Value: bsonx.Int32(1),
+		},
+		bsonx.Elem{
+			Key:   "status.mod_ts",
+			Value: bsonx.Int32(1),
+		},
+	)
+	indexes = append(indexes, mongo.IndexModel{Keys: typeCompletedInProgModTs})
+
+	typeCompletedEnd = append(typeCompletedEnd,
+		bsonx.Elem{
+			Key:   "type",
+			Value: bsonx.Int32(1),
+		},
+		bsonx.Elem{
+			Key:   "status.completed",
+			Value: bsonx.Int32(1),
+		},
+		bsonx.Elem{
+			Key:   "time_info.end",
+			Value: bsonx.Int32(1),
+		},
+	)
+	indexes = append(indexes, mongo.IndexModel{Keys: typeCompletedEnd})
+
+	return indexes
 }
 
 func (d *mongoDriver) Close() {
