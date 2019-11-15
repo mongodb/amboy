@@ -50,12 +50,8 @@ func IntervalGroupQueueOperation(ctx context.Context, qg QueueGroup, interval ti
 				IntervalGroupQueueOperation(ctx, qg, interval, startAt, conf, ops...)
 			}
 		}()
-		for {
-			if !startAt.Before(time.Now()) {
-				break
-			}
-			startAt = startAt.Add(interval)
-		}
+
+		waitUntilInterval(ctx, startAt, interval)
 
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
