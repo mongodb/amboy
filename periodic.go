@@ -129,12 +129,7 @@ func IntervalQueueOperation(ctx context.Context, q Queue, interval time.Duration
 			}
 		}()
 
-		for {
-			if !startAt.Before(time.Now()) {
-				break
-			}
-			startAt = startAt.Add(interval)
-		}
+		waitUntilInterval(ctx, startAt, interval)
 
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -185,4 +180,27 @@ func scheduleOp(ctx context.Context, q Queue, op QueueOperation, conf QueueOpera
 	}
 
 	return nil
+}
+
+func waitUntilInterval(ctx context.Context, startAt time.Time, interval time.Duration) {
+	if startAt.Before(time.Now()) {
+		for {
+			startAt = startAt.Add(interval)
+			if startAt.Before(time.Now()) {
+				continue
+			}
+
+			break
+		}
+	}
+
+	timer := time.NewTimer(-time.Since(startAt))
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return
+	case <-timer.C:
+		return
+	}
 }
