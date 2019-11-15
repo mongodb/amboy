@@ -18,7 +18,7 @@ type GroupQueueOperation struct {
 	Check     func(context.Context) bool
 }
 
-// IntervalQueueGroupOperation schedules jobs on a queue group with
+// IntervalGroupQueueOperation schedules jobs on a queue group with
 // similar semantics as IntervalQueueOperation.
 //
 // Operations will continue to run as long as the context is not
