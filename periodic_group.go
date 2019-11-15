@@ -10,6 +10,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+// GroupQueueOperation describes a single queue population operation
+// for a group queue.
 type GroupQueueOperation struct {
 	Operation QueueOperation
 	Queue     string
