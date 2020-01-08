@@ -10,6 +10,7 @@ import (
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/pool"
 	"github.com/mongodb/grip"
+	"github.com/mongodb/grip/message"
 	"github.com/mongodb/grip/recovery"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
@@ -21,6 +22,7 @@ type adaptiveLocalOrdering struct {
 	capacity   int
 	starter    sync.Once
 	id         string
+	scopes     ScopeManager
 	runner     amboy.Runner
 }
 
@@ -34,6 +36,7 @@ type adaptiveLocalOrdering struct {
 func NewAdaptiveOrderedLocalQueue(workers, capacity int) amboy.Queue {
 	q := &adaptiveLocalOrdering{}
 	r := pool.NewLocalWorkers(workers, q)
+	q.scopes = NewLocalScopeManager()
 	q.capacity = capacity
 	q.runner = r
 	q.id = fmt.Sprintf("queue.local.ordered.adaptive.%s", uuid.NewV4().String())
@@ -263,7 +266,15 @@ func (q *adaptiveLocalOrdering) Next(ctx context.Context) amboy.Job {
 
 				if len(items.ready) > 0 {
 					id, items.ready = items.ready[0], items.ready[1:]
-					ret <- items.jobs[id]
+					j := items.jobs[id]
+					if err := q.scopes.Acquire(id, j.Scopes()); err != nil {
+						items.ready = append(items.ready)
+						misses++
+						timer.Reset(time.Duration(misses * rand.Int63n(int64(time.Millisecond))))
+						continue
+					}
+
+					ret <- j
 					return
 				}
 
@@ -271,7 +282,15 @@ func (q *adaptiveLocalOrdering) Next(ctx context.Context) amboy.Job {
 
 				if len(items.ready) > 0 {
 					id, items.ready = items.ready[0], items.ready[1:]
-					ret <- items.jobs[id]
+					j := items.jobs[id]
+					if err := q.scopes.Acquire(id, j.Scopes()); err != nil {
+						items.ready = append(items.ready)
+						misses++
+						timer.Reset(time.Duration(misses * rand.Int63n(int64(time.Millisecond))))
+						continue
+					}
+
+					ret <- j
 					return
 				}
 
@@ -305,6 +324,15 @@ func (q *adaptiveLocalOrdering) Complete(ctx context.Context, j amboy.Job) {
 				items.remove(fixed.Pop())
 			}
 		}
+
+		grip.Warning(message.WrapErrors(
+			q.scopes.Release(j.ID(), j.Scopes()),
+			message.Fields{
+				"id":     j.ID(),
+				"scopes": j.Scopes(),
+				"queue":  q.ID(),
+				"op":     "releasing scope lock during completion",
+			}))
 
 		close(wait)
 	}

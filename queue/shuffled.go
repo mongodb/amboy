@@ -23,6 +23,7 @@ import (
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/pool"
 	"github.com/mongodb/grip"
+	"github.com/mongodb/grip/message"
 	"github.com/mongodb/grip/recovery"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
@@ -37,6 +38,7 @@ type shuffledLocal struct {
 	capacity   int
 	id         string
 	starter    sync.Once
+	scopes     ScopeManager
 	runner     amboy.Runner
 }
 
@@ -44,6 +46,7 @@ type shuffledLocal struct {
 // order of jobs, relative the insertion order.
 func NewShuffledLocal(workers, capacity int) amboy.Queue {
 	q := &shuffledLocal{
+		scopes:   NewLocalScopeManager(),
 		capacity: capacity,
 		id:       fmt.Sprintf("queue.local.unordered.shuffled.%s", uuid.NewV4().String()),
 	}
@@ -356,6 +359,10 @@ func (q *shuffledLocal) Next(ctx context.Context) amboy.Job {
 				continue
 			}
 
+			if err := q.scopes.Acquire(job.ID(), job.Scopes()); err != nil {
+				continue
+			}
+
 			select {
 			case <-ctx.Done():
 				return
@@ -401,6 +408,15 @@ func (q *shuffledLocal) Complete(ctx context.Context, j amboy.Job) {
 				delete(completed, toDelete.Pop())
 			}
 		}
+
+		grip.Warning(message.WrapErrors(
+			q.scopes.Release(j.ID(), j.Scopes()),
+			message.Fields{
+				"id":     j.ID(),
+				"scopes": j.Scopes(),
+				"queue":  q.ID(),
+				"op":     "releasing scope lock during completion",
+			}))
 	}
 
 	select {

@@ -30,6 +30,7 @@ type sqsFIFOQueue struct {
 	id         string
 	started    bool
 	numRunning int
+	scopes     ScopeManager
 	tasks      struct { // map jobID to job information
 		completed map[string]bool
 		all       map[string]amboy.Job
@@ -44,6 +45,7 @@ type sqsFIFOQueue struct {
 // restarts.
 func NewSQSFifoQueue(queueName string, workers int) (amboy.Queue, error) {
 	q := &sqsFIFOQueue{
+		scopes: NewLocalScopeManager(),
 		sqsClient: sqs.New(session.Must(session.NewSession(&aws.Config{
 			Region: aws.String(region),
 		}))),
@@ -174,6 +176,10 @@ func (q *sqsFIFOQueue) Next(ctx context.Context) amboy.Job {
 	if err != nil {
 		return nil
 	}
+	if err := q.scopes.Acquire(job.ID(), job.Scopes()); err != nil {
+		q.Put(ctx, job)
+		return nil
+	}
 
 	if job.TimeInfo().IsStale() {
 		return nil
@@ -220,6 +226,14 @@ func (q *sqsFIFOQueue) Complete(ctx context.Context, job amboy.Job) {
 		savedJob.UpdateTimeInfo(job.TimeInfo())
 	}
 
+	grip.Warning(message.WrapErrors(
+		q.scopes.Release(j.ID(), j.Scopes()),
+		message.Fields{
+			"id":     j.ID(),
+			"scopes": j.Scopes(),
+			"queue":  q.ID(),
+			"op":     "releasing scope lock during completion",
+		}))
 }
 
 // Returns a channel that produces completed Job objects.

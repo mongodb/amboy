@@ -23,6 +23,7 @@ type priorityLocalQueue struct {
 	storage  *priorityStorage
 	fixed    *fixedStorage
 	channel  chan amboy.Job
+	scopes   ScopeManager
 	runner   amboy.Runner
 	id       string
 	counters struct {
@@ -37,6 +38,7 @@ type priorityLocalQueue struct {
 // worker processes.
 func NewLocalPriorityQueue(workers, capacity int) amboy.Queue {
 	q := &priorityLocalQueue{
+		scopes:  NewLocalScopeManager(),
 		storage: makePriorityStorage(),
 		fixed:   newFixedStorage(capacity),
 		id:      fmt.Sprintf("queue.local.unordered.priority.%s", uuid.NewV4().String()),
@@ -101,6 +103,12 @@ func (q *priorityLocalQueue) Next(ctx context.Context) amboy.Job {
 					q.channel <- job
 				}()
 				continue
+			}
+			if err := q.scopes.Acquire(job.ID(), job.Scopes()); err != nil {
+				go func() {
+					defer recovery.LogStackTraceAndContinue("re-queue waiting job", job.ID())
+					q.channel <- job
+				}()
 			}
 
 			q.counters.Lock()
@@ -217,6 +225,15 @@ func (q *priorityLocalQueue) Complete(ctx context.Context, j amboy.Job) {
 			q.storage.Remove(q.fixed.Pop())
 		}
 	}
+
+	grip.Warning(message.WrapErrors(
+		q.scopes.Release(j.ID(), j.Scopes()),
+		message.Fields{
+			"id":     j.ID(),
+			"scopes": j.Scopes(),
+			"queue":  q.ID(),
+			"op":     "releasing scope lock during completion",
+		}))
 
 	q.counters.completed++
 }

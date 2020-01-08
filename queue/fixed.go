@@ -29,6 +29,7 @@ type limitedSizeLocal struct {
 	toDelete chan string
 	capacity int
 	storage  map[string]amboy.Job
+	scopes   ScopeManager
 
 	deletedCount int
 	staleCount   int
@@ -43,6 +44,7 @@ func NewLocalLimitedSize(workers, capacity int) amboy.Queue {
 	q := &limitedSizeLocal{
 		capacity: capacity,
 		storage:  make(map[string]amboy.Job),
+		scopes:   NewLocalScopeManager(),
 		id:       fmt.Sprintf("queue.local.unordered.fixed.%s", uuid.NewV4().String()),
 	}
 	q.runner = pool.NewLocalWorkers(workers, q)
@@ -146,6 +148,9 @@ func (q *limitedSizeLocal) Next(ctx context.Context) amboy.Job {
 					defer recovery.LogStackTraceAndContinue("re-queue waiting job", job.ID())
 					q.channel <- job
 				}()
+				continue
+			}
+			if err := q.scopes.Acquire(job.ID(), job.Scopes()); err != nil {
 				continue
 			}
 
@@ -256,6 +261,15 @@ func (q *limitedSizeLocal) Complete(ctx context.Context, j amboy.Job) {
 		delete(q.storage, <-q.toDelete)
 		q.deletedCount++
 	}
+
+	grip.Warning(message.WrapErrors(
+		q.scopes.Release(j.ID(), j.Scopes()),
+		message.Fields{
+			"id":     j.ID(),
+			"scopes": j.Scopes(),
+			"queue":  q.ID(),
+			"op":     "releasing scope lock during completion",
+		}))
 
 	q.toDelete <- j.ID()
 }
