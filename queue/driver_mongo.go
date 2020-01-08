@@ -187,8 +187,12 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 			Key:   "group",
 			Value: bsonx.Int32(1),
 		})
-
 	}
+
+	scopes = append(scopes, bsonx.Elem{
+		Key:   "scopes",
+		Value: bsonx.Int32(1),
+	})
 
 	primary = append(primary,
 		bsonx.Elem{
