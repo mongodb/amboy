@@ -502,7 +502,7 @@ func (d *mongoDriver) prepareInterchange(j amboy.Job) (*registry.JobInterchange,
 
 func (d *mongoDriver) doUpdate(ctx context.Context, job *registry.JobInterchange) error {
 	d.processJobForGroup(job)
-	query := getAtomicQuery(d.instanceID, job.Name, stat.ModificationCount)
+	query := getAtomicQuery(d.instanceID, job.Name, job.Status.ModificationCount)
 	res, err := d.getCollection().ReplaceOne(ctx, query, job)
 	if err != nil {
 		if isMongoDupKey(err) {

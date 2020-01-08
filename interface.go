@@ -82,7 +82,7 @@ type Job interface {
 
 	// Scope provides the ability to provide more configurable
 	// exclusion a job can provide.
-	Scope() []string
+	Scopes() []string
 	SetScopes([]string)
 }
 

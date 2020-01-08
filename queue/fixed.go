@@ -262,7 +262,7 @@ func (q *limitedSizeLocal) Complete(ctx context.Context, j amboy.Job) {
 		q.deletedCount++
 	}
 
-	grip.Warning(message.WrapErrors(
+	grip.Warning(message.WrapError(
 		q.scopes.Release(j.ID(), j.Scopes()),
 		message.Fields{
 			"id":     j.ID(),

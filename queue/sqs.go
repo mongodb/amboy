@@ -177,7 +177,7 @@ func (q *sqsFIFOQueue) Next(ctx context.Context) amboy.Job {
 		return nil
 	}
 	if err := q.scopes.Acquire(job.ID(), job.Scopes()); err != nil {
-		q.Put(ctx, job)
+		_ = q.Put(ctx, job)
 		return nil
 	}
 
@@ -226,11 +226,11 @@ func (q *sqsFIFOQueue) Complete(ctx context.Context, job amboy.Job) {
 		savedJob.UpdateTimeInfo(job.TimeInfo())
 	}
 
-	grip.Warning(message.WrapErrors(
-		q.scopes.Release(j.ID(), j.Scopes()),
+	grip.Warning(message.WrapError(
+		q.scopes.Release(job.ID(), job.Scopes()),
 		message.Fields{
-			"id":     j.ID(),
-			"scopes": j.Scopes(),
+			"id":     job.ID(),
+			"scopes": job.Scopes(),
 			"queue":  q.ID(),
 			"op":     "releasing scope lock during completion",
 		}))

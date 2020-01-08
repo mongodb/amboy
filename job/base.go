@@ -270,6 +270,6 @@ func (b *Base) Scopes() []string {
 	b.mutex.RLock()
 	defer b.mutex.RUnlock()
 
-	return b.timeInfo
+	return b.scopes
 
 }

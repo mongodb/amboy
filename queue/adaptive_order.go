@@ -325,7 +325,7 @@ func (q *adaptiveLocalOrdering) Complete(ctx context.Context, j amboy.Job) {
 			}
 		}
 
-		grip.Warning(message.WrapErrors(
+		grip.Warning(message.WrapError(
 			q.scopes.Release(j.ID(), j.Scopes()),
 			message.Fields{
 				"id":     j.ID(),

@@ -359,7 +359,7 @@ func (q *shuffledLocal) Next(ctx context.Context) amboy.Job {
 				continue
 			}
 
-			if err := q.scopes.Acquire(job.ID(), job.Scopes()); err != nil {
+			if err := q.scopes.Acquire(j.ID(), j.Scopes()); err != nil {
 				continue
 			}
 
@@ -409,7 +409,7 @@ func (q *shuffledLocal) Complete(ctx context.Context, j amboy.Job) {
 			}
 		}
 
-		grip.Warning(message.WrapErrors(
+		grip.Warning(message.WrapError(
 			q.scopes.Release(j.ID(), j.Scopes()),
 			message.Fields{
 				"id":     j.ID(),
