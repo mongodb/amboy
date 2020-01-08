@@ -175,16 +175,22 @@ func (d *mongoDriver) setupDB(ctx context.Context) error {
 }
 
 func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
-	keys := bsonx.Doc{}
+	primary := bsonx.Doc{}
+	scopes := bsonx.Doc{}
 
 	if d.opts.UseGroups {
-		keys = append(keys, bsonx.Elem{
+		primary = append(primary, bsonx.Elem{
 			Key:   "group",
 			Value: bsonx.Int32(1),
 		})
+		scopes = append(scopes, bsonx.Elem{
+			Key:   "group",
+			Value: bsonx.Int32(1),
+		})
+
 	}
 
-	keys = append(keys,
+	primary = append(primary,
 		bsonx.Elem{
 			Key:   "status.completed",
 			Value: bsonx.Int32(1),
@@ -195,25 +201,33 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 		})
 
 	if d.opts.Priority {
-		keys = append(keys, bsonx.Elem{
+		primary = append(primary, bsonx.Elem{
 			Key:   "priority",
 			Value: bsonx.Int32(1),
 		})
 	}
 
 	if d.opts.CheckWaitUntil {
-		keys = append(keys, bsonx.Elem{
+		primary = append(primary, bsonx.Elem{
 			Key:   "time_info.wait_until",
 			Value: bsonx.Int32(1),
 		})
 	} else if d.opts.CheckDispatchBy {
-		keys = append(keys, bsonx.Elem{
+		primary = append(primary, bsonx.Elem{
 			Key:   "time_info.dispatch_by",
 			Value: bsonx.Int32(1),
 		})
 	}
 
-	indexes := []mongo.IndexModel{mongo.IndexModel{Keys: keys}}
+	indexes := []mongo.IndexModel{
+		{
+			Keys: primary,
+		},
+		{
+			Keys:    scopes,
+			Options: options.Index().SetSparse(true).SetUnique(true),
+		},
+	}
 
 	if d.opts.TTL > 0 {
 		ttl := int32(d.opts.TTL / time.Second)
@@ -454,7 +468,26 @@ func isMongoDupKey(err error) bool {
 }
 
 func (d *mongoDriver) Save(ctx context.Context, j amboy.Job) error {
-	name := j.ID()
+	job, err := d.prepareInterchange(j)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return errors.WithStack(d.doUpdate(ctx, job))
+}
+
+func (d *mongoDriver) Complete(ctx context.Context, j amboy.Job) error {
+	job, err := d.prepareInterchange(j)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	job.Scopes = nil
+
+	return errors.WithStack(d.doUpdate(ctx, job))
+}
+
+func (d *mongoDriver) prepareInterchange(j amboy.Job) (*registry.JobInterchange, error) {
 	stat := j.Status()
 	stat.ErrorCount = len(stat.Errors)
 	stat.ModificationTime = time.Now()
@@ -462,9 +495,12 @@ func (d *mongoDriver) Save(ctx context.Context, j amboy.Job) error {
 
 	job, err := registry.MakeJobInterchange(j, d.opts.Format)
 	if err != nil {
-		return errors.Wrap(err, "problem converting job to interchange format")
+		return nil, errors.Wrap(err, "problem converting job to interchange format")
 	}
+	return job, nil
+}
 
+func (d *mongoDriver) doUpdate(ctx context.Context, job *registry.JobInterchange) error {
 	d.processJobForGroup(job)
 	query := getAtomicQuery(d.instanceID, job.Name, stat.ModificationCount)
 	res, err := d.getCollection().ReplaceOne(ctx, query, job)
@@ -474,18 +510,18 @@ func (d *mongoDriver) Save(ctx context.Context, j amboy.Job) error {
 				"id":        d.instanceID,
 				"service":   "amboy.queue.mongo",
 				"operation": "save job",
-				"name":      name,
+				"name":      job.Name,
 				"is_group":  d.opts.UseGroups,
 				"group":     d.opts.GroupName,
 				"outcome":   "duplicate key error, ignoring stale job",
 			})
 			return nil
 		}
-		return errors.Wrapf(err, "problem saving document %s: %+v", name, res)
+		return errors.Wrapf(err, "problem saving document %s: %+v", job.Name, res)
 	}
 
 	if res.MatchedCount == 0 {
-		return errors.Errorf("problem saving job [id=%s, matched=%d, modified=%d]", name, res.MatchedCount, res.ModifiedCount)
+		return errors.Errorf("problem saving job [id=%s, matched=%d, modified=%d]", job.Name, res.MatchedCount, res.ModifiedCount)
 	}
 	return nil
 }
