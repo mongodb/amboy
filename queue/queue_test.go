@@ -939,7 +939,7 @@ func ManyQueueTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 }
 
 func ScopedLockTest(bctx context.Context, t *testing.T, test QueueTestCase, runner PoolTestCase, size SizeTestCase) {
-	ctx, cancel := context.WithTimeout(bctx, 20*time.Second)
+	ctx, cancel := context.WithTimeout(bctx, time.Minute)
 	defer cancel()
 	q, closer, err := test.Constructor(ctx, newDriverID(), 2*size.Size)
 	require.NoError(t, err)

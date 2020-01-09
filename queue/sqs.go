@@ -216,9 +216,9 @@ func (q *sqsFIFOQueue) Complete(ctx context.Context, job amboy.Job) {
 		return
 	}
 	name := job.ID()
+	q.dispatcher.Complete(ctx, job)
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
-	q.dispatcher.Complete(ctx, job)
 	if ctx.Err() != nil {
 		grip.Notice(message.Fields{
 			"message":   "Did not complete job because context cancelled",
