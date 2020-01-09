@@ -263,6 +263,7 @@ func (b *Base) SetScopes(scopes []string) {
 	defer b.mutex.Unlock()
 
 	if len(scopes) == 0 {
+		b.RequiredScopes = nil
 		return
 	}
 

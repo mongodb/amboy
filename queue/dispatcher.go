@@ -135,6 +135,10 @@ func (d *dispatcherImpl) Complete(ctx context.Context, job amboy.Job) {
 	ti.End = time.Now()
 	job.UpdateTimeInfo(ti)
 
+	if info.jobContext.Err() != nil && job.Error() == nil {
+		job.AddError(errors.New("job was aborted during execution"))
+	}
+
 	info.jobCancel()
 	info.stopPing()
 }
