@@ -419,8 +419,8 @@ func (q *depGraphOrderedLocal) Complete(ctx context.Context, j amboy.Job) {
 		return
 	}
 	grip.Debugf("marking job (%s) as complete", j.ID())
+	q.dispatcher.Complete(ctx, j)
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
-	q.dispatcher.Complete(ctx, j)
 	q.tasks.completed[j.ID()] = true
 }
