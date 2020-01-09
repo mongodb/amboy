@@ -109,7 +109,6 @@ func DefaultQueueTestCases() []QueueTestCase {
 			Name:                    "LimitedSize",
 			WaitUntilSupported:      true,
 			DispatchBeforeSupported: true,
-			SingleWorker:            true,
 			Constructor: func(ctx context.Context, _ string, size int) (amboy.Queue, TestCloser, error) {
 				return NewLocalLimitedSize(size, 1024*size), func(ctx context.Context) error { return nil }, nil
 			},
@@ -428,7 +427,7 @@ func TestQueueSmoke(t *testing.T) {
 								OneExecutionTest(bctx, t, test, runner, size)
 							})
 
-							if !test.SingleWorker && (!test.OrderedSupported || test.OrderedStartsBefore) && size.Size >= 4 && size.Size <= 32 {
+							if test.SingleWorker && (!test.OrderedSupported || test.OrderedStartsBefore) && size.Size >= 4 && size.Size <= 32 {
 								t.Run("ScopedLock", func(t *testing.T) {
 									ScopedLockTest(bctx, t, test, runner, size)
 								})
@@ -945,7 +944,7 @@ func ScopedLockTest(bctx context.Context, t *testing.T, test QueueTestCase, runn
 	q, closer, err := test.Constructor(ctx, newDriverID(), 2*size.Size)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, closer(ctx)) }()
-	require.NoError(t, runner.SetPool(q, size.Size*2))
+	require.NoError(t, runner.SetPool(q, size.Size*3))
 
 	require.NoError(t, q.Start(ctx))
 

@@ -364,10 +364,6 @@ func (q *shuffledLocal) Next(ctx context.Context) amboy.Job {
 				continue
 			}
 
-			if err := q.dispatcher.Dispatch(ctx, j); err != nil {
-				continue
-			}
-
 			select {
 			case <-ctx.Done():
 				return
@@ -383,7 +379,16 @@ func (q *shuffledLocal) Next(ctx context.Context) amboy.Job {
 	case <-ctx.Done():
 		return nil
 	case q.operations <- op:
-		return <-ret
+		j := <-ret
+		if j == nil {
+			return nil
+		}
+		if err := q.dispatcher.Dispatch(ctx, j); err != nil {
+			q.Put(ctx, j)
+			return nil
+		}
+
+		return j
 	}
 }
 
@@ -395,13 +400,13 @@ func (q *shuffledLocal) Complete(ctx context.Context, j amboy.Job) {
 		return
 	}
 
+	q.dispatcher.Complete(ctx, j)
 	op := func(
 		pending map[string]amboy.Job,
 		completed map[string]amboy.Job,
 		dispatched map[string]amboy.Job,
 		toDelete *fixedStorage,
 	) {
-		q.dispatcher.Complete(ctx, j)
 		id := j.ID()
 
 		completed[id] = j

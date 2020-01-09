@@ -25,12 +25,13 @@ import (
 // store no more than 2x the number specified, and no more the
 // specified capacity of completed jobs.
 type limitedSizeLocal struct {
-	channel    chan amboy.Job
-	toDelete   chan string
-	capacity   int
-	storage    map[string]amboy.Job
-	scopes     ScopeManager
-	dispatcher Dispatcher
+	channel     chan amboy.Job
+	toDelete    chan string
+	capacity    int
+	storage     map[string]amboy.Job
+	scopes      ScopeManager
+	dispatcher  Dispatcher
+	lifetimeCtx context.Context
 
 	deletedCount int
 	staleCount   int
@@ -54,9 +55,6 @@ func NewLocalLimitedSize(workers, capacity int) amboy.Queue {
 }
 
 func (q *limitedSizeLocal) ID() string {
-	q.mu.RLock()
-	defer q.mu.RUnlock()
-
 	return q.id
 }
 
@@ -127,7 +125,12 @@ func (q *limitedSizeLocal) Get(ctx context.Context, name string) (amboy.Job, boo
 // implementations to fetch work. This operation blocks until a job is
 // available or the context is canceled.
 func (q *limitedSizeLocal) Next(ctx context.Context) amboy.Job {
+	misses := 0
 	for {
+		if misses > q.capacity {
+			return nil
+		}
+
 		select {
 		case job := <-q.channel:
 			ti := job.TimeInfo()
@@ -137,33 +140,31 @@ func (q *limitedSizeLocal) Next(ctx context.Context) amboy.Job {
 				q.staleCount++
 				q.mu.Unlock()
 
-				grip.Notice(message.Fields{
+				grip.Alert(message.Fields{
 					"state":    "stale",
 					"job":      job.ID(),
 					"job_type": job.Type().Name,
 				})
+				misses++
 				continue
 			}
 
 			if !ti.IsDispatchable() {
-				go func() {
-					defer recovery.LogStackTraceAndContinue("re-queue waiting job", job.ID())
-					q.channel <- job
-				}()
+				go q.requeue(job)
+				misses++
 				continue
 			}
-			if err := q.scopes.Acquire(job.ID(), job.Scopes()); err != nil {
-				go func() {
-					defer recovery.LogStackTraceAndContinue("re-queue waiting job", job.ID())
-					q.channel <- job
-				}()
-				continue
-			}
+
 			if err := q.dispatcher.Dispatch(ctx, job); err != nil {
-				go func() {
-					defer recovery.LogStackTraceAndContinue("re-queue waiting job", job.ID())
-					q.channel <- job
-				}()
+				go q.requeue(job)
+				misses++
+				continue
+			}
+
+			if err := q.scopes.Acquire(job.ID(), job.Scopes()); err != nil {
+				q.dispatcher.Release(ctx, job)
+				go q.requeue(job)
+				misses++
 				continue
 			}
 
@@ -171,7 +172,14 @@ func (q *limitedSizeLocal) Next(ctx context.Context) amboy.Job {
 		case <-ctx.Done():
 			return nil
 		}
+	}
+}
 
+func (q *limitedSizeLocal) requeue(job amboy.Job) {
+	defer recovery.LogStackTraceAndContinue("re-queue waiting job", job.ID())
+	select {
+	case <-q.lifetimeCtx.Done():
+	case q.channel <- job:
 	}
 }
 
@@ -264,9 +272,10 @@ func (q *limitedSizeLocal) Complete(ctx context.Context, j amboy.Job) {
 	if ctx.Err() != nil {
 		return
 	}
+	q.dispatcher.Complete(ctx, j)
+
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	q.dispatcher.Complete(ctx, j)
 	// save it
 	q.storage[j.ID()] = j
 
@@ -275,7 +284,7 @@ func (q *limitedSizeLocal) Complete(ctx context.Context, j amboy.Job) {
 		q.deletedCount++
 	}
 
-	grip.Warning(message.WrapError(
+	grip.Alert(message.WrapError(
 		q.scopes.Release(j.ID(), j.Scopes()),
 		message.Fields{
 			"id":     j.ID(),
@@ -298,6 +307,7 @@ func (q *limitedSizeLocal) Start(ctx context.Context) error {
 		return errors.New("cannot start a running queue")
 	}
 
+	q.lifetimeCtx = ctx
 	q.toDelete = make(chan string, q.capacity)
 	q.channel = make(chan amboy.Job, q.capacity)
 

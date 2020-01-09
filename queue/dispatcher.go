@@ -14,6 +14,7 @@ import (
 
 type Dispatcher interface {
 	Dispatch(context.Context, amboy.Job) error
+	Release(context.Context, amboy.Job)
 	Complete(context.Context, amboy.Job)
 }
 
@@ -38,6 +39,9 @@ type dispatcherInfo struct {
 }
 
 func (d *dispatcherImpl) Dispatch(ctx context.Context, job amboy.Job) error {
+	if job == nil {
+		return errors.New("cannot dispatch nil job")
+	}
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
 
@@ -108,20 +112,29 @@ func (d *dispatcherImpl) Dispatch(ctx context.Context, job amboy.Job) error {
 	return nil
 }
 
+func (d *dispatcherImpl) Release(ctx context.Context, job amboy.Job) {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	if info, ok := d.cache[job.ID()]; ok {
+		info.stopPing()
+		info.jobCancel()
+		delete(d.cache, job.ID())
+	}
+}
+
 func (d *dispatcherImpl) Complete(ctx context.Context, job amboy.Job) {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
 	info, ok := d.cache[job.ID()]
 	if !ok {
-		job.AddError(errors.Errorf("problem with completing a cached job."))
 		return
 	}
-
 	delete(d.cache, job.ID())
 
 	ti := job.TimeInfo()
 	ti.End = time.Now()
 	job.UpdateTimeInfo(ti)
 
+	info.jobCancel()
 	info.stopPing()
 }
