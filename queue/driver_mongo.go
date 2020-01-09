@@ -176,23 +176,13 @@ func (d *mongoDriver) setupDB(ctx context.Context) error {
 
 func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 	primary := bsonx.Doc{}
-	scopes := bsonx.Doc{}
 
 	if d.opts.UseGroups {
 		primary = append(primary, bsonx.Elem{
 			Key:   "group",
 			Value: bsonx.Int32(1),
 		})
-		scopes = append(scopes, bsonx.Elem{
-			Key:   "group",
-			Value: bsonx.Int32(1),
-		})
 	}
-
-	scopes = append(scopes, bsonx.Elem{
-		Key:   "scopes",
-		Value: bsonx.Int32(1),
-	})
 
 	primary = append(primary,
 		bsonx.Elem{
@@ -228,7 +218,12 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 			Keys: primary,
 		},
 		{
-			Keys:    scopes,
+			Keys: bsonx.Doc{
+				{
+					Key:   "scopes",
+					Value: bsonx.Int32(1),
+				},
+			},
 			Options: options.Index().SetSparse(true).SetUnique(true),
 		},
 	}
@@ -476,6 +471,8 @@ func (d *mongoDriver) Save(ctx context.Context, j amboy.Job) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
+
+	job.Scopes = j.Scopes()
 
 	return errors.WithStack(d.doUpdate(ctx, job))
 }

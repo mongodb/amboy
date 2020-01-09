@@ -23,6 +23,10 @@ func NewLocalScopeManager() ScopeManager {
 }
 
 func (s *scopeManagerImpl) Acquire(id string, scopes []string) error {
+	if len(scopes) == 0 {
+		return nil
+	}
+
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -43,6 +47,10 @@ func (s *scopeManagerImpl) Acquire(id string, scopes []string) error {
 }
 
 func (s *scopeManagerImpl) Release(id string, scopes []string) error {
+	if len(scopes) == 0 {
+		return nil
+	}
+
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 

@@ -32,11 +32,9 @@ func init() {
 	grip.SetName("amboy.queue.tests")
 	grip.Error(grip.SetSender(send.MakeNative()))
 
-	if !testing.Verbose() {
-		lvl := grip.GetSender().Level()
-		lvl.Threshold = level.Error
-		_ = grip.GetSender().SetLevel(lvl)
-	}
+	lvl := grip.GetSender().Level()
+	lvl.Threshold = level.Error
+	_ = grip.GetSender().SetLevel(lvl)
 
 	job.RegisterDefaultJobs()
 }
@@ -61,12 +59,13 @@ type QueueTestCase struct {
 }
 
 type PoolTestCase struct {
-	Name       string
-	SetPool    func(amboy.Queue, int) error
-	SkipRemote bool
-	SkipMulti  bool
-	MinSize    int
-	MaxSize    int
+	Name         string
+	SetPool      func(amboy.Queue, int) error
+	SkipRemote   bool
+	SkipMulti    bool
+	RateLimiting bool
+	MinSize      int
+	MaxSize      int
 }
 
 type SizeTestCase struct {
@@ -104,20 +103,20 @@ func DefaultQueueTestCases() []QueueTestCase {
 				return NewLocalPriorityQueue(size, defaultLocalQueueCapcity), func(ctx context.Context) error { return nil }, nil
 			},
 		},
-		{
-			Name:                    "LimitedSize",
-			WaitUntilSupported:      true,
-			DispatchBeforeSupported: true,
-			Constructor: func(ctx context.Context, _ string, size int) (amboy.Queue, TestCloser, error) {
-				return NewLocalLimitedSize(size, 1024*size), func(ctx context.Context) error { return nil }, nil
-			},
-		},
-		{
-			Name: "Shuffled",
-			Constructor: func(ctx context.Context, _ string, size int) (amboy.Queue, TestCloser, error) {
-				return NewShuffledLocal(size, defaultLocalQueueCapcity), func(ctx context.Context) error { return nil }, nil
-			},
-		},
+		// {
+		//	Name:                    "LimitedSize",
+		//	WaitUntilSupported:      true,
+		//	DispatchBeforeSupported: true,
+		//	Constructor: func(ctx context.Context, _ string, size int) (amboy.Queue, TestCloser, error) {
+		//		return NewLocalLimitedSize(size, 1024*size), func(ctx context.Context) error { return nil }, nil
+		//	},
+		// },
+		// {
+		//	Name: "Shuffled",
+		//	Constructor: func(ctx context.Context, _ string, size int) (amboy.Queue, TestCloser, error) {
+		//		return NewShuffledLocal(size, defaultLocalQueueCapcity), func(ctx context.Context) error { return nil }, nil
+		//	},
+		// },
 		{
 			Name:    "SQSFifo",
 			MaxSize: 4,
@@ -298,6 +297,7 @@ func DefaultPoolTestCases() []PoolTestCase {
 		{
 			Name:      "Single",
 			SkipMulti: true,
+			MinSize:   1,
 			MaxSize:   1,
 			SetPool: func(q amboy.Queue, _ int) error {
 				runner := pool.NewSingle()
@@ -314,9 +314,10 @@ func DefaultPoolTestCases() []PoolTestCase {
 			SetPool: func(q amboy.Queue, size int) error { return q.SetRunner(pool.NewAbortablePool(size, q)) },
 		},
 		{
-			Name:    "RateLimitedSimple",
-			MinSize: 4,
-			MaxSize: 16,
+			Name:         "RateLimitedSimple",
+			MinSize:      4,
+			MaxSize:      16,
+			RateLimiting: true,
 			SetPool: func(q amboy.Queue, size int) error {
 				runner, err := pool.NewSimpleRateLimitedWorkers(size, 10*time.Millisecond, q)
 				if err != nil {
@@ -327,11 +328,12 @@ func DefaultPoolTestCases() []PoolTestCase {
 			},
 		},
 		{
-			Name:       "RateLimitedAverage",
-			MinSize:    4,
-			MaxSize:    16,
-			SkipMulti:  true,
-			SkipRemote: true,
+			Name:         "RateLimitedAverage",
+			MinSize:      4,
+			MaxSize:      16,
+			RateLimiting: true,
+			SkipMulti:    true,
+			SkipRemote:   true,
 			SetPool: func(q amboy.Queue, size int) error {
 				runner, err := pool.NewMovingAverageRateLimitedWorkers(size, size*100, 10*time.Millisecond, q)
 				if err != nil {
@@ -421,6 +423,12 @@ func TestQueueSmoke(t *testing.T) {
 							t.Run("OneExecution", func(t *testing.T) {
 								OneExecutionTest(bctx, t, test, runner, size)
 							})
+
+							if !runner.RateLimiting && (!test.OrderedSupported || test.OrderedStartsBefore) && runner.MinSize > 2 && runner.MaxSize < 32 {
+								t.Run("ScopedLock", func(t *testing.T) {
+									ScopedLockTest(bctx, t, test, runner, size)
+								})
+							}
 
 							if test.IsRemote && test.MultiSupported && !runner.SkipMulti {
 								t.Run("MultiExecution", func(t *testing.T) {
@@ -925,4 +933,44 @@ func ManyQueueTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 	}
 
 	assert.Equal(t, size.Size*inside*outside, mockJobCounters.Count())
+}
+
+func ScopedLockTest(bctx context.Context, t *testing.T, test QueueTestCase, runner PoolTestCase, size SizeTestCase) {
+	ctx, cancel := context.WithTimeout(bctx, time.Second)
+	defer cancel()
+	q, closer, err := test.Constructor(ctx, newDriverID(), size.Size)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, closer(ctx)) }()
+	require.NoError(t, runner.SetPool(q, size.Size*3))
+
+	require.NoError(t, q.Start(ctx))
+
+	for i := 0; i < 2*size.Size; i++ {
+		j := newSleepJob()
+		if i%2 == 0 {
+			j.SetScopes([]string{"a"})
+			j.sleep = time.Hour
+		}
+		require.NoError(t, q.Put(ctx, j))
+	}
+	ticker := time.NewTicker(2 * time.Millisecond)
+	defer ticker.Stop()
+
+waitLoop:
+	for {
+		select {
+		case <-ctx.Done():
+			break waitLoop
+		case <-ticker.C:
+			stat := q.Stats(ctx)
+			if stat.Completed == size.Size {
+				break waitLoop
+			}
+		}
+	}
+
+	time.Sleep(50 * time.Millisecond)
+	stats := q.Stats(ctx)
+	assert.Equal(t, 2*size.Size, stats.Total)
+	assert.Equal(t, size.Size, stats.Completed)
 }

@@ -262,6 +262,10 @@ func (b *Base) SetScopes(scopes []string) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
+	if len(scopes) == 0 {
+		b.scopes = nil
+	}
+
 	b.scopes = scopes
 }
 
@@ -269,6 +273,10 @@ func (b *Base) SetScopes(scopes []string) {
 func (b *Base) Scopes() []string {
 	b.mutex.RLock()
 	defer b.mutex.RUnlock()
+
+	if len(b.scopes) == 0 {
+		return nil
+	}
 
 	return b.scopes
 

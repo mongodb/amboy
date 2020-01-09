@@ -49,7 +49,6 @@ func MakeJobInterchange(j amboy.Job, f amboy.Format) (*JobInterchange, error) {
 		Priority: j.Priority(),
 		Status:   j.Status(),
 		TimeInfo: j.TimeInfo(),
-		Scopes:   j.Scopes(),
 		Job: &rawJob{
 			Body: data,
 			Type: typeInfo.Name,
