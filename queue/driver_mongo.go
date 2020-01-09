@@ -28,6 +28,7 @@ type mongoDriver struct {
 	instanceID string
 	mu         sync.RWMutex
 	canceler   context.CancelFunc
+	dispatcher Dispatcher
 }
 
 // NewMongoDriver constructs a MongoDB backed queue driver
@@ -689,7 +690,7 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 		misses int64
 	)
 
-	opts := options.Find().SetBatchSize(4)
+	opts := options.Find().SetBatchSize(100)
 	if d.opts.Priority {
 		opts.SetSort(bson.M{"priority": -1})
 	}
@@ -767,7 +768,22 @@ RETRY:
 					grip.NoticeWhen(err == nil, msg)
 					continue CURSOR
 				}
+				// TODO check here to see if this is
+				// lockable
 
+				if err := d.dispatcher.Dispatch(ctx, job); err != nil {
+					grip.Info(message.WrapError(err, message.Fields{
+						"id":        d.instanceID,
+						"service":   "amboy.queue.mongo",
+						"is_group":  d.opts.UseGroups,
+						"group":     d.opts.GroupName,
+						"operation": "dispatching job",
+						"job":       job.ID(),
+						"job_type":  job.Type().Name,
+					}))
+
+					continue CURSOR
+				}
 				break CURSOR
 			}
 
@@ -803,7 +819,6 @@ RETRY:
 			continue RETRY
 		}
 	}
-
 	return job
 }
 
@@ -860,4 +875,16 @@ func (d *mongoDriver) Stats(ctx context.Context) amboy.QueueStats {
 		Completed: int(numJobs - pending),
 		Running:   int(numLocked),
 	}
+}
+
+func (d *mongoDriver) Dispatcher() Dispatcher {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.dispatcher
+}
+
+func (d *mongoDriver) SetDispatcher(disp Dispatcher) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.dispatcher = disp
 }

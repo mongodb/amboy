@@ -39,6 +39,7 @@ type shuffledLocal struct {
 	id         string
 	starter    sync.Once
 	scopes     ScopeManager
+	dispatcher Dispatcher
 	runner     amboy.Runner
 }
 
@@ -50,7 +51,7 @@ func NewShuffledLocal(workers, capacity int) amboy.Queue {
 		capacity: capacity,
 		id:       fmt.Sprintf("queue.local.unordered.shuffled.%s", uuid.NewV4().String()),
 	}
-
+	q.dispatcher = NewDispatcher(q)
 	q.runner = pool.NewLocalWorkers(workers, q)
 	return q
 }
@@ -363,6 +364,10 @@ func (q *shuffledLocal) Next(ctx context.Context) amboy.Job {
 				continue
 			}
 
+			if err := q.dispatcher.Dispatch(ctx, j); err != nil {
+				continue
+			}
+
 			select {
 			case <-ctx.Done():
 				return
@@ -396,7 +401,7 @@ func (q *shuffledLocal) Complete(ctx context.Context, j amboy.Job) {
 		dispatched map[string]amboy.Job,
 		toDelete *fixedStorage,
 	) {
-
+		q.dispatcher.Complete(ctx, j)
 		id := j.ID()
 
 		completed[id] = j

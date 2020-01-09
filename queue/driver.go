@@ -24,6 +24,9 @@ type remoteQueueDriver interface {
 	Stats(context.Context) amboy.QueueStats
 	JobStats(context.Context) <-chan amboy.JobStatusInfo
 	Complete(context.Context, amboy.Job) error
+
+	SetDispatcher(Dispatcher)
+	Dispatcher() Dispatcher
 }
 
 // MongoDBOptions is a struct passed to the NewMongo constructor to

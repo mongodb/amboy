@@ -47,6 +47,7 @@ type depGraphOrderedLocal struct {
 	numStarted int
 	id         string
 	channel    chan amboy.Job
+	dispatcher Dispatcher
 	tasks      struct {
 		m         map[string]amboy.Job
 		ids       map[string]int64
@@ -74,7 +75,7 @@ func NewLocalOrdered(workers int) amboy.Queue {
 	q.id = fmt.Sprintf("queue.local.ordered.graph.%s", uuid.NewV4().String())
 	r := pool.NewLocalWorkers(workers, q)
 	q.runner = r
-
+	q.dispatcher = NewDispatcher(q)
 	return q
 }
 
@@ -168,6 +169,7 @@ func (q *depGraphOrderedLocal) Next(ctx context.Context) amboy.Job {
 	case <-ctx.Done():
 		return nil
 	case job := <-q.channel:
+		grip.Critical(q.dispatcher.Dispatch(ctx, job))
 		return job
 	}
 }
@@ -406,5 +408,6 @@ func (q *depGraphOrderedLocal) Complete(ctx context.Context, j amboy.Job) {
 	grip.Debugf("marking job (%s) as complete", j.ID())
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
+	q.dispatcher.Complete(ctx, j)
 	q.tasks.completed[j.ID()] = true
 }

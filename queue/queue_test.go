@@ -48,6 +48,7 @@ type QueueTestCase struct {
 	Constructor             func(context.Context, string, int) (amboy.Queue, TestCloser, error)
 	MinSize                 int
 	MaxSize                 int
+	SingleWorker            bool
 	MultiSupported          bool
 	OrderedSupported        bool
 	OrderedStartsBefore     bool
@@ -80,6 +81,7 @@ func DefaultQueueTestCases() []QueueTestCase {
 			OrderedSupported:        true,
 			OrderedStartsBefore:     true,
 			WaitUntilSupported:      true,
+			SingleWorker:            true,
 			DispatchBeforeSupported: true,
 			MinSize:                 2,
 			MaxSize:                 16,
@@ -103,20 +105,22 @@ func DefaultQueueTestCases() []QueueTestCase {
 				return NewLocalPriorityQueue(size, defaultLocalQueueCapcity), func(ctx context.Context) error { return nil }, nil
 			},
 		},
-		// {
-		//	Name:                    "LimitedSize",
-		//	WaitUntilSupported:      true,
-		//	DispatchBeforeSupported: true,
-		//	Constructor: func(ctx context.Context, _ string, size int) (amboy.Queue, TestCloser, error) {
-		//		return NewLocalLimitedSize(size, 1024*size), func(ctx context.Context) error { return nil }, nil
-		//	},
-		// },
-		// {
-		//	Name: "Shuffled",
-		//	Constructor: func(ctx context.Context, _ string, size int) (amboy.Queue, TestCloser, error) {
-		//		return NewShuffledLocal(size, defaultLocalQueueCapcity), func(ctx context.Context) error { return nil }, nil
-		//	},
-		// },
+		{
+			Name:                    "LimitedSize",
+			WaitUntilSupported:      true,
+			DispatchBeforeSupported: true,
+			SingleWorker:            true,
+			Constructor: func(ctx context.Context, _ string, size int) (amboy.Queue, TestCloser, error) {
+				return NewLocalLimitedSize(size, 1024*size), func(ctx context.Context) error { return nil }, nil
+			},
+		},
+		{
+			Name:         "Shuffled",
+			SingleWorker: true,
+			Constructor: func(ctx context.Context, _ string, size int) (amboy.Queue, TestCloser, error) {
+				return NewShuffledLocal(size, defaultLocalQueueCapcity), func(ctx context.Context) error { return nil }, nil
+			},
+		},
 		{
 			Name:    "SQSFifo",
 			MaxSize: 4,
@@ -424,7 +428,7 @@ func TestQueueSmoke(t *testing.T) {
 								OneExecutionTest(bctx, t, test, runner, size)
 							})
 
-							if !runner.RateLimiting && (!test.OrderedSupported || test.OrderedStartsBefore) && runner.MinSize > 2 && runner.MaxSize < 32 {
+							if !test.SingleWorker && (!test.OrderedSupported || test.OrderedStartsBefore) && size.Size >= 4 && size.Size <= 32 {
 								t.Run("ScopedLock", func(t *testing.T) {
 									ScopedLockTest(bctx, t, test, runner, size)
 								})
@@ -936,12 +940,12 @@ func ManyQueueTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 }
 
 func ScopedLockTest(bctx context.Context, t *testing.T, test QueueTestCase, runner PoolTestCase, size SizeTestCase) {
-	ctx, cancel := context.WithTimeout(bctx, time.Second)
+	ctx, cancel := context.WithTimeout(bctx, 20*time.Second)
 	defer cancel()
-	q, closer, err := test.Constructor(ctx, newDriverID(), size.Size)
+	q, closer, err := test.Constructor(ctx, newDriverID(), 2*size.Size)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, closer(ctx)) }()
-	require.NoError(t, runner.SetPool(q, size.Size*3))
+	require.NoError(t, runner.SetPool(q, size.Size*2))
 
 	require.NoError(t, q.Start(ctx))
 
@@ -949,11 +953,11 @@ func ScopedLockTest(bctx context.Context, t *testing.T, test QueueTestCase, runn
 		j := newSleepJob()
 		if i%2 == 0 {
 			j.SetScopes([]string{"a"})
-			j.sleep = time.Hour
+			j.Sleep = time.Hour
 		}
 		require.NoError(t, q.Put(ctx, j))
 	}
-	ticker := time.NewTicker(2 * time.Millisecond)
+	ticker := time.NewTicker(20 * time.Millisecond)
 	defer ticker.Stop()
 
 waitLoop:
@@ -963,7 +967,7 @@ waitLoop:
 			break waitLoop
 		case <-ticker.C:
 			stat := q.Stats(ctx)
-			if stat.Completed == size.Size {
+			if stat.Completed >= size.Size {
 				break waitLoop
 			}
 		}

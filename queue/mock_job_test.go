@@ -71,7 +71,7 @@ func (j *mockJob) Run(_ context.Context) {
 }
 
 type sleepJob struct {
-	sleep time.Duration
+	Sleep time.Duration
 	job.Base
 }
 
@@ -92,15 +92,17 @@ func newSleepJob() *sleepJob {
 func (j *sleepJob) Run(ctx context.Context) {
 	defer j.MarkComplete()
 
-	if j.sleep == 0 {
+	if j.Sleep == 0 {
 		return
 	}
 
-	timer := time.NewTimer(j.sleep)
+	timer := time.NewTimer(j.Sleep)
 	defer timer.Stop()
 
 	select {
 	case <-timer.C:
+		return
 	case <-ctx.Done():
+		return
 	}
 }

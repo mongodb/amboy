@@ -25,11 +25,12 @@ import (
 // store no more than 2x the number specified, and no more the
 // specified capacity of completed jobs.
 type limitedSizeLocal struct {
-	channel  chan amboy.Job
-	toDelete chan string
-	capacity int
-	storage  map[string]amboy.Job
-	scopes   ScopeManager
+	channel    chan amboy.Job
+	toDelete   chan string
+	capacity   int
+	storage    map[string]amboy.Job
+	scopes     ScopeManager
+	dispatcher Dispatcher
 
 	deletedCount int
 	staleCount   int
@@ -47,6 +48,7 @@ func NewLocalLimitedSize(workers, capacity int) amboy.Queue {
 		scopes:   NewLocalScopeManager(),
 		id:       fmt.Sprintf("queue.local.unordered.fixed.%s", uuid.NewV4().String()),
 	}
+	q.dispatcher = NewDispatcher(q)
 	q.runner = pool.NewLocalWorkers(workers, q)
 	return q
 }
@@ -151,6 +153,17 @@ func (q *limitedSizeLocal) Next(ctx context.Context) amboy.Job {
 				continue
 			}
 			if err := q.scopes.Acquire(job.ID(), job.Scopes()); err != nil {
+				go func() {
+					defer recovery.LogStackTraceAndContinue("re-queue waiting job", job.ID())
+					q.channel <- job
+				}()
+				continue
+			}
+			if err := q.dispatcher.Dispatch(ctx, job); err != nil {
+				go func() {
+					defer recovery.LogStackTraceAndContinue("re-queue waiting job", job.ID())
+					q.channel <- job
+				}()
 				continue
 			}
 
@@ -253,7 +266,7 @@ func (q *limitedSizeLocal) Complete(ctx context.Context, j amboy.Job) {
 	}
 	q.mu.Lock()
 	defer q.mu.Unlock()
-
+	q.dispatcher.Complete(ctx, j)
 	// save it
 	q.storage[j.ID()] = j
 

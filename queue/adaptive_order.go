@@ -23,6 +23,7 @@ type adaptiveLocalOrdering struct {
 	starter    sync.Once
 	id         string
 	scopes     ScopeManager
+	dispatcher Dispatcher
 	runner     amboy.Runner
 }
 
@@ -37,6 +38,7 @@ func NewAdaptiveOrderedLocalQueue(workers, capacity int) amboy.Queue {
 	q := &adaptiveLocalOrdering{}
 	r := pool.NewLocalWorkers(workers, q)
 	q.scopes = NewLocalScopeManager()
+	q.dispatcher = NewDispatcher(q)
 	q.capacity = capacity
 	q.runner = r
 	q.id = fmt.Sprintf("queue.local.ordered.adaptive.%s", uuid.NewV4().String())
@@ -274,6 +276,13 @@ func (q *adaptiveLocalOrdering) Next(ctx context.Context) amboy.Job {
 						continue
 					}
 
+					if err := q.dispatcher.Dispatch(ctx, j); err != nil {
+						items.ready = append(items.ready)
+						misses++
+						timer.Reset(time.Duration(misses * rand.Int63n(int64(time.Millisecond))))
+						continue
+					}
+
 					ret <- j
 					return
 				}
@@ -284,6 +293,13 @@ func (q *adaptiveLocalOrdering) Next(ctx context.Context) amboy.Job {
 					id, items.ready = items.ready[0], items.ready[1:]
 					j := items.jobs[id]
 					if err := q.scopes.Acquire(id, j.Scopes()); err != nil {
+						items.ready = append(items.ready)
+						misses++
+						timer.Reset(time.Duration(misses * rand.Int63n(int64(time.Millisecond))))
+						continue
+					}
+
+					if err := q.dispatcher.Dispatch(ctx, j); err != nil {
 						items.ready = append(items.ready)
 						misses++
 						timer.Reset(time.Duration(misses * rand.Int63n(int64(time.Millisecond))))
@@ -325,6 +341,7 @@ func (q *adaptiveLocalOrdering) Complete(ctx context.Context, j amboy.Job) {
 			}
 		}
 
+		q.dispatcher.Complete(ctx, j)
 		grip.Warning(message.WrapError(
 			q.scopes.Release(j.ID(), j.Scopes()),
 			message.Fields{
