@@ -11,7 +11,7 @@ import (
 )
 
 type queueSender struct {
-	mu       sync.Mutex
+	mu       sync.RWMutex
 	ctx      context.Context
 	queue    amboy.Queue
 	canceler context.CancelFunc
@@ -61,8 +61,8 @@ func NewQueueBackedSender(ctx context.Context, sender send.Sender, workers, capa
 
 func (s *queueSender) Send(m message.Composer) {
 	if s.Level().ShouldLog(m) {
-		s.mu.Lock()
-		defer s.mu.Unlock()
+		s.mu.RLock()
+		defer s.mu.RUnlock()
 
 		err := s.queue.Put(s.ctx, NewSendMessageJob(m, s.Sender))
 		if err != nil {

@@ -12,7 +12,7 @@ import (
 )
 
 type multiQueueSender struct {
-	mu       sync.Mutex
+	mu       sync.RWMutex
 	ctx      context.Context
 	queue    amboy.Queue
 	senders  []send.Sender
@@ -62,8 +62,8 @@ func NewQueueMultiSender(ctx context.Context, workers, capacity int, senders ...
 }
 
 func (s *multiQueueSender) Send(m message.Composer) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	s.ErrorHandler()(s.queue.Put(s.ctx, NewMultiSendMessageJob(m, s.senders)), m)
 }
