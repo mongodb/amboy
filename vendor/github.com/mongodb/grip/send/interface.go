@@ -69,9 +69,7 @@ type LevelInfo struct {
 }
 
 // Valid checks that the priorities stored in the LevelInfo document are valid.
-func (l LevelInfo) Valid() bool {
-	return level.IsValidPriority(l.Default) && level.IsValidPriority(l.Threshold)
-}
+func (l LevelInfo) Valid() bool { return l.Default.IsValid() && l.Threshold.IsValid() }
 
 // ShouldLog checks to see if the log message should be logged, and returns
 // false if there is no message or if the message's priority is below the
