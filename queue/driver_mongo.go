@@ -77,7 +77,7 @@ func newMongoGroupDriver(name string, opts MongoDBOptions, group string) remoteQ
 	return &mongoDriver{
 		name:       name,
 		opts:       opts,
-		instanceID: fmt.Sprintf("%s.%s.%s.%s", name, group, host, uuid.NewV4()),
+		instanceID: fmt.Sprintf("%s.%s.%s.%s", name, group, host, uuid.New()),
 	}
 }
 
