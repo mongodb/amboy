@@ -6,11 +6,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/grip"
 	"github.com/mongodb/grip/message"
 	"github.com/pkg/errors"
-	uuid "github.com/satori/go.uuid"
 )
 
 type remoteQueue interface {
@@ -34,7 +34,7 @@ type remoteBase struct {
 
 func newRemoteBase() *remoteBase {
 	return &remoteBase{
-		id:         uuid.NewV4().String(),
+		id:         uuid.New().String(),
 		channel:    make(chan amboy.Job),
 		blocked:    make(map[string]struct{}),
 		dispatched: make(map[string]struct{}),
