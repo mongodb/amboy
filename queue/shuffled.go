@@ -125,7 +125,7 @@ func (q *shuffledLocal) Put(ctx context.Context, j amboy.Job) error {
 		_, isDispatched := dispatched[id]
 
 		if isPending || isCompleted || isDispatched {
-			ret <- errors.Errorf("job '%s' already exists", id)
+			ret <- NewDuplicatJobErrorf("job '%s' already exists", id)
 		}
 
 		pending[id] = j

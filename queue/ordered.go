@@ -113,7 +113,7 @@ func (q *depGraphOrderedLocal) Put(ctx context.Context, j amboy.Job) error {
 	}
 
 	if _, ok := q.tasks.m[name]; ok {
-		return errors.Errorf("cannot add %s because duplicate job ids are not allowed", name)
+		return NewDuplicatJobErrorf("cannot add %s because duplicate job ids are not allowed", name)
 	}
 
 	node := q.tasks.graph.NewNode()
