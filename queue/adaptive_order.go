@@ -94,6 +94,7 @@ func (q *adaptiveLocalOrdering) Put(ctx context.Context, j amboy.Job) error {
 	out := make(chan error)
 	op := func(ctx context.Context, items *adaptiveOrderItems, fixed *fixedStorage) {
 		defer close(out)
+
 		j.UpdateTimeInfo(amboy.JobTimeInfo{
 			Created: time.Now(),
 		})
@@ -299,7 +300,7 @@ func (q *adaptiveLocalOrdering) Next(ctx context.Context) amboy.Job {
 			return nil
 		}
 		if err := q.dispatcher.Dispatch(ctx, j); err != nil {
-			q.Put(ctx, j)
+			_ = q.Put(ctx, j)
 			return nil
 		}
 

@@ -581,7 +581,7 @@ func OrderedTest(bctx context.Context, t *testing.T, test QueueTestCase, runner 
 	numJobs := size.Size / 2 * len(testNames)
 
 	tempDir, err := ioutil.TempDir("", strings.Join([]string{"amboy-ordered-queue-smoke-test",
-		uuid.NewV4().String()}, "-"))
+		uuid.New().String()}, "-"))
 	require.NoError(t, err)
 	defer os.RemoveAll(tempDir)
 

@@ -428,6 +428,10 @@ func (d *mongoDriver) Put(ctx context.Context, j amboy.Job) error {
 	d.processJobForGroup(job)
 
 	if _, err = d.getCollection().InsertOne(ctx, job); err != nil {
+		if isMongoDupKey(err) {
+			return amboy.NewDuplicateJobErrorf("job '%s' already exists", j.ID())
+		}
+
 		return errors.Wrapf(err, "problem saving new job %s", j.ID())
 	}
 
@@ -460,7 +464,7 @@ func getAtomicQuery(owner, jobName string, modCount int) bson.M {
 }
 
 func isMongoDupKey(err error) bool {
-	wce, ok := err.(mongo.WriteConcernError)
+	wce, ok := errors.Cause(err).(mongo.WriteConcernError)
 	if !ok {
 		return false
 	}

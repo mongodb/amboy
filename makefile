@@ -42,6 +42,7 @@ lintArgs += --exclude="package comment should be of the form \"Package .* \(goli
 #  no need to check the error of closer read operations in defer cases
 lintArgs += --exclude="error return value not checked \(defer.*"
 lintArgs += --exclude="should check returned error before deferring .*\.Close"
+lintArgs += --exclude="warning: Errors unhandled.*"
 # end lint suppressions
 
 

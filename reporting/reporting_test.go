@@ -68,7 +68,7 @@ func TestReportingSuiteBackedByMongoDB(t *testing.T) {
 
 func TestReportingSuiteBackedByMongoDBSingleGroup(t *testing.T) {
 	s := new(ReportingSuite)
-	name := uuid.NewV4().String()
+	name := uuid.New().String()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	opts := queue.DefaultMongoDBOptions()
@@ -113,7 +113,7 @@ func TestReportingSuiteBackedByMongoDBSingleGroup(t *testing.T) {
 
 func TestReportingSuiteBackedByMongoDBMultiGroup(t *testing.T) {
 	s := new(ReportingSuite)
-	name := uuid.NewV4().String()
+	name := uuid.New().String()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	opts := queue.DefaultMongoDBOptions()
