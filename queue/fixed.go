@@ -81,7 +81,7 @@ func (q *limitedSizeLocal) Put(ctx context.Context, j amboy.Job) error {
 	defer q.mu.Unlock()
 
 	if _, ok := q.storage[name]; ok {
-		return NewDuplicatJobErrorf("cannot dispatch '%s', already complete", name)
+		return amboy.NewDuplicateJobErrorf("cannot dispatch '%s', already complete", name)
 	}
 
 	select {

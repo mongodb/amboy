@@ -93,7 +93,7 @@ func (q *sqsFIFOQueue) Put(ctx context.Context, j amboy.Job) error {
 	}
 
 	if _, ok := q.tasks.all[name]; ok {
-		return NewDuplicatJobErrorf("cannot add %s because duplicate job already exists", name)
+		return amboy.NewDuplicateJobErrorf("cannot add %s because duplicate job already exists", name)
 	}
 
 	dedupID := strings.Replace(j.ID(), " ", "", -1) //remove all spaces

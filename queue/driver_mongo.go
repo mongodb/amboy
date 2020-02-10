@@ -429,7 +429,7 @@ func (d *mongoDriver) Put(ctx context.Context, j amboy.Job) error {
 
 	if _, err = d.getCollection().InsertOne(ctx, job); err != nil {
 		if isMongoDupKey(err) {
-			return NewDuplicatJobErrorf("job '%s' already exists", j.ID())
+			return amboy.NewDuplicateJobErrorf("job '%s' already exists", j.ID())
 		}
 
 		return errors.Wrapf(err, "problem saving new job %s", j.ID())
