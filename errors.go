@@ -16,7 +16,7 @@ func EnqueueUniqueJob(ctx context.Context, queue Queue, job Job) error {
 		return nil
 	}
 
-	errors.WithStack(err)
+	return errors.WithStack(err)
 }
 
 type duplJobError struct {
