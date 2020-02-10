@@ -48,7 +48,7 @@ func (d *dispatcherImpl) Dispatch(ctx context.Context, job amboy.Job) error {
 	}
 
 	if isDispatchable(job.Status()) {
-		return errors.New("cannot dispatch in progress job")
+		return errors.New("cannot dispatch in progress or completed job")
 	}
 
 	d.mutex.Lock()
