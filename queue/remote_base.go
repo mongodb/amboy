@@ -158,7 +158,7 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
 			err = q.driver.Complete(ctx, j)
 			if err != nil {
 				if time.Since(startAt) > time.Minute+amboy.LockTimeout {
-					grip.Error(message.WrapError(err, message.Fields{
+					grip.Warning(message.WrapError(err, message.Fields{
 						"job_id":      id,
 						"job_type":    j.Type().Name,
 						"driver_type": q.driverType,
@@ -167,7 +167,7 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
 						"message":     "job took too long to mark complete",
 					}))
 				} else if count > 10 {
-					grip.Error(message.WrapError(err, message.Fields{
+					grip.Warning(message.WrapError(err, message.Fields{
 						"job_id":      id,
 						"driver_type": q.driverType,
 						"job_type":    j.Type().Name,
