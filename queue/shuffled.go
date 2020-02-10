@@ -384,7 +384,7 @@ func (q *shuffledLocal) Next(ctx context.Context) amboy.Job {
 			return nil
 		}
 		if err := q.dispatcher.Dispatch(ctx, j); err != nil {
-			q.Put(ctx, j)
+			_ = q.Put(ctx, j)
 			return nil
 		}
 

@@ -98,16 +98,16 @@ func (q *priorityLocalQueue) Next(ctx context.Context) amboy.Job {
 			}
 
 			if !ti.IsDispatchable() {
-				q.storage.Insert(job)
+				_ = q.storage.Insert(job)
 				continue
 			}
 			if err := q.dispatcher.Dispatch(ctx, job); err != nil {
-				q.storage.Insert(job)
+				_ = q.storage.Insert(job)
 				continue
 			}
 
 			if err := q.scopes.Acquire(job.ID(), job.Scopes()); err != nil {
-				q.storage.Insert(job)
+				_ = q.storage.Insert(job)
 				continue
 			}
 

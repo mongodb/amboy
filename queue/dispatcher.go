@@ -12,6 +12,9 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Dispatcher provides a common mechanism shared between queue
+// implementations to handle job locking to prevent multiple workers
+// from running the same job.
 type Dispatcher interface {
 	Dispatch(context.Context, amboy.Job) error
 	Release(context.Context, amboy.Job)
@@ -24,6 +27,7 @@ type dispatcherImpl struct {
 	cache map[string]dispatcherInfo
 }
 
+// NewDispatcher constructs a default dispatching implementation.
 func NewDispatcher(q amboy.Queue) Dispatcher {
 	return &dispatcherImpl{
 		queue: q,
