@@ -331,5 +331,12 @@ func (q *remoteBase) canDispatch(j amboy.Job) bool {
 }
 
 func isDispatchable(stat amboy.JobStatusInfo) bool {
-	return !stat.Completed
+	if stat.Completed {
+		return false
+	}
+	if stat.InProgress {
+		return false
+	}
+
+	return true
 }

@@ -772,20 +772,8 @@ RETRY:
 					grip.NoticeWhen(err == nil, msg)
 					continue CURSOR
 				}
-				// TODO check here to see if this is
-				// lockable
 
 				if err := d.dispatcher.Dispatch(ctx, job); err != nil {
-					grip.Info(message.WrapError(err, message.Fields{
-						"id":        d.instanceID,
-						"service":   "amboy.queue.mongo",
-						"is_group":  d.opts.UseGroups,
-						"group":     d.opts.GroupName,
-						"operation": "dispatching job",
-						"job":       job.ID(),
-						"job_type":  job.Type().Name,
-					}))
-
 					continue CURSOR
 				}
 				break CURSOR
