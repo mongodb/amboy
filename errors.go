@@ -29,7 +29,7 @@ func (e *duplJobError) Error() string { return e.msg }
 // duplicate job error, for use by queue implementations.
 func NewDuplicateJobError(msg string) error { return &duplJobError{msg: msg} }
 
-// NewDuplicatJobErrorf creates a new error object to represent a
+// NewDuplicateJobErrorf creates a new error object to represent a
 // duplicate job error with a formatted message, for use by queue
 // implementations.
 func NewDuplicateJobErrorf(msg string, args ...interface{}) error {
