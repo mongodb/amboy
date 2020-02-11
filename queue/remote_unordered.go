@@ -2,14 +2,11 @@ package queue
 
 import (
 	"context"
-	"time"
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/pool"
 	"github.com/mongodb/grip"
 )
-
-const dispatchWarningThreshold = time.Second
 
 // RemoteUnordered are queues that use a Driver as backend for job
 // storage and processing and do not impose any additional ordering
