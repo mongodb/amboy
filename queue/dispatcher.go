@@ -47,7 +47,7 @@ func (d *dispatcherImpl) Dispatch(ctx context.Context, job amboy.Job) error {
 		return errors.New("cannot dispatch nil job")
 	}
 
-	if isDispatchable(job.Status()) {
+	if !isDispatchable(job.Status()) {
 		return errors.New("cannot dispatch in progress or completed job")
 	}
 
