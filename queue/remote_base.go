@@ -98,10 +98,6 @@ func (q *remoteBase) jobServer(ctx context.Context) {
 				continue
 			}
 
-			if !isDispatchable(job.Status()) {
-				continue
-			}
-
 			// therefore return any pending job or job
 			// that has a timed out lock.
 			q.channel <- job
