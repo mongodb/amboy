@@ -180,11 +180,11 @@ func TestMultipleWorkers(t *testing.T) {
 			}
 
 			// sam's test
-			assert.InDelta(time.Duration(workers)*time.Second, float64(next), float64(workers*10*time.Millisecond),
+			assert.InDelta(workers, float64(next), float64(workers*10*time.Millisecond),
 				"next=%s, workers=%d, iter=%d", next, workers, i)
 
 			// brian's test:
-			assert.InDelta(time.Duration(workers)*time.Second, next, float64(100*time.Millisecond),
+			assert.InDelta(workers, next, float64(100*time.Millisecond),
 				"next=%s, workers=%d, iter=%d", next, workers, i)
 		}
 	}
