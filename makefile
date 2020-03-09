@@ -41,16 +41,6 @@ $(buildDir)/run-linter:buildscripts/run-linter.go $(buildDir)/.lintSetup $(build
 ######################################################################
 
 
-# start environment setup
-gocache := $(abspath $(buildDir)/.cache)
-ifeq ($(OS),Windows_NT)
-gocache := $(shell cygpath -m $(gocache))
-gopath := $(shell cygpath -m $(gopath))
-endif
-goEnv := GOPATH=$(gopath) $(if $(GO_BIN_PATH),PATH="$(shell dirname $(GO_BIN_PATH)):$(PATH)")
-# end environment setup
-
-
 # start dependency installation tools
 #   implementation details for being able to lazily install dependencies
 testOutput := $(foreach target,$(packages),$(buildDir)/output.$(target).test)
@@ -89,8 +79,6 @@ $(name):$(buildDir)/$(name)
 	@[ -L $@ ] || ln -s $< $@
 $(buildDir)/$(name):$(gopath)/src/$(projectPath)
 	$(goEnv) $(gobin) build -o $@ main/$(name).go
-$(buildDir)/$(name).race:$(gopath)/src/$(projectPath)
-	$(goEnv) $(gobin) build -race -o $@ main/$(name).go
 # end main build
 
 
@@ -124,22 +112,20 @@ endif
 ifneq (,$(RUN_COUNT))
 testArgs += -test.count='$(RUN_COUNT)'
 endif
+ifeq (,DISABLE_COVERAGE)
+testArgs += -covermode=count
+endif
 #    implementation for package coverage and test running,mongodb to produce
 #    and save test output.
 $(buildDir)/output.%.test:
-	$(goEnv) $(gobin) test $(if $(DISABLE_COVERAGE),,-covermode=count) -c -o $@ ./$(subst -,/,$*)
+	$(goEnv) $(gobin) test $(testArgs) ./$(subst -,/,$*) | tee $@
 $(buildDir)/output.%.race:
-	$(goEnv) $(gobin) test -race -c -o $@ ./$(subst -,/,$*)
+	$(goEnv) $(gobin) test $(testArgs) -race ./$(subst -,/,$*) | tee  $@
 #  targets to run any tests in the top-level package
 $(buildDir)/output.$(name).test:
-	$(goEnv) $(gobin) test $(if $(DISABLE_COVERAGE),,-covermode=count) -c -o $@ ./
+	$(goEnv) $(gobin) test $(testArgs) $@ ./ | tee $@
 $(buildDir)/output.$(name).race:
-	$(goEnv) $(gobin) test -race -c -o $@ ./
-#  targets to run the tests and report the output
-$(buildDir)/output.%.test:$(buildDir)/test.% .FORCE
-	$(goEnv) ./$< $(testArgs) 2>&1 | tee $@
-$(buildDir)/output.%.race:$(buildDir)/race.% .FORCE
-	$(goEnv) ./$< $(testArgs) 2>&1 | tee $@
+	$(goEnv) $(gobin) test $(testArgs) -race ./ | tee $@
 #  targets to generate gotest output from the linter.
 $(buildDir)/output.%.lint:$(buildDir)/run-linter .FORCE
 	@$(goEnv) ./$< --output=$@ --lintBin=$(buildDir)/golangci-lint --packages='$*'
@@ -147,7 +133,7 @@ $(buildDir)/output.lint:$(buildDir)/run-linter .FORCE
 	@$(goEnv) ./$< --output=$@ --lintBin=$(buildDir)/golangci-lint --packages='$(packages)'
 #  targets to process and generate coverage reports
 $(buildDir)/output.%.coverage:$(buildDir)/output.%.test .FORCE
-	$(goEnv) ./$< $(testArgs) -test.coverprofile=$@ | tee $(subst coverage,test,$@)
+	$(goEnv) $(gobin) test $(testArgs) -covermode=count -coverprofile=$@ | tee $(subst coverage,test,$@)
 	@-[ -f $@ ] && $(gobin) tool cover -func=$@ | sed 's%$(projectPath)/%%' | column -t
 $(buildDir)/output.%.coverage.html:$(buildDir)/output.%.coverage $(coverDeps)
 	$(goEnv) $(gobin) tool cover -html=$< -o $@
