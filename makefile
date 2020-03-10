@@ -113,6 +113,8 @@ testArgs += -covermode=count
 endif
 #    implementation for package coverage and test running,mongodb to produce
 #    and save test output.
+$(buildDir)/:
+	@mkdir -p $@
 $(buildDir)/output.%.test:$(buildDir)/ .FORCE
 	$(goEnv) $(gobin) test $(testArgs) ./$(subst -,/,$*) | tee $@
 $(buildDir)/output.%.race:$(buildDir)/ .FORCE
