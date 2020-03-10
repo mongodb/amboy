@@ -75,10 +75,6 @@ $(gopath)/src/$(orgPath):
 	@mkdir -p $@
 $(gopath)/src/$(projectPath):$(gopath)/src/$(orgPath)
 	@[ -L $@ ] || ln -s $(shell pwd) $@
-$(name):$(buildDir)/$(name)
-	@[ -L $@ ] || ln -s $< $@
-$(buildDir)/$(name):$(gopath)/src/$(projectPath)
-	$(goEnv) $(gobin) build -o $@ main/$(name).go
 # end main build
 
 
@@ -117,14 +113,14 @@ testArgs += -covermode=count
 endif
 #    implementation for package coverage and test running,mongodb to produce
 #    and save test output.
-$(buildDir)/output.%.test:
+$(buildDir)/output.%.test:$(buildDir)/ .FORCE
 	$(goEnv) $(gobin) test $(testArgs) ./$(subst -,/,$*) | tee $@
-$(buildDir)/output.%.race:
+$(buildDir)/output.%.race:$(buildDir)/ .FORCE
 	$(goEnv) $(gobin) test $(testArgs) -race ./$(subst -,/,$*) | tee  $@
 #  targets to run any tests in the top-level package
-$(buildDir)/output.$(name).test:
+$(buildDir)/output.$(name).test:$(buildDir)/
 	$(goEnv) $(gobin) test $(testArgs) $@ ./ | tee $@
-$(buildDir)/output.$(name).race:
+$(buildDir)/output.$(name).race:$(buildDir)/
 	$(goEnv) $(gobin) test $(testArgs) -race ./ | tee $@
 #  targets to generate gotest output from the linter.
 $(buildDir)/output.%.lint:$(buildDir)/run-linter .FORCE
