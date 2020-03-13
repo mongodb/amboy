@@ -134,6 +134,9 @@ func (c *ManagementClient) RecentJobErrors(ctx context.Context, jobType string, 
 func (c *ManagementClient) MarkCompleteByType(ctx context.Context, jobType string) error {
 	path := fmt.Sprintf("/jobs/mark_complete_by_type/%s", jobType)
 	req, err := http.NewRequest(http.MethodPost, c.url+path, nil)
+	if err != nil {
+		return errors.Wrap(err, "problem building request")
+	}
 	req = req.WithContext(ctx)
 
 	resp, err := c.client.Do(req)
