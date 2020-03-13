@@ -11,7 +11,7 @@ import (
 
 func abortablePoolManagement(opts *ServiceOptions) cli.Command {
 	return cli.Command{
-		Name: "manage",
+		Name: "abortable_pool_management",
 		Subcommands: []cli.Command{
 			manageListJobs(opts),
 			manageAbortAllJobs(opts),
