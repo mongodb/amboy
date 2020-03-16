@@ -581,7 +581,7 @@ func (db *dbQueueManager) CompleteJobsByType(ctx context.Context, jobType string
 
 	update := bson.M{
 		"$set": bson.M{"status.completed": true},
-		"$inc": bson.M{"status.mod_count": 1},
+		"$inc": bson.M{"status.mod_count": 3},
 	}
 
 	_, err := db.collection.UpdateMany(ctx, query, update)

@@ -294,7 +294,7 @@ func (s *ManagementSuite) TestCompleteJobsByType() {
 			s.True(jobStats.Completed)
 			_, ok := s.manager.(*dbQueueManager)
 			if ok {
-				s.Equal(1, jobStats.ModificationCount)
+				s.Equal(3, jobStats.ModificationCount)
 			}
 		} else {
 			s.False(jobStats.Completed)
