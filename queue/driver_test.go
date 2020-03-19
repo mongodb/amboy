@@ -3,11 +3,11 @@ package queue
 import (
 	"context"
 	"fmt"
-	"github.com/mongodb/amboy"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/job"
 	"github.com/mongodb/grip"
 	"github.com/stretchr/testify/suite"
