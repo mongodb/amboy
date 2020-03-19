@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"fmt"
+	"github.com/mongodb/amboy"
 	"testing"
 	"time"
 
@@ -94,7 +95,9 @@ func (s *DriverSuite) TestPutJobDoesNotAllowDuplicateIds() {
 	s.NoError(err)
 
 	for i := 0; i < 10; i++ {
-		s.Error(s.driver.Put(ctx, j))
+		err := s.driver.Put(ctx, j)
+		s.Error(err)
+		s.True(amboy.IsDuplicateJobError(err))
 	}
 }
 
