@@ -684,13 +684,13 @@ func (d *mongoDriver) getNextQuery() bson.M {
 
 	timeLimits := bson.M{}
 	if d.opts.CheckWaitUntil {
-		timeLimits["time_info.wait_until"] = bson.M{"$lte": now}
+		timeLimits["$or"] = []bson.M{
+			bson.M{"time_info.wait_until": bson.M{"$gte": now}},
+			bson.M{"time_info.wait_until": time.Time{}},
+		}
 	}
 	if d.opts.CheckDispatchBy {
-		timeLimits["$or"] = []bson.M{
-			{"time_info.dispatch_by": bson.M{"$gt": now}},
-			{"time_info.dispatch_by": time.Time{}},
-		}
+		timeLimits["time_info.dispatch_by"] = bson.M{"$lte": now}
 	}
 	if len(timeLimits) > 0 {
 		qd = bson.M{"$and": []bson.M{qd, timeLimits}}
