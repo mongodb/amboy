@@ -1,12 +1,12 @@
 package rest
 
 import (
-	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/evergreen-ci/gimlet"
 	"github.com/mongodb/amboy/management"
+	"github.com/mongodb/grip/message"
 	"github.com/pkg/errors"
 )
 
@@ -181,7 +181,10 @@ func (s *ManagementService) MarkComplete(rw http.ResponseWriter, r *http.Request
 			"problem complete job '%s'", name)))
 	}
 
-	gimlet.WriteText(rw, fmt.Sprintf("job with name '%s' marked complete", name))
+	gimlet.WriteJSON(rw, message.Fields{
+		"message":  "mark job complete successful",
+		"job_name": name,
+	})
 }
 
 // MarkCompleteByType is an http.Handlerfunc marks all jobs of the given type
@@ -196,5 +199,8 @@ func (s *ManagementService) MarkCompleteByType(rw http.ResponseWriter, r *http.R
 			"problem completing jobs by type '%s'", jobType)))
 	}
 
-	gimlet.WriteText(rw, fmt.Sprintf("jobs with type '%s' marked complete", jobType))
+	gimlet.WriteJSON(rw, message.Fields{
+		"message": "mark jobs complete by type successful",
+		"type":    jobType,
+	})
 }
