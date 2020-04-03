@@ -6,7 +6,6 @@ import (
 
 	"github.com/evergreen-ci/gimlet"
 	"github.com/mongodb/amboy/management"
-	"github.com/mongodb/grip/message"
 	"github.com/pkg/errors"
 )
 
@@ -181,9 +180,12 @@ func (s *ManagementService) MarkComplete(rw http.ResponseWriter, r *http.Request
 			"problem complete job '%s'", name)))
 	}
 
-	gimlet.WriteJSON(rw, message.Fields{
-		"message":  "mark job complete successful",
-		"job_name": name,
+	gimlet.WriteJSON(rw, struct {
+		Message string `json:"message"`
+		JobName string `json:"job_name"`
+	}{
+		Message: "mark job complete successful",
+		JobName: name,
 	})
 }
 
@@ -199,8 +201,11 @@ func (s *ManagementService) MarkCompleteByType(rw http.ResponseWriter, r *http.R
 			"problem completing jobs by type '%s'", jobType)))
 	}
 
-	gimlet.WriteJSON(rw, message.Fields{
-		"message": "mark jobs complete by type successful",
-		"type":    jobType,
+	gimlet.WriteJSON(rw, struct {
+		Message string `json:"message"`
+		JobType string `json:"job_type"`
+	}{
+		Message: "mark jobs complete by type successful",
+		JobType: jobType,
 	})
 }
