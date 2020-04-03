@@ -35,6 +35,7 @@ func (s *ManagementService) App() *gimlet.APIApp {
 	app.AddRoute("/timing/{filter}/{seconds}").Version(1).Get().Handler(s.GetRecentTimings)
 	app.AddRoute("/errors/{filter}/{seconds}").Version(1).Get().Handler(s.GetRecentErrors)
 	app.AddRoute("/errors/{filter}/{type}/{seconds}").Version(1).Get().Handler(s.GetRecentErrorsByType)
+	app.AddRoute("/jobs/mark_complete/{name}").Version(1).Post().Handler(s.MarkComplete)
 	app.AddRoute("/jobs/mark_complete_by_type/{type}").Version(1).Post().Handler(s.MarkCompleteByType)
 
 	return app
@@ -167,6 +168,20 @@ func (s *ManagementService) GetRecentErrorsByType(rw http.ResponseWriter, r *htt
 	}
 
 	gimlet.WriteJSON(rw, data)
+}
+
+// MarkComplete is an http.Handlerfunc marks the given job complete.
+func (s *ManagementService) MarkComplete(rw http.ResponseWriter, r *http.Request) {
+	vars := gimlet.GetVars(r)
+	name := vars["name"]
+
+	ctx := r.Context()
+	if err := s.manager.CompleteJob(ctx, name); err != nil {
+		gimlet.WriteResponse(rw, gimlet.MakeTextErrorResponder(errors.Wrapf(err,
+			"problem complete job '%s'", name)))
+	}
+
+	gimlet.WriteText(rw, fmt.Sprintf("job with name '%s' marked complete", name))
 }
 
 // MarkCompleteByType is an http.Handlerfunc marks all jobs of the given type
