@@ -249,7 +249,7 @@ func managementCompleteJob(opts *ServiceOptions) cli.Command {
 
 func managementCompleteJobByType(opts *ServiceOptions) cli.Command {
 	return cli.Command{
-		Name: "complete-job-by-type",
+		Name: "complete-jobs-by-type",
 		Flags: opts.managementReportFlags(
 			cli.StringFlag{
 				Name:  jobTypeFlagName,
