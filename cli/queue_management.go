@@ -19,6 +19,8 @@ func managementReports(opts *ServiceOptions) cli.Command {
 			managementReportRecentTiming(opts),
 			managementReportJobIDs(opts),
 			managementReportRecentErrors(opts),
+			managementCompleteJob(opts),
+			managementCompleteJobByType(opts),
 		},
 	}
 }
@@ -208,6 +210,57 @@ func managementReportRecentErrors(opts *ServiceOptions) cli.Command {
 				}
 				t.Print()
 
+				return nil
+			})
+		},
+	}
+}
+
+func managementCompleteJob(opts *ServiceOptions) cli.Command {
+	return cli.Command{
+		Name: "complete_job",
+		Flags: opts.managementReportFlags(
+			cli.StringFlag{
+				Name:  "name",
+				Usage: "name of job to complete",
+			},
+		),
+		Action: func(c *cli.Context) error {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			name := c.String("name")
+
+			return opts.withManagementClient(ctx, c, func(client *rest.ManagementClient) error {
+				if err := client.MarkComplete(ctx, name); err != nil {
+					return errors.Wrap(err, "problem marking job complete")
+				}
+				return nil
+			})
+		},
+	}
+
+}
+
+func managementCompleteJobByType(opts *ServiceOptions) cli.Command {
+	return cli.Command{
+		Name: "complete_job_by_type",
+		Flags: opts.managementReportFlags(
+			cli.StringFlag{
+				Name:  "type",
+				Usage: "job type to filter by",
+			},
+		),
+		Action: func(c *cli.Context) error {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			jobType := c.String("type")
+
+			return opts.withManagementClient(ctx, c, func(client *rest.ManagementClient) error {
+				if err := client.MarkCompleteByType(ctx, jobType); err != nil {
+					return errors.Wrap(err, "problem marking job complete")
+				}
 				return nil
 			})
 		},
