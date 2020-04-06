@@ -148,7 +148,7 @@ func (c *ManagementClient) MarkComplete(ctx context.Context, name string) error 
 		var msg string
 		data, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			msg = fmt.Sprintf("problem reading response body: '%s'", err.Error())
+			msg = errors.Wrap(err, "problem reading response body").Error()
 		} else {
 			msg = string(data)
 		}
@@ -176,7 +176,7 @@ func (c *ManagementClient) MarkCompleteByType(ctx context.Context, jobType strin
 		var msg string
 		data, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			msg = fmt.Sprintf("problem reading response body: '%s'", err.Error())
+			msg = errors.Wrap(err, "problem reading response body").Error()
 		} else {
 			msg = string(data)
 		}

@@ -11,6 +11,11 @@ import (
 	"github.com/urfave/cli"
 )
 
+const (
+	jobNameFlagName = "name"
+	jobTypeFlagName = "type"
+)
+
 func managementReports(opts *ServiceOptions) cli.Command {
 	return cli.Command{
 		Name: "management_report",
@@ -218,10 +223,10 @@ func managementReportRecentErrors(opts *ServiceOptions) cli.Command {
 
 func managementCompleteJob(opts *ServiceOptions) cli.Command {
 	return cli.Command{
-		Name: "complete_job",
+		Name: "complete-job",
 		Flags: opts.managementReportFlags(
 			cli.StringFlag{
-				Name:  "name",
+				Name:  jobNameFlagName,
 				Usage: "name of job to complete",
 			},
 		),
@@ -229,7 +234,7 @@ func managementCompleteJob(opts *ServiceOptions) cli.Command {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			name := c.String("name")
+			name := c.String(jobNameFlagName)
 
 			return opts.withManagementClient(ctx, c, func(client *rest.ManagementClient) error {
 				if err := client.MarkComplete(ctx, name); err != nil {
@@ -244,10 +249,10 @@ func managementCompleteJob(opts *ServiceOptions) cli.Command {
 
 func managementCompleteJobByType(opts *ServiceOptions) cli.Command {
 	return cli.Command{
-		Name: "complete_job_by_type",
+		Name: "complete-job-by-type",
 		Flags: opts.managementReportFlags(
 			cli.StringFlag{
-				Name:  "type",
+				Name:  jobTypeFlagName,
 				Usage: "job type to filter by",
 			},
 		),
@@ -255,7 +260,7 @@ func managementCompleteJobByType(opts *ServiceOptions) cli.Command {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			jobType := c.String("type")
+			jobType := c.String(jobTypeFlagName)
 
 			return opts.withManagementClient(ctx, c, func(client *rest.ManagementClient) error {
 				if err := client.MarkCompleteByType(ctx, jobType); err != nil {
