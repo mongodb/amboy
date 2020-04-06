@@ -17,7 +17,7 @@ func Amboy(opts *ServiceOptions) cli.Command {
 		Name:  "amboy",
 		Usage: "access administrative rest interfaces for an amboy service",
 		Subcommands: []cli.Command{
-			managementReports(opts),
+			queueManagement(opts),
 			abortablePoolManagement(opts),
 		},
 	}

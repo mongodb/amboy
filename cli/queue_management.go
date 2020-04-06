@@ -16,9 +16,9 @@ const (
 	jobTypeFlagName = "type"
 )
 
-func managementReports(opts *ServiceOptions) cli.Command {
+func queueManagement(opts *ServiceOptions) cli.Command {
 	return cli.Command{
-		Name: "management_report",
+		Name: "management",
 		Subcommands: []cli.Command{
 			managementReportJobStatus(opts),
 			managementReportRecentTiming(opts),
