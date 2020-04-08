@@ -297,7 +297,7 @@ func managementCompleteJobByType(opts *ServiceOptions) cli.Command {
 			filter := management.StatusFilter(c.String(statusFilterFlagName))
 
 			return opts.withManagementClient(ctx, c, func(client management.Management) error {
-				if err := client.CompleteJobsByTypeg(ctx, filter, jobType); err != nil {
+				if err := client.CompleteJobsByType(ctx, filter, jobType); err != nil {
 					return errors.Wrap(err, "problem marking job complete")
 				}
 				return nil
