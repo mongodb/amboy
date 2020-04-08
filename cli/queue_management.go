@@ -26,6 +26,7 @@ func queueManagement(opts *ServiceOptions) cli.Command {
 			managementReportRecentErrors(opts),
 			managementCompleteJob(opts),
 			managementCompleteJobByType(opts),
+			managementCompleteJobsByStatus(opts),
 		},
 	}
 }
@@ -238,6 +239,33 @@ func managementCompleteJob(opts *ServiceOptions) cli.Command {
 
 			return opts.withManagementClient(ctx, c, func(client management.Management) error {
 				if err := client.CompleteJob(ctx, name); err != nil {
+					return errors.Wrap(err, "problem marking job complete")
+				}
+				return nil
+			})
+		},
+	}
+
+}
+
+func managementCompleteJobsByStatus(opts *ServiceOptions) cli.Command {
+	return cli.Command{
+		Name: "complete-jobs",
+		Flags: opts.managementReportFlags(
+			cli.StringFlag{
+				Name:  statusFilterFlagName,
+				Value: "in-progress",
+				Usage: "specify the process filter, can be 'all', 'completed', 'in-progress', 'pending', or 'stale'",
+			},
+		),
+		Action: func(c *cli.Context) error {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			filter := management.StatusFilter(c.String(statusFilterFlagName))
+
+			return opts.withManagementClient(ctx, c, func(client management.Management) error {
+				if err := client.CompleteJobs(ctx, filter); err != nil {
 					return errors.Wrap(err, "problem marking job complete")
 				}
 				return nil
