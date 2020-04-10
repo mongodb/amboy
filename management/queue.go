@@ -547,21 +547,25 @@ func (m *queueManager) CompleteJobs(ctx context.Context, f StatusFilter) error {
 	}
 
 	for stat := range m.queue.JobStats(ctx) {
+		if stat.Completed {
+			continue
+		}
+
 		switch f {
 		case Stale:
-			if !stat.InProgress || time.Since(stat.ModificationTime) < amboy.LockTimeout {
+			if stat.InProgress && time.Since(stat.ModificationTime) > amboy.LockTimeout {
 				continue
 			}
 		case InProgress:
 			if !stat.InProgress {
 				continue
 			}
-		case All, Pending:
-			// pass: (because there's no fallthrough
-			// everything else should be in progress)
-			if stat.Completed {
+		case Pending:
+			if stat.InProgress {
 				continue
 			}
+		case All:
+			// pass
 		default:
 			// futureproofing...
 			continue

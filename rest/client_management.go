@@ -186,7 +186,7 @@ func (c *managementClient) CompleteJobsByType(ctx context.Context, f management.
 	return nil
 }
 
-// CompleteJobsByType marks all jobs of the given type complete.
+// CompleteJobs marks all jobs of the given type complete.
 func (c *managementClient) CompleteJobs(ctx context.Context, f management.StatusFilter) error {
 	path := fmt.Sprintf("/jobs/mark_many_complete/%s", f)
 	req, err := http.NewRequest(http.MethodPost, c.url+path, nil)

@@ -603,8 +603,10 @@ func (db *dbQueueManager) completeJobs(ctx context.Context, query bson.M, f Stat
 	case Stale:
 		query["status.in_prog"] = true
 		query["status.mod_ts"] = bson.M{"$gt": time.Now().Add(-amboy.LockTimeout)}
-	case Pending, All:
+	case Pending:
 		query["status.completed"] = false
+		query["status.in_prog"] = false
+	case All:
 		query["status.in_prog"] = false
 	}
 
