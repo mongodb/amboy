@@ -99,9 +99,7 @@ func (q *remoteSimpleOrdered) Next(ctx context.Context) amboy.Job {
 
 				if len(edges) == 1 {
 					// this is just an optimization; if there's one dependency its easy
-					// to move that job *up* in the queue by submitting it here. there's a
-					// chance, however, that it's already in progress and we'll end up
-					// running it twice.
+					// to move that job up in the queue by submitting it here.
 					dj, ok := q.Get(ctx, edges[0])
 					if ok && isDispatchable(dj.Status()) {
 						// might need to make this non-blocking.
