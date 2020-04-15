@@ -776,7 +776,7 @@ RETRY:
 
 				if err = d.dispatcher.Dispatch(ctx, job); err != nil {
 					grip.DebugWhen(
-						!isDispatchable(job.Status()),
+						isDispatchable(job.Status()),
 						message.WrapError(err, message.Fields{
 							"id":        d.instanceID,
 							"service":   "amboy.queue.mongo",
@@ -788,7 +788,8 @@ RETRY:
 							"is_group":  d.opts.UseGroups,
 							"group":     d.opts.GroupName,
 							"dup_key":   isMongoDupKey(err),
-						}))
+						}),
+					)
 
 					job = nil
 					continue CURSOR
