@@ -698,7 +698,7 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 		grip.WarningWhen(
 			time.Since(startAt) > time.Second,
 			message.Fields{
-				"duration_secs": time.Since(startAt),
+				"duration_secs": time.Since(startAt).Seconds(),
 				"service":       "amboy.queue.mdb",
 				"operation":     "next job",
 				"misses":        misses,
