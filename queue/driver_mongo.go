@@ -774,6 +774,11 @@ RETRY:
 					continue CURSOR
 				}
 
+				if d.scopesInUse(ctx, job.Scopes()) {
+					job = nil
+					continue CURSOR
+				}
+
 				if err = d.dispatcher.Dispatch(ctx, job); err != nil {
 					grip.DebugWhen(
 						isDispatchable(job.Status()),
@@ -830,6 +835,18 @@ RETRY:
 		}
 	}
 	return job
+}
+
+func (d *mongoDriver) scopesInUse(ctx context.Context, scopes []string) bool {
+	if len(scopes) == 0 {
+		return false
+	}
+	num, err := d.getCollection().CountDocuments(ctx, bson.M{"scopes": bson.M{"$in": scopes}})
+	if err != nil {
+		return false
+	}
+
+	return num > 0
 }
 
 func (d *mongoDriver) Stats(ctx context.Context) amboy.QueueStats {
