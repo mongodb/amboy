@@ -821,7 +821,6 @@ RETRY:
 						}),
 					)
 					job = nil
-					time.Sleep(time.Duration(rand.Int63n(int64(d.opts.WaitInterval))))
 					continue CURSOR
 				}
 				break CURSOR
