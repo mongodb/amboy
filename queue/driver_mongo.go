@@ -692,6 +692,7 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 		job            amboy.Job
 		misses         int64
 		dispatchMisses int64
+		dispatchSkips  int64
 	)
 
 	startAt := time.Now()
@@ -703,6 +704,7 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 				"service":       "amboy.queue.mdb",
 				"operation":     "next job",
 				"attempts":      dispatchMisses,
+				"skips":         dispatchSkips,
 				"misses":        misses,
 				"dispatched":    job != nil,
 				"message":       "slow job dispatching operation",
@@ -797,7 +799,8 @@ RETRY:
 					continue CURSOR
 				}
 
-				if d.scopesInUse(ctx, job.Scopes()) {
+				if d.scopesInUse(ctx, job.Scopes()) || !isDispatchable(job.Status()) {
+					dispatchSkips++
 					job = nil
 					continue CURSOR
 				}
