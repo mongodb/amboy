@@ -341,7 +341,7 @@ func (s *ManagerSuite) TestCompleteJobsByTypeInvalidFilter() {
 	s.Error(s.manager.CompleteJobsByType(s.ctx, Completed, "type"))
 }
 
-func (s *ManagerSuite) TestCompleteJobsByType() {
+func (s *ManagerSuite) TestCompleteJobsByTypeValidFilter() {
 	j1 := job.NewShellJob("ls", "")
 	s.Require().NoError(s.queue.Put(s.ctx, j1))
 	j2 := newTestJob("0")
