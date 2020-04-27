@@ -608,6 +608,8 @@ func (db *dbQueueManager) completeJobs(ctx context.Context, query bson.M, f Stat
 		query["status.in_prog"] = false
 	case All:
 		query["status.in_prog"] = false
+	default:
+		return errors.New("invalid job status filter")
 	}
 
 	res, err := db.collection.UpdateMany(ctx, query, db.getUpdateStatement())
