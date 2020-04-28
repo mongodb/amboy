@@ -8,7 +8,7 @@ import (
 	"github.com/mongodb/grip"
 )
 
-// LockTimeout describes the period of time that a queue will respect
+// LockTimeout describes the default period of time that a queue will respect
 // a stale lock from another queue before beginning work on a job.
 const LockTimeout = 10 * time.Minute
 
@@ -222,6 +222,7 @@ type Queue interface {
 	Start(context.Context) error
 }
 
+// QueueInfo describes runtime information associated with a Queue.
 type QueueInfo struct {
 	Started     bool
 	LockTimeout time.Duration

@@ -242,8 +242,7 @@ func (db *dbQueueManager) JobStatus(ctx context.Context, f StatusFilter) (*JobSt
 		match["status.completed"] = false
 	case Stale:
 		match["status.in_prog"] = true
-		// kim: TODO: pass in lock timeout
-		match["status.mod_ts"] = bson.M{"$gt": time.Now().Add(-db.opts.Options.GetLockTimeout())}
+		match["status.mod_ts"] = bson.M{"$gt": time.Now().Add(-db.opts.Options.LockTimeout)}
 		match["status.completed"] = false
 	case Completed:
 		match["status.in_prog"] = false
@@ -384,8 +383,7 @@ func (db *dbQueueManager) JobIDsByState(ctx context.Context, jobType string, f S
 		query["status.in_prog"] = false
 	case Stale:
 		query["status.in_prog"] = true
-		// kim: TODO: pass in lock timeout
-		query["status.mod_ts"] = bson.M{"$gt": time.Now().Add(-db.opts.Options.GetLockTimeout())}
+		query["status.mod_ts"] = bson.M{"$gt": time.Now().Add(-db.opts.Options.LockTimeout)}
 	case Completed:
 		query["status.in_prog"] = false
 		query["status.completed"] = true
@@ -603,8 +601,7 @@ func (db *dbQueueManager) completeJobs(ctx context.Context, query bson.M, f Stat
 		query["status.in_prog"] = true
 	case Stale:
 		query["status.in_prog"] = true
-		// kim: TODO: pass in lock timeout
-		query["status.mod_ts"] = bson.M{"$gt": time.Now().Add(-db.opts.Options.GetLockTimeout())}
+		query["status.mod_ts"] = bson.M{"$gt": time.Now().Add(-db.opts.Options.LockTimeout)}
 	case Pending:
 		query["status.completed"] = false
 		query["status.in_prog"] = false

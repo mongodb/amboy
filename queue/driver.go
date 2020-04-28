@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/mongodb/amboy"
+	"github.com/mongodb/grip"
 )
 
 // remoteQueueDriver describes the interface between a queue and an out of
@@ -25,7 +26,6 @@ type remoteQueueDriver interface {
 	JobStats(context.Context) <-chan amboy.JobStatusInfo
 	Complete(context.Context, amboy.Job) error
 
-	// kim: TODO: maybe remove
 	LockTimeout() time.Duration
 
 	SetDispatcher(Dispatcher)
@@ -55,15 +55,6 @@ type MongoDBOptions struct {
 	LockTimeout time.Duration
 }
 
-// GetLockTimeout returns the lock timeout specified by the options, or
-// amboy.LockTimeout as the default.
-func (opts *MongoDBOptions) GetLockTimeout() time.Duration {
-	if opts.LockTimeout <= time.Duration(0) {
-		return amboy.LockTimeout
-	}
-	return opts.LockTimeout
-}
-
 // DefaultMongoDBOptions constructs a new options object with default
 // values: connecting to a MongoDB instance on localhost, using the
 // "amboy" database, and *not* using priority ordering of jobs.
@@ -78,5 +69,22 @@ func DefaultMongoDBOptions() MongoDBOptions {
 		SkipReportingIndexBuilds: false,
 		WaitInterval:             time.Second,
 		Format:                   amboy.BSON,
+		LockTimeout:              amboy.LockTimeout,
 	}
+}
+
+// ValidateAndDefault validates that the required options are given and sets
+// fields that are unspecified and have a default value.
+func (opts *MongoDBOptions) ValidateAndDefault() error {
+	catcher := grip.NewBasicCatcher()
+	catcher.NewWhen(opts.URI == "", "must specify connection URI")
+	catcher.NewWhen(opts.DB == "", "must specify database")
+	catcher.NewWhen(opts.LockTimeout < 0, "cannot have negative lock timeout")
+	if opts.LockTimeout == 0 {
+		opts.LockTimeout = amboy.LockTimeout
+	}
+	if !opts.Format.IsValid() {
+		opts.Format = amboy.BSON
+	}
+	return catcher.Resolve()
 }

@@ -34,27 +34,34 @@ type mongoDriver struct {
 // NewMongoDriver constructs a MongoDB backed queue driver
 // implementation using the go.mongodb.org/mongo-driver as the
 // database interface.
-func newMongoDriver(name string, opts MongoDBOptions) remoteQueueDriver {
+func newMongoDriver(name string, opts MongoDBOptions) (remoteQueueDriver, error) {
 	host, _ := os.Hostname() // nolint
 
-	if !opts.Format.IsValid() {
-		opts.Format = amboy.BSON
+	if err := opts.ValidateAndDefault(); err != nil {
+		return nil, errors.Wrap(err, "invalid mongo driver options")
 	}
 
 	return &mongoDriver{
 		name:       name,
 		opts:       opts,
 		instanceID: fmt.Sprintf("%s.%s.%s", name, host, uuid.New()),
-	}
+	}, nil
 }
 
 // openNewMongoDriver constructs and opens a new MongoDB driver instance
 // using the specified session. It is equivalent to calling
 // NewMongoDriver() and calling driver.Open().
 func openNewMongoDriver(ctx context.Context, name string, opts MongoDBOptions, client *mongo.Client) (remoteQueueDriver, error) {
-	d := newMongoDriver(name, opts).(*mongoDriver)
+	d, err := newMongoDriver(name, opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not create driver")
+	}
+	md, ok := d.(*mongoDriver)
+	if !ok {
+		return nil, errors.New("amboy programmer error: incorrect constructor")
+	}
 
-	if err := d.start(ctx, client); err != nil {
+	if err := md.start(ctx, client); err != nil {
 		return nil, errors.Wrap(err, "problem starting driver")
 	}
 
@@ -65,11 +72,11 @@ func openNewMongoDriver(ctx context.Context, name string, opts MongoDBOptions, c
 // prefixes job ids with a prefix and adds the group field to the
 // documents in the database which makes it possible to manage
 // distinct queues with a single MongoDB collection.
-func newMongoGroupDriver(name string, opts MongoDBOptions, group string) remoteQueueDriver {
+func newMongoGroupDriver(name string, opts MongoDBOptions, group string) (remoteQueueDriver, error) {
 	host, _ := os.Hostname() // nolint
 
-	if !opts.Format.IsValid() {
-		opts.Format = amboy.BSON
+	if err := opts.ValidateAndDefault(); err != nil {
+		return nil, errors.Wrap(err, "invalid mongo driver options")
 	}
 	opts.UseGroups = true
 	opts.GroupName = group
@@ -78,14 +85,18 @@ func newMongoGroupDriver(name string, opts MongoDBOptions, group string) remoteQ
 		name:       name,
 		opts:       opts,
 		instanceID: fmt.Sprintf("%s.%s.%s.%s", name, group, host, uuid.New()),
-	}
+	}, nil
 }
 
 // OpenNewMongoGroupDriver constructs and opens a new MongoDB driver instance
 // using the specified session. It is equivalent to calling
 // NewMongoGroupDriver() and calling driver.Open().
 func openNewMongoGroupDriver(ctx context.Context, name string, opts MongoDBOptions, group string, client *mongo.Client) (remoteQueueDriver, error) {
-	d, ok := newMongoGroupDriver(name, opts, group).(*mongoDriver)
+	d, err := newMongoGroupDriver(name, opts, group)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not create driver")
+	}
+	md, ok := d.(*mongoDriver)
 	if !ok {
 		return nil, errors.New("amboy programmer error: incorrect constructor")
 	}
@@ -93,7 +104,7 @@ func openNewMongoGroupDriver(ctx context.Context, name string, opts MongoDBOptio
 	opts.UseGroups = true
 	opts.GroupName = group
 
-	if err := d.start(ctx, client); err != nil {
+	if err := md.start(ctx, client); err != nil {
 		return nil, errors.Wrap(err, "problem starting driver")
 	}
 
@@ -890,12 +901,11 @@ func (d *mongoDriver) Stats(ctx context.Context) amboy.QueueStats {
 	}
 }
 
-// kim: TODO: maybe remove
 func (d *mongoDriver) LockTimeout() time.Duration {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
-	return d.opts.GetLockTimeout()
+	return d.opts.LockTimeout
 }
 
 func (d *mongoDriver) Dispatcher() Dispatcher {

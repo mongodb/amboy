@@ -356,7 +356,8 @@ func (s *RemoteUnorderedSuite) TestInfoReturnsDefaultLockTimeout() {
 func (s *RemoteUnorderedSuite) TestInfoReturnsConfigurableLockTimeout() {
 	opts := DefaultMongoDBOptions()
 	opts.LockTimeout = 30 * time.Minute
-	d := newMongoDriver(s.T().Name(), opts)
+	d, err := newMongoDriver(s.T().Name(), opts)
+	s.Require().NoError(err)
 	s.Require().NoError(s.queue.SetDriver(d))
 	s.Equal(opts.LockTimeout, s.queue.Info().LockTimeout)
 }

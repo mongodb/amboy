@@ -10,6 +10,7 @@ import (
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/job"
 	"github.com/mongodb/grip"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -34,9 +35,9 @@ func TestDriverSuiteWithMongoDBInstance(t *testing.T) {
 	tests.uuid = uuid.New().String()
 	opts := DefaultMongoDBOptions()
 	opts.DB = "amboy_test"
-	mDriver := newMongoDriver(
-		"test-"+tests.uuid,
-		opts).(*mongoDriver)
+	driver, err := newMongoDriver("test-"+tests.uuid, opts)
+	require.NoError(t, err)
+	mDriver := driver.(*mongoDriver)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -271,15 +272,12 @@ func (s *DriverSuite) TestStatsMethodReturnsAllJobs() {
 
 func (s *DriverSuite) TestReturnsDefaultLockTimeout() {
 	s.Equal(amboy.LockTimeout, s.driver.LockTimeout())
-	d, ok := s.driver.(*mongoDriver)
-	s.Require().True(ok)
-	s.Equal(amboy.LockTimeout, d.opts.GetLockTimeout())
 }
 
 func (s *DriverSuite) TestInfoReturnsConfigurableLockTimeout() {
 	opts := DefaultMongoDBOptions()
 	opts.LockTimeout = 25 * time.Minute
-	d := newMongoDriver(s.T().Name(), opts)
+	d, err := newMongoDriver(s.T().Name(), opts)
+	s.Require().NoError(err)
 	s.Equal(opts.LockTimeout, d.LockTimeout())
-	s.Equal(opts.LockTimeout, opts.GetLockTimeout())
 }
