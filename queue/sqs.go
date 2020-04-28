@@ -88,7 +88,7 @@ func (q *sqsFIFOQueue) Put(ctx context.Context, j amboy.Job) error {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 
-	if !q.Info().Started {
+	if !q.started {
 		return errors.Errorf("cannot put job %s; queue not started", name)
 	}
 
@@ -129,7 +129,7 @@ func (q *sqsFIFOQueue) Save(ctx context.Context, j amboy.Job) error {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 
-	if !q.Info().Started {
+	if !q.started {
 		return errors.Errorf("cannot save job %s; queue not started", name)
 	}
 
