@@ -337,11 +337,11 @@ func (q *remoteBase) canDispatch(j amboy.Job) bool {
 }
 
 func isDispatchable(stat amboy.JobStatusInfo) bool {
-	if stat.Completed {
-		return false
-	}
 	if stat.ModificationTime.Before(time.Now().Add(-amboy.LockTimeout)) {
 		return true
+	}
+	if stat.Completed {
+		return false
 	}
 	if stat.InProgress {
 		return false
