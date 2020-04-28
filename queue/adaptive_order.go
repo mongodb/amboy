@@ -245,6 +245,14 @@ func (q *adaptiveLocalOrdering) Stats(ctx context.Context) amboy.QueueStats {
 }
 
 func (q *adaptiveLocalOrdering) Started() bool { return q.operations != nil }
+
+func (q *adaptiveLocalOrdering) Info() amboy.QueueInfo {
+	return amboy.QueueInfo{
+		Started:     q.operations != nil,
+		LockTimeout: amboy.LockTimeout,
+	}
+}
+
 func (q *adaptiveLocalOrdering) Next(ctx context.Context) amboy.Job {
 	ret := make(chan amboy.Job)
 	op := func(ctx context.Context, items *adaptiveOrderItems, fixed *fixedStorage) {

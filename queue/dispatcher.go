@@ -55,7 +55,7 @@ func (d *dispatcherImpl) Dispatch(ctx context.Context, job amboy.Job) error {
 	defer d.mutex.Unlock()
 
 	if _, ok := d.cache[job.ID()]; ok {
-		if time.Since(job.Status().ModificationTime) > amboy.LockTimeout {
+		if time.Since(job.Status().ModificationTime) > d.queue.Info().LockTimeout {
 			return errors.New("job is already dispatched")
 		}
 		delete(d.cache, job.ID())
@@ -77,7 +77,7 @@ func (d *dispatcherImpl) Dispatch(ctx context.Context, job amboy.Job) error {
 		info.jobContext, info.jobCancel = context.WithCancel(ctx)
 	}
 
-	if err := job.Lock(d.queue.ID()); err != nil {
+	if err := job.Lock(d.queue.ID(), d.queue.Info().LockTimeout); err != nil {
 		return errors.Wrap(err, "problem locking job")
 	}
 	if err := d.queue.Save(ctx, job); err != nil {
@@ -89,14 +89,14 @@ func (d *dispatcherImpl) Dispatch(ctx context.Context, job amboy.Job) error {
 	go func() {
 		defer recovery.LogStackTraceAndContinue("background lock ping", job.ID())
 		iters := 0
-		ticker := time.NewTicker(amboy.LockTimeout / 4)
+		ticker := time.NewTicker(d.queue.Info().LockTimeout / 4)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-pingerCtx.Done():
 				return
 			case <-ticker.C:
-				if err := job.Lock(d.queue.ID()); err != nil {
+				if err := job.Lock(d.queue.ID(), d.queue.Info().LockTimeout); err != nil {
 					job.AddError(errors.Wrapf(err, "problem pinging job lock on cycle #%d", iters))
 					info.jobCancel()
 					return

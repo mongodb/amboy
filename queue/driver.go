@@ -25,6 +25,9 @@ type remoteQueueDriver interface {
 	JobStats(context.Context) <-chan amboy.JobStatusInfo
 	Complete(context.Context, amboy.Job) error
 
+	// kim: TODO: maybe remove
+	LockTimeout() time.Duration
+
 	SetDispatcher(Dispatcher)
 	Dispatcher() Dispatcher
 }
@@ -48,6 +51,17 @@ type MongoDBOptions struct {
 	// field. If set to zero, the TTL index will not be created and
 	// and documents may live forever in the database.
 	TTL time.Duration
+	// LockTimeout overrides the default job lock timeout if set.
+	LockTimeout time.Duration
+}
+
+// GetLockTimeout returns the lock timeout specified by the options, or
+// amboy.LockTimeout as the default.
+func (opts *MongoDBOptions) GetLockTimeout() time.Duration {
+	if opts.LockTimeout <= time.Duration(0) {
+		return amboy.LockTimeout
+	}
+	return opts.LockTimeout
 }
 
 // DefaultMongoDBOptions constructs a new options object with default

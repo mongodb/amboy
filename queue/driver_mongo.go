@@ -438,8 +438,11 @@ func (d *mongoDriver) Put(ctx context.Context, j amboy.Job) error {
 	return nil
 }
 
-func getAtomicQuery(owner, jobName string, modCount int) bson.M {
-	timeoutTs := time.Now().Add(-amboy.LockTimeout)
+func (d *mongoDriver) getAtomicQuery(jobName string, modCount int) bson.M {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	owner := d.instanceID
+	timeoutTs := time.Now().Add(-d.LockTimeout())
 
 	return bson.M{
 		"_id": jobName,
@@ -519,7 +522,7 @@ func (d *mongoDriver) prepareInterchange(j amboy.Job) (*registry.JobInterchange,
 
 func (d *mongoDriver) doUpdate(ctx context.Context, job *registry.JobInterchange) error {
 	d.processJobForGroup(job)
-	query := getAtomicQuery(d.instanceID, job.Name, job.Status.ModificationCount)
+	query := d.getAtomicQuery(job.Name, job.Status.ModificationCount)
 	res, err := d.getCollection().ReplaceOne(ctx, query, job)
 	if err != nil {
 		return errors.Wrapf(err, "problem saving document %s: %+v", job.Name, res)
@@ -653,6 +656,9 @@ func (d *mongoDriver) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 }
 
 func (d *mongoDriver) getNextQuery() bson.M {
+	d.mu.RLock()
+	lockTimeout := d.LockTimeout()
+	d.mu.RUnlock()
 	now := time.Now()
 	qd := bson.M{
 		"$or": []bson.M{
@@ -663,7 +669,7 @@ func (d *mongoDriver) getNextQuery() bson.M {
 			{
 				"status.completed": false,
 				"status.in_prog":   true,
-				"status.mod_ts":    bson.M{"$lte": now.Add(-amboy.LockTimeout)},
+				"status.mod_ts":    bson.M{"$lte": now.Add(-lockTimeout)},
 			},
 		},
 	}
@@ -882,6 +888,14 @@ func (d *mongoDriver) Stats(ctx context.Context) amboy.QueueStats {
 		Completed: int(numJobs - pending),
 		Running:   int(numLocked),
 	}
+}
+
+// kim: TODO: maybe remove
+func (d *mongoDriver) LockTimeout() time.Duration {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	return d.opts.GetLockTimeout()
 }
 
 func (d *mongoDriver) Dispatcher() Dispatcher {

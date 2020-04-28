@@ -192,6 +192,16 @@ func (q *limitedSizeLocal) Started() bool {
 	return q.channel != nil
 }
 
+func (q *limitedSizeLocal) Info() amboy.QueueInfo {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+
+	return amboy.QueueInfo{
+		Started:     q.channel != nil,
+		LockTimeout: amboy.LockTimeout,
+	}
+}
+
 // Results is a generator of all completed tasks in the queue.
 func (q *limitedSizeLocal) Results(ctx context.Context) <-chan amboy.Job {
 	q.mu.Lock()

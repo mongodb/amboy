@@ -125,6 +125,13 @@ func (q *priorityLocalQueue) Started() bool {
 	return q.channel != nil
 }
 
+func (q *priorityLocalQueue) Info() amboy.QueueInfo {
+	return amboy.QueueInfo{
+		Started:     q.channel != nil,
+		LockTimeout: amboy.LockTimeout,
+	}
+}
+
 // Results is a generator of all jobs that report as "Completed" in
 // the queue.
 func (q *priorityLocalQueue) Results(ctx context.Context) <-chan amboy.Job {

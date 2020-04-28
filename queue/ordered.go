@@ -168,6 +168,13 @@ func (q *depGraphOrderedLocal) Started() bool {
 	return q.started
 }
 
+func (q *depGraphOrderedLocal) Info() amboy.QueueInfo {
+	return amboy.QueueInfo{
+		Started:     q.started,
+		LockTimeout: amboy.LockTimeout,
+	}
+}
+
 // Next returns a job from the Queue. This call is non-blocking. If
 // there are no pending jobs at the moment, then Next returns an
 // error.

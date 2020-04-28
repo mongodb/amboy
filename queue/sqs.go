@@ -203,6 +203,13 @@ func (q *sqsFIFOQueue) Started() bool {
 	return q.started
 }
 
+func (q *sqsFIFOQueue) Info() amboy.QueueInfo {
+	return amboy.QueueInfo{
+		Started:     q.started,
+		LockTimeout: amboy.LockTimeout,
+	}
+}
+
 // Used to mark a Job complete and remove it from the pending
 // work of the queue.
 func (q *sqsFIFOQueue) Complete(ctx context.Context, job amboy.Job) {

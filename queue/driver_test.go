@@ -211,7 +211,7 @@ func (s *DriverSuite) TestNextMethodDoesNotReturnLastJob() {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 	j := job.NewShellJob("echo foo", "")
-	s.Require().NoError(j.Lock("taken"))
+	s.Require().NoError(j.Lock("taken", amboy.LockTimeout))
 
 	s.NoError(s.driver.Put(s.ctx, j))
 	s.Equal(1, s.driver.Stats(s.ctx).Total)

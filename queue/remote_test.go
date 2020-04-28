@@ -263,10 +263,10 @@ func (s *RemoteUnorderedSuite) TestNextMethodSkipsLockedJobs() {
 
 		if i%3 == 0 {
 			numLocked++
-			err := j.Lock(s.driver.ID())
+			err := j.Lock(s.driver.ID(), amboy.LockTimeout)
 			s.NoError(err)
 
-			s.Error(j.Lock("elsewhere"))
+			s.Error(j.Lock("elsewhere", amboy.LockTimeout))
 			lockedJobs[j.ID()] = struct{}{}
 		}
 

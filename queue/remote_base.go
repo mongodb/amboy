@@ -113,6 +113,25 @@ func (q *remoteBase) Started() bool {
 	return q.started
 }
 
+func (q *remoteBase) Info() amboy.QueueInfo {
+	q.mutex.RLock()
+	defer q.mutex.RUnlock()
+
+	// return amboy.QueueInfo{
+	//     Started:     q.started,
+	//     LockTimeout: amboy.LockTimeout,
+	// }
+	// kim: TODO: figure out if queue driver should have lock timeout.
+	lockTimeout := amboy.LockTimeout
+	if q.driver != nil {
+		lockTimeout = q.driver.LockTimeout()
+	}
+	return amboy.QueueInfo{
+		Started:     q.started,
+		LockTimeout: lockTimeout,
+	}
+}
+
 func (q *remoteBase) Save(ctx context.Context, j amboy.Job) error {
 	return q.driver.Save(ctx, j)
 }
@@ -154,7 +173,7 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
 
 			err = q.driver.Complete(ctx, j)
 			if err != nil {
-				if time.Since(startAt) > time.Minute+amboy.LockTimeout {
+				if time.Since(startAt) > time.Minute+q.Info().LockTimeout {
 					grip.Warning(message.WrapError(err, message.Fields{
 						"job_id":      id,
 						"job_type":    j.Type().Name,

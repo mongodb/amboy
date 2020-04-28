@@ -340,6 +340,13 @@ func (q *shuffledLocal) Started() bool {
 	return q.operations != nil
 }
 
+func (q *shuffledLocal) Info() amboy.QueueInfo {
+	return amboy.QueueInfo{
+		Started:     q.operations != nil,
+		LockTimeout: amboy.LockTimeout,
+	}
+}
+
 // Next returns a new pending job, and is used by the Runner interface
 // to fetch new jobs. This method returns a nil job object is there are
 // no pending jobs.

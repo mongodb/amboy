@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/queue"
 	"github.com/mongodb/grip"
 	"github.com/mongodb/grip/message"
@@ -243,7 +242,8 @@ func (db *dbQueueManager) JobStatus(ctx context.Context, f StatusFilter) (*JobSt
 		match["status.completed"] = false
 	case Stale:
 		match["status.in_prog"] = true
-		match["status.mod_ts"] = bson.M{"$gt": time.Now().Add(-amboy.LockTimeout)}
+		// kim: TODO: pass in lock timeout
+		match["status.mod_ts"] = bson.M{"$gt": time.Now().Add(-db.opts.Options.GetLockTimeout())}
 		match["status.completed"] = false
 	case Completed:
 		match["status.in_prog"] = false
@@ -384,7 +384,8 @@ func (db *dbQueueManager) JobIDsByState(ctx context.Context, jobType string, f S
 		query["status.in_prog"] = false
 	case Stale:
 		query["status.in_prog"] = true
-		query["status.mod_ts"] = bson.M{"$gt": time.Now().Add(-amboy.LockTimeout)}
+		// kim: TODO: pass in lock timeout
+		query["status.mod_ts"] = bson.M{"$gt": time.Now().Add(-db.opts.Options.GetLockTimeout())}
 	case Completed:
 		query["status.in_prog"] = false
 		query["status.completed"] = true
@@ -602,7 +603,8 @@ func (db *dbQueueManager) completeJobs(ctx context.Context, query bson.M, f Stat
 		query["status.in_prog"] = true
 	case Stale:
 		query["status.in_prog"] = true
-		query["status.mod_ts"] = bson.M{"$gt": time.Now().Add(-amboy.LockTimeout)}
+		// kim: TODO: pass in lock timeout
+		query["status.mod_ts"] = bson.M{"$gt": time.Now().Add(-db.opts.Options.GetLockTimeout())}
 	case Pending:
 		query["status.completed"] = false
 		query["status.in_prog"] = false
