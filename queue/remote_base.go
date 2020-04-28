@@ -341,15 +341,12 @@ func (q *remoteBase) canDispatch(j amboy.Job) bool {
 	return true
 }
 
-func isDispatchable(stat amboy.JobStatusInfo) bool {
-	if stat.ModificationTime.Before(time.Now().Add(-amboy.LockTimeout)) {
-		return true
-	}
+func isDispatchable(stat amboy.JobStatusInfo, lockTimeout time.Duration) bool {
 	if stat.Completed {
 		return false
 	}
 	if stat.InProgress {
-		if time.Since(stat.ModificationTime) > amboy.LockTimeout {
+		if time.Since(stat.ModificationTime) > lockTimeout {
 			return true
 		}
 		return false

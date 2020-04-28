@@ -816,7 +816,11 @@ RETRY:
 					continue CURSOR
 				}
 
-				if d.scopesInUse(ctx, job.Scopes()) || !isDispatchable(job.Status()) {
+				if !isDispatchable(job.Status(), d.opts.LockTimeout) {
+					dispatchSkips++
+					job = nil
+					continue CURSOR
+				} else if d.scopesInUse(ctx, job.Scopes()) && time.Since(job.Status().ModificationTime) <= d.opts.LockTimeout {
 					dispatchSkips++
 					job = nil
 					continue CURSOR
@@ -825,7 +829,7 @@ RETRY:
 				if err = d.dispatcher.Dispatch(ctx, job); err != nil {
 					dispatchMisses++
 					grip.DebugWhen(
-						isDispatchable(job.Status()),
+						isDispatchable(job.Status(), d.opts.LockTimeout),
 						message.WrapError(err, message.Fields{
 							"id":            d.instanceID,
 							"service":       "amboy.queue.mdb",
