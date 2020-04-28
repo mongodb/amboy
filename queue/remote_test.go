@@ -348,3 +348,15 @@ func (s *RemoteUnorderedSuite) TestTimeInfoPersists() {
 	j2 := s.queue.Next(ctx)
 	s.NotZero(j2.TimeInfo())
 }
+
+func (s *RemoteUnorderedSuite) TestInfoReturnsDefaultLockTimeout() {
+	s.Equal(amboy.LockTimeout, s.queue.Info().LockTimeout)
+}
+
+func (s *RemoteUnorderedSuite) TestInfoReturnsConfigurableLockTimeout() {
+	opts := DefaultMongoDBOptions()
+	opts.LockTimeout = 30 * time.Minute
+	d := newMongoDriver(s.T().Name(), opts)
+	s.Require().NoError(s.queue.SetDriver(d))
+	s.Equal(opts.LockTimeout, s.queue.Info().LockTimeout)
+}

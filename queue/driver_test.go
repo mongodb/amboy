@@ -269,7 +269,17 @@ func (s *DriverSuite) TestStatsMethodReturnsAllJobs() {
 	s.Equal(counter, 30)
 }
 
-// kim: TODO: write test
-// func (s *DriverSuite) TestInfoReturnsConfigurableLockTimeout() {
-//     s.driver.LockTimeout()
-// }
+func (s *DriverSuite) TestReturnsDefaultLockTimeout() {
+	s.Equal(amboy.LockTimeout, s.driver.LockTimeout())
+	d, ok := s.driver.(*mongoDriver)
+	s.Require().True(ok)
+	s.Equal(amboy.LockTimeout, d.opts.GetLockTimeout())
+}
+
+func (s *DriverSuite) TestInfoReturnsConfigurableLockTimeout() {
+	opts := DefaultMongoDBOptions()
+	opts.LockTimeout = 25 * time.Minute
+	d := newMongoDriver(s.T().Name(), opts)
+	s.Equal(opts.LockTimeout, d.LockTimeout())
+	s.Equal(opts.LockTimeout, opts.GetLockTimeout())
+}
