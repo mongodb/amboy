@@ -88,7 +88,7 @@ func (q *sqsFIFOQueue) Put(ctx context.Context, j amboy.Job) error {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 
-	if !q.Started() {
+	if !q.Info().Started {
 		return errors.Errorf("cannot put job %s; queue not started", name)
 	}
 
@@ -129,7 +129,7 @@ func (q *sqsFIFOQueue) Save(ctx context.Context, j amboy.Job) error {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 
-	if !q.Started() {
+	if !q.Info().Started {
 		return errors.Errorf("cannot save job %s; queue not started", name)
 	}
 
@@ -198,12 +198,10 @@ func (q *sqsFIFOQueue) Get(ctx context.Context, name string) (amboy.Job, bool) {
 	return j, ok
 }
 
-// true if queue has started dispatching jobs
-func (q *sqsFIFOQueue) Started() bool {
-	return q.started
-}
-
 func (q *sqsFIFOQueue) Info() amboy.QueueInfo {
+	q.mutex.RLock()
+	defer q.mutex.RUnlock()
+
 	return amboy.QueueInfo{
 		Started:     q.started,
 		LockTimeout: amboy.LockTimeout,
@@ -315,7 +313,7 @@ func (q *sqsFIFOQueue) Runner() amboy.Runner {
 }
 
 func (q *sqsFIFOQueue) SetRunner(r amboy.Runner) error {
-	if q.Started() {
+	if q.Info().Started {
 		return errors.New("cannot change runners after starting")
 	}
 
@@ -326,9 +324,11 @@ func (q *sqsFIFOQueue) SetRunner(r amboy.Runner) error {
 // Begins the execution of the job Queue, using the embedded
 // Runner.
 func (q *sqsFIFOQueue) Start(ctx context.Context) error {
-	if q.Started() {
+	if q.Info().Started {
 		return nil
 	}
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
 
 	q.started = true
 	err := q.runner.Start(ctx)

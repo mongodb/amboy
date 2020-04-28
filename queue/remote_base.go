@@ -105,23 +105,10 @@ func (q *remoteBase) jobServer(ctx context.Context) {
 	}
 }
 
-// Started reports if the queue has begun processing jobs.
-func (q *remoteBase) Started() bool {
-	q.mutex.RLock()
-	defer q.mutex.RUnlock()
-
-	return q.started
-}
-
 func (q *remoteBase) Info() amboy.QueueInfo {
 	q.mutex.RLock()
 	defer q.mutex.RUnlock()
 
-	// return amboy.QueueInfo{
-	//     Started:     q.started,
-	//     LockTimeout: amboy.LockTimeout,
-	// }
-	// kim: TODO: figure out if queue driver should have lock timeout.
 	lockTimeout := amboy.LockTimeout
 	if q.driver != nil {
 		lockTimeout = q.driver.LockTimeout()
@@ -244,7 +231,7 @@ func (q *remoteBase) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 	return q.driver.JobStats(ctx)
 }
 
-// Stats returns a amboy. QueueStats object that reflects the progress
+// Stats returns a amboy.QueueStats object that reflects the progress
 // jobs in the queue.
 func (q *remoteBase) Stats(ctx context.Context) amboy.QueueStats {
 	output := q.driver.Stats(ctx)
@@ -286,7 +273,7 @@ func (q *remoteBase) Driver() remoteQueueDriver {
 // instances. It is an error to change Driver instances after starting
 // a queue. This method is not part of the amboy.Queue interface.
 func (q *remoteBase) SetDriver(d remoteQueueDriver) error {
-	if q.Started() {
+	if q.Info().Started {
 		return errors.New("cannot change drivers after starting queue")
 	}
 	q.driver = d
@@ -301,7 +288,7 @@ func (q *remoteBase) SetDriver(d remoteQueueDriver) error {
 // error. To release the resources created when starting the queue,
 // cancel the context used when starting the queue.
 func (q *remoteBase) Start(ctx context.Context) error {
-	if q.Started() {
+	if q.Info().Started {
 		return nil
 	}
 
@@ -324,9 +311,8 @@ func (q *remoteBase) Start(ctx context.Context) error {
 	}
 
 	go q.jobServer(ctx)
-	q.mutex.Lock()
+
 	q.started = true
-	q.mutex.Unlock()
 
 	return nil
 }

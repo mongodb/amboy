@@ -168,9 +168,9 @@ func (s *RemoteUnorderedSuite) TestInternalRunnerCannotBeChangedAfterStartingAQu
 	s.NoError(s.queue.SetDriver(s.driver))
 
 	runner := s.queue.Runner()
-	s.False(s.queue.Started())
+	s.False(s.queue.Info().Started)
 	s.NoError(s.queue.Start(ctx))
-	s.True(s.queue.Started())
+	s.True(s.queue.Info().Started)
 
 	newRunner := pool.NewLocalWorkers(2, s.queue)
 	s.Error(s.queue.SetRunner(newRunner))
@@ -244,7 +244,7 @@ func (s *RemoteUnorderedSuite) TestStartMethodCanBeCalledMultipleTimes() {
 	s.NoError(s.queue.SetDriver(s.driver))
 	for i := 0; i < 200; i++ {
 		s.NoError(s.queue.Start(ctx))
-		s.True(s.queue.Started())
+		s.True(s.queue.Info().Started)
 	}
 }
 

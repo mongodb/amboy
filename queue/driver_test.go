@@ -268,3 +268,8 @@ func (s *DriverSuite) TestStatsMethodReturnsAllJobs() {
 	s.Equal(len(names), counter)
 	s.Equal(counter, 30)
 }
+
+// kim: TODO: write test
+// func (s *DriverSuite) TestInfoReturnsConfigurableLockTimeout() {
+//     s.driver.LockTimeout()
+// }

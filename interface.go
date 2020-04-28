@@ -183,11 +183,6 @@ type Queue interface {
 	// blocking, but may be interrupted with a canceled context.
 	Next(context.Context) Job
 
-	// Makes it possible to detect if a Queue has started
-	// dispatching jobs to runners.
-	// kim: TODO: remove and replace with Info()
-	Started() bool
-
 	// Info returns information related to management of the Queue.
 	Info() QueueInfo
 

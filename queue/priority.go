@@ -120,11 +120,6 @@ func (q *priorityLocalQueue) Next(ctx context.Context) amboy.Job {
 	}
 }
 
-// Started reports if the queue has begun processing work.
-func (q *priorityLocalQueue) Started() bool {
-	return q.channel != nil
-}
-
 func (q *priorityLocalQueue) Info() amboy.QueueInfo {
 	return amboy.QueueInfo{
 		Started:     q.channel != nil,
@@ -188,7 +183,7 @@ func (q *priorityLocalQueue) Runner() amboy.Runner {
 // you attempt to set the runner after the queue has started the
 // operation returns an error and has no effect.
 func (q *priorityLocalQueue) SetRunner(r amboy.Runner) error {
-	if q.Started() {
+	if q.Info().Started {
 		return errors.New("cannot set runner after queue is started")
 	}
 
