@@ -47,6 +47,7 @@ func (o *DBQueueManagerOptions) Validate() error {
 	catcher := grip.NewBasicCatcher()
 	catcher.NewWhen(o.SingleGroup && o.ByGroups, "cannot specify conflicting group options")
 	catcher.NewWhen(o.Name == "", "must specify queue name")
+	catcher.Wrap(o.Options.Validate(), "invalid mongo options")
 	return catcher.Resolve()
 }
 
