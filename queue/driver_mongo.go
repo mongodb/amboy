@@ -37,7 +37,7 @@ type mongoDriver struct {
 func newMongoDriver(name string, opts MongoDBOptions) (remoteQueueDriver, error) {
 	host, _ := os.Hostname() // nolint
 
-	if err := opts.ValidateAndDefault(); err != nil {
+	if err := opts.Validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid mongo driver options")
 	}
 
@@ -75,7 +75,7 @@ func openNewMongoDriver(ctx context.Context, name string, opts MongoDBOptions, c
 func newMongoGroupDriver(name string, opts MongoDBOptions, group string) (remoteQueueDriver, error) {
 	host, _ := os.Hostname() // nolint
 
-	if err := opts.ValidateAndDefault(); err != nil {
+	if err := opts.Validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid mongo driver options")
 	}
 	opts.UseGroups = true

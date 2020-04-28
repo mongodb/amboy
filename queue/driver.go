@@ -73,9 +73,9 @@ func DefaultMongoDBOptions() MongoDBOptions {
 	}
 }
 
-// ValidateAndDefault validates that the required options are given and sets
-// fields that are unspecified and have a default value.
-func (opts *MongoDBOptions) ValidateAndDefault() error {
+// Validate validates that the required options are given and sets fields that
+// are unspecified and have a default value.
+func (opts *MongoDBOptions) Validate() error {
 	catcher := grip.NewBasicCatcher()
 	catcher.NewWhen(opts.URI == "", "must specify connection URI")
 	catcher.NewWhen(opts.DB == "", "must specify database")
