@@ -820,7 +820,7 @@ RETRY:
 					dispatchSkips++
 					job = nil
 					continue CURSOR
-				} else if d.scopesInUse(ctx, job.Scopes()) && time.Since(job.Status().ModificationTime) <= d.opts.LockTimeout {
+				} else if d.scopesInUse(ctx, job.Scopes()) && !jobCanRestart(job.Status(), d.opts.LockTimeout) {
 					dispatchSkips++
 					job = nil
 					continue CURSOR

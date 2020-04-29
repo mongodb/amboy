@@ -98,7 +98,7 @@ func (q *remoteSimpleOrdered) Next(ctx context.Context) amboy.Job {
 				})
 
 				if len(edges) == 1 {
-					// this is just an optimization; if there's one dependency its easy
+					// this is just an optimization; if there's one dependency it's easy
 					// to move that job up in the queue by submitting it here.
 					dj, ok := q.Get(ctx, edges[0])
 					if ok && isDispatchable(dj.Status(), q.Info().LockTimeout) {
