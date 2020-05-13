@@ -8,7 +8,7 @@ package amboy
 type Format int
 
 // Supported values of the Format type, which represent different
-// supported serialization methods..
+// supported serialization methods.
 const (
 	BSON Format = iota
 	YAML
