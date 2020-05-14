@@ -24,12 +24,12 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// RunQueue runs the dispatcher benchmark suite.
+// RunQueue runs the queue benchmark suite.
 func RunQueue(ctx context.Context) error {
 	// Set the level to suppress debug messages from the queue.
 	grip.SetLevel(send.LevelInfo{Threshold: level.Info, Default: level.Info})
 
-	prefix := filepath.Join("build", fmt.Sprintf("amboy-dispatcher-benchmark-%d", time.Now().Unix()))
+	prefix := filepath.Join("build", fmt.Sprintf("queue-benchmark-%d", time.Now().Unix()))
 	if err := os.MkdirAll(prefix, os.ModePerm); err != nil {
 		return errors.Wrap(err, "creating benchmark directory")
 	}
@@ -43,9 +43,9 @@ func RunQueue(ctx context.Context) error {
 	s := queueBenchmarkSuite()
 	res, err := s.Run(ctx, prefix)
 	if err != nil {
-		resultText = fmt.Sprintf("--- FAIL: %s\n", err)
+		resultText = err.Error()
 	} else {
-		resultText = fmt.Sprintf("--- PASS: %s\n", res.Report())
+		resultText = res.Report()
 	}
 
 	catcher := grip.NewBasicCatcher()
@@ -63,54 +63,66 @@ type jobConstructor func(id string) amboy.Job
 
 func basicThroughputBenchmark(makeQueue queueConstructor, makeJob jobConstructor, timeout time.Duration) poplar.Benchmark {
 	return func(ctx context.Context, r poplar.Recorder, count int) error {
-		q, closeQueue, err := makeQueue(ctx)
-		if err != nil {
-			return errors.Wrap(err, "making queue")
+		for i := 0; i < count; i++ {
+			if err := runBasicThroughputIteration(ctx, r, makeQueue, makeJob, timeout); err != nil {
+				return errors.Wrapf(err, "iteration %d", i)
+			}
 		}
-		defer func() {
-			grip.Error(errors.Wrap(closeQueue(), "cleaning up queue"))
-		}()
+		return nil
+	}
+}
 
-		errChan := make(chan error)
-		qctx, cancel := context.WithCancel(ctx)
-		defer cancel()
-		go func() {
-			for {
-				if qctx.Err() != nil {
+func runBasicThroughputIteration(ctx context.Context, r poplar.Recorder, makeQueue queueConstructor, makeJob jobConstructor, timeout time.Duration) error {
+	q, closeQueue, err := makeQueue(ctx)
+	if err != nil {
+		return errors.Wrap(err, "making queue")
+	}
+	defer func() {
+		grip.Error(errors.Wrap(closeQueue(), "cleaning up queue"))
+	}()
+
+	errChan := make(chan error)
+	qctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		for {
+			if qctx.Err() != nil {
+				return
+			}
+
+			j := makeJob(uuid.New().String())
+			if err := q.Put(qctx, j); err != nil {
+				select {
+				case <-qctx.Done():
 					return
-				}
-
-				j := makeJob(uuid.New().String())
-				if err := q.Put(qctx, j); err != nil {
-					errChan <- errors.Wrap(err, "adding job to queue")
+				case errChan <- errors.Wrap(err, "adding job to queue"):
 					return
 				}
 			}
-		}()
-
-		startAt := time.Now()
-		r.BeginIteration()
-		defer func() {
-			r.EndIteration(time.Since(startAt))
-		}()
-
-		if err = q.Start(ctx); err != nil {
-			return errors.Wrap(err, "starting queue")
 		}
+	}()
 
-		timer := time.NewTimer(timeout)
-		select {
-		case err := <-errChan:
-			return errors.WithStack(err)
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-timer.C:
-			stats := q.Stats(ctx)
-			r.IncOperations(int64(stats.Completed))
-		}
+	startAt := time.Now()
+	r.BeginIteration()
+	defer func() {
+		r.EndIteration(time.Since(startAt))
+	}()
 
-		return nil
+	if err = q.Start(qctx); err != nil {
+		return errors.Wrap(err, "starting queue")
 	}
+
+	timer := time.NewTimer(timeout)
+	select {
+	case err := <-errChan:
+		return errors.WithStack(err)
+	case <-qctx.Done():
+		return qctx.Err()
+	case <-timer.C:
+		stats := q.Stats(ctx)
+		r.IncOperations(int64(stats.Completed))
+	}
+	return nil
 }
 
 func queueBenchmarkSuite() poplar.BenchmarkSuite {
@@ -119,9 +131,9 @@ func queueBenchmarkSuite() poplar.BenchmarkSuite {
 		"MongoDB": makeMongoDBQueue,
 	} {
 		for jobName, makeJob := range map[string]jobConstructor{
-			"Noop":                 newNoopJob,
-			"ScopedNoop":           newScopedNoopJob,
-			"MixedScopeAndNoScope": newSometimesScopedJob(50),
+			"Noop":                     newNoopJob,
+			"ScopedNoop":               newScopedNoopJob,
+			"MixedScopeAndNoScopeNoop": newSometimesScopedJob(50),
 		} {
 			suite = append(suite,
 				&poplar.BenchmarkCase{
@@ -132,6 +144,7 @@ func queueBenchmarkSuite() poplar.BenchmarkSuite {
 					MaxRuntime:    5 * time.Minute,
 					Timeout:       10 * time.Minute,
 					MinIterations: 10,
+					MaxIterations: 20,
 					Recorder:      poplar.RecorderPerf,
 				},
 				&poplar.BenchmarkCase{
@@ -142,6 +155,7 @@ func queueBenchmarkSuite() poplar.BenchmarkSuite {
 					MaxRuntime:    15 * time.Minute,
 					Timeout:       30 * time.Minute,
 					MinIterations: 10,
+					MaxIterations: 20,
 					Recorder:      poplar.RecorderPerf,
 				},
 			)
