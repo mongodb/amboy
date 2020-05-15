@@ -43,9 +43,9 @@ $(buildDir)/run-linter:buildscripts/run-linter.go $(buildDir)/.lintSetup $(build
 ##
 ######################################################################
 
-_compilePackages := $(subst $(name),,$(subst -,/,$(foreach target,$(testPackages),./$(target))))
-coverageOutput := $(foreach target,$(testPackages),$(buildDir)/output.$(target).coverage)
-coverageHtmlOutput := $(foreach target,$(testPackages),$(buildDir)/output.$(target).coverage.html)
+_compilePackages := $(subst $(name),,$(subst -,/,$(foreach target,$(packages),./$(target))))
+coverageOutput := $(foreach target,$(packages),$(buildDir)/output.$(target).coverage)
+coverageHtmlOutput := $(foreach target,$(packages),$(buildDir)/output.$(target).coverage.html)
 
 # start dependency installation tools
 #   implementation details for being able to lazily install dependencies
@@ -57,7 +57,7 @@ coverageHtmlOutput := $(foreach target,$(packages),$(buildDir)/output.$(target).
 
 # userfacing targets for basic build and development operations
 lint:$(foreach target,$(packages),$(buildDir)/output.$(target).lint)
-test:$(foreach target,$(testPackages),$(buildDir)/output.$(target).test)
+test:$(foreach target,$(packages),$(buildDir)/output.$(target).test)
 coverage:$(buildDir) $(coverageOutput)
 coverage-html:$(buildDir) $(coverageHtmlOutput)
 compile $(buildDir):
@@ -68,13 +68,13 @@ compile-base:
 # convenience targets for runing tests and coverage tasks on a
 # specific package.
 test-%:$(buildDir)/output.%.test
-	
+
 coverage-%:$(buildDir)/output.%.coverage
-	
+
 html-coverage-%:$(buildDir)/output.%.coverage.html
-	
+
 lint-%:$(buildDir)/output.%.lint
-	
+
 # end convienence targets
 phony := lint build build-race race test coverage coverage-html
 .PRECIOUS:$(testOutput) $(coverageOutput) $(coverageHtmlOutput)

@@ -45,7 +45,7 @@ The `QueueGroup <https://godoc.org/github.com/mongodb/amboy#QueueGroup>`_
 interface provides a mechanism to manage collections of queues. There are remote
 and local versions of the queue group possible, but these groups make it
 possible to create new queues at runtime, and improve the isolation of queues
-from eachother.
+from each other.
 
 Runners
 ~~~~~~~
@@ -58,8 +58,8 @@ implementation executes tasks in a fixed-size worker pool, which is
 the default of most queue implementations.
 
 Additional implementation provide rate limiting, and it would be possible to
-implement runners which used the REST interface to distribute worker to a larger
-pool of processes, where existing runners simply use go routines.
+implement runners which used the REST interface to distribute workers to a
+larger pool of processes, where existing runners simply use go routines.
 
 Dependencies
 ~~~~~~~~~~~~
@@ -94,9 +94,9 @@ build clients and services, although any client that can construct
 JSON formated Job object can use the REST API.
 
 Additionally the REST package provides remote implementations of the `management
-<https://godoc.org/github.com/mongodb/amboy/rest#ManagementService>`_ which
-makes it possible to manage and report on the jobs in an existing queue, and the
-`abortable pool
+interface <https://godoc.org/github.com/mongodb/amboy/rest#ManagementService>`_
+which makes it possible to manage and report on the jobs in an existing queue,
+and the `abortable pool
 <https://godoc.org/github.com/mongodb/amboy/rest#AbortablePoolManagementService>`_
 interface, that makes it possible to abort running jobs. These management tools
 can help administrators of larger amboy systems gain insights into the current
@@ -159,7 +159,7 @@ Getting Started
 ~~~~~~~~~~~~~~~
 
 Currently amboy vendors all of its dependencies, as a result of an upstream
-requirement to build on go1.10; however, eventually the project will move to use
+requirement to build on go1.9; however, eventually the project will move to use
 modules. For the time being, have a ``GOPATH`` set, and ensure that you check
 out the repository into ``$GOPATH/src/github/mongodb/amboy``.
 
