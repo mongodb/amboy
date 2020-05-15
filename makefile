@@ -52,8 +52,6 @@ $(buildDir)/run-benchmarks:cmd/run-benchmarks/run-benchmarks.go $(buildDir)
 ######################################################################
 
 _compilePackages := $(subst $(name),,$(subst -,/,$(foreach target,$(packages),./$(target))))
-coverageOutput := $(foreach target,$(packages),$(buildDir)/output.$(target).coverage)
-coverageHtmlOutput := $(foreach target,$(packages),$(buildDir)/output.$(target).coverage.html)
 
 # start dependency installation tools
 #   implementation details for being able to lazily install dependencies
@@ -154,9 +152,14 @@ vendor-clean:
 	rm -rf vendor/github.com/evergreen-ci/gimlet/vendor/github.com/stretchr/testify/
 	rm -rf vendor/github.com/evergreen-ci/gimlet/vendor/github.com/mongodb/grip/
 	rm -rf vendor/github.com/evergreen-ci/gimlet/vendor/github.com/pkg/errors/
+	rm -rf vendor/github.com/evergreen-ci/gimlet/vendor/gopkg.in/yaml.v2/
 	rm -rf vendor/github.com/evergreen-ci/poplar/vendor/github.com/evergreen-ci/pail/vendor/github.com/aws/aws-sdk-go/
 	rm -rf vendor/github.com/evergreen-ci/poplar/vendor/github.com/mongodb/amboy/
 	rm -rf vendor/github.com/evergreen-ci/poplar/vendor/github.com/mongodb/grip/
+	rm -rf vendor/github.com/evergreen-ci/poplar/vendor/gopkg.in/yaml.v2/
+	rm -rf vendor/github.com/evergreen-ci/poplar/vendor/github.com/mongodb/ftdc/vendor/go.mongodb.org/mongo-driver/
+	rm -rf vendor/github.com/evergreen-ci/poplar/vendor/github.com/evergreen-ci/pail/vendor/go.mongodb.org/mongo-driver/
+	rm -rf vendor/github.com/evergreen-ci/poplar/vendor/github.com/evergreen-ci/aviation/vendor/github.com/evergreen-ci/gimlet/
 	rm -rf vendor/github.com/mongodb/grip/vendor/github.com/stretchr/testify/
 	rm -rf vendor/github.com/mongodb/grip/vendor/github.com/pkg/errors/
 	rm -rf vendor/gopkg.in/mgo.v2/harness/
