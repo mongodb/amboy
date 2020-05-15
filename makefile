@@ -68,13 +68,13 @@ compile-base:
 # convenience targets for runing tests and coverage tasks on a
 # specific package.
 test-%:$(buildDir)/output.%.test
-
+	
 coverage-%:$(buildDir)/output.%.coverage
-
+	
 html-coverage-%:$(buildDir)/output.%.coverage.html
-
+	
 lint-%:$(buildDir)/output.%.lint
-
+	
 # end convienence targets
 phony := lint build build-race race test coverage coverage-html
 .PRECIOUS:$(testOutput) $(coverageOutput) $(coverageHtmlOutput)
