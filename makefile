@@ -7,7 +7,6 @@ projectPath := $(orgPath)/$(name)
 # end project configuration
 
 
-
  # start environment setup
 gobin := ${GO_BIN_PATH}
 ifeq (,$(gobin))
@@ -120,7 +119,7 @@ ifneq (,$(RACE_DETECTOR))
 testArgs += -race
 endif
 ifneq (,$(DISABLE_COVERAGE))
-testArgs += -covermode=count
+testArgs += -cover
 endif
 ifneq (,$(SKIP_LONG))
 testArgs += -short
