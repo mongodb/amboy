@@ -11,7 +11,6 @@ type Format int
 // supported serialization methods.
 const (
 	BSON Format = iota
-	YAML
 	JSON
 	BSON2
 )
@@ -23,8 +22,6 @@ func (f Format) String() string {
 		return "json"
 	case BSON, BSON2:
 		return "bson"
-	case YAML:
-		return "yaml"
 	default:
 		return "INVALID"
 	}
@@ -33,7 +30,7 @@ func (f Format) String() string {
 // IsValid returns true if when a valid format is specified, and false otherwise
 func (f Format) IsValid() bool {
 	switch f {
-	case JSON, YAML, BSON, BSON2:
+	case JSON, BSON, BSON2:
 		return true
 	default:
 		return false
