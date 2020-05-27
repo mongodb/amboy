@@ -554,7 +554,7 @@ func (m *queueManager) CompleteJobs(ctx context.Context, f StatusFilter) error {
 
 		switch f {
 		case Stale:
-			if stat.InProgress && time.Since(stat.ModificationTime) > m.queue.Info().LockTimeout {
+			if !stat.InProgress || time.Since(stat.ModificationTime) < m.queue.Info().LockTimeout {
 				continue
 			}
 		case InProgress:
@@ -601,7 +601,7 @@ func (m *queueManager) CompleteJobsByPrefix(ctx context.Context, f StatusFilter,
 
 		switch f {
 		case Stale:
-			if stat.InProgress && time.Since(stat.ModificationTime) > m.queue.Info().LockTimeout {
+			if !stat.InProgress || time.Since(stat.ModificationTime) > m.queue.Info().LockTimeout {
 				continue
 			}
 		case InProgress:
