@@ -13,7 +13,7 @@ import (
 const (
 	jobNameFlagName      = "name"
 	jobTypeFlagName      = "type"
-	jobPrefixFlagName    = "prefix"
+	jobPrefixFlagName    = "job-prefix"
 	statusFilterFlagName = "filter"
 )
 
