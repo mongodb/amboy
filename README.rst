@@ -149,7 +149,7 @@ API and Documentation
 ---------------------
 
 See the `godoc API documentation
-<http://godoc.org/github.com/mongodb/amboy>` for more information
+<https://godoc.org/github.com/mongodb/amboy>` for more information
 about amboy interfaces and internals.
 
 Development
