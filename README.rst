@@ -184,6 +184,6 @@ iterative development workflows: ::
 Issues
 ~~~~~~
 
-Please file all issues in the `MAKE project
-<https://jira.mongodb.org/browse/MAKE>`_ in the `MongoDB Jira
+Please file all issues in the `EVG project
+<https://jira.mongodb.org/browse/EVG>`_ in the `MongoDB Jira
 <https://jira.mongodb.org/>`_ instance.
