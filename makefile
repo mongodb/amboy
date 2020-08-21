@@ -12,8 +12,8 @@ gobin := $(GO_BIN_PATH)
 ifeq (,$(gobin))
 gobin := go
 endif
-gopath := $(GOPATH)
 gocache := $(abspath $(buildDir)/.cache)
+gopath := $(GOPATH)
 goroot := $(GOROOT)
 ifeq ($(OS),Windows_NT)
 gocache := $(shell cygpath -m $(gocache))
