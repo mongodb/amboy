@@ -70,6 +70,8 @@ functions:
       binary: make
       args: ["${make_args}", "${target}"]
       add_expansions_to_env: true
+    env:
+      GOPATH: ${workdir}/gopath
     # command: shell.exec
     # type: test
     # params:

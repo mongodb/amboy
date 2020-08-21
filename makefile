@@ -91,17 +91,6 @@ phony := lint build build-race race test coverage coverage-html
 .PRECIOUS:$(foreach target,$(packages),$(buildDir)/output.$(target).lint)
 # end front-end
 
-
-# implementation details for building the binary and creating a
-# convienent link in the working directory
-$(gopath)/src/$(orgPath):
-	@mkdir -p $@
-$(gopath)/src/$(projectPath):$(gopath)/src/$(orgPath)
-	@[ -L $@ ] || ln -s $(shell pwd) $@
-# end main build
-
-
-
 # start test and coverage artifacts
 #    tests have compile and runtime deps. This varable has everything
 #    that the tests actually need to run. (The "build" target is
