@@ -8,34 +8,40 @@ projectPath := $(orgPath)/$(name)
 
 
  # start environment setup
-gobin := ${GO_BIN_PATH}
+gobin := $(GO_BIN_PATH)
 ifeq (,$(gobin))
 gobin := go
 endif
-gopath := ${GOPATH}
 gocache := $(abspath $(buildDir)/.cache)
+gopath := $(GOPATH)
+goroot := $(GOROOT)
 ifeq ($(OS),Windows_NT)
 gocache := $(shell cygpath -m $(gocache))
 gopath := $(shell cygpath -m $(gopath))
+goroot := $(shell cygpath -m $(goroot))
 endif
-goEnv := GOPATH=$(gopath) GOCACHE=$(gocache) $(if ${GO_BIN_PATH},PATH="$(shell dirname ${GO_BIN_PATH}):${PATH}")
+export GOCACHE := $(gocache)
+export GOPATH := $(gopath)
+export GOROOT := $(goroot)
 # end environment setup
 
+# Ensure the build directory exists, since most targets require it.
+$(shell mkdir -p $(buildDir))
 
 # start lint setup targets
 lintDeps := $(buildDir)/run-linter $(buildDir)/golangci-lint
-$(buildDir)/golangci-lint:$(buildDir)
-	@curl --retry 10 --retry-max-time 60 -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/76a82c6ed19784036bbf2d4c84d0228ca12381a4/install.sh | sh -s -- -b $(buildDir) v1.23.8 >/dev/null 2>&1
+$(buildDir)/golangci-lint:
+	@curl --retry 10 --retry-max-time 60 -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/76a82c6ed19784036bbf2d4c84d0228ca12381a4/install.sh | sh -s -- -b $(buildDir) v1.30.0 >/dev/null 2>&1
 $(buildDir)/run-linter:buildscripts/run-linter.go $(buildDir)/golangci-lint
-	@$(goEnv) $(gobin) build -o $@ $<
+	@$(gobin) build -o $@ $<
 # end lint setup targets
 
 
 # benchmark setup targets
-benchmarks:$(buildDir)/run-benchmarks $(buildDir) .FORCE
-	$(goEnv) ./$(buildDir)/run-benchmarks $(run-benchmark)
-$(buildDir)/run-benchmarks:cmd/run-benchmarks/run-benchmarks.go $(buildDir)
-	$(goEnv) $(gobin) build -o $@ $<
+benchmarks:$(buildDir)/run-benchmarks .FORCE
+	./$(buildDir)/run-benchmarks $(run-benchmark)
+$(buildDir)/run-benchmarks:cmd/run-benchmarks/run-benchmarks.go
+	$(gobin) build -o $@ $<
 # end benchmark setup targets
 
 
@@ -62,13 +68,12 @@ coverageHtmlOutput := $(foreach target,$(packages),$(buildDir)/output.$(target).
 # userfacing targets for basic build and development operations
 lint:$(foreach target,$(packages),$(buildDir)/output.$(target).lint)
 test:$(foreach target,$(packages),$(buildDir)/output.$(target).test)
-coverage:$(buildDir) $(coverageOutput)
-coverage-html:$(buildDir) $(coverageHtmlOutput)
+coverage: $(coverageOutput)
+coverage-html: $(coverageHtmlOutput)
 compile $(buildDir):
-	@mkdir -p $(buildDir)
-	$(goEnv) $(gobin) build $(_compilePackages)
+	$(gobin) build $(_compilePackages)
 compile-base:
-	$(goEnv) $(gobin) build  ./
+	$(gobin) build  ./
 # convenience targets for runing tests and coverage tasks on a
 # specific package.
 test-%:$(buildDir)/output.%.test
@@ -84,19 +89,7 @@ phony := lint build build-race race test coverage coverage-html
 .PRECIOUS:$(testOutput) $(coverageOutput) $(coverageHtmlOutput)
 .PRECIOUS:$(foreach target,$(packages),$(buildDir)/test.$(target))
 .PRECIOUS:$(foreach target,$(packages),$(buildDir)/output.$(target).lint)
-.PRECIOUS:$(buildDir)/output.lint
 # end front-end
-
-
-# implementation details for building the binary and creating a
-# convienent link in the working directory
-$(gopath)/src/$(orgPath):
-	@mkdir -p $@
-$(gopath)/src/$(projectPath):$(gopath)/src/$(orgPath)
-	@[ -L $@ ] || ln -s $(shell pwd) $@
-# end main build
-
-
 
 # start test and coverage artifacts
 #    tests have compile and runtime deps. This varable has everything
@@ -123,23 +116,19 @@ testArgs += -short
 endif
 #    implementation for package coverage and test running,mongodb to produce
 #    and save test output.
-$(buildDir)/:
-	@mkdir -p $@
 $(buildDir)/output.%.test:.FORCE
-	@mkdir -p $(buildDir)/
-	$(goEnv) $(gobin) test $(testArgs) ./$(if $(subst $(name),,$*),$(subst -,/,$*),) | tee $@
+	$(gobin) test $(testArgs) ./$(if $(subst $(name),,$*),$(subst -,/,$*),) | tee $@
 	@!( grep -s -q "^FAIL" $@ && grep -s -q "^WARNING: DATA RACE" $@)
 	@(grep -s -q "^PASS" $@ || grep -s -q "no test files" $@)
 $(buildDir)/output.%.coverage:.FORCE
-	@mkdir -p $(buildDir)/
-	$(goEnv) $(gobin) test $(testArgs) ./$(if $(subst $(name),,$*),$(subst -,/,$*),) -coverprofile $@ | tee $(buildDir)/output.$*.test
+	$(gobin) test $(testArgs) ./$(if $(subst $(name),,$*),$(subst -,/,$*),) -coverprofile $@ | tee $(buildDir)/output.$*.test
 	@-[ -f $@ ] && $(gobin) tool cover -func=$@ | sed 's%$(projectPath)/%%' | column -t
 $(buildDir)/output.%.coverage.html:$(buildDir)/output.%.coverage
-	$(goEnv) $(gobin) tool cover -html=$< -o $@
+	$(gobin) tool cover -html=$< -o $@
 #  targets to generate gotest output from the linter.
 $(buildDir)/output.%.lint:$(buildDir)/run-linter .FORCE
-	@mkdir -p $(buildDir)/
-	@$(goEnv) ./$< --output=$@ --lintBin=$(buildDir)/golangci-lint --packages='$*'
+	@# We have to handle the PATH specially for CI, because if the PATH has a different version of Go in it, it'll break.
+	@$(if $(GO_BIN_PATH),PATH="$(shell dirname $(GO_BIN_PATH)):$(PATH)") ./$< --output=$@ --lintBin=$(buildDir)/golangci-lint --packages='$*'
 # end test and coverage artifacts
 
 

@@ -63,26 +63,35 @@ functions:
          aws_secret_access_key = ${aws_secret}
          EOF
   run-make:
-    command: shell.exec
+    command: subprocess.exec
     type: test
     params:
-       script: |
-         set -o errexit
-         set -o verbose
-
-         # Configure a local go path for this build.
-         export GOPATH=`pwd`/gopath
-
-         # on windows we need to turn the slashes the other way
-         if [ "Windows_NT" == "$OS" ]; then
-            export GOPATH=$(cygpath -m $GOPATH)
-         fi
-
-         cd gopath/src/github.com/mongodb/amboy
-
-         # Run make, called with proper environment variables set,
-         # running the target.
-         ${build_env} make ${target}
+      working_dir: gopath/src/github.com/mongodb/amboy
+      binary: make
+      args: ["${make_args}", "${target}"]
+      add_expansions_to_env: true
+      env:
+        GOPATH: ${workdir}/gopath
+    # command: shell.exec
+    # type: test
+    # params:
+    #    script: |
+    #      set -o errexit
+    #      set -o verbose
+    #
+    #      # Configure a local go path for this build.
+    #      export GOPATH=`pwd`/gopath
+    #
+    #      # on windows we need to turn the slashes the other way
+    #      if [ "Windows_NT" == "$OS" ]; then
+    #         export GOPATH=$(cygpath -m $GOPATH)
+    #      fi
+    #
+    #      cd gopath/src/github.com/mongodb/amboy
+    #
+    #      # Run make, called with proper environment variables set,
+    #      # running the target.
+    #      ${build_env} make ${target}
   set-up-mongodb:
     # TODO replace this configuration with something more robust.
     # Current version is borrowed directly rom the Evergreen self tests.
@@ -225,7 +234,10 @@ buildvariants:
   - name: race-detector
     display_name: Race Detector
     expansions:
-      build_env: "GOROOT=/opt/golang/go1.12 GO_BIN_PATH=/opt/golang/go1.12/bin/go DISABLE_COVERAGE=true RACE_DETECTOR=true"
+      DISABLE_COVERAGE: true
+      GO_BIN_PATH: /opt/golang/go1.13/bin/go
+      GOROOT: /opt/golang/go1.13
+      RACE_DETECTOR: true
       mongodb_url: https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-3.6.4.tgz
       test_timeout: 15m
     run_on:
@@ -238,7 +250,8 @@ buildvariants:
     run_on:
       - archlinux-build
     expansions:
-      build_env: "GOROOT=/opt/golang/go1.12 GO_BIN_PATH=/opt/golang/go1.12/bin/go"
+      GO_BIN_PATH: /opt/golang/go1.13/bin/go
+      GOROOT: /opt/golang/go1.13
       mongodb_url: http://fastdl.mongodb.org/linux/mongodb-linux-x86_64-3.6.4.tgz
       test_timeout: 15m
     tasks:
@@ -250,7 +263,9 @@ buildvariants:
     run_on:
       - ubuntu1604-build
     expansions:
-      build_env: "DISABLE_COVERAGE=yes GOROOT=/opt/golang/go1.9 GO_BIN_PATH=/opt/golang/go1.9/bin/go"
+      DISABLE_COVERAGE: true
+      GO_BIN_PATH: /opt/golang/go1.9/bin/go
+      GOROOT: /opt/golang/go1.9
       mongodb_url: https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-ubuntu1604-3.6.4.tgz
     tasks:
       - name: ".dist"
@@ -259,8 +274,10 @@ buildvariants:
   - name: macos
     display_name: macOS 10.14
     expansions:
+      DISABLE_COVERAGE: true
+      GO_BIN_PATH: /opt/golang/go1.13/bin/go
+      GOROOT: /opt/golang/go1.13
       mongodb_url: https://fastdl.mongodb.org/osx/mongodb-osx-ssl-x86_64-3.6.4.tgz
-      build_env: " DISABLE_COVERAGE=yes GOROOT=/opt/golang/go1.12 PATH=/opt/golang/go1.12/bin:$PATH"
       test_timeout: 15m
     run_on:
       - macos-1014
@@ -280,8 +297,10 @@ buildvariants:
       - windows-64-vs2013-compile
       - windows-64-vs2013-test
     expansions:
+      GO_BIN_PATH: /cygdrive/c/golang/go1.13/bin/go
+      GOROOT: C:/golang/go1.13
+      DISABLE_COVERAGE: true
       test_timeout: 15m
-      build_env: "GOROOT=c:/golang/go1.12 DISABLE_COVERAGE=yes PATH=/cygdrive/c/golang/go1.12/bin:$PATH"
       mongodb_url: https://fastdl.mongodb.org/win32/mongodb-win32-x86_64-2008plus-ssl-3.6.4.zip
       extension: ".exe"
       archiveExt: ".zip"
