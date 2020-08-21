@@ -72,29 +72,9 @@ functions:
       add_expansions_to_env: true
       env:
         GOPATH: ${workdir}/gopath
-    # command: shell.exec
-    # type: test
-    # params:
-    #    script: |
-    #      set -o errexit
-    #      set -o verbose
-    #
-    #      # Configure a local go path for this build.
-    #      export GOPATH=`pwd`/gopath
-    #
-    #      # on windows we need to turn the slashes the other way
-    #      if [ "Windows_NT" == "$OS" ]; then
-    #         export GOPATH=$(cygpath -m $GOPATH)
-    #      fi
-    #
-    #      cd gopath/src/github.com/mongodb/amboy
-    #
-    #      # Run make, called with proper environment variables set,
-    #      # running the target.
-    #      ${build_env} make ${target}
   set-up-mongodb:
     # TODO replace this configuration with something more robust.
-    # Current version is borrowed directly rom the Evergreen self tests.
+    # Current version is borrowed directly from the Evergreen self tests.
     - command: shell.exec
       type: setup
       params:
