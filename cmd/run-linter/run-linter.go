@@ -10,9 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/shlex"
 	"github.com/mongodb/grip"
-	"github.com/pkg/errors"
 )
 
 type result struct {
@@ -86,11 +84,7 @@ func main() {
 		if cwd != pkg {
 			pkgDir += pkg
 		}
-		splitLintArgs, err := shlex.Split(lintArgs)
-		if err != nil {
-			grip.Error(errors.Wrapf(err, "splitting lint args '%s'", lintArgs))
-			os.Exit(1)
-		}
+		splitLintArgs := strings.Split(lintArgs, " ")
 		args := []string{lintBin, "run"}
 		args = append(args, splitLintArgs...)
 		args = append(args, pkgDir)
@@ -109,7 +103,9 @@ func main() {
 
 		for _, linter := range customLinters {
 			customLinterStart := time.Now()
-			cmd := exec.Command(linter, pkgDir)
+			linterArgs := (strings.Split(linter, " "))
+			linterArgs = append(linterArgs, pkgDir)
+			cmd := exec.Command(linterArgs[0], linterArgs[1:]...)
 			cmd.Dir = dirname
 			out, err := cmd.CombinedOutput()
 			r.passed = r.passed && err == nil
