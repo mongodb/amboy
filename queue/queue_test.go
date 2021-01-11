@@ -978,3 +978,9 @@ waitLoop:
 	assert.Equal(t, 2*size.Size, stats.Total)
 	assert.Equal(t, size.Size, stats.Completed)
 }
+
+/*
+kim: TODO: test
+- Scoped job
+	-
+*/

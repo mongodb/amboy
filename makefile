@@ -108,7 +108,7 @@ endif
 ifneq (,$(RACE_DETECTOR))
 testArgs += -race
 endif
-ifneq (,$(DISABLE_COVERAGE))
+ifeq (,$(DISABLE_COVERAGE))
 testArgs += -cover
 endif
 ifneq (,$(SKIP_LONG))

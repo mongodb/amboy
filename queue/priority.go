@@ -62,6 +62,9 @@ func (q *priorityLocalQueue) Put(ctx context.Context, j amboy.Job) error {
 		return errors.Wrap(err, "invalid job timeinfo")
 	}
 
+	// kim: TODO: have to update this implementation to use the new
+	// scopes behavior.
+
 	return q.storage.Insert(j)
 }
 

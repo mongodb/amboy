@@ -113,6 +113,9 @@ func (q *shuffledLocal) Put(ctx context.Context, j amboy.Job) error {
 		return errors.Wrap(err, "invalid job timeinfo")
 	}
 
+	// kim: TODO: have to update this implementation to use the new
+	// scopes behavior.
+
 	ret := make(chan error)
 	op := func(
 		pending map[string]amboy.Job,

@@ -9,8 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/job"
-	"github.com/mongodb/grip"
-	"github.com/stretchr/testify/require"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -21,8 +20,8 @@ import (
 type DriverSuite struct {
 	uuid              string
 	driver            remoteQueueDriver
-	driverConstructor func() remoteQueueDriver
-	tearDown          func()
+	driverConstructor func() (remoteQueueDriver, error)
+	tearDown          func() error
 	ctx               context.Context
 	cancel            context.CancelFunc
 	suite.Suite
@@ -35,20 +34,23 @@ func TestDriverSuiteWithMongoDBInstance(t *testing.T) {
 	tests.uuid = uuid.New().String()
 	opts := DefaultMongoDBOptions()
 	opts.DB = "amboy_test"
-	driver, err := newMongoDriver("test-"+tests.uuid, opts)
-	require.NoError(t, err)
-	mDriver := driver.(*mongoDriver)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tests.driverConstructor = func() remoteQueueDriver {
-		return mDriver
+	tests.driverConstructor = func() (remoteQueueDriver, error) {
+		return newMongoDriver("test-"+tests.uuid, opts)
 	}
 
-	tests.tearDown = func() {
-		err := mDriver.getCollection().Drop(ctx)
-		grip.Infof("removed %s collection (%+v)", mDriver.getCollection().Name(), err)
+	tests.tearDown = func() error {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		mDriver, ok := tests.driver.(*mongoDriver)
+		if !ok {
+			return errors.New("cannot tear down mongo driver tests because test suite is not running a mongo driver")
+		}
+		if err := mDriver.getCollection().Drop(ctx); err != nil {
+			return errors.Wrapf(err, "removing collection '%s'", mDriver.getCollection().Name())
+		}
+		return nil
 	}
 
 	suite.Run(t, tests)
@@ -62,13 +64,15 @@ func (s *DriverSuite) SetupSuite() {
 }
 
 func (s *DriverSuite) SetupTest() {
-	s.driver = s.driverConstructor()
+	var err error
+	s.driver, err = s.driverConstructor()
+	s.Require().NoError(err)
 	s.NoError(s.driver.Open(s.ctx))
 }
 
 func (s *DriverSuite) TearDownTest() {
 	if s.tearDown != nil {
-		s.tearDown()
+		s.Require().NoError(s.tearDown())
 	}
 }
 
@@ -88,7 +92,6 @@ func (s *DriverSuite) TestInitialValues() {
 func (s *DriverSuite) TestPutJobDoesNotAllowDuplicateIds() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	s.NoError(s.driver.Open(ctx))
 
 	j := job.NewShellJob("echo foo", "")
 
@@ -100,6 +103,85 @@ func (s *DriverSuite) TestPutJobDoesNotAllowDuplicateIds() {
 		s.Error(err)
 		s.True(amboy.IsDuplicateJobError(err))
 	}
+}
+
+/*
+kim: TODO: test:
+- Regular job
+- Grouped job
+	- Put() does not apply scope.
+	- Put() applies scope.
+	- Save() always applies job scope.
+- Job without scope
+	- Put() behaves unchanged.
+	- Save() behaves unchanged.
+*/
+func (s *DriverSuite) TestPutJobDoesNotApplyScopesInQueueByDefault() {
+	j := job.NewShellJob("echo foo", "")
+	j.SetScopes([]string{"scope"})
+
+	s.Require().NoError(s.driver.Put(s.ctx, j))
+
+	s.Equal(1, s.driver.Stats(s.ctx).Total)
+
+	j = job.NewShellJob("echo bar", "")
+	j.SetScopes([]string{"scope"})
+
+	s.Require().NoError(s.driver.Put(s.ctx, j))
+
+	s.Equal(2, s.driver.Stats(s.ctx).Total)
+}
+
+func (s *DriverSuite) TestPutJobAppliesScopesInQueueIfSet() {
+	j := job.NewShellJob("echo foo", "")
+	j.SetScopes([]string{"scope"})
+	j.SetApplyScopesOnEnqueue(true)
+
+	s.Require().NoError(s.driver.Put(s.ctx, j))
+
+	s.Equal(1, s.driver.Stats(s.ctx).Total)
+
+	j = job.NewShellJob("echo bar", "")
+	j.SetScopes([]string{"scope"})
+	j.SetApplyScopesOnEnqueue(true)
+
+	s.Error(s.driver.Put(s.ctx, j))
+
+	s.Equal(1, s.driver.Stats(s.ctx).Total)
+}
+
+func (s *DriverSuite) TestPutJobAllowsSameScopesInQueueIfDuplicateScopedJobDoesNotApplyScopeOnEnqueue() {
+	j := job.NewShellJob("echo foo", "")
+	j.SetScopes([]string{"scope"})
+	j.SetApplyScopesOnEnqueue(true)
+
+	s.Require().NoError(s.driver.Put(s.ctx, j))
+
+	s.Equal(1, s.driver.Stats(s.ctx).Total)
+
+	j = job.NewShellJob("echo bar", "")
+	j.SetScopes([]string{"scope"})
+
+	s.Require().NoError(s.driver.Put(s.ctx, j))
+
+	s.Equal(2, s.driver.Stats(s.ctx).Total)
+}
+
+func (s *DriverSuite) TestPutJobAllowsSameScopesInQueueIfInitialScopedJobDoesNotApplyScopeOnEnqueue() {
+	j := job.NewShellJob("echo foo", "")
+	j.SetScopes([]string{"scope"})
+
+	s.Require().NoError(s.driver.Put(s.ctx, j))
+
+	s.Equal(1, s.driver.Stats(s.ctx).Total)
+
+	j = job.NewShellJob("echo bar", "")
+	j.SetScopes([]string{"scope"})
+	j.SetApplyScopesOnEnqueue(true)
+
+	s.Require().NoError(s.driver.Put(s.ctx, j))
+
+	s.Equal(2, s.driver.Stats(s.ctx).Total)
 }
 
 func (s *DriverSuite) TestSaveJobPersistsJobInDriver() {
