@@ -17,16 +17,17 @@ func init() {
 }
 
 type JobTest struct {
-	Name        string              `bson:"name" json:"name" yaml:"name"`
-	Content     string              `bson:"content" json:"content" yaml:"content"`
-	ShouldFail  bool                `bson:"should_fail" json:"should_fail" yaml:"should_fail"`
-	HadError    bool                `bson:"has_error" json:"has_error" yaml:"has_error"`
-	IsLocked    bool                `bson:"is_locked" json:"is_locked" yaml:"is_locked"`
-	JobPriority int                 `bson:"priority" json:"priority" yaml:"priority"`
-	T           amboy.JobType       `bson:"type" json:"type" yaml:"type"`
-	Stat        amboy.JobStatusInfo `bson:"status" json:"status" yaml:"status"`
-	TimingInfo  amboy.JobTimeInfo   `bson:"time_info" json:"time_info" yaml:"time_info"`
-	LockScopes  []string            `bson:"scopes" json:"scopes" yaml:"scopes"`
+	Name                       string              `bson:"name" json:"name" yaml:"name"`
+	Content                    string              `bson:"content" json:"content" yaml:"content"`
+	ShouldFail                 bool                `bson:"should_fail" json:"should_fail" yaml:"should_fail"`
+	HadError                   bool                `bson:"has_error" json:"has_error" yaml:"has_error"`
+	IsLocked                   bool                `bson:"is_locked" json:"is_locked" yaml:"is_locked"`
+	JobPriority                int                 `bson:"priority" json:"priority" yaml:"priority"`
+	T                          amboy.JobType       `bson:"type" json:"type" yaml:"type"`
+	Stat                       amboy.JobStatusInfo `bson:"status" json:"status" yaml:"status"`
+	TimingInfo                 amboy.JobTimeInfo   `bson:"time_info" json:"time_info" yaml:"time_info"`
+	LockScopes                 []string            `bson:"scopes" json:"scopes" yaml:"scopes"`
+	ShouldApplyScopesOnEnqueue bool                `bson:"should_apply_scopes_on_enqueue" json:"should_apply_scopes_on_enqueue" yaml:"should_apply_scopes_on_enqueue"`
 
 	dep dependency.Manager
 }
@@ -143,4 +144,12 @@ func (j *JobTest) SetScopes(in []string) {
 
 func (j *JobTest) Scopes() []string {
 	return j.LockScopes
+}
+
+func (j *JobTest) SetApplyScopesOnEnqueue(val bool) {
+	j.ShouldApplyScopesOnEnqueue = val
+}
+
+func (j *JobTest) ApplyScopesOnEnqueue() bool {
+	return j.ShouldApplyScopesOnEnqueue
 }
