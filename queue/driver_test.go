@@ -104,17 +104,6 @@ func (s *DriverSuite) TestPutJobDoesNotAllowDuplicateIds() {
 	}
 }
 
-/*
-kim: TODO: test:
-- Regular job
-- Grouped job
-	- Put() does not apply scope.
-	- Put() applies scope.
-	- Save() always applies job scope.
-- Job without scope
-	- Put() behaves unchanged.
-	- Save() behaves unchanged.
-*/
 func (s *DriverSuite) TestPutJobDoesNotApplyScopesInQueueByDefault() {
 	j := job.NewShellJob("echo foo", "")
 	j.SetScopes([]string{"scope"})
