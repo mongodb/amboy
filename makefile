@@ -60,6 +60,7 @@ coverageHtmlOutput := $(foreach target,$(packages),$(buildDir)/output.$(target).
 # start dependency installation tools
 #   implementation details for being able to lazily install dependencies
 testOutput := $(foreach target,$(packages),$(buildDir)/output.$(target).test)
+testOutput := $(foreach target,$(packages),$(buildDir)/output.$(target).lint)
 coverageOutput := $(foreach target,$(packages),$(buildDir)/output.$(target).coverage)
 coverageHtmlOutput := $(foreach target,$(packages),$(buildDir)/output.$(target).coverage.html)
 # end dependency installation tools
@@ -85,25 +86,23 @@ html-coverage-%:$(buildDir)/output.%.coverage.html
 lint-%:$(buildDir)/output.%.lint
 	
 # end convienence targets
-phony := lint build build-race race test coverage coverage-html
-.PRECIOUS:$(testOutput) $(coverageOutput) $(coverageHtmlOutput)
-.PRECIOUS:$(foreach target,$(packages),$(buildDir)/test.$(target))
-.PRECIOUS:$(foreach target,$(packages),$(buildDir)/output.$(target).lint)
+phony := lint build test coverage coverage-html
+.PRECIOUS:$(testOutput) $(lintOutput) $(coverageOutput) $(coverageHtmlOutput)
 # end front-end
 
 # start test and coverage artifacts
 #    tests have compile and runtime deps. This varable has everything
 #    that the tests actually need to run. (The "build" target is
 #    intentional and makes these targets rerun as expected.)
-testArgs := -test.v --test.timeout=1h
+testArgs := -v -timeout=1h
 ifneq (,$(RUN_TEST))
-testArgs += -test.run='$(RUN_TEST)'
+testArgs += -run='$(RUN_TEST)'
 endif
 ifneq (,$(RUN_CASE))
 testArgs += -testify.m='$(RUN_CASE)'
 endif
 ifneq (,$(RUN_COUNT))
-testArgs += -test.count='$(RUN_COUNT)'
+testArgs += -count='$(RUN_COUNT)'
 endif
 ifneq (,$(RACE_DETECTOR))
 testArgs += -race

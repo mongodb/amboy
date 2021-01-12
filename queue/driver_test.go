@@ -18,7 +18,6 @@ import (
 // reaching into the implementation details of any specific interface.
 
 type DriverSuite struct {
-	uuid              string
 	driver            remoteQueueDriver
 	driverConstructor func() (remoteQueueDriver, error)
 	tearDown          func() error
@@ -31,12 +30,12 @@ type DriverSuite struct {
 
 func TestDriverSuiteWithMongoDBInstance(t *testing.T) {
 	tests := new(DriverSuite)
-	tests.uuid = uuid.New().String()
+	name := "test-" + uuid.New().String()
 	opts := DefaultMongoDBOptions()
 	opts.DB = "amboy_test"
 
 	tests.driverConstructor = func() (remoteQueueDriver, error) {
-		return newMongoDriver("test-"+tests.uuid, opts)
+		return newMongoDriver(name, opts)
 	}
 
 	tests.tearDown = func() error {
@@ -47,7 +46,7 @@ func TestDriverSuiteWithMongoDBInstance(t *testing.T) {
 		if !ok {
 			return errors.New("cannot tear down mongo driver tests because test suite is not running a mongo driver")
 		}
-		if err := mDriver.getCollection().Drop(ctx); err != nil {
+		if err := mDriver.getCollection().Database().Drop(ctx); err != nil {
 			return errors.Wrapf(err, "removing collection '%s'", mDriver.getCollection().Name())
 		}
 		return nil
@@ -168,6 +167,23 @@ func (s *DriverSuite) TestPutJobAllowsSameScopesInQueueIfDuplicateScopedJobDoesN
 }
 
 func (s *DriverSuite) TestPutJobAllowsSameScopesInQueueIfInitialScopedJobDoesNotApplyScopeOnEnqueue() {
+	j := job.NewShellJob("echo foo", "")
+	j.SetScopes([]string{"scope"})
+
+	s.Require().NoError(s.driver.Put(s.ctx, j))
+
+	s.Equal(1, s.driver.Stats(s.ctx).Total)
+
+	j = job.NewShellJob("echo bar", "")
+	j.SetScopes([]string{"scope"})
+	j.SetApplyScopesOnEnqueue(true)
+
+	s.Require().NoError(s.driver.Put(s.ctx, j))
+
+	s.Equal(2, s.driver.Stats(s.ctx).Total)
+}
+
+func (s *DriverSuite) TestPutAndSaveJobSucceedsIfScopeIsAppliedOnEnqueue() {
 	j := job.NewShellJob("echo foo", "")
 	j.SetScopes([]string{"scope"})
 
