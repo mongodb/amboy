@@ -25,11 +25,8 @@ func TestShuffledQueueSuite(t *testing.T) {
 	suite.Run(t, new(ShuffledQueueSuite))
 }
 
-func (s *ShuffledQueueSuite) SetupSuite() {
-	s.require = s.Require()
-}
-
 func (s *ShuffledQueueSuite) SetupTest() {
+	// kim: TODO: add test for applying scope on enqueue
 	s.queue = &shuffledLocal{
 		capacity: defaultLocalQueueCapcity,
 		scopes:   NewLocalScopeManager(),
