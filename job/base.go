@@ -34,16 +34,16 @@ import (
 // an implementation of most common Job methods which most jobs
 // need not implement themselves.
 type Base struct {
-	TaskID                     string        `bson:"name" json:"name" yaml:"name"`
-	JobType                    amboy.JobType `bson:"job_type" json:"job_type" yaml:"job_type"`
-	RequiredScopes             []string      `bson:"required_scopes" json:"required_scopes" yaml:"required_scopes"`
-	ShouldApplyScopesOnEnqueue bool          `bson:"should_apply_scopes_on_enqueue" json:"should_apply_scopes_on_enqueue" yaml:"should_apply_scopes_on_enqueue"`
+	TaskID         string        `bson:"name" json:"name" yaml:"name"`
+	JobType        amboy.JobType `bson:"job_type" json:"job_type" yaml:"job_type"`
+	RequiredScopes []string      `bson:"required_scopes" json:"required_scopes" yaml:"required_scopes"`
 
-	priority int
-	timeInfo amboy.JobTimeInfo
-	status   amboy.JobStatusInfo
-	dep      dependency.Manager
-	mutex    sync.RWMutex
+	applyScopesOnEnqueue bool
+	priority             int
+	timeInfo             amboy.JobTimeInfo
+	status               amboy.JobStatusInfo
+	dep                  dependency.Manager
+	mutex                sync.RWMutex
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -290,7 +290,7 @@ func (b *Base) SetApplyScopesOnEnqueue(val bool) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
-	b.ShouldApplyScopesOnEnqueue = true
+	b.applyScopesOnEnqueue = true
 }
 
 // ApplyScopesOnEnqueue returns whether the job's scopes are applied on enqueue.
@@ -298,5 +298,5 @@ func (b *Base) ApplyScopesOnEnqueue() bool {
 	b.mutex.RLock()
 	defer b.mutex.RUnlock()
 
-	return b.ShouldApplyScopesOnEnqueue
+	return b.applyScopesOnEnqueue
 }
