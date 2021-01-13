@@ -84,9 +84,9 @@ func (q *limitedSizeLocal) Put(ctx context.Context, j amboy.Job) error {
 		return amboy.NewDuplicateJobErrorf("cannot dispatch '%s', already complete", name)
 	}
 
-	if j.ApplyScopesOnEnqueue() {
+	if j.ShouldApplyScopesOnEnqueue() {
 		if err := q.scopes.Acquire(name, j.Scopes()); err != nil {
-			return errors.Wrapf(err, "could not apply scopes on job to enqueue")
+			return errors.Wrapf(err, "applying scopes to job")
 		}
 	}
 
@@ -113,7 +113,7 @@ func (q *limitedSizeLocal) Save(ctx context.Context, j amboy.Job) error {
 	}
 
 	if err := q.scopes.Acquire(name, j.Scopes()); err != nil {
-		return errors.Wrapf(err, "could not apply scopes to job")
+		return errors.Wrapf(err, "applying scopes to job")
 	}
 
 	q.storage[name] = j

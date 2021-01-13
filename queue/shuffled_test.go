@@ -26,7 +26,6 @@ func TestShuffledQueueSuite(t *testing.T) {
 }
 
 func (s *ShuffledQueueSuite) SetupTest() {
-	// kim: TODO: add test for applying scope on enqueue
 	s.queue = &shuffledLocal{
 		capacity: defaultLocalQueueCapcity,
 		scopes:   NewLocalScopeManager(),

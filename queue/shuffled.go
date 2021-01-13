@@ -117,7 +117,7 @@ func (q *shuffledLocal) Put(ctx context.Context, j amboy.Job) error {
 	// kim: TODO: test
 	if j.ShouldApplyScopesOnEnqueue() {
 		if err := q.scopes.Acquire(id, j.Scopes()); err != nil {
-			return errors.Wrapf(err, "could not apply scopes on job to enqueue")
+			return errors.Wrapf(err, "applying scopes to job")
 		}
 	}
 
@@ -156,8 +156,9 @@ func (q *shuffledLocal) Save(ctx context.Context, j amboy.Job) error {
 		return errors.Errorf("cannot save job %s; queue not started", id)
 	}
 
+	// pp.Println("kim: shuffle Save():", j.ID(), j.Scopes())
 	if err := q.scopes.Acquire(id, j.Scopes()); err != nil {
-		return errors.Wrapf(err, "could not apply scopes to job")
+		return errors.Wrapf(err, "applying scopes to job")
 	}
 
 	ret := make(chan error)
@@ -375,6 +376,7 @@ func (q *shuffledLocal) Next(ctx context.Context) amboy.Job {
 			if err := q.scopes.Acquire(j.ID(), j.Scopes()); err != nil {
 				continue
 			}
+			// pp.Println("kim: shuffle dispatch in Next():", j.ID(), j.Type().Name, j.Scopes())
 
 			select {
 			case <-ctx.Done():
@@ -431,6 +433,7 @@ func (q *shuffledLocal) Complete(ctx context.Context, j amboy.Job) {
 			}
 		}
 
+		// pp.Println("kim: shuffle Complete():", j.ID(), j.Scopes())
 		grip.Warning(message.WrapError(
 			q.scopes.Release(j.ID(), j.Scopes()),
 			message.Fields{

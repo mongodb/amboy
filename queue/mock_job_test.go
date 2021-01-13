@@ -46,7 +46,6 @@ func init() {
 	registry.AddJobType("sleep", func() amboy.Job { return newSleepJob() })
 }
 
-//
 type mockJob struct {
 	job.Base `bson:"job_base" json:"job_base" yaml:"job_base"`
 }
@@ -90,6 +89,7 @@ func newSleepJob() *sleepJob {
 }
 
 func (j *sleepJob) Run(ctx context.Context) {
+	// pp.Println("kim: sleep job running")
 	defer j.MarkComplete()
 
 	if j.Sleep == 0 {
