@@ -177,16 +177,7 @@ func (s *DriverSuite) TestPutAndSaveJobSucceedsIfScopeIsAppliedOnEnqueue() {
 	j.SetScopes([]string{"scope"})
 
 	s.Require().NoError(s.driver.Put(s.ctx, j))
-
-	s.Equal(1, s.driver.Stats(s.ctx).Total)
-
-	j = job.NewShellJob("echo bar", "")
-	j.SetScopes([]string{"scope"})
-	j.SetApplyScopesOnEnqueue(true)
-
-	s.Require().NoError(s.driver.Put(s.ctx, j))
-
-	s.Equal(2, s.driver.Stats(s.ctx).Total)
+	s.Require().NoError(s.driver.Save(s.ctx, j))
 }
 
 func (s *DriverSuite) TestSaveJobPersistsJobInDriver() {
