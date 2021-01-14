@@ -180,6 +180,19 @@ func (s *JobInterchangeSuite) TestApplyScopesOnEnqueuePersists() {
 	s.True(j.ShouldApplyScopesOnEnqueue())
 }
 
+func (s *JobInterchangeSuite) TestRetryInfoPersists() {
+	info := amboy.JobRetryInfo{
+		Retryable:    true,
+		CurrentTrial: 5,
+	}
+	s.job.UpdateRetryInfo(info)
+	s.Equal(info, s.job.RetryInfo())
+
+	ji, err := MakeJobInterchange(s.job, s.format)
+	s.Require().NoError(err)
+	s.Equal(info, ji.RetryInfo)
+}
+
 // DependencyInterchangeSuite tests the DependencyInterchange format
 // and converters. This type provides a way for Jobs and Queues to
 // serialize their objects quasi-generically.

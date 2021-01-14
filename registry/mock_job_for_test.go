@@ -29,6 +29,8 @@ type JobTest struct {
 	LockScopes           []string            `bson:"scopes" json:"scopes" yaml:"scopes"`
 	ApplyScopesOnEnqueue bool                `bson:"apply_scopes_on_enqueue" json:"apply_scopes_on_enqueue" yaml:"apply_scopes_on_enqueue"`
 
+	JobRetry amboy.JobRetryInfo
+
 	dep dependency.Manager
 }
 
@@ -152,4 +154,16 @@ func (j *JobTest) SetShouldApplyScopesOnEnqueue(val bool) {
 
 func (j *JobTest) ShouldApplyScopesOnEnqueue() bool {
 	return j.ApplyScopesOnEnqueue
+}
+
+func (j *JobTest) RetryInfo() amboy.JobRetryInfo {
+	return j.JobRetry
+}
+
+func (j *JobTest) UpdateRetryInfo(info amboy.JobRetryInfo) {
+	j.JobRetry = info
+}
+
+func (j *JobTest) SetRetryable(val bool) {
+	j.JobRetry.Retryable = val
 }
