@@ -142,11 +142,11 @@ func (s *BaseCheckSuite) TestUpdateRetryInfoSetsNonzeroFields() {
 	s.Require().True(s.base.RetryInfo().Retryable)
 
 	s.base.UpdateRetryInfo(amboy.JobRetryInfo{
-		RetryCount: 5,
+		CurrentTrial: 5,
 	})
 
 	s.Equal(amboy.JobRetryInfo{
-		Retryable:  true,
-		RetryCount: 5,
+		Retryable:    true,
+		CurrentTrial: 5,
 	}, s.base.RetryInfo())
 }

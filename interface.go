@@ -144,8 +144,8 @@ type JobTimeInfo struct {
 // JobRetryInfo stores configuration and information for a job that can retry.
 // Support for retrying jobs is optional for Queue implementations.
 type JobRetryInfo struct {
-	Retryable  bool `bson:"retryable,omitempty" json:"retryable,omitempty" yaml:"retryable,omitempty"`
-	RetryCount int  `bson:"retry_count,omitempty" json:"retry_count,omitempty" yaml:"retry_count,omitempty"`
+	Retryable    bool `bson:"retryable,omitempty" json:"retryable,omitempty" yaml:"retryable,omitempty"`
+	CurrentTrial int  `bson:"current_trial,omitempty" json:"current_trial,omitempty" yaml:"current_trial,omitempty"`
 }
 
 // Duration is a convenience function to return a duration for a job.

@@ -322,8 +322,8 @@ func (b *Base) UpdateRetryInfo(info amboy.JobRetryInfo) {
 		b.retryInfo.Retryable = true
 	}
 
-	if info.RetryCount != 0 {
-		b.retryInfo.RetryCount = info.RetryCount
+	if info.CurrentTrial != 0 {
+		b.retryInfo.CurrentTrial = info.CurrentTrial
 	}
 }
 
