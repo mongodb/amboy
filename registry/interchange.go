@@ -19,6 +19,7 @@ type JobInterchange struct {
 	Status     amboy.JobStatusInfo    `bson:"status" json:"status" yaml:"status"`
 	Scopes     []string               `bson:"scopes,omitempty" json:"scopes,omitempty" yaml:"scopes,omitempty"`
 	TimeInfo   amboy.JobTimeInfo      `bson:"time_info" json:"time_info,omitempty" yaml:"time_info,omitempty"`
+	RetryInfo  amboy.JobRetryInfo     `bson:"retry_info,omitempty" json:"retry_info,omitempty" yaml:"retry_info,omitempty"`
 	Job        rawJob                 `json:"job" bson:"job" yaml:"job"`
 	Dependency *DependencyInterchange `json:"dependency,omitempty" bson:"dependency,omitempty" yaml:"dependency,omitempty"`
 }
@@ -49,6 +50,7 @@ func MakeJobInterchange(j amboy.Job, f amboy.Format) (*JobInterchange, error) {
 		Priority:   j.Priority(),
 		Status:     j.Status(),
 		TimeInfo:   j.TimeInfo(),
+		RetryInfo:  j.RetryInfo(),
 		Job:        data,
 		Dependency: dep,
 	}
@@ -89,6 +91,7 @@ func (j *JobInterchange) Resolve(f amboy.Format) (amboy.Job, error) {
 	job.SetPriority(j.Priority)
 	job.SetStatus(j.Status)
 	job.UpdateTimeInfo(j.TimeInfo)
+	job.UpdateRetryInfo(j.RetryInfo)
 
 	return job, nil
 }

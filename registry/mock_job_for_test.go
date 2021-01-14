@@ -28,6 +28,8 @@ type JobTest struct {
 	TimingInfo  amboy.JobTimeInfo   `bson:"time_info" json:"time_info" yaml:"time_info"`
 	LockScopes  []string            `bson:"scopes" json:"scopes" yaml:"scopes"`
 
+	JobRetry amboy.JobRetryInfo
+
 	dep dependency.Manager
 }
 
@@ -143,4 +145,16 @@ func (j *JobTest) SetScopes(in []string) {
 
 func (j *JobTest) Scopes() []string {
 	return j.LockScopes
+}
+
+func (j *JobTest) RetryInfo() amboy.JobRetryInfo {
+	return j.JobRetry
+}
+
+func (j *JobTest) UpdateRetryInfo(info amboy.JobRetryInfo) {
+	j.JobRetry = info
+}
+
+func (j *JobTest) SetRetryable(val bool) {
+	j.JobRetry.Retryable = val
 }

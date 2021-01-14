@@ -31,7 +31,7 @@ type Job interface {
 	// completed state for the job.
 	Run(context.Context)
 
-	// Returns a pointer to a JobType object that Queue
+	// Type returns a JobType object that Queue
 	// implementations can use to de-serialize tasks.
 	Type() JobType
 
@@ -47,12 +47,19 @@ type Job interface {
 	Status() JobStatusInfo
 	SetStatus(JobStatusInfo)
 
-	// TimeInfo reports the start/end time of jobs, as well as
-	// providing for a "wait until" functionality that queues can
-	// use to schedule jobs in the future. The update method, only
-	// updates non-zero methods.
+	// TimeInfo reports the start/end time of jobs, as well as "wait until" and
+	// "dispatch by" options that queues can use to schedule jobs in the future.
+	// UpdateTimeInfo only modifies non-zero fields.
 	TimeInfo() JobTimeInfo
 	UpdateTimeInfo(JobTimeInfo)
+
+	// RetryInfo reports information about the job's retry behavior.
+	// UpdateRetryInfo method only modifies non-zero fields.
+	RetryInfo() JobRetryInfo
+	UpdateRetryInfo(JobRetryInfo)
+	// SetRetryable determines whether or not the job is allowed to retry, which
+	// gives a mechanism to disable retryability after it's enabled.
+	SetRetryable(bool)
 
 	// Provides access to the job's priority value, which some
 	// queues may use to order job dispatching. Most Jobs
@@ -117,7 +124,7 @@ type JobStatusInfo struct {
 // defer the execution of a job, until WaitUntil refers to a time in
 // the past.
 //
-// If the deadline is specified, and the queue
+// If the DispatchBy deadline is specified, and the queue
 // implementation supports it, the queue may drop the job if the
 // deadline is in the past when the job would be dispatched.
 type JobTimeInfo struct {
@@ -127,6 +134,13 @@ type JobTimeInfo struct {
 	WaitUntil  time.Time     `bson:"wait_until" json:"wait_until,omitempty" yaml:"wait_until,omitempty"`
 	DispatchBy time.Time     `bson:"dispatch_by" json:"dispatch_by,omitempty" yaml:"dispatch_by,omitempty"`
 	MaxTime    time.Duration `bson:"max_time" json:"max_time,omitempty" yaml:"max_time,omitempty"`
+}
+
+// JobRetryInfo stores configuration and information for a job that can retry.
+// Support for retrying jobs is optional for Queue implementations.
+type JobRetryInfo struct {
+	Retryable  bool `bson:"retryable,omitempty" json:"retryable,omitempty" yaml:"retryable,omitempty"`
+	RetryCount int  `bson:"retry_count,omitempty" json:"retry_count,omitempty" yaml:"retry_count,omitempty"`
 }
 
 // Duration is a convenience function to return a duration for a job.

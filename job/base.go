@@ -38,11 +38,12 @@ type Base struct {
 	JobType        amboy.JobType `bson:"job_type" json:"job_type" yaml:"job_type"`
 	RequiredScopes []string      `bson:"required_scopes" json:"required_scopes" yaml:"required_scopes"`
 
-	priority int
-	timeInfo amboy.JobTimeInfo
-	status   amboy.JobStatusInfo
-	dep      dependency.Manager
-	mutex    sync.RWMutex
+	retryInfo amboy.JobRetryInfo
+	priority  int
+	timeInfo  amboy.JobTimeInfo
+	status    amboy.JobStatusInfo
+	dep       dependency.Manager
+	mutex     sync.RWMutex
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -281,4 +282,36 @@ func (b *Base) Scopes() []string {
 
 	return b.RequiredScopes
 
+}
+
+// RetryInfo returns information and options for the job's retry policies.
+func (b *Base) RetryInfo() amboy.JobRetryInfo {
+	b.mutex.RLock()
+	defer b.mutex.RUnlock()
+
+	return b.retryInfo
+}
+
+// UpdateRetryInfo updates the stored retry information and configuration, but
+// does not modify fields that are unset. In particular, Retryable cannot be
+// unset using UpdateRetryInfo; to achieve this, use SetRetryable.
+func (b *Base) UpdateRetryInfo(info amboy.JobRetryInfo) {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	if info.Retryable {
+		b.retryInfo.Retryable = true
+	}
+
+	if info.RetryCount != 0 {
+		b.retryInfo.RetryCount = info.RetryCount
+	}
+}
+
+// SetRetryable sets whether or not the job is allowed to retry.
+func (b *Base) SetRetryable(val bool) {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	b.retryInfo.Retryable = val
 }
