@@ -11,16 +11,17 @@ import (
 // instances. Interchange is also used internally as part of JobGroup
 // Job type.
 type JobInterchange struct {
-	Name       string                 `json:"name" bson:"_id" yaml:"name"`
-	Type       string                 `json:"type" bson:"type" yaml:"type"`
-	Group      string                 `bson:"group,omitempty" json:"group,omitempty" yaml:"group,omitempty"`
-	Version    int                    `json:"version" bson:"version" yaml:"version"`
-	Priority   int                    `json:"priority" bson:"priority" yaml:"priority"`
-	Status     amboy.JobStatusInfo    `bson:"status" json:"status" yaml:"status"`
-	Scopes     []string               `bson:"scopes,omitempty" json:"scopes,omitempty" yaml:"scopes,omitempty"`
-	TimeInfo   amboy.JobTimeInfo      `bson:"time_info" json:"time_info,omitempty" yaml:"time_info,omitempty"`
-	Job        rawJob                 `json:"job" bson:"job" yaml:"job"`
-	Dependency *DependencyInterchange `json:"dependency,omitempty" bson:"dependency,omitempty" yaml:"dependency,omitempty"`
+	Name                 string                 `json:"name" bson:"_id" yaml:"name"`
+	Type                 string                 `json:"type" bson:"type" yaml:"type"`
+	Group                string                 `bson:"group,omitempty" json:"group,omitempty" yaml:"group,omitempty"`
+	Version              int                    `json:"version" bson:"version" yaml:"version"`
+	Priority             int                    `json:"priority" bson:"priority" yaml:"priority"`
+	Status               amboy.JobStatusInfo    `bson:"status" json:"status" yaml:"status"`
+	Scopes               []string               `bson:"scopes,omitempty" json:"scopes,omitempty" yaml:"scopes,omitempty"`
+	ApplyScopesOnEnqueue bool                   `bson:"apply_scopes_on_enqueue" json:"apply_scopes_on_enqueue,omitempty" yaml:"apply_scopes_on_enqueue,omitempty"`
+	TimeInfo             amboy.JobTimeInfo      `bson:"time_info" json:"time_info,omitempty" yaml:"time_info,omitempty"`
+	Job                  rawJob                 `json:"job" bson:"job" yaml:"job"`
+	Dependency           *DependencyInterchange `json:"dependency,omitempty" bson:"dependency,omitempty" yaml:"dependency,omitempty"`
 }
 
 // MakeJobInterchange changes a Job interface into a JobInterchange
@@ -43,14 +44,15 @@ func MakeJobInterchange(j amboy.Job, f amboy.Format) (*JobInterchange, error) {
 	}
 
 	output := &JobInterchange{
-		Name:       j.ID(),
-		Type:       typeInfo.Name,
-		Version:    typeInfo.Version,
-		Priority:   j.Priority(),
-		Status:     j.Status(),
-		TimeInfo:   j.TimeInfo(),
-		Job:        data,
-		Dependency: dep,
+		Name:                 j.ID(),
+		Type:                 typeInfo.Name,
+		Version:              typeInfo.Version,
+		Priority:             j.Priority(),
+		Status:               j.Status(),
+		TimeInfo:             j.TimeInfo(),
+		ApplyScopesOnEnqueue: j.ShouldApplyScopesOnEnqueue(),
+		Job:                  data,
+		Dependency:           dep,
 	}
 
 	return output, nil
@@ -89,6 +91,7 @@ func (j *JobInterchange) Resolve(f amboy.Format) (amboy.Job, error) {
 	job.SetPriority(j.Priority)
 	job.SetStatus(j.Status)
 	job.UpdateTimeInfo(j.TimeInfo)
+	job.SetShouldApplyScopesOnEnqueue(j.ApplyScopesOnEnqueue)
 
 	return job, nil
 }
