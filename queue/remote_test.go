@@ -114,17 +114,17 @@ func (s *RemoteUnorderedSuite) TestJobScopesApplyWhenJobIsPutIntoQueue() {
 
 	j := job.NewShellJob("echo foo", "")
 	j.SetScopes([]string{"scope"})
-	j.SetApplyScopesOnEnqueue(true)
+	j.SetShouldApplyScopesOnEnqueue(true)
 
 	s.Require().NoError(s.queue.Put(s.ctx, j))
 	fetchedJob, ok := s.queue.Get(s.ctx, j.ID())
 	s.Require().True(ok)
 	s.EqualValues(fetchedJob.Scopes(), j.Scopes())
-	s.True(fetchedJob.ApplyScopesOnEnqueue())
+	s.True(fetchedJob.ShouldApplyScopesOnEnqueue())
 
 	j = job.NewShellJob("echo bar", "")
 	j.SetScopes([]string{"scope"})
-	j.SetApplyScopesOnEnqueue(true)
+	j.SetShouldApplyScopesOnEnqueue(true)
 	s.Require().Error(s.queue.Put(s.ctx, j))
 }
 

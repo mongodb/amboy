@@ -169,15 +169,15 @@ func (s *JobInterchangeSuite) TestTimeInfoPersists() {
 	}
 }
 
-func (s *JobInterchangeSuite) TestApplyScopeOnEnqueuePersists() {
-	s.job.SetApplyScopesOnEnqueue(true)
+func (s *JobInterchangeSuite) TestApplyScopesOnEnqueuePersists() {
+	s.job.SetShouldApplyScopesOnEnqueue(true)
 
 	i, err := MakeJobInterchange(s.job, s.format)
 	s.Require().NoError(err)
 
 	j, err := i.Resolve(s.format)
 	s.Require().NoError(err)
-	s.True(j.ApplyScopesOnEnqueue())
+	s.True(j.ShouldApplyScopesOnEnqueue())
 }
 
 // DependencyInterchangeSuite tests the DependencyInterchange format

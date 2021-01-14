@@ -436,7 +436,7 @@ func (d *mongoDriver) Put(ctx context.Context, j amboy.Job) error {
 		return errors.Wrap(err, "problem converting job to interchange format")
 	}
 
-	if j.ApplyScopesOnEnqueue() {
+	if j.ShouldApplyScopesOnEnqueue() {
 		job.Scopes = j.Scopes()
 	}
 

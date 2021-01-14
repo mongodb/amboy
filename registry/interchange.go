@@ -50,7 +50,7 @@ func MakeJobInterchange(j amboy.Job, f amboy.Format) (*JobInterchange, error) {
 		Priority:             j.Priority(),
 		Status:               j.Status(),
 		TimeInfo:             j.TimeInfo(),
-		ApplyScopesOnEnqueue: j.ApplyScopesOnEnqueue(),
+		ApplyScopesOnEnqueue: j.ShouldApplyScopesOnEnqueue(),
 		Job:                  data,
 		Dependency:           dep,
 	}
@@ -91,7 +91,7 @@ func (j *JobInterchange) Resolve(f amboy.Format) (amboy.Job, error) {
 	job.SetPriority(j.Priority)
 	job.SetStatus(j.Status)
 	job.UpdateTimeInfo(j.TimeInfo)
-	job.SetApplyScopesOnEnqueue(j.ApplyScopesOnEnqueue)
+	job.SetShouldApplyScopesOnEnqueue(j.ApplyScopesOnEnqueue)
 
 	return job, nil
 }
