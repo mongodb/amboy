@@ -91,6 +91,11 @@ type Job interface {
 	// exclusion a job can provide.
 	Scopes() []string
 	SetScopes([]string)
+
+	// ShouldApplyScopesOnEnqueue allows the scope exclusion functionality to be
+	// configured so that exclusion occurs during job dispatch or enqueue.
+	ShouldApplyScopesOnEnqueue() bool
+	SetShouldApplyScopesOnEnqueue(bool)
 }
 
 // JobType contains information about the type of a job, which queues
