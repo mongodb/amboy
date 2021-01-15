@@ -172,7 +172,6 @@ post:
       content_type: text/html
       permissions: public-read
       display_name: "(html) coverage:"
-      optional: true
   - command: s3.put
     type: system
     params:
@@ -184,7 +183,6 @@ post:
       content_type: text/plain
       permissions: public-read
       display_name: "(txt) coverage:"
-      optional: true
 
 
 #######################################

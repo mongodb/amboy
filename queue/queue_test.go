@@ -195,8 +195,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 			Name:               "MongoGroupUnordered",
 			IsRemote:           true,
 			WaitUntilSupported: true,
-			// DispatchBeforeSupported: true,
-			ScopesSupported: true,
+			ScopesSupported:    true,
 			Constructor: func(ctx context.Context, name string, size int) (amboy.Queue, TestCloser, error) {
 				opts := MongoDBQueueCreationOptions{
 					Size:    size,
