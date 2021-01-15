@@ -447,9 +447,11 @@ func TestQueueSmoke(t *testing.T) {
 										ScopedLockTest(bctx, t, test, runner, size)
 									})
 								}
-								t.Run("ApplyScopesOnEnqueue", func(t *testing.T) {
-									ApplyScopesOnEnqueueTest(bctx, t, test, runner, size)
-								})
+								if size.Size <= 4 {
+									t.Run("ApplyScopesOnEnqueue", func(t *testing.T) {
+										ApplyScopesOnEnqueueTest(bctx, t, test, runner, size)
+									})
+								}
 							}
 
 							if test.IsRemote && test.MultiSupported && !runner.SkipMulti {
