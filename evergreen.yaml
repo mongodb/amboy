@@ -23,7 +23,6 @@ variables:
         type: system
         params:
           directory: gopath/src/github.com/mongodb/amboy
-      - func: setup-credentials
       - func: run-make
         vars: { target: "${task_name}" }
   - &run-go-test-suite-with-mongodb
@@ -35,7 +34,6 @@ variables:
         type: system
         params:
           directory: gopath/src/github.com/mongodb/amboy
-      - func: setup-credentials
       - func: set-up-mongodb
       - func: run-make
         vars: { target: "${task_name}" }
@@ -44,24 +42,6 @@ variables:
 #              Functions              #
 #######################################
 functions:
-  setup-credentials:
-    command: shell.exec
-    type: setup
-    params:
-       silent: true
-       script: |
-         mkdir ~/.aws
-
-         cat <<EOF > ~/.aws/config
-         [default]
-         region = us-east-1
-         EOF
-
-         cat <<EOF > ~/.aws/credentials
-         [default]
-         aws_access_key_id = ${aws_key}
-         aws_secret_access_key = ${aws_secret}
-         EOF
   run-make:
     command: subprocess.exec
     type: test
@@ -71,6 +51,8 @@ functions:
       args: ["${make_args}", "${target}"]
       add_expansions_to_env: true
       env:
+        AWS_KEY: ${aws_key}
+        AWS_SECRET: ${aws_secret}
         GOPATH: ${workdir}/gopath
   set-up-mongodb:
     # TODO replace this configuration with something more robust.
@@ -134,7 +116,6 @@ tasks:
         type: setup
         params:
           directory: gopath/src/github.com/mongodb/amboy
-      - func: setup-credentials
       - func: set-up-mongodb
       - func: run-make
         vars:
@@ -180,7 +161,6 @@ post:
     params:
       script: |
         rm -rf amboy
-        rm -rf ~/.aws
   - command: s3.put
     type: system
     params:

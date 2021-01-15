@@ -129,7 +129,7 @@ func DefaultQueueTestCases() []QueueTestCase {
 			MaxSize: 4,
 			Skip:    true,
 			Constructor: func(ctx context.Context, _ string, size int) (amboy.Queue, TestCloser, error) {
-				q, err := NewSQSFifoQueue(randomString(4), size)
+				q, err := NewSQSFifoQueue(randomString(4), size, awsTestCredentialsFromEnv())
 				closer := func(ctx context.Context) error { return nil }
 				return q, closer, err
 			},
@@ -192,11 +192,11 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 			},
 		},
 		{
-			Name:                    "MongoGroupUnordered",
-			IsRemote:                true,
-			WaitUntilSupported:      true,
-			DispatchBeforeSupported: true,
-			ScopesSupported:         true,
+			Name:               "MongoGroupUnordered",
+			IsRemote:           true,
+			WaitUntilSupported: true,
+			// DispatchBeforeSupported: true,
+			ScopesSupported: true,
 			Constructor: func(ctx context.Context, name string, size int) (amboy.Queue, TestCloser, error) {
 				opts := MongoDBQueueCreationOptions{
 					Size:    size,
