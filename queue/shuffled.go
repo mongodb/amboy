@@ -32,7 +32,7 @@ import (
 // LocalShuffled provides a queue implementation that shuffles the
 // order of jobs, relative the insertion order. Unlike
 // some of the other local queue implementations that predate LocalShuffled
-// (e.g. LocalUnordered,) there are no mutexes used in the implementation.
+// (e.g. LocalUnordered), there are no mutexes used in the implementation.
 type shuffledLocal struct {
 	operations chan func(map[string]amboy.Job, map[string]amboy.Job, map[string]amboy.Job, *fixedStorage)
 	capacity   int
@@ -114,7 +114,6 @@ func (q *shuffledLocal) Put(ctx context.Context, j amboy.Job) error {
 		return errors.Wrap(err, "invalid job timeinfo")
 	}
 
-	// kim: TODO: test
 	if j.ShouldApplyScopesOnEnqueue() {
 		if err := q.scopes.Acquire(id, j.Scopes()); err != nil {
 			return errors.Wrapf(err, "applying scopes to job")
@@ -156,7 +155,6 @@ func (q *shuffledLocal) Save(ctx context.Context, j amboy.Job) error {
 		return errors.Errorf("cannot save job %s; queue not started", id)
 	}
 
-	// pp.Println("kim: shuffle Save():", j.ID(), j.Scopes())
 	if err := q.scopes.Acquire(id, j.Scopes()); err != nil {
 		return errors.Wrapf(err, "applying scopes to job")
 	}
@@ -376,7 +374,6 @@ func (q *shuffledLocal) Next(ctx context.Context) amboy.Job {
 			if err := q.scopes.Acquire(j.ID(), j.Scopes()); err != nil {
 				continue
 			}
-			// pp.Println("kim: shuffle dispatch in Next():", j.ID(), j.Type().Name, j.Scopes())
 
 			select {
 			case <-ctx.Done():
@@ -433,7 +430,6 @@ func (q *shuffledLocal) Complete(ctx context.Context, j amboy.Job) {
 			}
 		}
 
-		// pp.Println("kim: shuffle Complete():", j.ID(), j.Scopes())
 		grip.Warning(message.WrapError(
 			q.scopes.Release(j.ID(), j.Scopes()),
 			message.Fields{

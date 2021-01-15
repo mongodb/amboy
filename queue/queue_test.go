@@ -160,9 +160,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 			Name:               "MongoUnordered",
 			IsRemote:           true,
 			WaitUntilSupported: true,
-			// kim: NOTE: unsure why this fails the tests
-			// DispatchBeforeSupported: true,
-			ScopesSupported: true,
+			ScopesSupported:    true,
 			Constructor: func(ctx context.Context, name string, size int) (amboy.Queue, TestCloser, error) {
 				opts := MongoDBQueueCreationOptions{
 					Size:    size,
@@ -194,9 +192,8 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 			},
 		},
 		{
-			Name:     "MongoGroupUnordered",
-			IsRemote: true,
-			// kim: NOTE: added
+			Name:                    "MongoGroupUnordered",
+			IsRemote:                true,
 			WaitUntilSupported:      true,
 			DispatchBeforeSupported: true,
 			ScopesSupported:         true,
@@ -236,10 +233,8 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 			Name:               "MongoUnorderedMGOBSON",
 			IsRemote:           true,
 			WaitUntilSupported: true,
-			// kim: NOTE: unsure why this fails the tests
-			// DispatchBeforeSupported: true,
-			ScopesSupported: true,
-			MaxSize:         32,
+			ScopesSupported:    true,
+			MaxSize:            32,
 			Constructor: func(ctx context.Context, name string, size int) (amboy.Queue, TestCloser, error) {
 				opts := MongoDBQueueCreationOptions{
 					Size:    size,
@@ -271,14 +266,11 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 			},
 		},
 		{
-			Name:     "MongoOrdered",
-			IsRemote: true,
-			// kim; NOTE: added
+			Name:               "MongoOrdered",
+			IsRemote:           true,
 			WaitUntilSupported: true,
-			// kim: NOTE: unsure why this fails the tests
-			// DispatchBeforeSupported: true,
-			ScopesSupported:  true,
-			OrderedSupported: true,
+			ScopesSupported:    true,
+			OrderedSupported:   true,
 			Constructor: func(ctx context.Context, name string, size int) (amboy.Queue, TestCloser, error) {
 				opts := MongoDBQueueCreationOptions{
 					Size:    size,
@@ -978,7 +970,6 @@ func ScopedLockTest(bctx context.Context, t *testing.T, test QueueTestCase, runn
 
 	for i := 0; i < 2*size.Size; i++ {
 		j := newSleepJob()
-		// kim: NOTE: this works because only half the jobs are scoped.
 		if i%2 == 0 {
 			j.SetScopes([]string{"a"})
 			j.Sleep = time.Hour
@@ -1007,7 +998,6 @@ waitLoop:
 	assert.Equal(t, size.Size, stats.Completed)
 }
 
-// kim: TODO: port remote tests to this test instead.
 func ApplyScopesOnEnqueueTest(bctx context.Context, t *testing.T, test QueueTestCase, runner PoolTestCase, size SizeTestCase) {
 	for testName, testCase := range map[string]func(ctx context.Context, t *testing.T, q amboy.Queue){
 		"PutJobAppliesScopeAndPreservesSettings": func(ctx context.Context, t *testing.T, q amboy.Queue) {

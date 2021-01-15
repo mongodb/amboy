@@ -40,7 +40,6 @@ func (s *scopeManagerImpl) Acquire(id string, scopes []string) error {
 		holder, ok := s.scopes[sc]
 		if !ok {
 			scopesToAcquire = append(scopesToAcquire, sc)
-			// s.scopes[sc] = id
 			continue
 		}
 
@@ -73,7 +72,6 @@ func (s *scopeManagerImpl) Release(id string, scopes []string) error {
 		}
 		if holder == id {
 			scopesToRelease = append(scopesToRelease, sc)
-			// delete(s.scopes, sc)
 			continue
 		}
 		return errors.Errorf("could not release lock scope '%s', held by '%s' not '%s'", sc, holder, id)

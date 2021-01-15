@@ -89,7 +89,6 @@ func newSleepJob() *sleepJob {
 }
 
 func (j *sleepJob) Run(ctx context.Context) {
-	// pp.Println("kim: sleep job running")
 	defer j.MarkComplete()
 
 	if j.Sleep == 0 {
