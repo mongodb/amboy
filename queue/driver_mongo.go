@@ -894,7 +894,9 @@ func (d *mongoDriver) scopesInUse(ctx context.Context, scopes []string) bool {
 	if len(scopes) == 0 {
 		return false
 	}
-	num, err := d.getCollection().CountDocuments(ctx, bson.M{"scopes": bson.M{"$in": scopes}})
+	num, err := d.getCollection().CountDocuments(ctx, bson.M{
+		"status.in_prog": true,
+		"scopes":         bson.M{"$in": scopes}})
 	if err != nil {
 		return false
 	}

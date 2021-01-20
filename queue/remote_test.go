@@ -109,25 +109,6 @@ func (s *RemoteUnorderedSuite) TestJobPutIntoQueueFetchableViaGetMethod() {
 	s.Equal(j.Type(), nj.Type())
 }
 
-func (s *RemoteUnorderedSuite) TestJobScopesApplyWhenJobIsPutIntoQueue() {
-	s.Require().NoError(s.queue.SetDriver(s.driver))
-
-	j := job.NewShellJob("echo foo", "")
-	j.SetScopes([]string{"scope"})
-	j.SetShouldApplyScopesOnEnqueue(true)
-
-	s.Require().NoError(s.queue.Put(s.ctx, j))
-	fetchedJob, ok := s.queue.Get(s.ctx, j.ID())
-	s.Require().True(ok)
-	s.EqualValues(fetchedJob.Scopes(), j.Scopes())
-	s.True(fetchedJob.ShouldApplyScopesOnEnqueue())
-
-	j = job.NewShellJob("echo bar", "")
-	j.SetScopes([]string{"scope"})
-	j.SetShouldApplyScopesOnEnqueue(true)
-	s.Require().Error(s.queue.Put(s.ctx, j))
-}
-
 func (s *RemoteUnorderedSuite) TestGetMethodHandlesMissingJobs() {
 	s.Require().Nil(s.queue.Driver())
 	s.Require().NoError(s.queue.SetDriver(s.driver))

@@ -54,6 +54,7 @@ type QueueTestCase struct {
 	OrderedStartsBefore     bool
 	WaitUntilSupported      bool
 	DispatchBeforeSupported bool
+	ScopesSupported         bool
 	SkipUnordered           bool
 	IsRemote                bool
 	Skip                    bool
@@ -100,7 +101,8 @@ func DefaultQueueTestCases() []QueueTestCase {
 			},
 		},
 		{
-			Name: "Priority",
+			Name:            "Priority",
+			ScopesSupported: true,
 			Constructor: func(ctx context.Context, _ string, size int) (amboy.Queue, TestCloser, error) {
 				return NewLocalPriorityQueue(size, defaultLocalQueueCapcity), func(ctx context.Context) error { return nil }, nil
 			},
@@ -109,13 +111,15 @@ func DefaultQueueTestCases() []QueueTestCase {
 			Name:                    "LimitedSize",
 			WaitUntilSupported:      true,
 			DispatchBeforeSupported: true,
+			ScopesSupported:         true,
 			Constructor: func(ctx context.Context, _ string, size int) (amboy.Queue, TestCloser, error) {
 				return NewLocalLimitedSize(size, 1024*size), func(ctx context.Context) error { return nil }, nil
 			},
 		},
 		{
-			Name:         "Shuffled",
-			SingleWorker: true,
+			Name:            "Shuffled",
+			SingleWorker:    true,
+			ScopesSupported: true,
 			Constructor: func(ctx context.Context, _ string, size int) (amboy.Queue, TestCloser, error) {
 				return NewShuffledLocal(size, defaultLocalQueueCapcity), func(ctx context.Context) error { return nil }, nil
 			},
@@ -125,7 +129,7 @@ func DefaultQueueTestCases() []QueueTestCase {
 			MaxSize: 4,
 			Skip:    true,
 			Constructor: func(ctx context.Context, _ string, size int) (amboy.Queue, TestCloser, error) {
-				q, err := NewSQSFifoQueue(randomString(4), size)
+				q, err := NewSQSFifoQueue(randomString(4), size, awsTestCredentialsFromEnv())
 				closer := func(ctx context.Context) error { return nil }
 				return q, closer, err
 			},
@@ -153,8 +157,10 @@ func MergeQueueTestCases(ctx context.Context, cases ...[]QueueTestCase) <-chan Q
 func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 	return []QueueTestCase{
 		{
-			Name:     "MongoUnordered",
-			IsRemote: true,
+			Name:               "MongoUnordered",
+			IsRemote:           true,
+			WaitUntilSupported: true,
+			ScopesSupported:    true,
 			Constructor: func(ctx context.Context, name string, size int) (amboy.Queue, TestCloser, error) {
 				opts := MongoDBQueueCreationOptions{
 					Size:    size,
@@ -186,8 +192,10 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 			},
 		},
 		{
-			Name:     "MongoGroupUnordered",
-			IsRemote: true,
+			Name:               "MongoGroupUnordered",
+			IsRemote:           true,
+			WaitUntilSupported: true,
+			ScopesSupported:    true,
 			Constructor: func(ctx context.Context, name string, size int) (amboy.Queue, TestCloser, error) {
 				opts := MongoDBQueueCreationOptions{
 					Size:    size,
@@ -221,9 +229,11 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 			},
 		},
 		{
-			Name:     "MongoUnorderedMGOBSON",
-			IsRemote: true,
-			MaxSize:  32,
+			Name:               "MongoUnorderedMGOBSON",
+			IsRemote:           true,
+			WaitUntilSupported: true,
+			ScopesSupported:    true,
+			MaxSize:            32,
 			Constructor: func(ctx context.Context, name string, size int) (amboy.Queue, TestCloser, error) {
 				opts := MongoDBQueueCreationOptions{
 					Size:    size,
@@ -255,8 +265,11 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 			},
 		},
 		{
-			Name:     "MongoOrdered",
-			IsRemote: true,
+			Name:               "MongoOrdered",
+			IsRemote:           true,
+			WaitUntilSupported: true,
+			ScopesSupported:    true,
+			OrderedSupported:   true,
 			Constructor: func(ctx context.Context, name string, size int) (amboy.Queue, TestCloser, error) {
 				opts := MongoDBQueueCreationOptions{
 					Size:    size,
@@ -427,10 +440,17 @@ func TestQueueSmoke(t *testing.T) {
 								OneExecutionTest(bctx, t, test, runner, size)
 							})
 
-							if test.SingleWorker && (!test.OrderedSupported || test.OrderedStartsBefore) && size.Size >= 4 && size.Size <= 32 {
-								t.Run("ScopedLock", func(t *testing.T) {
-									ScopedLockTest(bctx, t, test, runner, size)
-								})
+							if test.ScopesSupported {
+								if test.SingleWorker && (!test.OrderedSupported || test.OrderedStartsBefore) && size.Size >= 4 && size.Size <= 32 {
+									t.Run("ScopedLock", func(t *testing.T) {
+										ScopedLockTest(bctx, t, test, runner, size)
+									})
+								}
+								if size.Size <= 4 {
+									t.Run("ApplyScopesOnEnqueue", func(t *testing.T) {
+										ApplyScopesOnEnqueueTest(bctx, t, test, runner, size)
+									})
+								}
 							}
 
 							if test.IsRemote && test.MultiSupported && !runner.SkipMulti {
@@ -977,4 +997,63 @@ waitLoop:
 	stats := q.Stats(ctx)
 	assert.Equal(t, 2*size.Size, stats.Total)
 	assert.Equal(t, size.Size, stats.Completed)
+}
+
+func ApplyScopesOnEnqueueTest(bctx context.Context, t *testing.T, test QueueTestCase, runner PoolTestCase, size SizeTestCase) {
+	for testName, testCase := range map[string]func(ctx context.Context, t *testing.T, q amboy.Queue){
+		"PutJobAppliesScopeAndPreservesSettings": func(ctx context.Context, t *testing.T, q amboy.Queue) {
+			j := newSleepJob()
+			j.Sleep = 10 * time.Millisecond
+			j.SetScopes([]string{"scope"})
+			j.SetShouldApplyScopesOnEnqueue(true)
+
+			require.NoError(t, q.Put(ctx, j))
+			fetchedJob, ok := q.Get(ctx, j.ID())
+			require.True(t, ok)
+			assert.EqualValues(t, j.Scopes(), fetchedJob.Scopes())
+			assert.True(t, fetchedJob.ShouldApplyScopesOnEnqueue())
+		},
+		"PutJobFollowedBySaveSucceeds": func(ctx context.Context, t *testing.T, q amboy.Queue) {
+			j := newSleepJob()
+			j.Sleep = 10 * time.Millisecond
+			j.SetScopes([]string{"scope"})
+			j.SetShouldApplyScopesOnEnqueue(true)
+			require.NoError(t, q.Put(ctx, j))
+			require.NoError(t, q.Save(ctx, j))
+		},
+		"PutJobPreventsEnqueueingDuplicateScopeUntilJobCompletes": func(ctx context.Context, t *testing.T, q amboy.Queue) {
+			j1 := newSleepJob()
+			j1.Sleep = 10 * time.Millisecond
+			j1.SetScopes([]string{"scope"})
+			j1.SetShouldApplyScopesOnEnqueue(true)
+
+			j2 := newSleepJob()
+			j2.Sleep = 10 * time.Millisecond
+			j2.SetScopes([]string{"scope"})
+			j2.SetShouldApplyScopesOnEnqueue(true)
+
+			require.NoError(t, q.Put(ctx, j1))
+			require.Error(t, q.Put(ctx, j2))
+
+			require.True(t, amboy.WaitInterval(ctx, q, 10*time.Millisecond))
+
+			require.NoError(t, q.Put(ctx, j2))
+		},
+	} {
+		t.Run(testName, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(bctx, time.Minute)
+			defer cancel()
+
+			q, closer, err := test.Constructor(ctx, newDriverID(), size.Size)
+			require.NoError(t, err)
+			defer func() {
+				assert.NoError(t, closer(ctx))
+			}()
+			require.NoError(t, runner.SetPool(q, size.Size))
+
+			require.NoError(t, q.Start(ctx))
+
+			testCase(ctx, t, q)
+		})
+	}
 }
