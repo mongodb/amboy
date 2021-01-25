@@ -95,6 +95,7 @@ func (q *remoteBase) jobServer(ctx context.Context) {
 		default:
 			job := q.driver.Next(ctx)
 			if !q.canDispatch(job) {
+				// kim: TODO: need to release if dispatch is not possible.
 				continue
 			}
 

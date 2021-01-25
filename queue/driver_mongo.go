@@ -855,6 +855,8 @@ RETRY:
 			}
 
 			if err = iter.Err(); err != nil {
+				// kim: NOTE: this should cause the dispatcher to release the
+				// job if it's non-nil
 				grip.Warning(message.WrapError(err, message.Fields{
 					"id":            d.instanceID,
 					"service":       "amboy.queue.mdb",
@@ -868,6 +870,8 @@ RETRY:
 			}
 
 			if err = iter.Close(ctx); err != nil {
+				// kim: NOTE: this should cause the dispatcher to release the
+				// job if it's non-nil
 				grip.Warning(message.WrapError(err, message.Fields{
 					"id":        d.instanceID,
 					"service":   "amboy.queue.mdb",
