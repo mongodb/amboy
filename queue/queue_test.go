@@ -797,9 +797,6 @@ waitLoop:
 	assert.Equal(t, size.Size, stats.Completed)
 }
 
-/* kim: TODO: test
-- 5 second sleep job with MaxTime of 1 second, let it run and check that time is less than 5 seconds.
-*/
 func MaxTimeTest(bctx context.Context, t *testing.T, test QueueTestCase, runner PoolTestCase, size SizeTestCase) {
 	ctx, cancel := context.WithTimeout(bctx, 10*time.Second)
 	defer cancel()
