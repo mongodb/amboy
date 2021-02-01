@@ -68,6 +68,9 @@ type Job interface {
 	// AddError allows another actor to annotate the job with an
 	// error.
 	AddError(error)
+	// AddRetryableError annotates the job with an error and marks the job as
+	// needing to retry.
+	AddRetryableError(error)
 	// Error returns an error object if the task was an
 	// error. Typically if the job has not run, this is nil.
 	Error() error
