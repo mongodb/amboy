@@ -327,13 +327,3 @@ func (b *Base) UpdateRetryInfo(opts amboy.JobRetryOptions) {
 		b.retryInfo.CurrentTrial = *opts.CurrentTrial
 	}
 }
-
-// SetRetryable marks the job as one that will retry, without any additional
-// configuration.
-func (b *Base) SetRetryable(val bool) {
-	b.mutex.Lock()
-	defer b.mutex.Unlock()
-
-	b.retryInfo.Retryable = val
-	b.retryInfo.NeedsRetry = val
-}

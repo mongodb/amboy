@@ -57,9 +57,6 @@ type Job interface {
 	RetryInfo() JobRetryInfo
 	// UpdateRetryInfo method modifies all set fields from the given options.
 	UpdateRetryInfo(JobRetryOptions)
-	// SetRetryable is a convenience function to indicate that a job will
-	// support retrying.
-	SetRetryable(bool)
 
 	// Provides access to the job's priority value, which some
 	// queues may use to order job dispatching. Most Jobs

@@ -171,8 +171,3 @@ func (j *JobTest) UpdateRetryInfo(opts amboy.JobRetryOptions) {
 		j.Retry.CurrentTrial = *opts.CurrentTrial
 	}
 }
-
-func (j *JobTest) SetRetryable(val bool) {
-	j.Retry.Retryable = val
-	j.Retry.NeedsRetry = val
-}
