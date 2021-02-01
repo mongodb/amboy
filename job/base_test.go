@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/evergreen-ci/utility"
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/dependency"
 	"github.com/stretchr/testify/require"
@@ -123,12 +124,8 @@ func (s *BaseCheckSuite) TestTimeInfoSetsValues() {
 }
 
 func (s *BaseCheckSuite) TestUpdateRetryInfoSetsNonzeroFields() {
-	// TODO (EVG-13920): use utility methods rather than make pointers like
-	// this.
-	trueVal := true
-	falseVal := false
 	s.base.UpdateRetryInfo(amboy.JobRetryOptions{
-		Retryable: &trueVal,
+		Retryable: utility.TruePtr(),
 	})
 	s.Require().Equal(amboy.JobRetryInfo{
 		Retryable: true,
@@ -136,7 +133,7 @@ func (s *BaseCheckSuite) TestUpdateRetryInfoSetsNonzeroFields() {
 
 	trial := 5
 	s.base.UpdateRetryInfo(amboy.JobRetryOptions{
-		CurrentTrial: &trial,
+		CurrentTrial: utility.ToIntPtr(trial),
 	})
 
 	s.Require().Equal(amboy.JobRetryInfo{
@@ -145,14 +142,14 @@ func (s *BaseCheckSuite) TestUpdateRetryInfoSetsNonzeroFields() {
 	}, s.base.RetryInfo())
 
 	s.base.UpdateRetryInfo(amboy.JobRetryOptions{
-		Retryable: &falseVal,
+		Retryable: utility.FalsePtr(),
 	})
 	s.Require().Equal(amboy.JobRetryInfo{
 		CurrentTrial: trial,
 	}, s.base.RetryInfo())
 
 	s.base.UpdateRetryInfo(amboy.JobRetryOptions{
-		NeedsRetry: &trueVal,
+		NeedsRetry: utility.TruePtr(),
 	})
 
 	s.Require().Equal(amboy.JobRetryInfo{
