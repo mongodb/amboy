@@ -143,10 +143,10 @@ type JobTimeInfo struct {
 type JobRetryInfo struct {
 	// Retryable indicates whether the job should use Amboy's built-in retry
 	// mechanism.
-	Retryable bool `bson:"retryable,omitempty" json:"retryable,omitempty" yaml:"retryable,omitempty"`
+	Retryable bool `bson:"retryable" json:"retryable,omitempty" yaml:"retryable,omitempty"`
 	// NeedsRetry indicates whether the job is supposed to retry when it is
 	// complete. This will only be considered if Retryable is true.
-	NeedsRetry bool `bson:"needs_retry,omitempty" json:"needs_retry,omitempty" yaml:"needs_retry,omitempty"`
+	NeedsRetry bool `bson:"needs_retry" json:"needs_retry,omitempty" yaml:"needs_retry,omitempty"`
 	// CurrentTrial is the current attempt number. This is zero-indexed, so the
 	// first time the job attempts to run, its value is 0. Each subsequent retry
 	// increments this value.
