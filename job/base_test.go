@@ -122,31 +122,40 @@ func (s *BaseCheckSuite) TestTimeInfoSetsValues() {
 	s.Equal(result.End, last.End)
 }
 
-func (s *BaseCheckSuite) TestSetRetryable() {
-	s.Require().False(s.base.RetryInfo().Retryable)
-	s.base.SetRetryable(true)
-	s.Require().True(s.base.RetryInfo().Retryable)
-	s.base.SetRetryable(false)
-	s.False(s.base.RetryInfo().Retryable)
-}
-
 func (s *BaseCheckSuite) TestUpdateRetryInfoSetsNonzeroFields() {
-	s.base.UpdateRetryInfo(amboy.JobRetryInfo{
+	// kim: TODO: use utility value-to-pointer methods
+	trueVal := true
+	falseVal := false
+	s.base.UpdateRetryInfo(amboy.JobRetryOptions{
+		Retryable: &trueVal,
+	})
+	s.Require().Equal(amboy.JobRetryInfo{
 		Retryable: true,
-	})
-	s.Require().True(s.base.RetryInfo().Retryable)
+	}, s.base.RetryInfo())
 
-	s.base.UpdateRetryInfo(amboy.JobRetryInfo{
-		Retryable: false,
-	})
-	s.Require().True(s.base.RetryInfo().Retryable)
-
-	s.base.UpdateRetryInfo(amboy.JobRetryInfo{
-		CurrentTrial: 5,
+	trial := 5
+	s.base.UpdateRetryInfo(amboy.JobRetryOptions{
+		CurrentTrial: &trial,
 	})
 
-	s.Equal(amboy.JobRetryInfo{
+	s.Require().Equal(amboy.JobRetryInfo{
 		Retryable:    true,
-		CurrentTrial: 5,
+		CurrentTrial: trial,
+	}, s.base.RetryInfo())
+
+	s.base.UpdateRetryInfo(amboy.JobRetryOptions{
+		Retryable: &falseVal,
+	})
+	s.Require().Equal(amboy.JobRetryInfo{
+		CurrentTrial: trial,
+	}, s.base.RetryInfo())
+
+	s.base.UpdateRetryInfo(amboy.JobRetryOptions{
+		NeedsRetry: &trueVal,
+	})
+
+	s.Require().Equal(amboy.JobRetryInfo{
+		NeedsRetry:   true,
+		CurrentTrial: trial,
 	}, s.base.RetryInfo())
 }

@@ -312,25 +312,29 @@ func (b *Base) RetryInfo() amboy.JobRetryInfo {
 }
 
 // UpdateRetryInfo updates the stored retry information and configuration, but
-// does not modify fields that are unset. In particular, Retryable cannot be
-// unset using UpdateRetryInfo; to achieve this, use SetRetryable.
-func (b *Base) UpdateRetryInfo(info amboy.JobRetryInfo) {
+// does not modify fields that are unset.
+func (b *Base) UpdateRetryInfo(opts amboy.JobRetryOptions) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
-	if info.Retryable {
-		b.retryInfo.Retryable = true
+	if opts.Retryable != nil {
+		b.retryInfo.Retryable = *opts.Retryable
+	}
+	// kim: NOTE:
+	// If this is default false when the job goes in the queue:
+	// - Inserting into the queue, it'll be true.
+	// - At the end of the job, if a retryable error has been added
+	// (AddRetryableError), NeedsRetry will be true
+	// - If the job marks itself as retryable manually with SetNeedsRetry,
+	// NeedsRetry will be true.
+	// - Jobs that are stuck in progress will be caught by the stranded job
+	// handling mechanism in the MongoDB driver (i.e.  `getNextQuery` looks for
+	// `stats.in_prog = true`, which).
+	if opts.NeedsRetry != nil {
+		b.retryInfo.NeedsRetry = *opts.NeedsRetry
 	}
 
-	if info.CurrentTrial != 0 {
-		b.retryInfo.CurrentTrial = info.CurrentTrial
+	if opts.CurrentTrial != nil {
+		b.retryInfo.CurrentTrial = *opts.CurrentTrial
 	}
-}
-
-// SetRetryable sets whether or not the job is allowed to retry.
-func (b *Base) SetRetryable(val bool) {
-	b.mutex.Lock()
-	defer b.mutex.Unlock()
-
-	b.retryInfo.Retryable = val
 }

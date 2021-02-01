@@ -94,7 +94,7 @@ func (j *JobInterchange) Resolve(f amboy.Format) (amboy.Job, error) {
 	job.SetStatus(j.Status)
 	job.SetShouldApplyScopesOnEnqueue(j.ApplyScopesOnEnqueue)
 	job.UpdateTimeInfo(j.TimeInfo)
-	job.UpdateRetryInfo(j.RetryInfo)
+	job.UpdateRetryInfo(j.RetryInfo.Options())
 
 	return job, nil
 }
