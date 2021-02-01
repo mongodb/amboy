@@ -123,7 +123,8 @@ func (s *BaseCheckSuite) TestTimeInfoSetsValues() {
 }
 
 func (s *BaseCheckSuite) TestUpdateRetryInfoSetsNonzeroFields() {
-	// kim: TODO: use utility value-to-pointer methods
+	// TODO (EVG-13920): use utility methods rather than make pointers like
+	// this.
 	trueVal := true
 	falseVal := false
 	s.base.UpdateRetryInfo(amboy.JobRetryOptions{

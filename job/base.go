@@ -320,20 +320,9 @@ func (b *Base) UpdateRetryInfo(opts amboy.JobRetryOptions) {
 	if opts.Retryable != nil {
 		b.retryInfo.Retryable = *opts.Retryable
 	}
-	// kim: NOTE:
-	// If this is default false when the job goes in the queue:
-	// - Inserting into the queue, it'll be true.
-	// - At the end of the job, if a retryable error has been added
-	// (AddRetryableError), NeedsRetry will be true
-	// - If the job marks itself as retryable manually with SetNeedsRetry,
-	// NeedsRetry will be true.
-	// - Jobs that are stuck in progress will be caught by the stranded job
-	// handling mechanism in the MongoDB driver (i.e.  `getNextQuery` looks for
-	// `stats.in_prog = true`, which).
 	if opts.NeedsRetry != nil {
 		b.retryInfo.NeedsRetry = *opts.NeedsRetry
 	}
-
 	if opts.CurrentTrial != nil {
 		b.retryInfo.CurrentTrial = *opts.CurrentTrial
 	}
