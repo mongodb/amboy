@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/evergreen-ci/utility"
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/dependency"
 	"github.com/stretchr/testify/require"
@@ -122,31 +123,37 @@ func (s *BaseCheckSuite) TestTimeInfoSetsValues() {
 	s.Equal(result.End, last.End)
 }
 
-func (s *BaseCheckSuite) TestSetRetryable() {
-	s.Require().False(s.base.RetryInfo().Retryable)
-	s.base.SetRetryable(true)
-	s.Require().True(s.base.RetryInfo().Retryable)
-	s.base.SetRetryable(false)
-	s.False(s.base.RetryInfo().Retryable)
-}
-
 func (s *BaseCheckSuite) TestUpdateRetryInfoSetsNonzeroFields() {
-	s.base.UpdateRetryInfo(amboy.JobRetryInfo{
+	s.base.UpdateRetryInfo(amboy.JobRetryOptions{
+		Retryable: utility.TruePtr(),
+	})
+	s.Require().Equal(amboy.JobRetryInfo{
 		Retryable: true,
-	})
-	s.Require().True(s.base.RetryInfo().Retryable)
+	}, s.base.RetryInfo())
 
-	s.base.UpdateRetryInfo(amboy.JobRetryInfo{
-		Retryable: false,
-	})
-	s.Require().True(s.base.RetryInfo().Retryable)
-
-	s.base.UpdateRetryInfo(amboy.JobRetryInfo{
-		CurrentTrial: 5,
+	trial := 5
+	s.base.UpdateRetryInfo(amboy.JobRetryOptions{
+		CurrentTrial: utility.ToIntPtr(trial),
 	})
 
-	s.Equal(amboy.JobRetryInfo{
+	s.Require().Equal(amboy.JobRetryInfo{
 		Retryable:    true,
-		CurrentTrial: 5,
+		CurrentTrial: trial,
+	}, s.base.RetryInfo())
+
+	s.base.UpdateRetryInfo(amboy.JobRetryOptions{
+		Retryable: utility.FalsePtr(),
+	})
+	s.Require().Equal(amboy.JobRetryInfo{
+		CurrentTrial: trial,
+	}, s.base.RetryInfo())
+
+	s.base.UpdateRetryInfo(amboy.JobRetryOptions{
+		NeedsRetry: utility.TruePtr(),
+	})
+
+	s.Require().Equal(amboy.JobRetryInfo{
+		NeedsRetry:   true,
+		CurrentTrial: trial,
 	}, s.base.RetryInfo())
 }
