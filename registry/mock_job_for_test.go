@@ -104,6 +104,14 @@ func (j *JobTest) AddError(err error) {
 	}
 }
 
+func (j *JobTest) AddRetryableError(err error) {
+	if err == nil {
+		return
+	}
+	j.HadError = true
+	j.Retry.NeedsRetry = true
+}
+
 func (j *JobTest) Type() amboy.JobType {
 	return j.T
 }

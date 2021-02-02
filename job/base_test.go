@@ -45,6 +45,16 @@ func (s *BaseCheckSuite) TestAddErrorWithNilObjectDoesNotChangeErrorState() {
 	}
 }
 
+func (s *BaseCheckSuite) TestAddRetryableErrorWithNilObjectDoesNotChangeErrorState() {
+	for i := 0; i < 100; i++ {
+		s.base.AddRetryableError(nil)
+		s.NoError(s.base.Error())
+		s.Len(s.base.status.Errors, 0)
+		s.False(s.base.HasErrors())
+		s.False(s.base.RetryInfo().NeedsRetry)
+	}
+}
+
 func (s *BaseCheckSuite) TestAddErrorsPersistsErrorsInJob() {
 	for i := 1; i <= 100; i++ {
 		s.base.AddError(errors.New("foo"))
@@ -52,6 +62,17 @@ func (s *BaseCheckSuite) TestAddErrorsPersistsErrorsInJob() {
 		s.Len(s.base.status.Errors, i)
 		s.True(s.base.HasErrors())
 		s.Len(strings.Split(s.base.Error().Error(), "\n"), i)
+	}
+}
+
+func (s *BaseCheckSuite) TestAddRetryableErrorsPersistsErrorsInJob() {
+	for i := 1; i <= 100; i++ {
+		s.base.AddRetryableError(errors.New("foo"))
+		s.Error(s.base.Error())
+		s.Len(s.base.status.Errors, i)
+		s.True(s.base.HasErrors())
+		s.Len(strings.Split(s.base.Error().Error(), "\n"), i)
+		s.True(s.base.RetryInfo().NeedsRetry)
 	}
 }
 
