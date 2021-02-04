@@ -95,12 +95,21 @@ func (q *remoteBase) jobServer(ctx context.Context) {
 		default:
 			job := q.driver.Next(ctx)
 			if !q.canDispatch(job) {
-				// kim: TODO: need to release if dispatch is not possible.
+				// kim: NOTE: this should cause the dispatcher to release the
+				// job because it's already been dispatched.
+				if job != nil {
+					q.dispatcher.Release(ctx, job)
+					grip.Warning(message.Fields{
+						"message":   "releasing a job that's already been dispatched",
+						"service":   "amboy.queue.mdb",
+						"operation": "post-dispatch",
+						"queue_id":  q.ID(),
+					})
+				}
 				continue
 			}
 
-			// therefore return any pending job or job
-			// that has a timed out lock.
+			// Return a successfully dispatched job.
 			q.channel <- job
 		}
 	}
@@ -325,6 +334,9 @@ func (q *remoteBase) addBlocked(n string) {
 	q.blocked[n] = struct{}{}
 }
 
+// canDispatch returns whether or not it is valid for this queue to dispatch the
+// job, considering only this queue instance's dispatched jobs. It is invalid if the queue
+// has already dispatched on this queue instance.
 func (q *remoteBase) canDispatch(j amboy.Job) bool {
 	if j == nil {
 		return false
