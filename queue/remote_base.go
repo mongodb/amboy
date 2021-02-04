@@ -103,6 +103,7 @@ func (q *remoteBase) jobServer(ctx context.Context) {
 						"message":   "releasing a job that's already been dispatched",
 						"service":   "amboy.queue.mdb",
 						"operation": "post-dispatch",
+						"job_id":    job.ID(),
 						"queue_id":  q.ID(),
 					})
 				}

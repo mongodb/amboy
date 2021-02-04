@@ -39,7 +39,7 @@ func executeJob(ctx context.Context, id string, job amboy.Job, q amboy.Queue) {
 	// dispatch succeeded but the job never executed Run(), then another app
 	// server took the job (evergreenapp-20 -> evergreenapp-3)
 	r := message.Fields{
-		"job":           job.ID(),
+		"job_id":        job.ID(),
 		"job_type":      job.Type().Name,
 		"duration_secs": ti.Duration().Seconds(),
 		"dispatch_secs": ti.Start.Sub(ti.Created).Seconds(),

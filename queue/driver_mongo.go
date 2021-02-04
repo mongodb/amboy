@@ -872,7 +872,7 @@ func (d *mongoDriver) tryDispatchJob(ctx context.Context, iter *mongo.Cursor, st
 				"num_deleted":   res.DeletedCount,
 				"message":       "found stale job",
 				"operation":     "job staleness check",
-				"job":           job.ID(),
+				"job_id":        job.ID(),
 				"job_type":      job.Type().Name,
 				"is_group":      d.opts.UseGroups,
 				"group":         d.opts.GroupName,
