@@ -94,7 +94,16 @@ func (q *remoteBase) jobServer(ctx context.Context) {
 			return
 		default:
 			job := q.driver.Next(ctx)
-			if !q.canDispatch(job) {
+			if !q.lockDispatch(job) {
+				// The dispatcer already ensures that the job is locked to a
+				// single in-memory queue on one host. However, the dispatcher
+				// cannot guarantee that a single worker on the host owns the
+				// job, it's still possible for two workers on the same host to
+				// dispatch the same job from a queue simultaneously via Next().
+				// Checking the dispatchability status of the job in this
+				// in-memory queue ensures that only one worker gets to proceed
+				// through to actually run the job.
+
 				// kim: NOTE: this should cause the dispatcher to release the
 				// job because it's already been dispatched.
 				if job != nil {
@@ -335,10 +344,10 @@ func (q *remoteBase) addBlocked(n string) {
 	q.blocked[n] = struct{}{}
 }
 
-// canDispatch returns whether or not it is valid for this queue to dispatch the
-// job, considering only this queue instance's dispatched jobs. It is invalid if the queue
-// has already dispatched on this queue instance.
-func (q *remoteBase) canDispatch(j amboy.Job) bool {
+// lockDispatch attempts to acquire the exclusive lock on a job dispatched by
+// this queue. If the job has not yet been dispatched, it marks it as dispatched
+// by this queue and returns true. Otherwise, it returns false.
+func (q *remoteBase) lockDispatch(j amboy.Job) bool {
 	if j == nil {
 		return false
 	}
