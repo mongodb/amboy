@@ -6,6 +6,7 @@ import (
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/pool"
 	"github.com/mongodb/grip"
+	"github.com/pkg/errors"
 )
 
 // RemoteUnordered are queues that use a Driver as backend for job
@@ -25,9 +26,11 @@ func newRemoteUnordered(size int) remoteQueue {
 	q.dispatcher = NewDispatcher(q)
 	grip.Error(q.SetRunner(pool.NewLocalWorkers(size, q)))
 	// kim: TODO: need a way to propagate RetryHandlerOptions
-	rh := newRetryHandler(q, amboy.RetryHandlerOptions{})
-	grip.Error(q.SetRetryHandler(rh))
-	grip.Error(rh.SetQueue(q))
+	rh, err := newRetryHandler(q, amboy.RetryHandlerOptions{})
+	grip.Error(errors.Wrap(err, "could not initialize retry handler"))
+	if rh != nil {
+		grip.Error(q.SetRetryHandler(rh))
+	}
 	grip.Infof("creating new remote job queue with %d workers", size)
 
 	return q

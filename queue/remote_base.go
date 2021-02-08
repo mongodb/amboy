@@ -281,7 +281,7 @@ func (q *remoteBase) SetRetryHandler(rh amboy.RetryHandler) error {
 
 	q.retryHandler = rh
 
-	return nil
+	return rh.SetQueue(q)
 }
 
 // Driver provides access to the embedded driver instance which
@@ -345,6 +345,12 @@ func (q *remoteBase) Start(ctx context.Context) error {
 	return nil
 }
 
+// Next is a no-op that is included here so that it fulfills the amboy.Queue
+// interface.
+func (q *remoteBase) Next(context.Context) amboy.Job {
+	return nil
+}
+
 func (q *remoteBase) addBlocked(n string) {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
@@ -367,10 +373,6 @@ func (q *remoteBase) canDispatch(j amboy.Job) bool {
 
 	q.dispatched[id] = struct{}{}
 	return true
-}
-
-func (q *remoteBase) Next(context.Context) amboy.Job {
-	return nil
 }
 
 func isDispatchable(stat amboy.JobStatusInfo, lockTimeout time.Duration) bool {

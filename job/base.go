@@ -8,7 +8,7 @@ that does *not* have a Run method, and can be embedded in your own job
 implementations to avoid implemented duplicated common
 functionality. The type also implements several methods which are not
 part of the Job interface for error handling (e.g. HasErrors), and methods for
-marking tasks complete and setting the ID (e.g. MarkComplete and SetID).
+marking tasks complete and setting the ID (e.g. MarkComplete).
 
 All job implementations should use this functionality, although there
 are some situations where jobs may want independent implementation of

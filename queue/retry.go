@@ -6,8 +6,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/evergreen-ci/utility"
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/grip"
+	"github.com/mongodb/grip/message"
+	"github.com/mongodb/grip/recovery"
 	"github.com/pkg/errors"
 )
 
@@ -24,12 +27,18 @@ type retryHandler struct {
 	cancelWorkers context.CancelFunc
 }
 
-func newRetryHandler(q amboy.Queue, opts amboy.RetryHandlerOptions) amboy.RetryHandler {
+func newRetryHandler(q amboy.Queue, opts amboy.RetryHandlerOptions) (amboy.RetryHandler, error) {
+	if q == nil {
+		return nil, errors.New("queue cannot be nil")
+	}
+	if err := opts.Validate(); err != nil {
+		return nil, errors.Wrap(err, "invalid options")
+	}
 	return &retryHandler{
 		queue:   q,
 		opts:    opts,
 		pending: map[string]amboy.Job{},
-	}
+	}, nil
 }
 
 func (rh *retryHandler) Start(ctx context.Context) error {
@@ -43,9 +52,15 @@ func (rh *retryHandler) Start(ctx context.Context) error {
 	for i := 0; i < rh.opts.NumWorkers; i++ {
 		rh.wg.Add(1)
 		go func() {
-			// kim: TODO: need panic handler
-			defer rh.wg.Done()
-			rh.waitForJob(workerCtx)
+			defer func() {
+				if err := recovery.HandlePanicWithError(recover(), nil, "retry handler worker"); err != nil {
+					go rh.waitForJob(workerCtx)
+					return
+				}
+				rh.wg.Done()
+			}()
+
+			grip.Error(rh.waitForJob(workerCtx))
 		}()
 	}
 	return nil
@@ -102,15 +117,35 @@ func (rh *retryHandler) waitForJob(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return nil
 		default:
-			j := rh.nextJob()
+			// kim:  TODO: have nextJob be a channel to make it easier to detect
+			// when there is a pending job rather than have a no-op loop most of
+			// the time.
+			var j amboy.Job
+			defer func() {
+				if err := recovery.HandlePanicWithError(recover(), nil, "handling job retry"); err != nil {
+					if j != nil {
+						rh.pending[j.ID()] = j
+					}
+				}
+			}()
+			j = rh.nextJob()
 			if j == nil {
 				continue
 			}
 			if err := rh.handleJob(ctx, j); err != nil && ctx.Err() == nil {
 				// If the worker fails to re-enqueue the job, do not bother
 				// trying to re-enqueue the job.
+				j.UpdateRetryInfo(amboy.JobRetryOptions{
+					Retryable:  utility.FalsePtr(),
+					NeedsRetry: utility.FalsePtr(),
+				})
+				// kim: TODO: this has to retry at least a few times, like the
+				// infinite loop in queue.Complete()
+				if err := rh.queue.Save(ctx, j); err != nil {
+					grip.Critical(message.WrapError(err, message.Fields{}))
+				}
 			}
 		}
 	}
@@ -130,12 +165,21 @@ func (rh *retryHandler) nextJob() amboy.Job {
 func (rh *retryHandler) handleJob(ctx context.Context, j amboy.Job) error {
 	startAt := time.Now()
 	catcher := grip.NewBasicCatcher()
+	timer := time.NewTimer(0)
+	defer timer.Stop()
 	for i := 0; i < rh.opts.MaxRetryAttempts; i++ {
 		if time.Since(startAt) > rh.opts.MaxRetryTime {
 			return errors.Errorf("giving up after %d attempts, %f seconds due to maximum retry time", i, rh.opts.MaxRetryTime.Seconds())
 		}
 
-		catcher.Wrapf(rh.tryEnqueueRetryJob(ctx, j), "enqueue retry job attempt %d", i)
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-timer.C:
+			catcher.Wrapf(rh.tryEnqueueRetryJob(ctx, j), "enqueue retry job attempt %d", i)
+			// kim: TODO: maybe add jitter here?
+			timer.Reset(rh.opts.RetryBackoff)
+		}
 	}
 
 	if catcher.HasErrors() {
@@ -156,6 +200,11 @@ func (rh *retryHandler) tryEnqueueRetryJob(ctx context.Context, j amboy.Job) err
 	if !newJob.RetryInfo().Retryable || !newJob.RetryInfo().NeedsRetry {
 		return nil
 	}
+
+	// kim: TODO: attempt to take the job retry lock (i.e. j.RetryLock(),
+	// similar to Lock()) so that this thread takes ownership of it. To do so,
+	// we'll have to either use the queue interface (e.g. rh.queue.Save() or
+	// pass in the driver).
 
 	info := newJob.RetryInfo()
 	newJob.SetID(makeRetryJobID(newJob.ID(), info.CurrentTrial+1))

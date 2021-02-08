@@ -54,7 +54,11 @@ func NewShuffledLocal(workers, capacity int) amboy.Queue {
 	}
 	q.dispatcher = NewDispatcher(q)
 	q.runner = pool.NewLocalWorkers(workers, q)
-	q.SetRetryHandler(newRetryHandler(q, amboy.RetryHandlerOptions{}))
+	rh, err := newRetryHandler(q, amboy.RetryHandlerOptions{})
+	grip.Error(errors.Wrap(err, "could not initialize retry handler"))
+	if rh != nil {
+		grip.Error(q.SetRetryHandler(rh))
+	}
 	return q
 }
 

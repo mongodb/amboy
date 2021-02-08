@@ -265,14 +265,21 @@ type Queue interface {
 	// runner implementations after starting the Queue.
 	SetRunner(Runner) error
 
+	// Getter for the RetryHandler implementation embedded in the Queue
+	// instance.
+	RetryHandler() RetryHandler
+	// Setter for the RetryHandler implementation embedded in the Queue
+	// instance. Permits runtime substitution of implementations. Queue
+	// implementations are not expected to permit users to change RetryHandler
+	// implementations after starting the Queue.
+	SetRetryHandler(RetryHandler) error
+
 	// Begins the execution of the job Queue, using the embedded
 	// Runner.
 	Start(context.Context) error
-
-	RetryHandler() RetryHandler
-	SetRetryHandler(RetryHandler) error
 }
 
+// RetryHandlerOptions configures the behavior of a RetryHandler.
 type RetryHandlerOptions struct {
 	// MaxRetryAttempts is the maximum number of times that the retry handler is
 	// allowed to attempt to retry a job before it gives up.
@@ -280,9 +287,32 @@ type RetryHandlerOptions struct {
 	// MaxRetryAttempts is the maximum time that the retry handler is allowed to
 	// attempt to retry a job before it gives up.
 	MaxRetryTime time.Duration
-	// NumWorkers is the maximum number of concurrent jobs that are allowed to
-	// retry.
+	// RetryBackoff is how long the retry handler will back off after a failed
+	// retry attempt.
+	RetryBackoff time.Duration
+	// NumWorkers is the maximum number of jobs that are allowed to retry in
+	// parallel.
 	NumWorkers int
+}
+
+func (opts *RetryHandlerOptions) Validate() error {
+	catcher := grip.NewBasicCatcher()
+	catcher.NewWhen(opts.MaxRetryAttempts < 0, "cannot have negative max retry attempts")
+	catcher.NewWhen(opts.MaxRetryTime < 0, "cannot have negative max retry time")
+	catcher.NewWhen(opts.NumWorkers < 0, "cannot have negative worker thread count")
+	if catcher.HasErrors() {
+		return catcher.Resolve()
+	}
+	if opts.MaxRetryAttempts == 0 {
+		opts.MaxRetryAttempts = 10
+	}
+	if opts.MaxRetryTime == 0 {
+		opts.MaxRetryTime = time.Minute
+	}
+	if opts.NumWorkers == 0 {
+		opts.NumWorkers = 1
+	}
+	return nil
 }
 
 // QueueInfo describes runtime information associated with a Queue.

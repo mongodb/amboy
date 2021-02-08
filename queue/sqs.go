@@ -56,7 +56,11 @@ func NewSQSFifoQueue(queueName string, workers int, creds *credentials.Credentia
 	q.tasks.completed = make(map[string]bool)
 	q.tasks.all = make(map[string]amboy.Job)
 	q.runner = pool.NewLocalWorkers(workers, q)
-	q.SetRetryHandler(newRetryHandler(q, amboy.RetryHandlerOptions{}))
+	rh, err := newRetryHandler(q, amboy.RetryHandlerOptions{})
+	grip.Error(errors.Wrap(err, "could not initialize retry handler"))
+	if rh != nil {
+		grip.Error(q.SetRetryHandler(rh))
+	}
 	q.dispatcher = NewDispatcher(q)
 	result, err := q.sqsClient.CreateQueue(&sqs.CreateQueueInput{
 		QueueName: aws.String(fmt.Sprintf("%s.fifo", queueName)),
