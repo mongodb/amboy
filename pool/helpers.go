@@ -35,9 +35,6 @@ func executeJob(ctx context.Context, id string, job amboy.Job, q amboy.Queue) {
 	job.Run(jobCtx)
 	q.Complete(ctx, job)
 	ti := job.TimeInfo()
-	// kim: NOTE: TimeInfo.Start wasn't set unti 12-29, which means that
-	// dispatch succeeded but the job never executed Run(), then another app
-	// server took the job (evergreenapp-20 -> evergreenapp-3)
 	r := message.Fields{
 		"job_id":        job.ID(),
 		"job_type":      job.Type().Name,

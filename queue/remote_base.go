@@ -104,8 +104,6 @@ func (q *remoteBase) jobServer(ctx context.Context) {
 				// in-memory queue ensures that only one worker gets to proceed
 				// through to actually run the job.
 
-				// kim: NOTE: this should cause the dispatcher to release the
-				// job because it's already been dispatched.
 				if job != nil {
 					q.dispatcher.Release(ctx, job)
 					grip.Warning(message.Fields{

@@ -740,7 +740,6 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 		opts.SetSort(bson.M{"priority": -1})
 	}
 
-	j := &registry.JobInterchange{}
 	timer := time.NewTimer(0)
 	defer timer.Stop()
 
@@ -765,13 +764,10 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 				return nil
 			}
 
-			var dispatchInfo dispatchAttemptInfo
 			job, dispatchInfo := d.tryDispatchJob(ctx, iter, startAt)
 			dispatchMisses += dispatchInfo.misses
 			dispatchSkips += dispatchInfo.skips
 			if err = iter.Err(); err != nil {
-				// kim: NOTE: this should cause the dispatcher to release the
-				// job if it's non-nil
 				if job != nil {
 					d.dispatcher.Release(ctx, job)
 				}
@@ -788,8 +784,6 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 			}
 
 			if err = iter.Close(ctx); err != nil {
-				// kim: NOTE: this should cause the dispatcher to release the
-				// job if it's non-nil
 				if job != nil {
 					d.dispatcher.Release(ctx, job)
 				}
@@ -811,7 +805,6 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 			timer.Reset(time.Duration(misses * rand.Intn(int(d.opts.WaitInterval))))
 		}
 	}
-	return nil
 }
 
 // dispatchAttemptInfo contains aggregate statistics on an attempt to dispatch
