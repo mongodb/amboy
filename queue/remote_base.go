@@ -95,21 +95,12 @@ func (q *remoteBase) jobServer(ctx context.Context) {
 		default:
 			job := q.driver.Next(ctx)
 			if !q.lockDispatch(job) {
-				// The dispatcer already ensures that the job is locked to a
-				// single in-memory queue on one host. However, the dispatcher
-				// cannot guarantee that a single worker on the host owns the
-				// job, it's still possible for two workers on the same host to
-				// dispatch the same job from a queue simultaneously via Next().
-				// Checking the dispatchability status of the job in this
-				// in-memory queue ensures that only one worker gets to proceed
-				// through to actually run the job.
-
 				if job != nil {
 					q.dispatcher.Release(ctx, job)
 					grip.Warning(message.Fields{
 						"message":   "releasing a job that's already been dispatched",
 						"service":   "amboy.queue.mdb",
-						"operation": "post-dispatch",
+						"operation": "post-dispatch lock",
 						"job_id":    job.ID(),
 						"queue_id":  q.ID(),
 					})
