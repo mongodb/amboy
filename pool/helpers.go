@@ -66,15 +66,6 @@ func worker(bctx context.Context, id string, q amboy.Queue, wg *sync.WaitGroup, 
 		ctx    context.Context
 	)
 
-	// kim: NOTE: if `go worker()` happens and the thread is added to the
-	// WaitGroup while Wait() is trying to handle a 0 count (e.g. the thread
-	// count hits 0, then goes back up to 1). We can fix this potentially by
-	// checking for context error either at the beginning of worker() _or_
-	// before every call to `go worker()`.
-	// if bctx.Err() != nil {
-	//     return
-	// }
-
 	mu.Lock()
 	wg.Add(1)
 	mu.Unlock()
@@ -82,18 +73,6 @@ func worker(bctx context.Context, id string, q amboy.Queue, wg *sync.WaitGroup, 
 	defer wg.Done()
 	defer func() {
 		// if we hit a panic we want to add an error to the job;
-		// kim: NOTE: let's say that executeJob panics due to the context
-		// cancellation (for whatever reason) during (*localWorkers).Close().
-		// Then, it will attempt to recover() by starting a new worker
-		// goroutine, which, while concurrently marking threads done, may
-		// temporarily hit count 0 but then the restarted worker will add 1 to
-		// the count and panic wg.Wait().
-		// For example, let's say there are 2 workers left (count=2). Worker 1 panics,
-		// hits this recovery handler, then starts a new goroutine (count=1).
-		// Then, worker 2 exits normally (count=0), which triggers wg.Wait() to
-		// check for doneness. However, the new goroutine adds one more thread
-		// (count=1) while it's still counting, causing the wg.Wait() to panic.
-		// Source: https://stackoverflow.com/questions/39800700/waitgroup-is-reused-before-previous-wait-has-returned
 		err = recovery.HandlePanicWithError(recover(), nil, "worker process encountered error")
 		if err != nil {
 			if job != nil {
