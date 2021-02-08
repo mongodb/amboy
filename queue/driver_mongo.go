@@ -163,7 +163,7 @@ func (d *mongoDriver) start(ctx context.Context, client *mongo.Client) error {
 func (d *mongoDriver) getCollection() *mongo.Collection {
 	db := d.client.Database(d.opts.DB)
 	if d.opts.UseGroups {
-		return db.Collection(addGroupSufix(d.name))
+		return db.Collection(addGroupSuffix(d.name))
 	}
 
 	return db.Collection(addJobsSuffix(d.name))
