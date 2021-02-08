@@ -36,8 +36,9 @@ type sqsFIFOQueue struct {
 		completed map[string]bool
 		all       map[string]amboy.Job
 	}
-	runner amboy.Runner
-	mutex  sync.RWMutex
+	runner       amboy.Runner
+	retryHandler amboy.RetryHandler
+	mutex        sync.RWMutex
 }
 
 // NewSQSFifoQueue constructs a AWS SQS backed Queue
@@ -321,6 +322,20 @@ func (q *sqsFIFOQueue) SetRunner(r amboy.Runner) error {
 
 	q.runner = r
 	return nil
+}
+
+func (q *sqsFIFOQueue) RetryHandler() amboy.RetryHandler {
+	return q.retryHandler
+}
+
+func (q *sqsFIFOQueue) SetRetryHandler(rh amboy.RetryHandler) error {
+	if q.Info().Started {
+		return errors.New("cannot change retry handler after it's already started")
+	}
+
+	q.retryHandler = rh
+
+	return rh.SetQueue(q)
 }
 
 // Begins the execution of the job Queue, using the embedded

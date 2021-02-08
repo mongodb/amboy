@@ -37,6 +37,7 @@ type limitedSizeLocal struct {
 	staleCount   int
 	id           string
 	runner       amboy.Runner
+	retryHandler amboy.RetryHandler
 	mu           sync.RWMutex
 }
 
@@ -261,6 +262,20 @@ func (q *limitedSizeLocal) SetRunner(r amboy.Runner) error {
 	q.runner = r
 
 	return nil
+}
+
+func (q *limitedSizeLocal) RetryHandler() amboy.RetryHandler {
+	return q.retryHandler
+}
+
+func (q *limitedSizeLocal) SetRetryHandler(rh amboy.RetryHandler) error {
+	if q.Info().Started {
+		return errors.New("cannot change retry handler after it's already started")
+	}
+
+	q.retryHandler = rh
+
+	return rh.SetQueue(q)
 }
 
 // Stats returns information about the current state of jobs in the

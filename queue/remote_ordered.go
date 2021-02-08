@@ -31,6 +31,9 @@ func newSimpleRemoteOrdered(size int) remoteQueue {
 	q := &remoteSimpleOrdered{remoteBase: newRemoteBase()}
 	q.dispatcher = NewDispatcher(q)
 	grip.Error(q.SetRunner(pool.NewLocalWorkers(size, q)))
+	// kim: TODO: need a way to propagate RetryHandlerOptions
+	rh := newRetryHandler(q, amboy.RetryHandlerOptions{})
+	grip.Error(q.SetRetryHandler(rh))
 	grip.Infof("creating new remote job queue with %d workers", size)
 
 	return q

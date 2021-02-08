@@ -20,16 +20,17 @@ type remoteQueue interface {
 }
 
 type remoteBase struct {
-	id         string
-	started    bool
-	driver     remoteQueueDriver
-	dispatcher Dispatcher
-	driverType string
-	channel    chan amboy.Job
-	blocked    map[string]struct{}
-	dispatched map[string]struct{}
-	runner     amboy.Runner
-	mutex      sync.RWMutex
+	id           string
+	started      bool
+	driver       remoteQueueDriver
+	dispatcher   Dispatcher
+	driverType   string
+	channel      chan amboy.Job
+	blocked      map[string]struct{}
+	dispatched   map[string]struct{}
+	runner       amboy.Runner
+	retryHandler amboy.RetryHandler
+	mutex        sync.RWMutex
 }
 
 func newRemoteBase() *remoteBase {
@@ -262,6 +263,24 @@ func (q *remoteBase) SetRunner(r amboy.Runner) error {
 	return nil
 }
 
+func (q *remoteBase) RetryHandler() amboy.RetryHandler {
+	q.mutex.RLock()
+	defer q.mutex.RUnlock()
+	return q.retryHandler
+}
+
+func (q *remoteBase) SetRetryHandler(rh amboy.RetryHandler) error {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+	if q.Info().Started {
+		return errors.New("cannot change retry handler after it's already started")
+	}
+
+	q.retryHandler = rh
+
+	return nil
+}
+
 // Driver provides access to the embedded driver instance which
 // provides access to the Queue's persistence layer. This method is
 // not part of the amboy.Queue interface.
@@ -310,6 +329,12 @@ func (q *remoteBase) Start(ctx context.Context) error {
 		return errors.Wrap(err, "problem starting driver in remote queue")
 	}
 
+	if q.retryHandler != nil {
+		if err = q.retryHandler.Start(ctx); err != nil {
+			return errors.Wrap(err, "starting retry handler in remote queue")
+		}
+	}
+
 	go q.jobServer(ctx)
 
 	q.started = true
@@ -339,6 +364,10 @@ func (q *remoteBase) canDispatch(j amboy.Job) bool {
 
 	q.dispatched[id] = struct{}{}
 	return true
+}
+
+func (q *remoteBase) Next(context.Context) amboy.Job {
+	return nil
 }
 
 func isDispatchable(stat amboy.JobStatusInfo, lockTimeout time.Duration) bool {

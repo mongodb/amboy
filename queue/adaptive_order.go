@@ -17,12 +17,13 @@ import (
 
 type adaptiveLocalOrdering struct {
 	// the ops are: all map:jobs || ready | blocked | passed+unresolved
-	operations chan func(context.Context, *adaptiveOrderItems, *fixedStorage)
-	capacity   int
-	starter    sync.Once
-	id         string
-	dispatcher Dispatcher
-	runner     amboy.Runner
+	operations   chan func(context.Context, *adaptiveOrderItems, *fixedStorage)
+	capacity     int
+	starter      sync.Once
+	id           string
+	dispatcher   Dispatcher
+	runner       amboy.Runner
+	retryHandler amboy.RetryHandler
 }
 
 // NewAdaptiveOrderedLocalQueue provides a queue implementation that
@@ -350,4 +351,18 @@ func (q *adaptiveLocalOrdering) SetRunner(r amboy.Runner) error {
 
 	q.runner = r
 	return r.SetQueue(q)
+}
+
+func (q *adaptiveLocalOrdering) RetryHandler() amboy.RetryHandler {
+	return q.retryHandler
+}
+
+func (q *adaptiveLocalOrdering) SetRetryHandler(rh amboy.RetryHandler) error {
+	if q.Info().Started {
+		return errors.New("cannot change retry handler after it's already started")
+	}
+
+	q.retryHandler = rh
+
+	return rh.SetQueue(q)
 }

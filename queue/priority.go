@@ -19,14 +19,15 @@ import (
 // interface to determine priority. These queues do not have shared
 // storage.
 type priorityLocalQueue struct {
-	storage    *priorityStorage
-	fixed      *fixedStorage
-	channel    chan amboy.Job
-	scopes     ScopeManager
-	dispatcher Dispatcher
-	runner     amboy.Runner
-	id         string
-	counters   struct {
+	storage      *priorityStorage
+	fixed        *fixedStorage
+	channel      chan amboy.Job
+	scopes       ScopeManager
+	dispatcher   Dispatcher
+	runner       amboy.Runner
+	retryHandler amboy.RetryHandler
+	id           string
+	counters     struct {
 		started   int
 		completed int
 		sync.RWMutex
@@ -199,6 +200,19 @@ func (q *priorityLocalQueue) SetRunner(r amboy.Runner) error {
 	q.runner = r
 
 	return nil
+}
+func (q *priorityLocalQueue) RetryHandler() amboy.RetryHandler {
+	return q.retryHandler
+}
+
+func (q *priorityLocalQueue) SetRetryHandler(rh amboy.RetryHandler) error {
+	if q.Info().Started {
+		return errors.New("cannot change retry handler after it's already started")
+	}
+
+	q.retryHandler = rh
+
+	return rh.SetQueue(q)
 }
 
 // Stats returns an amboy.QueueStats object that reflects the queue's

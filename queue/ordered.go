@@ -58,8 +58,9 @@ type depGraphOrderedLocal struct {
 	}
 
 	// Composed functionality:
-	runner amboy.Runner
-	mutex  sync.RWMutex
+	runner       amboy.Runner
+	retryHandler amboy.RetryHandler
+	mutex        sync.RWMutex
 }
 
 // NewLocalOrdered constructs an LocalOrdered object. The "workers"
@@ -160,6 +161,20 @@ func (q *depGraphOrderedLocal) SetRunner(r amboy.Runner) error {
 
 	q.runner = r
 	return nil
+}
+
+func (q *depGraphOrderedLocal) RetryHandler() amboy.RetryHandler {
+	return q.retryHandler
+}
+
+func (q *depGraphOrderedLocal) SetRetryHandler(rh amboy.RetryHandler) error {
+	if q.Info().Started {
+		return errors.New("cannot change retry handler after it's already started")
+	}
+
+	q.retryHandler = rh
+
+	return rh.SetQueue(q)
 }
 
 func (q *depGraphOrderedLocal) Info() amboy.QueueInfo {

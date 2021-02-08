@@ -34,13 +34,14 @@ import (
 // some of the other local queue implementations that predate LocalShuffled
 // (e.g. LocalUnordered), there are no mutexes used in the implementation.
 type shuffledLocal struct {
-	operations chan func(map[string]amboy.Job, map[string]amboy.Job, map[string]amboy.Job, *fixedStorage)
-	capacity   int
-	id         string
-	starter    sync.Once
-	scopes     ScopeManager
-	dispatcher Dispatcher
-	runner     amboy.Runner
+	operations   chan func(map[string]amboy.Job, map[string]amboy.Job, map[string]amboy.Job, *fixedStorage)
+	capacity     int
+	id           string
+	starter      sync.Once
+	scopes       ScopeManager
+	dispatcher   Dispatcher
+	runner       amboy.Runner
+	retryHandler amboy.RetryHandler
 }
 
 // NewShuffledLocal provides a queue implementation that shuffles the
@@ -460,4 +461,18 @@ func (q *shuffledLocal) SetRunner(r amboy.Runner) error {
 // Runner returns the embedded runner.
 func (q *shuffledLocal) Runner() amboy.Runner {
 	return q.runner
+}
+
+func (q *shuffledLocal) RetryHandler() amboy.RetryHandler {
+	return q.retryHandler
+}
+
+func (q *shuffledLocal) SetRetryHandler(rh amboy.RetryHandler) error {
+	if q.Info().Started {
+		return errors.New("cannot change retry handler after it's already started")
+	}
+
+	q.retryHandler = rh
+
+	return rh.SetQueue(q)
 }

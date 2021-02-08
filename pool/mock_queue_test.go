@@ -12,12 +12,13 @@ import (
 )
 
 type QueueTester struct {
-	started     bool
-	pool        amboy.Runner
-	id          string
-	numComplete int
-	toProcess   chan amboy.Job
-	storage     map[string]amboy.Job
+	started      bool
+	pool         amboy.Runner
+	retryHandler amboy.RetryHandler
+	id           string
+	numComplete  int
+	toProcess    chan amboy.Job
+	storage      map[string]amboy.Job
 
 	mutex sync.RWMutex
 }
@@ -115,6 +116,19 @@ func (q *QueueTester) SetRunner(r amboy.Runner) error {
 	}
 	q.pool = r
 	return nil
+}
+func (q *QueueTester) RetryHandler() amboy.RetryHandler {
+	return q.retryHandler
+}
+
+func (q *QueueTester) SetRetryHandler(rh amboy.RetryHandler) error {
+	if q.Info().Started {
+		return errors.New("cannot change retry handler after it's already started")
+	}
+
+	q.retryHandler = rh
+
+	return rh.SetQueue(q)
 }
 
 func (q *QueueTester) Next(ctx context.Context) amboy.Job {

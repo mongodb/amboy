@@ -34,6 +34,12 @@ func executeJob(ctx context.Context, id string, job amboy.Job, q amboy.Queue) {
 	}
 	job.Run(jobCtx)
 	q.Complete(ctx, job)
+	if job.RetryInfo().Retryable && job.RetryInfo().NeedsRetry {
+		if rh := q.RetryHandler(); rh != nil {
+			rh.Put(ctx, job)
+		}
+	}
+
 	ti := job.TimeInfo()
 	r := message.Fields{
 		"job":           job.ID(),

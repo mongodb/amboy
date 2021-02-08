@@ -267,6 +267,21 @@ type Queue interface {
 	// Begins the execution of the job Queue, using the embedded
 	// Runner.
 	Start(context.Context) error
+
+	RetryHandler() RetryHandler
+	SetRetryHandler(RetryHandler) error
+}
+
+type RetryHandlerOptions struct {
+	// MaxRetryAttempts is the maximum number of times that the retry handler is
+	// allowed to attempt to retry a job before it gives up.
+	MaxRetryAttempts int
+	// MaxRetryAttempts is the maximum time that the retry handler is allowed to
+	// attempt to retry a job before it gives up.
+	MaxRetryTime time.Duration
+	// NumWorkers is the maximum number of concurrent jobs that are allowed to
+	// retry.
+	NumWorkers int
 }
 
 // QueueInfo describes runtime information associated with a Queue.
@@ -333,4 +348,9 @@ type AbortableRunner interface {
 	RunningJobs() []string
 	Abort(context.Context, string) error
 	AbortAll(context.Context)
+}
+
+type RetryHandler interface {
+	Runner
+	Put(context.Context, Job) error
 }
