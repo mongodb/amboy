@@ -59,7 +59,7 @@ func (d *dispatcherImpl) Dispatch(ctx context.Context, job amboy.Job) error {
 			"message":  "re-dispatching job that has already been dispatched",
 			"queue_id": d.queue.ID(),
 			"job_id":   job.ID(),
-			"service":  "amboy.dispatcher",
+			"service":  "amboy.queue.dispatcher",
 		})
 		delete(d.cache, job.ID())
 	}
@@ -104,7 +104,7 @@ func (d *dispatcherImpl) Dispatch(ctx context.Context, job amboy.Job) error {
 						"message":   "failed to lock job for lock ping",
 						"queue_id":  d.queue.ID(),
 						"job_id":    job.ID(),
-						"service":   "amboy.dispatcher",
+						"service":   "amboy.queue.dispatcher",
 						"ping_iter": iters,
 						"stat":      job.Status(),
 					}))
@@ -117,7 +117,7 @@ func (d *dispatcherImpl) Dispatch(ctx context.Context, job amboy.Job) error {
 						"message":   "failed to save job for lock ping",
 						"queue_id":  d.queue.ID(),
 						"job_id":    job.ID(),
-						"service":   "amboy.dispatcher",
+						"service":   "amboy.queue.dispatcher",
 						"ping_iter": iters,
 						"stat":      job.Status(),
 					}))
@@ -128,7 +128,7 @@ func (d *dispatcherImpl) Dispatch(ctx context.Context, job amboy.Job) error {
 				grip.Debug(message.Fields{
 					"queue_id":  d.queue.ID(),
 					"job_id":    job.ID(),
-					"service":   "amboy.dispatcher",
+					"service":   "amboy.queue.dispatcher",
 					"ping_iter": iters,
 					"stat":      job.Status(),
 				})
