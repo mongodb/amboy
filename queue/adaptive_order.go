@@ -42,6 +42,7 @@ func NewAdaptiveOrderedLocalQueue(workers, capacity int) amboy.Queue {
 	q.dispatcher = NewDispatcher(q)
 	q.capacity = capacity
 	q.runner = r
+	q.SetRetryHandler(newRetryHandler(q, amboy.RetryHandlerOptions{}))
 	q.id = fmt.Sprintf("queue.local.ordered.adaptive.%s", uuid.New().String())
 	return q
 }

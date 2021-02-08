@@ -482,6 +482,8 @@ func (d *mongoDriver) getAtomicQuery(jobName string, modCount int) bson.M {
 }
 
 func isMongoDupKey(err error) bool {
+	// TODO: handle duplicate write errors due to scopes separately from write
+	// errors due to job ID clashes.
 	we, ok := errors.Cause(err).(mongo.WriteException)
 	if !ok {
 		return false

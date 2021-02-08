@@ -81,6 +81,10 @@ func (q *QueueTester) Info() amboy.QueueInfo {
 	q.mutex.RLock()
 	defer q.mutex.RUnlock()
 
+	return q.info()
+}
+
+func (q *QueueTester) info() amboy.QueueInfo {
 	return amboy.QueueInfo{
 		Started:     q.started,
 		LockTimeout: amboy.LockTimeout,
@@ -118,11 +122,15 @@ func (q *QueueTester) SetRunner(r amboy.Runner) error {
 	return nil
 }
 func (q *QueueTester) RetryHandler() amboy.RetryHandler {
+	q.mutex.RLock()
+	defer q.mutex.RUnlock()
 	return q.retryHandler
 }
 
 func (q *QueueTester) SetRetryHandler(rh amboy.RetryHandler) error {
-	if q.Info().Started {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+	if q.info().Started {
 		return errors.New("cannot change retry handler after it's already started")
 	}
 

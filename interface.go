@@ -26,6 +26,7 @@ type Job interface {
 	// Provides a unique identifier for a job. Queues may error if
 	// two jobs have different IDs.
 	ID() string
+	SetID(string)
 
 	// The primary execution method for the job. Should toggle the
 	// completed state for the job.

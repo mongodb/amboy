@@ -61,6 +61,10 @@ func (j *JobTest) ID() string {
 	return j.Name
 }
 
+func (j *JobTest) SetID(id string) {
+	j.Name = id
+}
+
 func (j *JobTest) Run(_ context.Context) {
 	j.Stat.Completed = true
 }

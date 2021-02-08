@@ -96,8 +96,7 @@ func (b *Base) HasErrors() bool {
 	return len(b.status.Errors) > 0
 }
 
-// SetID makes it possible to change the ID of an amboy.Job. It is not
-// part of the amboy.Job interface.
+// SetID makes it possible to change the ID of an amboy.Job.
 func (b *Base) SetID(n string) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()

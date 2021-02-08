@@ -2,10 +2,12 @@ package queue
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/mongodb/amboy"
+	"github.com/mongodb/grip"
 	"github.com/pkg/errors"
 )
 
@@ -106,7 +108,10 @@ func (rh *retryHandler) waitForJob(ctx context.Context) error {
 			if j == nil {
 				continue
 			}
-			rh.handleJob(ctx, j)
+			if err := rh.handleJob(ctx, j); err != nil && ctx.Err() == nil {
+				// If the worker fails to re-enqueue the job, do not bother
+				// trying to re-enqueue the job.
+			}
 		}
 	}
 }
@@ -122,21 +127,55 @@ func (rh *retryHandler) nextJob() amboy.Job {
 	return nil
 }
 
-// kim: TODO: spin off retry workers from retry handler since it could be quite
-// complicated.
 func (rh *retryHandler) handleJob(ctx context.Context, j amboy.Job) error {
 	startAt := time.Now()
+	catcher := grip.NewBasicCatcher()
 	for i := 0; i < rh.opts.MaxRetryAttempts; i++ {
 		if time.Since(startAt) > rh.opts.MaxRetryTime {
 			return errors.Errorf("giving up after %d attempts, %f seconds due to maximum retry time", i, rh.opts.MaxRetryTime.Seconds())
 		}
-		if err := rh.queue.Put(ctx, j); err != nil {
-			continue
-		}
-		return nil
+
+		catcher.Wrapf(rh.tryEnqueueRetryJob(ctx, j), "enqueue retry job attempt %d", i)
 	}
-	return errors.Errorf("exhausted all %d retry attempts", rh.opts.MaxRetryAttempts)
+
+	if catcher.HasErrors() {
+		return errors.Wrapf(catcher.Resolve(), "exhausted all %d attempts to enqueue retry job without success", rh.opts.MaxRetryAttempts)
+	}
+
+	return errors.Errorf("exhausted all %d attempts to enqueue retry job without success", rh.opts.MaxRetryAttempts)
 }
 
-type retryWorker struct {
+func (rh *retryHandler) tryEnqueueRetryJob(ctx context.Context, j amboy.Job) error {
+	// Load the most up-to-date copy in case the cached in-memory job is
+	// outdated.
+	newJob, ok := rh.queue.Get(ctx, j.ID())
+	if !ok {
+		return errors.New("could not find job")
+	}
+
+	if !newJob.RetryInfo().Retryable || !newJob.RetryInfo().NeedsRetry {
+		return nil
+	}
+
+	info := newJob.RetryInfo()
+	newJob.SetID(makeRetryJobID(newJob.ID(), info.CurrentTrial+1))
+	info.CurrentTrial++
+	newJob.UpdateRetryInfo(info.Options())
+
+	// TODO: handle safe transfer of scopes to new job if they're applied on
+	// enqueue.
+	err := rh.queue.Put(ctx, newJob)
+	if amboy.IsDuplicateJobError(err) {
+		// The job is already in the queue, do nothing.
+		return nil
+	} else if err != nil {
+		return errors.Wrap(err, "enqueueing retry job")
+	}
+
+	return nil
+}
+
+// makeRetryJobID creates the job ID for the retry job.
+func makeRetryJobID(id string, attempt int) string {
+	return fmt.Sprintf("%s.attempt-%d", id, attempt)
 }

@@ -46,6 +46,7 @@ func NewLocalPriorityQueue(workers, capacity int) amboy.Queue {
 	}
 	q.dispatcher = NewDispatcher(q)
 	q.runner = pool.NewLocalWorkers(workers, q)
+	q.SetRetryHandler(newRetryHandler(q, amboy.RetryHandlerOptions{}))
 	return q
 }
 

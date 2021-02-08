@@ -109,7 +109,10 @@ func (q *remoteBase) jobServer(ctx context.Context) {
 func (q *remoteBase) Info() amboy.QueueInfo {
 	q.mutex.RLock()
 	defer q.mutex.RUnlock()
+	return q.info()
+}
 
+func (q *remoteBase) info() amboy.QueueInfo {
 	lockTimeout := amboy.LockTimeout
 	if q.driver != nil {
 		lockTimeout = q.driver.LockTimeout()
@@ -272,7 +275,7 @@ func (q *remoteBase) RetryHandler() amboy.RetryHandler {
 func (q *remoteBase) SetRetryHandler(rh amboy.RetryHandler) error {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
-	if q.Info().Started {
+	if q.info().Started {
 		return errors.New("cannot change retry handler after it's already started")
 	}
 

@@ -48,6 +48,7 @@ func MakeDuplicateJobError(err error) error {
 
 // IsDuplicateJobError tests an error object to see if it is a
 // duplicate job error.
+// TODO: handle duplicate scope errors properly.
 func IsDuplicateJobError(err error) bool {
 	if err == nil {
 		return false

@@ -272,13 +272,6 @@ func (g *remoteMongoQueueGroup) getExistingCollections(ctx context.Context, clie
 // that the caller must add a job to the queue within the TTL, or else it may have attempted to add
 // a job to a closed queue.
 func (g *remoteMongoQueueGroup) Get(ctx context.Context, id string) (amboy.Queue, error) {
-	g.mu.RLock()
-	if queue, ok := g.queues[id]; ok {
-		g.ttlMap[id] = time.Now()
-		g.mu.RUnlock()
-		return queue, nil
-	}
-	g.mu.RUnlock()
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	// Check again in case the map was modified after we released the read lock.

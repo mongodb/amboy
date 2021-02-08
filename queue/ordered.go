@@ -83,6 +83,7 @@ func NewLocalOrdered(workers int) amboy.Queue {
 	q.id = fmt.Sprintf("queue.local.ordered.graph.%s", uuid.New().String())
 	r := pool.NewLocalWorkers(workers, q)
 	q.runner = r
+	q.SetRetryHandler(newRetryHandler(q, amboy.RetryHandlerOptions{}))
 	q.dispatcher = NewDispatcher(q)
 	return q
 }
@@ -164,11 +165,15 @@ func (q *depGraphOrderedLocal) SetRunner(r amboy.Runner) error {
 }
 
 func (q *depGraphOrderedLocal) RetryHandler() amboy.RetryHandler {
+	q.mutex.RLock()
+	defer q.mutex.RUnlock()
 	return q.retryHandler
 }
 
 func (q *depGraphOrderedLocal) SetRetryHandler(rh amboy.RetryHandler) error {
-	if q.Info().Started {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+	if q.info().Started {
 		return errors.New("cannot change retry handler after it's already started")
 	}
 
@@ -180,7 +185,10 @@ func (q *depGraphOrderedLocal) SetRetryHandler(rh amboy.RetryHandler) error {
 func (q *depGraphOrderedLocal) Info() amboy.QueueInfo {
 	q.mutex.RLock()
 	defer q.mutex.RUnlock()
+	return q.info()
+}
 
+func (q *depGraphOrderedLocal) info() amboy.QueueInfo {
 	return amboy.QueueInfo{
 		Started:     q.started,
 		LockTimeout: amboy.LockTimeout,
