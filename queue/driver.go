@@ -18,6 +18,7 @@ type remoteQueueDriver interface {
 	Get(context.Context, string) (amboy.Job, error)
 	Put(context.Context, amboy.Job) error
 	Save(context.Context, amboy.Job) error
+	Swap(ctx context.Context, old amboy.Job, replacement amboy.Job) error
 
 	Jobs(context.Context) <-chan amboy.Job
 	Next(context.Context) amboy.Job

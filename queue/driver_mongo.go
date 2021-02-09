@@ -511,6 +511,58 @@ func (d *mongoDriver) Save(ctx context.Context, j amboy.Job) error {
 	return errors.WithStack(d.doUpdate(ctx, job))
 }
 
+// kim: TODO: decide the extent to which this should modify the in-memory job
+// state. Maybe the retry handler should do all the in-memory modifications and
+// the driver should _only_ do the atomic swap using retry modTS/count.
+// kim: maybe rename this. It's not really
+// swapping, more like marking the old job as unretryable and ...
+func (d *mongoDriver) Swap(ctx context.Context, old amboy.Job, replacement amboy.Job) error {
+	// kim: TODO: do this outside of this function, so that you can make
+	// arbitrary changes.
+	// kim: TODO: will have to pass the driver into the retry handler, or add a
+	// unexported interface to the queue package that allows the retry handler
+	// to atomically swap scopes (e.g. transactionalQueue).
+	// oldScopes := old.Scopes()
+	// replacedScopes := replacement.Scopes()
+	// replacement.SetScopes(oldScopes)
+	// old.SetScopes(nil)
+
+	sess, err := d.client.StartSession()
+	if err != nil {
+		return errors.Wrap(err, "starting transaction session")
+	}
+	defer sess.EndSession(ctx)
+
+	// kim: TODO: revendor the mongo driver so it has WithTransaction.
+	_, err = sess.WithTransaction(ctx, func(sessCtx mongo.SessionContext) (interface{}, error) {
+		// kim: NOTE: for a long-running job that has been lock pinged, we need
+		// to make sure that the modTS/modcount is okay to use. Save() should
+		// still succeed as long as:
+		// * The dispatcher has the same in-memory copy of the job in the retry
+		// handler is the same as the dispatcher's copy.
+		// * The dispatcher never runs concurrently with the retry handler
+		// (which would modify modts/modcount).
+		// * The job is complete when this is called.
+		// We should verify these statements are true.
+		if err := d.Save(ctx, old); err != nil {
+			return nil, errors.Wrap(err, "saving old job")
+		}
+
+		if err := d.Put(ctx, replacement); err != nil {
+			return nil, errors.Wrap(err, "adding new job")
+		}
+
+		return nil, nil
+	})
+	if err != nil {
+		// old.SetScopes(oldScopes)
+		// replacement.SetScopes(replacedScopes)
+		return errors.Wrap(err, "swapping scopes")
+	}
+
+	return nil
+}
+
 func (d *mongoDriver) Complete(ctx context.Context, j amboy.Job) error {
 	job, err := d.prepareInterchange(j)
 	if err != nil {
