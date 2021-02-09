@@ -25,7 +25,7 @@ func newRemoteUnordered(size int) remoteQueue {
 
 	q.dispatcher = NewDispatcher(q)
 	grip.Error(q.SetRunner(pool.NewLocalWorkers(size, q)))
-	// kim: TODO: need a way to propagate RetryHandlerOptions
+	// TODO (EVG-13540): need a way to propagate RetryHandlerOptions
 	rh, err := newRetryHandler(q, amboy.RetryHandlerOptions{})
 	grip.Error(errors.Wrap(err, "could not initialize retry handler"))
 	if rh != nil {

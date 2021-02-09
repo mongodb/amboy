@@ -119,9 +119,6 @@ func (rh *retryHandler) waitForJob(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		default:
-			// kim:  TODO: have nextJob be a channel to make it easier to detect
-			// when there is a pending job rather than have a no-op loop most of
-			// the time.
 			var j amboy.Job
 			defer func() {
 				if err := recovery.HandlePanicWithError(recover(), nil, "handling job retry"); err != nil {
@@ -130,6 +127,8 @@ func (rh *retryHandler) waitForJob(ctx context.Context) error {
 					}
 				}
 			}()
+			// TODO (EVG-13540): make this use a channel instead checking in a
+			// no-op loop.
 			j = rh.nextJob()
 			if j == nil {
 				continue
@@ -141,8 +140,8 @@ func (rh *retryHandler) waitForJob(ctx context.Context) error {
 					Retryable:  utility.FalsePtr(),
 					NeedsRetry: utility.FalsePtr(),
 				})
-				// kim: TODO: this has to retry at least a few times, like the
-				// infinite loop in queue.Complete()
+				// TODO (EVG-13540): this has to retry this op until success,
+				// like the theoretical infinite loop in queue.Complete().
 				if err := rh.queue.Save(ctx, j); err != nil {
 					grip.Critical(message.WrapError(err, message.Fields{}))
 				}
@@ -177,7 +176,7 @@ func (rh *retryHandler) handleJob(ctx context.Context, j amboy.Job) error {
 			return nil
 		case <-timer.C:
 			catcher.Wrapf(rh.tryEnqueueRetryJob(ctx, j), "enqueue retry job attempt %d", i)
-			// kim: TODO: maybe add jitter here?
+			// TODO (EVG-13540): consider adding jitter.
 			timer.Reset(rh.opts.RetryBackoff)
 		}
 	}
@@ -192,6 +191,7 @@ func (rh *retryHandler) handleJob(ctx context.Context, j amboy.Job) error {
 func (rh *retryHandler) tryEnqueueRetryJob(ctx context.Context, j amboy.Job) error {
 	// Load the most up-to-date copy in case the cached in-memory job is
 	// outdated.
+	// TODO (EVG-13540): determine if this will be an expensive query or not.
 	newJob, ok := rh.queue.Get(ctx, j.ID())
 	if !ok {
 		return errors.New("could not find job")
@@ -201,18 +201,18 @@ func (rh *retryHandler) tryEnqueueRetryJob(ctx context.Context, j amboy.Job) err
 		return nil
 	}
 
-	// kim: TODO: attempt to take the job retry lock (i.e. j.RetryLock(),
-	// similar to Lock()) so that this thread takes ownership of it. To do so,
-	// we'll have to either use the queue interface (e.g. rh.queue.Save() or
-	// pass in the driver).
+	// TODO (EVG-13584): add job retry locking mechanism (similar to
+	// (amboy.Job).Lock()) to ensure that this thread on this host has sole
+	// ownership of the job.
 
 	info := newJob.RetryInfo()
 	newJob.SetID(makeRetryJobID(newJob.ID(), info.CurrentTrial+1))
 	info.CurrentTrial++
 	newJob.UpdateRetryInfo(info.Options())
 
-	// TODO: handle safe transfer of scopes to new job if they're applied on
-	// enqueue.
+	// TODO (EVG-13540): handle safe transfer of scopes to new job if they're
+	// applied on enqueue. _id clashes should not retry, but should scope
+	// clashes still retry enqueueing?
 	err := rh.queue.Put(ctx, newJob)
 	if amboy.IsDuplicateJobError(err) {
 		// The job is already in the queue, do nothing.
