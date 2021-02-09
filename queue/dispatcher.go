@@ -16,8 +16,15 @@ import (
 // implementations to handle job locking to prevent multiple workers
 // from running the same job.
 type Dispatcher interface {
+	// Dispatch allows a single worker to take exclusive ownership of the job
+	// when preparing to run it and during its execution. If this succeeds,
+	// implementations should not allow any other worker to take ownership of
+	// the job unless the job is stranded in progress.
 	Dispatch(context.Context, amboy.Job) error
+	// Release releases the worker's exclusive ownership of the job.
 	Release(context.Context, amboy.Job)
+	// Complete relinquishes the worker's exclusive ownership of the job. It may
+	// optionally update metadata indicating that the job is finished.
 	Complete(context.Context, amboy.Job)
 }
 
@@ -85,6 +92,9 @@ func (d *dispatcherImpl) Dispatch(ctx context.Context, job amboy.Job) error {
 	pingerCtx, info.stopPing = context.WithCancel(ctx)
 	go func() {
 		defer recovery.LogStackTraceAndContinue("background lock ping", job.ID())
+		pingJobLock(ctx, pingerCtx, d.queue, job, info.jobCancel)
+	}()
+	go func() {
 		iters := 0
 		ticker := time.NewTicker(d.queue.Info().LockTimeout / 4)
 		defer ticker.Stop()
@@ -147,4 +157,34 @@ func (d *dispatcherImpl) Complete(ctx context.Context, job amboy.Job) {
 
 	info.jobCancel()
 	info.stopPing()
+}
+
+func pingJobLock(ctx context.Context, pingCtx context.Context, q amboy.Queue, j amboy.Job, cancelJob context.CancelFunc) {
+	iters := 0
+	ticker := time.NewTicker(q.Info().LockTimeout / 4)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-pingCtx.Done():
+			return
+		case <-ticker.C:
+			if err := j.Lock(q.ID(), q.Info().LockTimeout); err != nil {
+				j.AddError(errors.Wrapf(err, "problem pinging job lock on cycle #%d", iters))
+				cancelJob()
+				return
+			}
+			if err := q.Save(ctx, j); err != nil {
+				j.AddError(errors.Wrapf(err, "problem saving job for lock ping on cycle #%d", iters))
+				cancelJob()
+				return
+			}
+			grip.Debug(message.Fields{
+				"queue_id":  q.ID(),
+				"job_id":    j.ID(),
+				"ping_iter": iters,
+				"stat":      j.Status(),
+			})
+		}
+		iters++
+	}
 }
