@@ -134,17 +134,20 @@ func (rh *retryHandler) waitForJob(ctx context.Context) error {
 				continue
 			}
 			if err := rh.handleJob(ctx, j); err != nil && ctx.Err() == nil {
-				// If the worker fails to re-enqueue the job, do not bother
-				// trying to re-enqueue the job.
-				j.UpdateRetryInfo(amboy.JobRetryOptions{
-					Retryable:  utility.FalsePtr(),
-					NeedsRetry: utility.FalsePtr(),
-				})
-				// TODO (EVG-13540): this has to retry this op until success,
-				// like the theoretical infinite loop in queue.Complete().
-				if err := rh.queue.Save(ctx, j); err != nil {
-					grip.Critical(message.WrapError(err, message.Fields{}))
-				}
+			}
+
+			// Once the job has been processed (either success or failure),
+			// mark it as processed so it does not attempt to retry again.
+			j.UpdateRetryInfo(amboy.JobRetryOptions{
+				Retryable:  utility.FalsePtr(),
+				NeedsRetry: utility.FalsePtr(),
+			})
+			// TODO (EVG-13540): this has to retry this op until success,
+			// like the theoretical infinite loop in queue.Complete(). It should
+			// also be done in a transaction-like way when the new job is
+			// inserted, so that the swap occurs safely.
+			if err := rh.queue.Save(ctx, j); err != nil {
+				grip.Critical(message.WrapError(err, message.Fields{}))
 			}
 		}
 	}
@@ -208,6 +211,8 @@ func (rh *retryHandler) tryEnqueueRetryJob(ctx context.Context, j amboy.Job) err
 	info := newJob.RetryInfo()
 	newJob.SetID(makeRetryJobID(newJob.ID(), info.CurrentTrial+1))
 	info.CurrentTrial++
+	info.NeedsRetry = false
+	info.Retryable = false
 	newJob.UpdateRetryInfo(info.Options())
 
 	// TODO (EVG-13540): handle safe transfer of scopes to new job if they're
