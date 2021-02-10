@@ -62,6 +62,12 @@ func (d *dispatcherImpl) Dispatch(ctx context.Context, job amboy.Job) error {
 	defer d.mutex.Unlock()
 
 	if _, ok := d.cache[job.ID()]; ok {
+		grip.Debug(message.Fields{
+			"message":  "re-dispatching job that has already been dispatched",
+			"queue_id": d.queue.ID(),
+			"job_id":   job.ID(),
+			"service":  "amboy.dispatcher",
+		})
 		delete(d.cache, job.ID())
 	}
 
@@ -141,10 +147,26 @@ func pingJobLock(ctx context.Context, pingCtx context.Context, q amboy.Queue, j 
 		case <-ticker.C:
 			if err := j.Lock(q.ID(), q.Info().LockTimeout); err != nil {
 				j.AddError(errors.Wrapf(err, "problem pinging job lock on cycle #%d", iters))
+				grip.Debug(message.WrapError(err, message.Fields{
+					"message":   "failed to lock job for lock ping",
+					"queue_id":  q.ID(),
+					"job_id":    j.ID(),
+					"service":   "amboy.dispatcher",
+					"ping_iter": iters,
+					"stat":      j.Status(),
+				}))
 				cancelJob()
 				return
 			}
 			if err := q.Save(ctx, j); err != nil {
+				grip.DebugWhen(ctx.Err() == nil, message.WrapError(err, message.Fields{
+					"message":   "failed to save job for lock ping",
+					"queue_id":  q.ID(),
+					"job_id":    j.ID(),
+					"service":   "amboy.dispatcher",
+					"ping_iter": iters,
+					"stat":      j.Status(),
+				}))
 				j.AddError(errors.Wrapf(err, "problem saving job for lock ping on cycle #%d", iters))
 				cancelJob()
 				return
@@ -152,6 +174,7 @@ func pingJobLock(ctx context.Context, pingCtx context.Context, q amboy.Queue, j 
 			grip.Debug(message.Fields{
 				"queue_id":  q.ID(),
 				"job_id":    j.ID(),
+				"service":   "amboy.dispatcher",
 				"ping_iter": iters,
 				"stat":      j.Status(),
 			})
