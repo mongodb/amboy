@@ -14,7 +14,7 @@ import (
 )
 
 type remoteQueue interface {
-	amboy.Queue
+	amboy.RetryableQueue
 	SetDriver(remoteQueueDriver) error
 	Driver() remoteQueueDriver
 }
@@ -121,6 +121,10 @@ func (q *remoteBase) Info() amboy.QueueInfo {
 
 func (q *remoteBase) Save(ctx context.Context, j amboy.Job) error {
 	return q.driver.Save(ctx, j)
+}
+
+func (q *remoteBase) SaveAndPut(ctx context.Context, toSave, toPut amboy.Job) error {
+	return q.driver.SaveAndPut(ctx, toSave, toPut)
 }
 
 // Complete takes a context and, asynchronously, marks the job

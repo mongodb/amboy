@@ -516,7 +516,7 @@ func (d *mongoDriver) Save(ctx context.Context, j amboy.Job) error {
 // the driver should _only_ do the atomic swap using retry modTS/count.
 // kim: maybe rename this. It's not really
 // swapping, more like marking the old job as unretryable and ...
-func (d *mongoDriver) Swap(ctx context.Context, old amboy.Job, replacement amboy.Job) error {
+func (d *mongoDriver) SaveAndPut(ctx context.Context, toSave amboy.Job, toPut amboy.Job) error {
 	// kim: TODO: do this outside of this function, so that you can make
 	// arbitrary changes.
 	// kim: TODO: will have to pass the driver into the retry handler, or add a
@@ -544,11 +544,11 @@ func (d *mongoDriver) Swap(ctx context.Context, old amboy.Job, replacement amboy
 		// (which would modify modts/modcount).
 		// * The job is complete when this is called.
 		// We should verify these statements are true.
-		if err := d.Save(ctx, old); err != nil {
+		if err := d.Save(ctx, toSave); err != nil {
 			return nil, errors.Wrap(err, "saving old job")
 		}
 
-		if err := d.Put(ctx, replacement); err != nil {
+		if err := d.Put(ctx, toPut); err != nil {
 			return nil, errors.Wrap(err, "adding new job")
 		}
 
