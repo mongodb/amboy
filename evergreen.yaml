@@ -55,44 +55,30 @@ functions:
         AWS_SECRET: ${aws_secret}
         GOPATH: ${workdir}/gopath
   set-up-mongodb:
-    # TODO replace this configuration with something more robust.
-    # Current version is borrowed directly from the Evergreen self tests.
-    - command: shell.exec
+    - command: subprocess.exec
       type: setup
       params:
-        script: |
-          set -o errexit
-          set -o verbose
-
-          rm -rf mongodb
-          mkdir mongodb
-          cd mongodb
-          curl ${mongodb_url} -o mongodb${archiveExt|.tgz}
-
-          ${decompress} mongodb${archiveExt|.tgz}
-          chmod +x ./mongodb-*/bin/*
-          mv ./mongodb-*/bin/* .
-          rm -rf db_files
-          rm -rf db_logs
-          mkdir db_files
-          mkdir db_logs
-    - command: shell.exec
+        command: make get-mongodb
+        env:
+          MONGODB_URL: ${mongodb_url}
+          DECOMPRESS: ${decompress}
+        working_dir: gopath/src/github.com/mongodb/amboy
+    - command: subprocess.exec
       type: setup
       params:
+        command: make start-mongod
+        working_dir: gopath/src/github.com/mongodb/amboy
         background: true
-        script: |
-          set -o verbose
-          cd mongodb
-          echo "starting mongod..."
-          ./mongod --dbpath ./db_files &
-          echo "waiting for mongod to start up"
-    - command: shell.exec
+    - command: subprocess.exec
       type: setup
       params:
-        script: |
-          cd mongodb
-          ./mongo${extension|} --nodb --eval 'assert.soon(function(x){try{var d = new Mongo("localhost:27017"); return true}catch(e){return false}}, "timed out connecting")'
-          echo "mongod is up."
+        command: make check-mongod
+        working_dir: gopath/src/github.com/mongodb/amboy
+    - command: subprocess.exec
+      type: setup
+      params:
+        command: make init-rs
+        working_dir: gopath/src/github.com/mongodb/amboy
 
 
 #######################################
