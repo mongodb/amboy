@@ -26,7 +26,6 @@ type Job interface {
 	// Provides a unique identifier for a job. Queues may error if
 	// two jobs have different IDs.
 	ID() string
-	SetID(string)
 
 	// The primary execution method for the job. Should toggle the
 	// completed state for the job.
@@ -95,6 +94,10 @@ type Job interface {
 // retrying (see RetryableQueue).
 type RetryableJob interface {
 	Job
+
+	// SetID allows the job ID to be modified.
+	SetID(string)
+
 	// RetryInfo reports information about the job's retry behavior.
 	RetryInfo() JobRetryInfo
 	// UpdateRetryInfo method modifies all set fields from the given options.
