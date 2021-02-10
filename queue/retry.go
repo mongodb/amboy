@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -209,7 +210,11 @@ func (rh *retryHandler) tryEnqueueRetryJob(ctx context.Context, j amboy.Job) err
 	// ownership of the job.
 
 	info := newJob.RetryInfo()
-	newJob.SetID(makeRetryJobID(newJob.ID(), info.CurrentTrial+1))
+	id := makeRetryJobID(newJob.ID(), info.CurrentTrial)
+	if id == "" {
+		return nil
+	}
+	newJob.SetID(id)
 	info.CurrentTrial++
 	info.NeedsRetry = false
 	info.Retryable = false
@@ -230,6 +235,14 @@ func (rh *retryHandler) tryEnqueueRetryJob(ctx context.Context, j amboy.Job) err
 }
 
 // makeRetryJobID creates the job ID for the retry job.
-func makeRetryJobID(id string, attempt int) string {
-	return fmt.Sprintf("%s.attempt-%d", id, attempt)
+func makeRetryJobID(id string, currAttempt int) string {
+	currAttemptSuffix := fmt.Sprintf(".attempt-%d", currAttempt)
+	if currAttempt != 0 && !strings.HasSuffix(id, currAttemptSuffix) {
+		// If the job has already been retried once but doesn't have the
+		// expected suffix applied by the retry handler, the job ID is in an
+		// invalid format.
+		return ""
+	}
+
+	return fmt.Sprintf("%s.attempt-%d", strings.TrimSuffix(id, currAttemptSuffix), currAttempt+1)
 }
