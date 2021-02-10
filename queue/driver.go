@@ -15,9 +15,17 @@ type remoteQueueDriver interface {
 	Open(context.Context) error
 	Close()
 
+	// Get finds a job by job ID.
 	Get(context.Context, string) (amboy.Job, error)
+	// Put inserts a new job in the backing storage.
 	Put(context.Context, amboy.Job) error
+	// Save updates an existing job in the backing storage. Implementations may
+	// not allow calls to Save to run concurrently.
 	Save(context.Context, amboy.Job) error
+	// SaveAndPut performs updates an existing job toSave and inserts a new job
+	// toPut atomically. Implementations may not allow calls to SaveAndPut to
+	// run concurrently.
+	SaveAndPut(ctx context.Context, toSave amboy.Job, toPut amboy.Job) error
 
 	Jobs(context.Context) <-chan amboy.Job
 	Next(context.Context) amboy.Job

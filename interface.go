@@ -53,11 +53,6 @@ type Job interface {
 	TimeInfo() JobTimeInfo
 	UpdateTimeInfo(JobTimeInfo)
 
-	// RetryInfo reports information about the job's retry behavior.
-	RetryInfo() JobRetryInfo
-	// UpdateRetryInfo method modifies all set fields from the given options.
-	UpdateRetryInfo(JobRetryOptions)
-
 	// Provides access to the job's priority value, which some
 	// queues may use to order job dispatching. Most Jobs
 	// implement these values by composing the
@@ -68,9 +63,6 @@ type Job interface {
 	// AddError allows another actor to annotate the job with an
 	// error.
 	AddError(error)
-	// AddRetryableError annotates the job with an error and marks the job as
-	// needing to retry.
-	AddRetryableError(error)
 	// Error returns an error object if the task was an
 	// error. Typically if the job has not run, this is nil.
 	Error() error
@@ -96,6 +88,30 @@ type Job interface {
 	// configured so that exclusion occurs during job dispatch or enqueue.
 	ShouldApplyScopesOnEnqueue() bool
 	SetShouldApplyScopesOnEnqueue(bool)
+}
+
+// RetryableJob is the same as a Job but supports additional operations for
+// retrying (see RetryableQueue).
+type RetryableJob interface {
+	Job
+	// RetryInfo reports information about the job's retry behavior.
+	RetryInfo() JobRetryInfo
+	// UpdateRetryInfo method modifies all set fields from the given options.
+	UpdateRetryInfo(JobRetryOptions)
+
+	// AddRetryableError annotates the job with an error and marks the job as
+	// needing to retry.
+	AddRetryableError(error)
+}
+
+// WithRetryableJob is a convenience function to perform an operation if the Job
+// is a RetryableJob; otherwise, it is a no-op.
+func WithRetryableJob(j Job, op func(RetryableJob)) {
+	rj, ok := j.(RetryableJob)
+	if !ok {
+		return
+	}
+	op(rj)
 }
 
 // JobType contains information about the type of a job, which queues
@@ -142,7 +158,7 @@ type JobTimeInfo struct {
 }
 
 // JobRetryInfo stores configuration and information for a job that can retry.
-// Support for retrying jobs is optional for Queue implementations.
+// Support for retrying jobs is only supported by RetryableQueues.
 type JobRetryInfo struct {
 	// Retryable indicates whether the job should use Amboy's built-in retry
 	// mechanism.
@@ -240,7 +256,7 @@ type Queue interface {
 	// Saves the state of a current job to the underlying storage,
 	// generally in support of locking and incremental
 	// persistence. Should error if the job does not exist (use
-	// put,) or if the queue does not have ownership of the job.
+	// Put) or if the queue does not have ownership of the job.
 	Save(context.Context, Job) error
 
 	// Returns a channel that produces completed Job objects.
@@ -267,6 +283,26 @@ type Queue interface {
 	// Begins the execution of the job Queue, using the embedded
 	// Runner.
 	Start(context.Context) error
+}
+
+// RetryableQueue is the same as a Queue but supports additional operations for
+// retryable jobs.
+type RetryableQueue interface {
+	Queue
+	// SaveAndPut saves an existing job toSave in the queue (see Save) and
+	// inserts a new job toPut in the queue (see Put). Implementations must
+	// make this operation atomic.
+	SaveAndPut(ctx context.Context, toSave, toPut Job) error
+}
+
+// WithRetryableQueue is a convenience function to perform an operation if the Job
+// is a RetryableJob; otherwise, it is a no-op.
+func WithRetryableQueue(q Queue, op func(RetryableQueue)) {
+	rq, ok := q.(RetryableQueue)
+	if !ok {
+		return
+	}
+	op(rq)
 }
 
 // QueueInfo describes runtime information associated with a Queue.
