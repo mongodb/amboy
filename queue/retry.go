@@ -15,10 +15,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-// kim: NOTE: maybe it's good enough to just use a local amboy.Runner from
-// pool/local.go, then attach specific work as a job to execute.
-
 type retryHandler struct {
+	// kim: TODO: should add a RetryableQueue interface with an extra PutRetry()
+	// method. That way, it's optional to implement the retryability features.
 	queue         amboy.Queue
 	opts          amboy.RetryHandlerOptions
 	pending       map[string]amboy.Job
@@ -135,6 +134,11 @@ func (rh *retryHandler) waitForJob(ctx context.Context) error {
 				continue
 			}
 			if err := rh.handleJob(ctx, j); err != nil && ctx.Err() == nil {
+				grip.Error(message.WrapError(err, message.Fields{
+					"message":  "could not retry job",
+					"queue_id": rh.queue.ID(),
+					"job_id":   j.ID(),
+				}))
 			}
 
 			// Once the job has been processed (either success or failure),
