@@ -42,11 +42,6 @@ func NewAdaptiveOrderedLocalQueue(workers, capacity int) amboy.Queue {
 	q.dispatcher = NewDispatcher(q)
 	q.capacity = capacity
 	q.runner = r
-	rh, err := newRetryHandler(q, amboy.RetryHandlerOptions{})
-	grip.Error(errors.Wrap(err, "could not initialize retry handler"))
-	if rh != nil {
-		grip.Error(q.SetRetryHandler(rh))
-	}
 	q.id = fmt.Sprintf("queue.local.ordered.adaptive.%s", uuid.New().String())
 	return q
 }
@@ -356,18 +351,4 @@ func (q *adaptiveLocalOrdering) SetRunner(r amboy.Runner) error {
 
 	q.runner = r
 	return r.SetQueue(q)
-}
-
-func (q *adaptiveLocalOrdering) RetryHandler() amboy.RetryHandler {
-	return q.retryHandler
-}
-
-func (q *adaptiveLocalOrdering) SetRetryHandler(rh amboy.RetryHandler) error {
-	if q.Info().Started {
-		return errors.New("cannot change retry handler after it's already started")
-	}
-
-	q.retryHandler = rh
-
-	return rh.SetQueue(q)
 }

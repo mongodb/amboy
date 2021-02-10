@@ -121,23 +121,6 @@ func (q *QueueTester) SetRunner(r amboy.Runner) error {
 	q.pool = r
 	return nil
 }
-func (q *QueueTester) RetryHandler() amboy.RetryHandler {
-	q.mutex.RLock()
-	defer q.mutex.RUnlock()
-	return q.retryHandler
-}
-
-func (q *QueueTester) SetRetryHandler(rh amboy.RetryHandler) error {
-	q.mutex.Lock()
-	defer q.mutex.Unlock()
-	if q.info().Started {
-		return errors.New("cannot change retry handler after it's already started")
-	}
-
-	q.retryHandler = rh
-
-	return rh.SetQueue(q)
-}
 
 func (q *QueueTester) Next(ctx context.Context) amboy.Job {
 	select {
