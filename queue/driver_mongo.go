@@ -556,7 +556,20 @@ func (d *mongoDriver) Complete(ctx context.Context, j amboy.Job) error {
 		return errors.WithStack(err)
 	}
 
-	job.Scopes = nil
+	isRetryableJob := amboy.WithRetryableJob(j, func(rj amboy.RetryableJob) {
+		info := rj.RetryInfo()
+		if info.Retryable && info.NeedsRetry && rj.ShouldApplyScopesOnEnqueue() {
+			// If the job is supposed to retry and apply the scopes immediately
+			// to the retry job, we cannot let go of the scopes yet because they
+			// will need to be safely transferred to the retry job.
+			return
+		}
+		job.Scopes = nil
+	})
+
+	if !isRetryableJob {
+		job.Scopes = nil
+	}
 
 	return errors.WithStack(d.doUpdate(ctx, job))
 }

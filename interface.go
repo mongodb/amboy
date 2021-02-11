@@ -108,16 +108,6 @@ type RetryableJob interface {
 	AddRetryableError(error)
 }
 
-// WithRetryableJob is a convenience function to perform an operation if the Job
-// is a RetryableJob; otherwise, it is a no-op.
-func WithRetryableJob(j Job, op func(RetryableJob)) {
-	rj, ok := j.(RetryableJob)
-	if !ok {
-		return
-	}
-	op(rj)
-}
-
 // JobType contains information about the type of a job, which queues
 // can use to serialize objects. All Job implementations must store
 // and produce instances of this type that identify the type and
@@ -305,16 +295,6 @@ type RetryableQueue interface {
 	// inserts a new job toPut in the queue (see Put). Implementations must
 	// make this operation atomic.
 	SaveAndPut(ctx context.Context, toSave, toPut RetryableJob) error
-}
-
-// WithRetryableQueue is a convenience function to perform an operation if the Job
-// is a RetryableJob; otherwise, it is a no-op.
-func WithRetryableQueue(q Queue, op func(RetryableQueue)) {
-	rq, ok := q.(RetryableQueue)
-	if !ok {
-		return
-	}
-	op(rq)
 }
 
 // RetryHandlerOptions configures the behavior of a RetryHandler.
