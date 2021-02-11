@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/mongodb/amboy"
@@ -10,6 +11,10 @@ import (
 	"github.com/mongodb/grip/message"
 	"github.com/mongodb/grip/recovery"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // mockDispatcher provides a mock implementation of a Dispatcher whose behavior
@@ -120,4 +125,170 @@ func (d *mockDispatcher) Complete(ctx context.Context, j amboy.Job) {
 	ti := j.TimeInfo()
 	ti.End = time.Now()
 	j.UpdateTimeInfo(ti)
+}
+
+func TestDispatcherImplementations(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	setLockTimeout := func(lockTimeout time.Duration) func(q remoteQueue) amboy.QueueInfo {
+		return func(q remoteQueue) amboy.QueueInfo {
+			info := q.Info()
+			info.LockTimeout = lockTimeout
+			return info
+		}
+	}
+
+	opts := DefaultMongoDBOptions()
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(opts.URI))
+	require.NoError(t, err)
+
+	for dispatcherName, makeDispatcher := range map[string]func(q amboy.Queue) Dispatcher{
+		"Basic": NewDispatcher,
+		"Mock":  func(q amboy.Queue) Dispatcher { return newMockDispatcher(q) },
+	} {
+		t.Run(dispatcherName, func(t *testing.T) {
+			for testName, testCase := range map[string]func(ctx context.Context, t *testing.T, d Dispatcher, mq *mockRemoteQueue){
+				"DispatchLocksJob": func(ctx context.Context, t *testing.T, d Dispatcher, mq *mockRemoteQueue) {
+					j := newMockJob()
+					require.NoError(t, mq.Put(ctx, j))
+					require.NoError(t, d.Dispatch(ctx, j))
+					defer d.Release(ctx, j)
+
+					status := j.Status()
+					assert.NotZero(t, status.ModificationCount)
+					assert.NotZero(t, status.ModificationTime)
+					assert.True(t, status.InProgress)
+				},
+				"DispatchPingsLockWithinQueueLockTimeoutInterval": func(ctx context.Context, t *testing.T, d Dispatcher, mq *mockRemoteQueue) {
+					lockTimeout := 10 * time.Millisecond
+					mq.queueInfo = setLockTimeout(lockTimeout)
+
+					j := newMockJob()
+					require.NoError(t, mq.Put(ctx, j))
+					require.NoError(t, d.Dispatch(ctx, j))
+					defer d.Release(ctx, j)
+
+					oldStatus := j.Status()
+					assert.NotZero(t, oldStatus.ModificationCount)
+					assert.NotZero(t, oldStatus.ModificationTime)
+					assert.True(t, oldStatus.InProgress)
+
+					time.Sleep(lockTimeout)
+
+					newStatus := j.Status()
+					assert.True(t, oldStatus.ModificationTime.Before(newStatus.ModificationTime))
+					assert.True(t, oldStatus.ModificationCount < newStatus.ModificationCount)
+					assert.True(t, newStatus.InProgress)
+				},
+				"DispatchLockPingerStopsWithContextError": func(ctx context.Context, t *testing.T, d Dispatcher, mq *mockRemoteQueue) {
+					lockTimeout := 10 * time.Millisecond
+					mq.queueInfo = setLockTimeout(lockTimeout)
+
+					j := newMockJob()
+					require.NoError(t, mq.Put(ctx, j))
+					cctx, ccancel := context.WithCancel(context.Background())
+					require.NoError(t, d.Dispatch(cctx, j))
+					defer d.Release(ctx, j)
+					ccancel()
+
+					oldStatus := j.Status()
+					assert.NotZero(t, oldStatus.ModificationCount)
+					assert.NotZero(t, oldStatus.ModificationTime)
+					assert.True(t, oldStatus.InProgress)
+
+					time.Sleep(lockTimeout)
+
+					newStatus := j.Status()
+					assert.Equal(t, oldStatus.ModificationTime, newStatus.ModificationTime)
+					assert.Equal(t, oldStatus.ModificationCount, newStatus.ModificationCount)
+					assert.True(t, newStatus.InProgress)
+				},
+				"ReleaseStopsLockPinger": func(ctx context.Context, t *testing.T, d Dispatcher, mq *mockRemoteQueue) {
+					lockTimeout := 10 * time.Millisecond
+					mq.queueInfo = setLockTimeout(lockTimeout)
+
+					j := newMockJob()
+					require.NoError(t, mq.Put(ctx, j))
+					require.NoError(t, d.Dispatch(ctx, j))
+					d.Release(ctx, j)
+
+					oldStatus := j.Status()
+					assert.NotZero(t, oldStatus.ModificationCount)
+					assert.NotZero(t, oldStatus.ModificationTime)
+					assert.True(t, oldStatus.InProgress)
+
+					time.Sleep(lockTimeout)
+
+					newStatus := j.Status()
+					assert.Equal(t, oldStatus.ModificationTime, newStatus.ModificationTime)
+					assert.Equal(t, oldStatus.ModificationCount, newStatus.ModificationCount)
+					assert.True(t, newStatus.InProgress)
+				},
+				"CompleteStopJobPingAndUpdatesJobInfo": func(ctx context.Context, t *testing.T, d Dispatcher, mq *mockRemoteQueue) {
+					lockTimeout := 10 * time.Millisecond
+					mq.queueInfo = setLockTimeout(lockTimeout)
+
+					j := newMockJob()
+					require.NoError(t, mq.Put(ctx, j))
+					require.NoError(t, d.Dispatch(ctx, j))
+
+					oldStatus := j.Status()
+					assert.NotZero(t, oldStatus.ModificationCount)
+					assert.NotZero(t, oldStatus.ModificationTime)
+					assert.True(t, oldStatus.InProgress)
+
+					d.Complete(ctx, j)
+
+					time.Sleep(lockTimeout)
+
+					newStatus := j.Status()
+					assert.Equal(t, oldStatus.ModificationTime, newStatus.ModificationTime)
+					assert.Equal(t, oldStatus.ModificationCount, newStatus.ModificationCount)
+					assert.True(t, newStatus.InProgress)
+					assert.NotZero(t, j.TimeInfo().End)
+
+				},
+				"CompleteNoopsForUnownedJob": func(ctx context.Context, t *testing.T, d Dispatcher, mq *mockRemoteQueue) {
+					lockTimeout := 10 * time.Millisecond
+					mq.queueInfo = setLockTimeout(lockTimeout)
+
+					j := newMockJob()
+					require.NoError(t, mq.Put(ctx, j))
+					d.Complete(ctx, j)
+
+					assert.Zero(t, j.Status().ModificationCount)
+					assert.Zero(t, j.Status().ModificationTime)
+					assert.False(t, j.Status().InProgress)
+				},
+			} {
+				t.Run(testName, func(t *testing.T) {
+					tctx, tcancel := context.WithTimeout(ctx, 10*time.Second)
+					defer tcancel()
+
+					const size = 10
+					q, err := newRemoteUnordered(size)
+					require.NoError(t, err)
+
+					driver, err := openNewMongoDriver(tctx, newDriverID(), opts, client)
+					require.NoError(t, err)
+
+					require.NoError(t, driver.Open(tctx))
+					defer driver.Close()
+
+					mDriver, ok := driver.(*mongoDriver)
+					require.True(t, ok)
+					require.NoError(t, mDriver.getCollection().Database().Drop(tctx))
+					defer func() {
+						assert.NoError(t, mDriver.getCollection().Database().Drop(tctx))
+					}()
+
+					mq, err := newMockRemoteQueue(q, driver, makeDispatcher, nil)
+					require.NoError(t, err)
+
+					testCase(tctx, t, mq.Driver().Dispatcher(), mq)
+				})
+			}
+		})
+	}
 }
