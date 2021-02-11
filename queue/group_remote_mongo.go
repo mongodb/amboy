@@ -47,6 +47,9 @@ type MongoDBQueueGroupOptions struct {
 	// to each queue, based on the queue ID passed to it.
 	WorkerPoolSize func(string) int
 
+	// RetryHandlerOpts configure how retryable jobs are handled.
+	RetryHandler amboy.RetryHandlerOptions
+
 	// PruneFrequency is how often Prune runs by default.
 	PruneFrequency time.Duration
 
@@ -59,7 +62,7 @@ type MongoDBQueueGroupOptions struct {
 	TTL time.Duration
 }
 
-func (opts *MongoDBQueueGroupOptions) constructor(ctx context.Context, name string) remoteQueue {
+func (opts *MongoDBQueueGroupOptions) constructor(ctx context.Context, name string, rhOpts amboy.RetryHandlerOptions) (remoteQueue, error) {
 	workers := opts.DefaultWorkers
 	if opts.WorkerPoolSize != nil {
 		workers = opts.WorkerPoolSize(name)
@@ -69,18 +72,32 @@ func (opts *MongoDBQueueGroupOptions) constructor(ctx context.Context, name stri
 	}
 
 	var q remoteQueue
+	var err error
 	if opts.Ordered {
-		q = newSimpleRemoteOrdered(workers)
+		if q, err = newSimpleRemoteOrdered(workers); err != nil {
+			return nil, errors.Wrap(err, "initializing ordered queue")
+		}
 	} else {
-		q = newRemoteUnordered(workers)
+		if q, err = newRemoteUnordered(workers); err != nil {
+			return nil, errors.Wrap(err, "initializing unordered queue")
+		}
 	}
 
 	if opts.Abortable {
 		p := pool.NewAbortablePool(workers, q)
-		grip.Debug(q.SetRunner(p))
+		if err := q.SetRunner(p); err != nil {
+			return nil, errors.Wrap(err, "configuring queue with runner")
+		}
+	}
+	rh, err := newBasicRetryHandler(q, rhOpts)
+	if err != nil {
+		return nil, errors.Wrap(err, "initializing retry handler")
+	}
+	if err = q.SetRetryHandler(rh); err != nil {
+		return nil, errors.Wrap(err, "configuring queue with retry handler")
 	}
 
-	return q
+	return q, nil
 }
 
 func (opts MongoDBQueueGroupOptions) validate() error {
@@ -230,7 +247,10 @@ func (g *remoteMongoQueueGroup) Queues(ctx context.Context) []string {
 
 func (g *remoteMongoQueueGroup) startProcessingRemoteQueue(ctx context.Context, coll string) (amboy.Queue, error) {
 	coll = trimJobsSuffix(coll)
-	q := g.opts.constructor(ctx, coll)
+	q, err := g.opts.constructor(ctx, coll, g.opts.RetryHandler)
+	if err != nil {
+		return nil, errors.Wrap(err, "constructing queue")
+	}
 
 	d, err := openNewMongoDriver(ctx, coll, g.dbOpts, g.client)
 	if err != nil {
