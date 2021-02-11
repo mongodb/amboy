@@ -282,6 +282,36 @@ type Queue interface {
 	Close(context.Context)
 }
 
+// QueueInfo describes runtime information associated with a Queue.
+type QueueInfo struct {
+	Started     bool
+	LockTimeout time.Duration
+}
+
+// QueueGroup describes a group of queues. Each queue is indexed by a
+// string. Users can use these queues if there are many different types
+// of work or if the types of work are only knowable at runtime.
+type QueueGroup interface {
+	// Get a queue with the given index.
+	Get(context.Context, string) (Queue, error)
+
+	// Put a queue at the given index.
+	Put(context.Context, string, Queue) error
+
+	// Prune old queues.
+	Prune(context.Context) error
+
+	// Close the queues.
+	Close(context.Context) error
+
+	// Len returns the number of active queues managed in the
+	// group.
+	Len() int
+
+	// Queues returns all currently registered and running queues
+	Queues(context.Context) []string
+}
+
 // RetryableQueue is the same as a Queue but supports additional operations for
 // retryable jobs.
 type RetryableQueue interface {
@@ -298,6 +328,23 @@ type RetryableQueue interface {
 	// inserts a new job toPut in the queue (see Put). Implementations must
 	// make this operation atomic.
 	SaveAndPut(ctx context.Context, toSave, toPut RetryableJob) error
+}
+
+// RetryHandler provides a means to retry RetryableJobs within a RetryableQueue.
+type RetryHandler interface {
+	// SetQueue provides a method to change the RetryableQueue where the job
+	// should be retried. Implementations may not be able to change their Queue
+	// association after starting.
+	SetQueue(RetryableQueue) error
+	// Start prepares the retry handler to begin processing jobs to retry.
+	Start(context.Context) error
+	// Started reports if the RetryHandler has started.
+	Started() bool
+	// Close aborts all retry work in progress and waits for all work to be
+	// return.
+	Close(context.Context)
+	// Put adds a job that must be retried to the retry handler.
+	Put(context.Context, RetryableJob) error
 }
 
 // RetryHandlerOptions configures the behavior of a RetryHandler.
@@ -336,36 +383,6 @@ func (opts *RetryHandlerOptions) Validate() error {
 	return nil
 }
 
-// QueueInfo describes runtime information associated with a Queue.
-type QueueInfo struct {
-	Started     bool
-	LockTimeout time.Duration
-}
-
-// QueueGroup describes a group of queues. Each queue is indexed by a
-// string. Users can use these queues if there are many different types
-// of work or if the types of work are only knowable at runtime.
-type QueueGroup interface {
-	// Get a queue with the given index.
-	Get(context.Context, string) (Queue, error)
-
-	// Put a queue at the given index.
-	Put(context.Context, string, Queue) error
-
-	// Prune old queues.
-	Prune(context.Context) error
-
-	// Close the queues.
-	Close(context.Context) error
-
-	// Len returns the number of active queues managed in the
-	// group.
-	Len() int
-
-	// Queues returns all currently registered and running queues
-	Queues(context.Context) []string
-}
-
 // Runner describes a simple worker interface for executing jobs in
 // the context of a Queue. Used by queue implementations to run
 // tasks. Generally Queue implementations will spawn a runner as part
@@ -400,21 +417,4 @@ type AbortableRunner interface {
 	RunningJobs() []string
 	Abort(context.Context, string) error
 	AbortAll(context.Context)
-}
-
-// RetryHandler provides a means to retry RetryableJobs within a RetryableQueue.
-type RetryHandler interface {
-	// SetQueue provides a method to change the RetryableQueue where the job
-	// should be retried. Implementations may not be able to change their Queue
-	// association after starting.
-	SetQueue(RetryableQueue) error
-	// Start prepares the retry handler to begin processing jobs to retry.
-	Start(context.Context) error
-	// Started reports if the RetryHandler has started.
-	Started() bool
-	// Close aborts all retry work in progress and waits for all work to be
-	// return.
-	Close(context.Context)
-	// Put adds a job that must be retried to the retry handler.
-	Put(context.Context, RetryableJob) error
 }
