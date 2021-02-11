@@ -94,6 +94,10 @@ type Job interface {
 // retrying (see RetryableQueue).
 type RetryableJob interface {
 	Job
+
+	// SetID allows the job ID to be modified.
+	SetID(string)
+
 	// RetryInfo reports information about the job's retry behavior.
 	RetryInfo() JobRetryInfo
 	// UpdateRetryInfo method modifies all set fields from the given options.
@@ -102,16 +106,6 @@ type RetryableJob interface {
 	// AddRetryableError annotates the job with an error and marks the job as
 	// needing to retry.
 	AddRetryableError(error)
-}
-
-// WithRetryableJob is a convenience function to perform an operation if the Job
-// is a RetryableJob; otherwise, it is a no-op.
-func WithRetryableJob(j Job, op func(RetryableJob)) {
-	rj, ok := j.(RetryableJob)
-	if !ok {
-		return
-	}
-	op(rj)
 }
 
 // JobType contains information about the type of a job, which queues
@@ -289,20 +283,54 @@ type Queue interface {
 // retryable jobs.
 type RetryableQueue interface {
 	Queue
+
+	// RetryHandler returns the handler for retrying a job in this queue.
+	RetryHandler() RetryHandler
+	// SetRetryHandler permits runtime substitution of RetryHandler
+	// implementations. Queue implementations are not expected to permit users
+	// to change RetryHandler implementations after starting the Queue.
+	SetRetryHandler(RetryHandler) error
+
 	// SaveAndPut saves an existing job toSave in the queue (see Save) and
 	// inserts a new job toPut in the queue (see Put). Implementations must
 	// make this operation atomic.
-	SaveAndPut(ctx context.Context, toSave, toPut Job) error
+	SaveAndPut(ctx context.Context, toSave, toPut RetryableJob) error
 }
 
-// WithRetryableQueue is a convenience function to perform an operation if the Job
-// is a RetryableJob; otherwise, it is a no-op.
-func WithRetryableQueue(q Queue, op func(RetryableQueue)) {
-	rq, ok := q.(RetryableQueue)
-	if !ok {
-		return
+// RetryHandlerOptions configures the behavior of a RetryHandler.
+type RetryHandlerOptions struct {
+	// MaxRetryAttempts is the maximum number of times that the retry handler is
+	// allowed to attempt to retry a job before it gives up.
+	MaxRetryAttempts int
+	// MaxRetryAttempts is the maximum time that the retry handler is allowed to
+	// attempt to retry a job before it gives up.
+	MaxRetryTime time.Duration
+	// RetryBackoff is how long the retry handler will back off after a failed
+	// retry attempt.
+	RetryBackoff time.Duration
+	// NumWorkers is the maximum number of jobs that are allowed to retry in
+	// parallel.
+	NumWorkers int
+}
+
+func (opts *RetryHandlerOptions) Validate() error {
+	catcher := grip.NewBasicCatcher()
+	catcher.NewWhen(opts.MaxRetryAttempts < 0, "cannot have negative max retry attempts")
+	catcher.NewWhen(opts.MaxRetryTime < 0, "cannot have negative max retry time")
+	catcher.NewWhen(opts.NumWorkers < 0, "cannot have negative worker thread count")
+	if catcher.HasErrors() {
+		return catcher.Resolve()
 	}
-	op(rq)
+	if opts.MaxRetryAttempts == 0 {
+		opts.MaxRetryAttempts = 10
+	}
+	if opts.MaxRetryTime == 0 {
+		opts.MaxRetryTime = time.Minute
+	}
+	if opts.NumWorkers == 0 {
+		opts.NumWorkers = 1
+	}
+	return nil
 }
 
 // QueueInfo describes runtime information associated with a Queue.
@@ -355,7 +383,7 @@ type Runner interface {
 	// by the enclosing Queue object's Start() method.
 	Start(context.Context) error
 
-	// Termaintes all in progress work and waits for processes to
+	// Terminates all in progress work and waits for processes to
 	// return.
 	Close(context.Context)
 }
@@ -369,4 +397,21 @@ type AbortableRunner interface {
 	RunningJobs() []string
 	Abort(context.Context, string) error
 	AbortAll(context.Context)
+}
+
+// RetryHandler provides a means to retry RetryableJobs within a RetryableQueue.
+type RetryHandler interface {
+	// SetQueue provides a method to change the RetryableQueue where the job
+	// should be retried. Implementations may not be able to change their Queue
+	// association after starting.
+	SetQueue(RetryableQueue) error
+	// Start prepares the retry handler to begin processing jobs to retry.
+	Start(context.Context) error
+	// Started reports if the RetryHandler has started.
+	Started() bool
+	// Close aborts all retry work in progress and waits for all work to be
+	// return.
+	Close(context.Context)
+	// Put adds a job that must be retried to the retry handler.
+	Put(context.Context, RetryableJob) error
 }

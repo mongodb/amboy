@@ -34,6 +34,32 @@ func executeJob(ctx context.Context, id string, job amboy.Job, q amboy.Queue) {
 	}
 	job.Run(jobCtx)
 	q.Complete(ctx, job)
+	amboy.WithRetryableJob(job, func(rj amboy.RetryableJob) {
+		amboy.WithRetryableQueue(q, func(rq amboy.RetryableQueue) {
+			if !rj.RetryInfo().Retryable || !rj.RetryInfo().NeedsRetry {
+				return
+			}
+
+			rh := rq.RetryHandler()
+			if rh == nil {
+				grip.Error(message.Fields{
+					"message":  "cannot retry a job in a queue that does not support retrying",
+					"job_id":   rj.ID(),
+					"queue_id": rq.ID(),
+				})
+				return
+			}
+
+			if err := rh.Put(ctx, rj); err != nil {
+				grip.Error(message.WrapError(err, message.Fields{
+					"message":  "could not prepare job for retry",
+					"job_id":   rj.ID(),
+					"queue_id": rq.ID(),
+				}))
+			}
+		})
+	})
+
 	ti := job.TimeInfo()
 	r := message.Fields{
 		"job":           job.ID(),

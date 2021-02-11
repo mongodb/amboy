@@ -165,7 +165,10 @@ func (q *depGraphOrderedLocal) SetRunner(r amboy.Runner) error {
 func (q *depGraphOrderedLocal) Info() amboy.QueueInfo {
 	q.mutex.RLock()
 	defer q.mutex.RUnlock()
+	return q.info()
+}
 
+func (q *depGraphOrderedLocal) info() amboy.QueueInfo {
 	return amboy.QueueInfo{
 		Started:     q.started,
 		LockTimeout: amboy.LockTimeout,

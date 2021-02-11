@@ -20,16 +20,17 @@ type remoteQueue interface {
 }
 
 type remoteBase struct {
-	id         string
-	started    bool
-	driver     remoteQueueDriver
-	dispatcher Dispatcher
-	driverType string
-	channel    chan amboy.Job
-	blocked    map[string]struct{}
-	dispatched map[string]struct{}
-	runner     amboy.Runner
-	mutex      sync.RWMutex
+	id           string
+	started      bool
+	driver       remoteQueueDriver
+	dispatcher   Dispatcher
+	driverType   string
+	channel      chan amboy.Job
+	blocked      map[string]struct{}
+	dispatched   map[string]struct{}
+	runner       amboy.Runner
+	retryHandler amboy.RetryHandler
+	mutex        sync.RWMutex
 }
 
 func newRemoteBase() *remoteBase {
@@ -108,7 +109,10 @@ func (q *remoteBase) jobServer(ctx context.Context) {
 func (q *remoteBase) Info() amboy.QueueInfo {
 	q.mutex.RLock()
 	defer q.mutex.RUnlock()
+	return q.info()
+}
 
+func (q *remoteBase) info() amboy.QueueInfo {
 	lockTimeout := amboy.LockTimeout
 	if q.driver != nil {
 		lockTimeout = q.driver.LockTimeout()
@@ -123,7 +127,7 @@ func (q *remoteBase) Save(ctx context.Context, j amboy.Job) error {
 	return q.driver.Save(ctx, j)
 }
 
-func (q *remoteBase) SaveAndPut(ctx context.Context, toSave, toPut amboy.Job) error {
+func (q *remoteBase) SaveAndPut(ctx context.Context, toSave, toPut amboy.RetryableJob) error {
 	return q.driver.SaveAndPut(ctx, toSave, toPut)
 }
 
@@ -266,6 +270,20 @@ func (q *remoteBase) SetRunner(r amboy.Runner) error {
 	return nil
 }
 
+func (q *remoteBase) RetryHandler() amboy.RetryHandler {
+	q.mutex.RLock()
+	defer q.mutex.RUnlock()
+	return q.retryHandler
+}
+
+func (q *remoteBase) SetRetryHandler(rh amboy.RetryHandler) error {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+	q.retryHandler = rh
+
+	return rh.SetQueue(q)
+}
+
 // Driver provides access to the embedded driver instance which
 // provides access to the Queue's persistence layer. This method is
 // not part of the amboy.Queue interface.
@@ -314,10 +332,22 @@ func (q *remoteBase) Start(ctx context.Context) error {
 		return errors.Wrap(err, "problem starting driver in remote queue")
 	}
 
+	if q.retryHandler != nil {
+		if err = q.retryHandler.Start(ctx); err != nil {
+			return errors.Wrap(err, "starting retry handler in remote queue")
+		}
+	}
+
 	go q.jobServer(ctx)
 
 	q.started = true
 
+	return nil
+}
+
+// Next is a no-op that is included here so that it fulfills the amboy.Queue
+// interface.
+func (q *remoteBase) Next(context.Context) amboy.Job {
 	return nil
 }
 

@@ -84,6 +84,7 @@ func (s *RemoteUnorderedSuite) TestDriverIsUnitializedByDefault() {
 
 func (s *RemoteUnorderedSuite) TestRemoteUnorderdImplementsQueueInterface() {
 	s.Implements((*amboy.Queue)(nil), s.queue)
+	s.Implements((*amboy.RetryableQueue)(nil), s.queue)
 }
 
 func (s *RemoteUnorderedSuite) TestJobPutIntoQueueFetchableViaGetMethod() {

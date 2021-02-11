@@ -482,6 +482,8 @@ func (d *mongoDriver) getAtomicQuery(jobName string, modCount int) bson.M {
 }
 
 func isMongoDupKey(err error) bool {
+	// TODO  (EVG-13591): handle duplicate write errors due to scopes separately
+	// from write errors due to job ID clashes.
 	we, ok := errors.Cause(err).(mongo.WriteException)
 	if !ok {
 		return false
@@ -530,11 +532,11 @@ func (d *mongoDriver) SaveAndPut(ctx context.Context, toSave amboy.Job, toPut am
 		// We should verify these statements are true when doing tests of the
 		// retry handler.
 
-		if err := d.Save(sessCtx, toSave); err != nil {
+		if err = d.Save(sessCtx, toSave); err != nil {
 			return nil, errors.Wrap(err, "saving old job")
 		}
 
-		if err := d.Put(sessCtx, toPut); err != nil {
+		if err = d.Put(sessCtx, toPut); err != nil {
 			return nil, errors.Wrap(err, "adding new job")
 		}
 
@@ -554,7 +556,20 @@ func (d *mongoDriver) Complete(ctx context.Context, j amboy.Job) error {
 		return errors.WithStack(err)
 	}
 
-	job.Scopes = nil
+	isRetryableJob := amboy.WithRetryableJob(j, func(rj amboy.RetryableJob) {
+		info := rj.RetryInfo()
+		if info.Retryable && info.NeedsRetry && rj.ShouldApplyScopesOnEnqueue() {
+			// If the job is supposed to retry and apply the scopes immediately
+			// to the retry job, we cannot let go of the scopes yet because they
+			// will need to be safely transferred to the retry job.
+			return
+		}
+		job.Scopes = nil
+	})
+
+	if !isRetryableJob {
+		job.Scopes = nil
+	}
 
 	return errors.WithStack(d.doUpdate(ctx, job))
 }
