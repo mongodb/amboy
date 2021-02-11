@@ -25,7 +25,7 @@ type basicRetryHandler struct {
 	cancelWorkers context.CancelFunc
 }
 
-func newRetryHandler(q amboy.RetryableQueue, opts amboy.RetryHandlerOptions) (amboy.RetryHandler, error) {
+func newBasicRetryHandler(q amboy.RetryableQueue, opts amboy.RetryHandlerOptions) (amboy.RetryHandler, error) {
 	if q == nil {
 		return nil, errors.New("queue cannot be nil")
 	}
