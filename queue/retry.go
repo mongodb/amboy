@@ -25,7 +25,7 @@ type basicRetryHandler struct {
 	cancelWorkers context.CancelFunc
 }
 
-func newBasicRetryHandler(q amboy.RetryableQueue, opts amboy.RetryHandlerOptions) (amboy.RetryHandler, error) {
+func newBasicRetryHandler(q amboy.RetryableQueue, opts amboy.RetryHandlerOptions) (*basicRetryHandler, error) {
 	if q == nil {
 		return nil, errors.New("queue cannot be nil")
 	}
@@ -42,6 +42,10 @@ func newBasicRetryHandler(q amboy.RetryableQueue, opts amboy.RetryHandlerOptions
 func (rh *basicRetryHandler) Start(ctx context.Context) error {
 	rh.mu.Lock()
 	defer rh.mu.Unlock()
+
+	if rh.started {
+		return nil
+	}
 
 	rh.started = true
 
@@ -108,11 +112,11 @@ func (rh *basicRetryHandler) Put(ctx context.Context, j amboy.RetryableJob) erro
 
 func (rh *basicRetryHandler) Close(ctx context.Context) {
 	rh.mu.Lock()
-	defer rh.mu.Unlock()
 	if rh.cancelWorkers != nil {
 		rh.cancelWorkers()
 	}
 	rh.started = false
+	rh.mu.Unlock()
 
 	rh.wg.Wait()
 }
