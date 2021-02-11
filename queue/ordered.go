@@ -431,3 +431,9 @@ func (q *depGraphOrderedLocal) Complete(ctx context.Context, j amboy.Job) {
 	defer q.mutex.Unlock()
 	q.tasks.completed[j.ID()] = true
 }
+
+func (q *depGraphOrderedLocal) Close(ctx context.Context) {
+	if r := q.Runner(); r != nil {
+		r.Close(ctx)
+	}
+}

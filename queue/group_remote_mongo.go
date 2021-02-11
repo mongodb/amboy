@@ -367,7 +367,7 @@ func (g *remoteMongoQueueGroup) Prune(ctx context.Context) error {
 					return
 				}
 				if queue, ok := g.queues[g.idFromCollection(nextColl)]; ok {
-					queue.Runner().Close(ctx)
+					queue.Close(ctx)
 					select {
 					case <-ctx.Done():
 						return
@@ -402,7 +402,7 @@ outer:
 		go func(queueID string, ch chan string, qu amboy.Queue) {
 			defer recovery.LogStackTraceAndContinue("panic in pruning queues")
 			defer wg.Done()
-			qu.Runner().Close(ctx)
+			qu.Close(ctx)
 			select {
 			case <-ctx.Done():
 				return
@@ -434,7 +434,7 @@ func (g *remoteMongoQueueGroup) Close(ctx context.Context) error {
 			go func(queue amboy.Queue) {
 				defer recovery.LogStackTraceAndContinue("panic in remote queue group closer")
 				defer wg.Done()
-				queue.Runner().Close(ctx)
+				queue.Close(ctx)
 			}(queue)
 		}
 		wg.Wait()

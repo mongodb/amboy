@@ -277,6 +277,9 @@ type Queue interface {
 	// Begins the execution of the job Queue, using the embedded
 	// Runner.
 	Start(context.Context) error
+
+	// Close cleans up all resources used by the queue.
+	Close(context.Context)
 }
 
 // RetryableQueue is the same as a Queue but supports additional operations for

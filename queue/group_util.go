@@ -134,7 +134,7 @@ func (c *cacheImpl) Remove(ctx context.Context, name string) error {
 		return errors.Errorf("cannot delete in progress queue, '%s'", name)
 	}
 
-	queue.Runner().Close(ctx)
+	queue.Close(ctx)
 	delete(c.q, name)
 	return nil
 }
@@ -186,7 +186,7 @@ func (c *cacheImpl) Prune(ctx context.Context) error {
 							defer recovery.LogStackTraceAndContinue("panic in queue waiting")
 							defer close(wait)
 
-							item.q.Runner().Close(ctx)
+							item.q.Close(ctx)
 							c.mu.Lock()
 							defer c.mu.Unlock()
 							catcher.Add(c.hook(ctx, item.name))
@@ -235,7 +235,7 @@ func (c *cacheImpl) Close(ctx context.Context) error {
 					go func() {
 						defer recovery.LogStackTraceAndContinue("panic in queue waiting")
 						defer close(wait)
-						item.q.Runner().Close(ctx)
+						item.q.Close(ctx)
 					}()
 					select {
 					case <-ctx.Done():
