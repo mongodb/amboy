@@ -532,11 +532,11 @@ func (d *mongoDriver) SaveAndPut(ctx context.Context, toSave amboy.Job, toPut am
 		// We should verify these statements are true when doing tests of the
 		// retry handler.
 
-		if err := d.Save(sessCtx, toSave); err != nil {
+		if err = d.Save(sessCtx, toSave); err != nil {
 			return nil, errors.Wrap(err, "saving old job")
 		}
 
-		if err := d.Put(sessCtx, toPut); err != nil {
+		if err = d.Put(sessCtx, toPut); err != nil {
 			return nil, errors.Wrap(err, "adding new job")
 		}
 

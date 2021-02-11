@@ -54,7 +54,13 @@ func (rh *retryHandler) Start(ctx context.Context) error {
 		go func() {
 			defer func() {
 				if err := recovery.HandlePanicWithError(recover(), nil, "retry handler worker"); err != nil {
-					go rh.waitForJob(workerCtx)
+					go func() {
+						grip.Error(message.WrapError(rh.waitForJob(workerCtx), message.Fields{
+							"message":  "retry job worker failed",
+							"service":  "amboy.queue.retry",
+							"queue_id": rh.queue.ID(),
+						}))
+					}()
 					return
 				}
 				rh.wg.Done()
@@ -169,7 +175,7 @@ func (rh *retryHandler) nextJob() amboy.RetryableJob {
 	return nil
 }
 
-func (rh *retryHandler) handleJob(ctx context.Context, j amboy.Job) error {
+func (rh *retryHandler) handleJob(ctx context.Context, j amboy.RetryableJob) error {
 	startAt := time.Now()
 	catcher := grip.NewBasicCatcher()
 	timer := time.NewTimer(0)
@@ -183,7 +189,7 @@ func (rh *retryHandler) handleJob(ctx context.Context, j amboy.Job) error {
 		case <-ctx.Done():
 			return nil
 		case <-timer.C:
-			catcher.Wrapf(rh.tryEnqueueRetryJob(ctx, j), "enqueue retry job attempt %d", i)
+			catcher.Wrapf(rh.tryEnqueueJob(ctx, j), "enqueue retry job attempt %d", i)
 			// TODO (EVG-13540): consider adding jitter.
 			timer.Reset(rh.opts.RetryBackoff)
 		}
@@ -196,7 +202,7 @@ func (rh *retryHandler) handleJob(ctx context.Context, j amboy.Job) error {
 	return errors.Errorf("exhausted all %d attempts to enqueue retry job without success", rh.opts.MaxRetryAttempts)
 }
 
-func (rh *retryHandler) tryEnqueueRetryJob(ctx context.Context, j amboy.Job) error {
+func (rh *retryHandler) tryEnqueueJob(ctx context.Context, j amboy.RetryableJob) error {
 	// Load the most up-to-date copy in case the cached in-memory job is
 	// outdated.
 	// TODO (EVG-13540): determine if this will be an expensive query or not.
@@ -209,7 +215,8 @@ func (rh *retryHandler) tryEnqueueRetryJob(ctx context.Context, j amboy.Job) err
 		return errors.New("job is not retryable")
 	}
 
-	if !newJob.RetryInfo().Retryable || !newJob.RetryInfo().NeedsRetry {
+	newInfo := newJob.RetryInfo()
+	if !newInfo.Retryable || !newInfo.NeedsRetry {
 		return nil
 	}
 
@@ -217,21 +224,30 @@ func (rh *retryHandler) tryEnqueueRetryJob(ctx context.Context, j amboy.Job) err
 	// (amboy.Job).Lock()) to ensure that this thread on this host has sole
 	// ownership of the job.
 
-	info := newJob.RetryInfo()
-	id := makeRetryJobID(newJob.ID(), info.CurrentTrial)
+	oldInfo := j.RetryInfo()
+
+	if oldInfo != newInfo {
+		return errors.New("precondition failed: in-memory retry information does not match queue's stored information")
+	}
+
+	oldInfo.NeedsRetry = false
+	oldInfo.Retryable = false
+	j.UpdateRetryInfo(oldInfo.Options())
+
+	// TODO (EVG-13540): ensure this is correct for grouped jobs (i.e. it may
+	// trim the grouped job ID off, which we have to make sure gets re-added
+	// before it's persisted).
+	id := makeRetryJobID(newJob.ID(), newInfo.CurrentTrial)
 	if id == "" {
 		return nil
 	}
 	newJob.SetID(id)
-	info.CurrentTrial++
-	info.NeedsRetry = false
-	info.Retryable = false
-	newJob.UpdateRetryInfo(info.Options())
+	newInfo.NeedsRetry = false
+	newInfo.Retryable = false
+	newInfo.CurrentTrial++
+	newJob.UpdateRetryInfo(newInfo.Options())
 
-	// TODO (EVG-13540): handle safe transfer of scopes to new job if they're
-	// applied on enqueue. _id clashes should not retry, but should scope
-	// clashes still retry enqueueing?
-	err := rh.queue.Put(ctx, newJob)
+	err := rh.queue.SaveAndPut(ctx, j, newJob)
 	if amboy.IsDuplicateJobError(err) {
 		// The job is already in the queue, do nothing.
 		return nil
