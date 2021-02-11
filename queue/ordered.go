@@ -58,9 +58,8 @@ type depGraphOrderedLocal struct {
 	}
 
 	// Composed functionality:
-	runner       amboy.Runner
-	retryHandler amboy.RetryHandler
-	mutex        sync.RWMutex
+	runner amboy.Runner
+	mutex  sync.RWMutex
 }
 
 // NewLocalOrdered constructs an LocalOrdered object. The "workers"

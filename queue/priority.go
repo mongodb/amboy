@@ -19,15 +19,14 @@ import (
 // interface to determine priority. These queues do not have shared
 // storage.
 type priorityLocalQueue struct {
-	storage      *priorityStorage
-	fixed        *fixedStorage
-	channel      chan amboy.Job
-	scopes       ScopeManager
-	dispatcher   Dispatcher
-	runner       amboy.Runner
-	retryHandler amboy.RetryHandler
-	id           string
-	counters     struct {
+	storage    *priorityStorage
+	fixed      *fixedStorage
+	channel    chan amboy.Job
+	scopes     ScopeManager
+	dispatcher Dispatcher
+	runner     amboy.Runner
+	id         string
+	counters   struct {
 		started   int
 		completed int
 		sync.RWMutex

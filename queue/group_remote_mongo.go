@@ -274,7 +274,6 @@ func (g *remoteMongoQueueGroup) getExistingCollections(ctx context.Context, clie
 func (g *remoteMongoQueueGroup) Get(ctx context.Context, id string) (amboy.Queue, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	// Check again in case the map was modified after we released the read lock.
 	if queue, ok := g.queues[id]; ok {
 		g.ttlMap[id] = time.Now()
 		return queue, nil

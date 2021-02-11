@@ -36,9 +36,8 @@ type sqsFIFOQueue struct {
 		completed map[string]bool
 		all       map[string]amboy.Job
 	}
-	runner       amboy.Runner
-	retryHandler amboy.RetryHandler
-	mutex        sync.RWMutex
+	runner amboy.Runner
+	mutex  sync.RWMutex
 }
 
 // NewSQSFifoQueue constructs a AWS SQS backed Queue

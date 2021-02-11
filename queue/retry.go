@@ -15,9 +15,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-type retryHandler struct {
-	// kim: TODO: should add a RetryableQueue interface with an extra PutRetry()
-	// method. That way, it's optional to implement the retryability features.
+type basicRetryHandler struct {
 	queue         amboy.RetryableQueue
 	opts          amboy.RetryHandlerOptions
 	pending       map[string]amboy.RetryableJob
@@ -34,14 +32,14 @@ func newRetryHandler(q amboy.RetryableQueue, opts amboy.RetryHandlerOptions) (am
 	if err := opts.Validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid options")
 	}
-	return &retryHandler{
+	return &basicRetryHandler{
 		queue:   q,
 		opts:    opts,
 		pending: map[string]amboy.RetryableJob{},
 	}, nil
 }
 
-func (rh *retryHandler) Start(ctx context.Context) error {
+func (rh *basicRetryHandler) Start(ctx context.Context) error {
 	rh.mu.Lock()
 	defer rh.mu.Unlock()
 
@@ -72,13 +70,13 @@ func (rh *retryHandler) Start(ctx context.Context) error {
 	return nil
 }
 
-func (rh *retryHandler) Started() bool {
+func (rh *basicRetryHandler) Started() bool {
 	rh.mu.RLock()
 	defer rh.mu.RUnlock()
 	return rh.started
 }
 
-func (rh *retryHandler) SetQueue(q amboy.RetryableQueue) error {
+func (rh *basicRetryHandler) SetQueue(q amboy.RetryableQueue) error {
 	rh.mu.Lock()
 	defer rh.mu.Unlock()
 	if rh.started {
@@ -88,7 +86,7 @@ func (rh *retryHandler) SetQueue(q amboy.RetryableQueue) error {
 	return nil
 }
 
-func (rh *retryHandler) Put(ctx context.Context, j amboy.RetryableJob) error {
+func (rh *basicRetryHandler) Put(ctx context.Context, j amboy.RetryableJob) error {
 	if j == nil {
 		return errors.New("cannot retry a nil job")
 	}
@@ -108,7 +106,7 @@ func (rh *retryHandler) Put(ctx context.Context, j amboy.RetryableJob) error {
 	return nil
 }
 
-func (rh *retryHandler) Close(ctx context.Context) {
+func (rh *basicRetryHandler) Close(ctx context.Context) {
 	rh.mu.Lock()
 	defer rh.mu.Unlock()
 	if rh.cancelWorkers != nil {
@@ -119,7 +117,7 @@ func (rh *retryHandler) Close(ctx context.Context) {
 	rh.wg.Wait()
 }
 
-func (rh *retryHandler) waitForJob(ctx context.Context) error {
+func (rh *basicRetryHandler) waitForJob(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -164,7 +162,7 @@ func (rh *retryHandler) waitForJob(ctx context.Context) error {
 	}
 }
 
-func (rh *retryHandler) nextJob() amboy.RetryableJob {
+func (rh *basicRetryHandler) nextJob() amboy.RetryableJob {
 	rh.mu.RLock()
 	defer rh.mu.RUnlock()
 	for id, found := range rh.pending {
@@ -175,7 +173,7 @@ func (rh *retryHandler) nextJob() amboy.RetryableJob {
 	return nil
 }
 
-func (rh *retryHandler) handleJob(ctx context.Context, j amboy.RetryableJob) error {
+func (rh *basicRetryHandler) handleJob(ctx context.Context, j amboy.RetryableJob) error {
 	startAt := time.Now()
 	catcher := grip.NewBasicCatcher()
 	timer := time.NewTimer(0)
@@ -189,9 +187,13 @@ func (rh *retryHandler) handleJob(ctx context.Context, j amboy.RetryableJob) err
 		case <-ctx.Done():
 			return nil
 		case <-timer.C:
-			catcher.Wrapf(rh.tryEnqueueJob(ctx, j), "enqueue retry job attempt %d", i)
-			// TODO (EVG-13540): consider adding jitter.
-			timer.Reset(rh.opts.RetryBackoff)
+			if err := rh.tryEnqueueJob(ctx, j); err != nil {
+				catcher.Wrapf(rh.tryEnqueueJob(ctx, j), "enqueue retry job attempt %d", i)
+				// TODO (EVG-13540): consider adding jitter.
+				timer.Reset(rh.opts.RetryBackoff)
+				continue
+			}
+			return nil
 		}
 	}
 
@@ -202,7 +204,7 @@ func (rh *retryHandler) handleJob(ctx context.Context, j amboy.RetryableJob) err
 	return errors.Errorf("exhausted all %d attempts to enqueue retry job without success", rh.opts.MaxRetryAttempts)
 }
 
-func (rh *retryHandler) tryEnqueueJob(ctx context.Context, j amboy.RetryableJob) error {
+func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.RetryableJob) error {
 	// Load the most up-to-date copy in case the cached in-memory job is
 	// outdated.
 	// TODO (EVG-13540): determine if this will be an expensive query or not.

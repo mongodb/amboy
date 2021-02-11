@@ -17,13 +17,12 @@ import (
 
 type adaptiveLocalOrdering struct {
 	// the ops are: all map:jobs || ready | blocked | passed+unresolved
-	operations   chan func(context.Context, *adaptiveOrderItems, *fixedStorage)
-	capacity     int
-	starter      sync.Once
-	id           string
-	dispatcher   Dispatcher
-	runner       amboy.Runner
-	retryHandler amboy.RetryHandler
+	operations chan func(context.Context, *adaptiveOrderItems, *fixedStorage)
+	capacity   int
+	starter    sync.Once
+	id         string
+	dispatcher Dispatcher
+	runner     amboy.Runner
 }
 
 // NewAdaptiveOrderedLocalQueue provides a queue implementation that

@@ -34,14 +34,13 @@ import (
 // some of the other local queue implementations that predate LocalShuffled
 // (e.g. LocalUnordered), there are no mutexes used in the implementation.
 type shuffledLocal struct {
-	operations   chan func(map[string]amboy.Job, map[string]amboy.Job, map[string]amboy.Job, *fixedStorage)
-	capacity     int
-	id           string
-	starter      sync.Once
-	scopes       ScopeManager
-	dispatcher   Dispatcher
-	runner       amboy.Runner
-	retryHandler amboy.RetryHandler
+	operations chan func(map[string]amboy.Job, map[string]amboy.Job, map[string]amboy.Job, *fixedStorage)
+	capacity   int
+	id         string
+	starter    sync.Once
+	scopes     ScopeManager
+	dispatcher Dispatcher
+	runner     amboy.Runner
 }
 
 // NewShuffledLocal provides a queue implementation that shuffles the

@@ -37,7 +37,6 @@ type limitedSizeLocal struct {
 	staleCount   int
 	id           string
 	runner       amboy.Runner
-	retryHandler amboy.RetryHandler
 	mu           sync.RWMutex
 }
 
