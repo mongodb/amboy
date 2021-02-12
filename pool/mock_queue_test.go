@@ -185,6 +185,8 @@ func (q *QueueTester) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 	return output
 }
 
+func (q *QueueTester) Close(context.Context) {}
+
 type jobThatPanics struct {
 	job.Base
 }
