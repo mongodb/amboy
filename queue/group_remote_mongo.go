@@ -396,35 +396,6 @@ func (g *remoteMongoQueueGroup) Prune(ctx context.Context) error {
 		delete(g.ttlMap, id)
 	}
 
-	// Another prune may have gotten to the collection first, so we should close the queue.
-	queuesDeleteChan := make(chan string, len(g.queues))
-	wg = &sync.WaitGroup{}
-outer:
-	for id, q := range g.queues {
-		for _, coll := range collsToCheck {
-			if id == g.idFromCollection(coll) {
-				continue outer
-			}
-		}
-		wg.Add(1)
-		go func(queueID string, ch chan string, qu amboy.Queue) {
-			defer recovery.LogStackTraceAndContinue("panic in pruning queues")
-			defer wg.Done()
-			qu.Runner().Close(ctx)
-			select {
-			case <-ctx.Done():
-				return
-			case ch <- queueID:
-				// pass
-			}
-		}(id, queuesDeleteChan, q)
-	}
-	wg.Wait()
-	close(queuesDeleteChan)
-	for id := range queuesDeleteChan {
-		delete(g.queues, id)
-		delete(g.ttlMap, id)
-	}
 	return catcher.Resolve()
 }
 
