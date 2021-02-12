@@ -339,3 +339,9 @@ func (q *sqsFIFOQueue) Start(ctx context.Context) error {
 	}
 	return nil
 }
+
+func (q *sqsFIFOQueue) Close(ctx context.Context) {
+	if r := q.Runner(); r != nil {
+		r.Close(ctx)
+	}
+}

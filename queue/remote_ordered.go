@@ -28,19 +28,15 @@ type remoteSimpleOrdered struct {
 
 // newSimpleRemoteOrdered returns a queue with a configured local
 // runner with the specified number of workers.
-func newSimpleRemoteOrdered(size int) remoteQueue {
+func newSimpleRemoteOrdered(size int) (remoteQueue, error) {
 	q := &remoteSimpleOrdered{remoteBase: newRemoteBase()}
 	q.dispatcher = NewDispatcher(q)
-	grip.Error(q.SetRunner(pool.NewLocalWorkers(size, q)))
-	// TODO (EVG-13540): need a way to propagate RetryHandlerOptions
-	rh, err := newRetryHandler(q, amboy.RetryHandlerOptions{})
-	grip.Error(errors.Wrap(err, "could not initialize retry handler"))
-	if rh != nil {
-		grip.Error(q.SetRetryHandler(rh))
+	if err := q.SetRunner(pool.NewLocalWorkers(size, q)); err != nil {
+		return nil, errors.Wrap(err, "configuring runner")
 	}
 	grip.Infof("creating new remote job queue with %d workers", size)
 
-	return q
+	return q, nil
 }
 
 // Next contains the unique implementation details of the

@@ -337,3 +337,9 @@ func (q *limitedSizeLocal) Start(ctx context.Context) error {
 
 	return nil
 }
+
+func (q *limitedSizeLocal) Close(ctx context.Context) {
+	if r := q.Runner(); r != nil {
+		r.Close(ctx)
+	}
+}

@@ -66,7 +66,11 @@ func (s *RemoteUnorderedSuite) SetupTest() {
 	s.driver, err = s.driverConstructor()
 	s.Require().NoError(err)
 	s.Require().NoError(s.driver.Open(s.ctx))
-	s.queue = newRemoteUnordered(2).(*remoteUnordered)
+	rq, err := newRemoteUnordered(2)
+	s.Require().NoError(err)
+	q, ok := rq.(*remoteUnordered)
+	s.Require().True(ok)
+	s.queue = q
 }
 
 func (s *RemoteUnorderedSuite) TearDownTest() {

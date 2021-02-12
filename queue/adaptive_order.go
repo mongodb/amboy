@@ -351,3 +351,9 @@ func (q *adaptiveLocalOrdering) SetRunner(r amboy.Runner) error {
 	q.runner = r
 	return r.SetQueue(q)
 }
+
+func (q *adaptiveLocalOrdering) Close(ctx context.Context) {
+	if r := q.Runner(); r != nil {
+		r.Close(ctx)
+	}
+}

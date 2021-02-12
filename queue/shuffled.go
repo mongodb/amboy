@@ -461,3 +461,9 @@ func (q *shuffledLocal) SetRunner(r amboy.Runner) error {
 func (q *shuffledLocal) Runner() amboy.Runner {
 	return q.runner
 }
+
+func (q *shuffledLocal) Close(ctx context.Context) {
+	if r := q.Runner(); r != nil {
+		r.Close(ctx)
+	}
+}

@@ -345,6 +345,15 @@ func (q *remoteBase) Start(ctx context.Context) error {
 	return nil
 }
 
+func (q *remoteBase) Close(ctx context.Context) {
+	if r := q.Runner(); r != nil {
+		r.Close(ctx)
+	}
+	if rh := q.RetryHandler(); rh != nil {
+		rh.Close(ctx)
+	}
+}
+
 // Next is a no-op that is included here so that it fulfills the amboy.Queue
 // interface.
 func (q *remoteBase) Next(context.Context) amboy.Job {
