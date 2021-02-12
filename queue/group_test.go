@@ -219,7 +219,6 @@ func TestQueueGroup(t *testing.T) {
 							}
 
 							g, err := NewMongoDBSingleQueueGroup(ctx, remoteOpts, client, mopts)
-							require.NoError(t, err)
 							if test.valid && remoteTest.valid {
 								require.NoError(t, err)
 								require.NotNil(t, g)
