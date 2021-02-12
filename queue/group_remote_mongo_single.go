@@ -159,7 +159,7 @@ func (g *remoteMongoQueueGroupSingle) Get(ctx context.Context, id string) (amboy
 	case remoteQueue:
 		return q, nil
 	case nil:
-		queue, err = g.opts.constructor(ctx, id, g.opts.RetryHandler)
+		queue, err = g.opts.constructor(ctx, id)
 		if err != nil {
 			return nil, errors.Wrap(err, "constructing queue")
 		}
