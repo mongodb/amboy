@@ -46,6 +46,10 @@ func (rh *basicRetryHandler) Start(ctx context.Context) error {
 		return nil
 	}
 
+	if rh.queue == nil {
+		return errors.New("cannot start retry handler without a queue")
+	}
+
 	rh.started = true
 
 	workerCtx, workerCancel := context.WithCancel(ctx)
