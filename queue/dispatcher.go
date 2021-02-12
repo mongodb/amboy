@@ -94,35 +94,6 @@ func (d *dispatcherImpl) Dispatch(ctx context.Context, job amboy.Job) error {
 		defer recovery.LogStackTraceAndContinue("background lock ping", job.ID())
 		pingJobLock(ctx, pingerCtx, d.queue, job, info.jobCancel)
 	}()
-	go func() {
-		iters := 0
-		ticker := time.NewTicker(d.queue.Info().LockTimeout / 4)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-pingerCtx.Done():
-				return
-			case <-ticker.C:
-				if err := job.Lock(d.queue.ID(), d.queue.Info().LockTimeout); err != nil {
-					job.AddError(errors.Wrapf(err, "problem pinging job lock on cycle #%d", iters))
-					info.jobCancel()
-					return
-				}
-				if err := d.queue.Save(ctx, job); err != nil {
-					job.AddError(errors.Wrapf(err, "problem saving job for lock ping on cycle #%d", iters))
-					info.jobCancel()
-					return
-				}
-				grip.Debug(message.Fields{
-					"queue_id":  d.queue.ID(),
-					"job_id":    job.ID(),
-					"ping_iter": iters,
-					"stat":      job.Status(),
-				})
-			}
-			iters++
-		}
-	}()
 
 	d.cache[job.ID()] = info
 	return nil
