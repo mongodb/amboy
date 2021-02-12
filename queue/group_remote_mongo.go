@@ -62,7 +62,7 @@ type MongoDBQueueGroupOptions struct {
 	TTL time.Duration
 }
 
-func (opts *MongoDBQueueGroupOptions) constructor(ctx context.Context, name string, rhOpts amboy.RetryHandlerOptions) (remoteQueue, error) {
+func (opts *MongoDBQueueGroupOptions) constructor(ctx context.Context, name string) (remoteQueue, error) {
 	workers := opts.DefaultWorkers
 	if opts.WorkerPoolSize != nil {
 		workers = opts.WorkerPoolSize(name)
@@ -89,7 +89,7 @@ func (opts *MongoDBQueueGroupOptions) constructor(ctx context.Context, name stri
 			return nil, errors.Wrap(err, "configuring queue with runner")
 		}
 	}
-	rh, err := newBasicRetryHandler(q, rhOpts)
+	rh, err := newBasicRetryHandler(q, opts.RetryHandler)
 	if err != nil {
 		return nil, errors.Wrap(err, "initializing retry handler")
 	}
@@ -247,7 +247,7 @@ func (g *remoteMongoQueueGroup) Queues(ctx context.Context) []string {
 
 func (g *remoteMongoQueueGroup) startProcessingRemoteQueue(ctx context.Context, coll string) (amboy.Queue, error) {
 	coll = trimJobsSuffix(coll)
-	q, err := g.opts.constructor(ctx, coll, g.opts.RetryHandler)
+	q, err := g.opts.constructor(ctx, coll)
 	if err != nil {
 		return nil, errors.Wrap(err, "constructing queue")
 	}
