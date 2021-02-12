@@ -141,7 +141,8 @@ func (c *cacheImpl) Remove(ctx context.Context, name string) error {
 
 func (c *cacheImpl) getCacheIterUnsafe() <-chan *cacheItem {
 	out := make(chan *cacheItem, len(c.q))
-	for _, v := range c.q {
+	for k := range c.q {
+		v := c.q[k]
 		out <- &v
 	}
 	close(out)

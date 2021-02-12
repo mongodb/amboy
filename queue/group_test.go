@@ -218,7 +218,7 @@ func TestQueueGroup(t *testing.T) {
 								PruneFrequency: test.ttl,
 							}
 
-							g, err := NewMongoDBSingleQueueGroup(ctx, remoteOpts, client, mopts) // nolint
+							g, err := NewMongoDBSingleQueueGroup(ctx, remoteOpts, client, mopts)
 							if test.valid && remoteTest.valid {
 								require.NoError(t, err)
 								require.NotNil(t, g)
@@ -556,10 +556,7 @@ func TestQueueGroup(t *testing.T) {
 					for i := 0; i < 30; i++ {
 						time.Sleep(time.Second)
 
-						if ctx.Err() != nil {
-							grip.Info(ctx.Err())
-							break
-						}
+						require.NoError(t, ctx.Err())
 						if g.Len() == 0 {
 							break
 						}
