@@ -13,8 +13,13 @@ import (
 	"github.com/pkg/errors"
 )
 
+// remoteQueue is an interface to an amboy.RetryableQueue that uses a
+// remoteQueueDriver to interact with the persistence layer for the queue.
 type remoteQueue interface {
 	amboy.RetryableQueue
+	// SetDriver sets the driver to connect to the persistence layer. The driver
+	// must be set before the queue can start. Once the queue has started, the
+	// driver cannot be modified.
 	SetDriver(remoteQueueDriver) error
 	Driver() remoteQueueDriver
 }
@@ -279,6 +284,9 @@ func (q *remoteBase) RetryHandler() amboy.RetryHandler {
 func (q *remoteBase) SetRetryHandler(rh amboy.RetryHandler) error {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
+	if q.retryHandler != nil && q.retryHandler.Started() {
+		return errors.New("cannot change retry handler after it is already started")
+	}
 	q.retryHandler = rh
 
 	return rh.SetQueue(q)
