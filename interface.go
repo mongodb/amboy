@@ -95,9 +95,6 @@ type Job interface {
 type RetryableJob interface {
 	Job
 
-	// SetID allows the job ID to be modified.
-	SetID(string)
-
 	// RetryInfo reports information about the job's retry behavior.
 	RetryInfo() JobRetryInfo
 	// UpdateRetryInfo method modifies all set fields from the given options.
@@ -162,11 +159,11 @@ type JobRetryInfo struct {
 	NeedsRetry bool `bson:"needs_retry" json:"needs_retry,omitempty" yaml:"needs_retry,omitempty"`
 	// BaseJobID is the job ID of the original job that was retried, ignoring
 	// any additional retry metadata.
-	BaseJobID string `bson:"base_job_id" json:"base_job_id,omitempty" yaml:"base_job_id,omitempty"`
+	BaseJobID string `bson:"base_job_id,omitempty" json:"base_job_id,omitempty" yaml:"base_job_id,omitempty"`
 	// CurrentAttempt is the current attempt number. This is zero-indexed
 	// (unless otherwise set on enqueue), so the first time the job attempts to
 	// run, its value is 0. Each subsequent retry increments this value.
-	CurrentAttempt int `bson:"current_attempt" json:"current_attempt,omitempty" yaml:"current_attempt,omitempty"`
+	CurrentAttempt int `bson:"current_attempt,omitempty" json:"current_attempt,omitempty" yaml:"current_attempt,omitempty"`
 }
 
 // Options returns a JobRetryInfo as its equivalent JobRetryOptions. In other

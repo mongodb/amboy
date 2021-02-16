@@ -452,8 +452,8 @@ func (s *DriverSuite) TestNextMethodDoesNotReturnLastJob() {
 func (s *DriverSuite) TestJobsMethodReturnsAllJobs() {
 	mocks := make(map[string]*job.ShellJob)
 
-	for idx := range [24]int{} {
-		name := fmt.Sprintf("echo test num %d", idx)
+	for i := 0; i < 24; i++ {
+		name := fmt.Sprintf("echo test num %d", i)
 		j := job.NewShellJob(name, "")
 		s.NoError(s.driver.Put(s.ctx, j))
 		mocks[j.ID()] = j

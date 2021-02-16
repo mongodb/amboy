@@ -249,7 +249,7 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 					Value: bsonx.Int32(-1),
 				},
 			},
-			Options: options.Index().SetUnique(true),
+			Options: options.Index().SetSparse(true).SetUnique(true),
 		},
 	}
 
@@ -703,7 +703,6 @@ func (d *mongoDriver) Jobs(ctx context.Context) <-chan amboy.Job {
 			}))
 			return
 		}
-		var job amboy.Job
 		for iter.Next(ctx) {
 			ji := &registry.JobInterchange{}
 			if err = iter.Decode(ji); err != nil {
@@ -719,6 +718,9 @@ func (d *mongoDriver) Jobs(ctx context.Context) <-chan amboy.Job {
 				continue
 			}
 
+			d.removeMetadata(ji)
+
+			var job amboy.Job
 			job, err = ji.Resolve(d.opts.Format)
 			if err != nil {
 				grip.Warning(message.WrapError(err, message.Fields{
