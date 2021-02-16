@@ -2,8 +2,6 @@ package queue
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -240,14 +238,6 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 	oldInfo.Retryable = false
 	j.UpdateRetryInfo(oldInfo.Options())
 
-	// TODO (EVG-13540): ensure this is correct for grouped jobs (i.e. it may
-	// trim the grouped job ID off, which we have to make sure gets re-added
-	// before it's persisted).
-	id := makeRetryJobID(newJob.ID(), newInfo.CurrentAttempt)
-	if id == "" {
-		return nil
-	}
-	newJob.SetID(id)
 	newInfo.NeedsRetry = false
 	newInfo.Retryable = false
 	newInfo.CurrentAttempt++
@@ -264,15 +254,6 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 	return nil
 }
 
-// makeRetryJobID creates the job ID for the retry job.
-func makeRetryJobID(id string, currAttempt int) string {
-	currAttemptSuffix := fmt.Sprintf(".attempt-%d", currAttempt)
-	if currAttempt != 0 && !strings.HasSuffix(id, currAttemptSuffix) {
-		// If the job has already been retried once but doesn't have the
-		// expected suffix applied by the retry handler, the job ID is in an
-		// invalid format.
-		return ""
-	}
-
-	return fmt.Sprintf("%s.attempt-%d", strings.TrimSuffix(id, currAttemptSuffix), currAttempt+1)
+func retryAttemptPrefix(attempt int) string {
+	return "attempt-%d"
 }

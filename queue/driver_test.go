@@ -198,6 +198,14 @@ func (s *DriverSuite) TestSaveJobPersistsJobInDriver() {
 	s.Equal(1, s.driver.Stats(s.ctx).Total)
 }
 
+/*
+kim: TODO:
+- Put then Get on retryable job returns the only doc when it's there.
+- Put then Get on retryable job returns latest.
+- Put then GetAttempt on retryable job returns attempt doc.
+- Put then GetAttempt on non-retryable job fails.
+*/
+
 func (s *DriverSuite) TestSaveAndGetRoundTripObjects() {
 	j := job.NewShellJob("echo foo", "")
 	name := j.ID()

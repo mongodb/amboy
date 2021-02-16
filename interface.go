@@ -162,12 +162,11 @@ type JobRetryInfo struct {
 	NeedsRetry bool `bson:"needs_retry" json:"needs_retry,omitempty" yaml:"needs_retry,omitempty"`
 	// BaseJobID is the job ID of the original job that was retried, ignoring
 	// any additional retry metadata.
-	// kim: TODO: store this with the job document when doing Put().
-	BaseJobID string `bson:"base_job_id" json:"base_job_id" omitempty:"base_job_id" yaml:"base_job_id,omitempty"`
-	// CurrentAttempt is the current attempt number. This is zero-indexed, so
-	// the first time the job attempts to run, its value is 0. Each subsequent
-	// retry increments this value.
-	CurrentAttempt int `bson:"current_attempt,omitempty" json:"current_attempt,omitempty" yaml:"current_attempt,omitempty"`
+	BaseJobID string `bson:"base_job_id" json:"base_job_id,omitempty" yaml:"base_job_id,omitempty"`
+	// CurrentAttempt is the current attempt number. This is zero-indexed
+	// (unless otherwise set on enqueue), so the first time the job attempts to
+	// run, its value is 0. Each subsequent retry increments this value.
+	CurrentAttempt int `bson:"current_attempt" json:"current_attempt,omitempty" yaml:"current_attempt,omitempty"`
 }
 
 // Options returns a JobRetryInfo as its equivalent JobRetryOptions. In other
@@ -319,7 +318,13 @@ type QueueGroup interface {
 // RetryableQueue is the same as a Queue but supports additional operations for
 // retryable jobs.
 type RetryableQueue interface {
+	// Queue is identical to the standard queue interface, except:
+	// For retryable jobs, Get will retrieve the latest attempt of a job by ID.
 	Queue
+
+	// GetAttempt returns the job associated with the given attempt of the job
+	// and a bool indicating whether the job was found or not.
+	GetAttempt(ctx context.Context, id string, attempt int) (RetryableJob, bool)
 
 	// RetryHandler returns the handler for retrying a job in this queue.
 	RetryHandler() RetryHandler
