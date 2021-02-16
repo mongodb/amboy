@@ -404,8 +404,6 @@ func (d *mongoDriver) getIDWithGroup(name string) string {
 }
 
 func (d *mongoDriver) addMetadata(j *registry.JobInterchange) {
-	// kim: NOTE: this has to happen before group/retry info is added to the
-	// name
 	if j.RetryInfo.Retryable {
 		j.RetryInfo.BaseJobID = j.Name
 	}
@@ -413,7 +411,6 @@ func (d *mongoDriver) addMetadata(j *registry.JobInterchange) {
 	d.addGroupToMetadata(j)
 }
 
-// kim: TODO: remove
 func (d *mongoDriver) removeMetadata(j *registry.JobInterchange) {
 	d.removeGroupFromMetadata(j)
 	d.removeRetryFromMetadata(j)
@@ -428,7 +425,6 @@ func (d *mongoDriver) addGroupToMetadata(j *registry.JobInterchange) {
 	j.Name = buildCompoundID(d.opts.GroupName, j.Name)
 }
 
-// kim: TODO: remove
 func (d *mongoDriver) removeGroupFromMetadata(j *registry.JobInterchange) {
 	if !d.opts.UseGroups {
 		return
@@ -445,7 +441,6 @@ func (d *mongoDriver) addRetryToMetadata(j *registry.JobInterchange) {
 	j.Name = buildCompoundID(retryAttemptPrefix(j.RetryInfo.CurrentAttempt), j.Name)
 }
 
-// kim: TODO: remove
 func (d *mongoDriver) removeRetryFromMetadata(j *registry.JobInterchange) {
 	if !j.RetryInfo.Retryable {
 		return
@@ -465,11 +460,6 @@ func (d *mongoDriver) modifyQueryForGroup(q bson.M) {
 func (d *mongoDriver) Get(ctx context.Context, name string) (amboy.Job, error) {
 	j := &registry.JobInterchange{}
 
-	// TODO (EVG-13540): should this handle getting a retryable job with attempt
-	// 0 by default? That seems like the only possible thing that can be done.
-	// kim: TODO: need to $or - either
-	// - by simple _id
-	// - by BaseJobID + max(CurrentAttempt)
 	matchID := bson.M{
 		"$or": []bson.M{
 			{"_id": d.getIDWithGroup(name)},
@@ -479,9 +469,6 @@ func (d *mongoDriver) Get(ctx context.Context, name string) (amboy.Job, error) {
 	byRetryAttempt := bson.M{
 		"retry_info.current_attempt": -1,
 	}
-	// res := d.getCollection().FindOne(ctx, bson.M{"_id": d.getIDFromMetadata(name)})
-	// kim: TODO: this needs to work even in the `_id` case, not just the
-	// base_job_id case
 	res := d.getCollection().FindOne(ctx, matchID, options.FindOne().SetSort(byRetryAttempt))
 	if err := res.Err(); err != nil {
 		return nil, errors.Wrapf(err, "GET problem fetching '%s'", name)
@@ -490,9 +477,6 @@ func (d *mongoDriver) Get(ctx context.Context, name string) (amboy.Job, error) {
 	if err := res.Decode(j); err != nil {
 		return nil, errors.Wrapf(err, "GET problem decoding '%s'", name)
 	}
-
-	// kim: QUESTION: can this be removed?
-	// d.removeMetadata(j)
 
 	output, err := j.Resolve(d.opts.Format)
 	if err != nil {
@@ -504,18 +488,10 @@ func (d *mongoDriver) Get(ctx context.Context, name string) (amboy.Job, error) {
 }
 
 func (d *mongoDriver) GetAttempt(ctx context.Context, name string, attempt int) (amboy.RetryableJob, error) {
-	// TODO (EVG-13540): should this handle getting a retryable job with attempt
-	// 0 by default? That seems like the only possible thing that can be done.
-	// kim: TODO: need to $or - either
-	// - by simple _id
-	// - by BaseJobID + max(CurrentAttempt)
 	matchIDAndAttempt := bson.M{
 		"retry_info.base_job_id":     name,
 		"retry_info.current_attempt": attempt,
 	}
-	// res := d.getCollection().FindOne(ctx, bson.M{"_id": d.getIDFromMetadata(name)})
-	// kim: TODO: this needs to work even in the `_id` case, not just the
-	// base_job_id case
 	res := d.getCollection().FindOne(ctx, matchIDAndAttempt)
 	if err := res.Err(); err != nil {
 		return nil, errors.Wrapf(err, "GET problem fetching '%s'", name)
@@ -525,9 +501,6 @@ func (d *mongoDriver) GetAttempt(ctx context.Context, name string, attempt int) 
 	if err := res.Decode(ji); err != nil {
 		return nil, errors.Wrapf(err, "GET problem decoding '%s'", name)
 	}
-
-	// kim: QUESTION: can this be removed?
-	// d.removeMetadata(j)
 
 	j, err := ji.Resolve(d.opts.Format)
 	if err != nil {
@@ -750,9 +723,6 @@ func (d *mongoDriver) Jobs(ctx context.Context) <-chan amboy.Job {
 				continue
 			}
 
-			// kim: QUESTION: can this be removed?
-			// d.removeMetadata(j)
-
 			job, err = ji.Resolve(d.opts.Format)
 			if err != nil {
 				grip.Warning(message.WrapError(err, message.Fields{
@@ -822,9 +792,10 @@ func (d *mongoDriver) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 				}))
 				continue
 			}
-			// kim: QUESTION: can this be removed?
+
 			d.removeMetadata(ji)
 			ji.Status.ID = ji.Name
+
 			select {
 			case <-ctx.Done():
 				return
@@ -1007,10 +978,6 @@ func (d *mongoDriver) tryDispatchJob(ctx context.Context, iter *mongo.Cursor, st
 			continue
 		}
 
-		// kim: QUESTION: why doesn't this have to remove the group metadata
-		// like the other places do, like Get()?
-		// d.removeMetadata(j)
-
 		j, err := ji.Resolve(d.opts.Format)
 		if err != nil {
 			grip.Warning(message.WrapError(err, message.Fields{
@@ -1030,8 +997,6 @@ func (d *mongoDriver) tryDispatchJob(ctx context.Context, iter *mongo.Cursor, st
 			// Delete stale jobs from the queue.
 			var res *mongo.DeleteResult
 
-			// kim: NOTE: since this has to include group, this should be j.Name
-			// instead of job.ID()
 			res, err = d.getCollection().DeleteOne(ctx, bson.M{"_id": j.ID()})
 			msg := message.Fields{
 				"id":            d.instanceID,
