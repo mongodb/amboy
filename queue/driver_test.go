@@ -368,6 +368,10 @@ func (s *DriverSuite) TestCompleteAndPutAtomicallySwapsScopes() {
 	s.Equal(j2.Scopes(), reloaded2.Scopes())
 }
 
+// kim: TODO: test:
+// - Put fails due to duplicate scope error (need unique index).
+// - SaveAndPut fails due to duplicate job ID error.
+
 func (s *DriverSuite) TestReloadRefreshesJobFromMemory() {
 	j := job.NewShellJob("echo foo", "")
 
