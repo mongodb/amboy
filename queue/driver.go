@@ -73,6 +73,7 @@ func DefaultMongoDBOptions() MongoDBOptions {
 		Priority:                 false,
 		UseGroups:                false,
 		CheckWaitUntil:           true,
+		CheckDispatchBy:          false,
 		SkipQueueIndexBuilds:     false,
 		SkipReportingIndexBuilds: false,
 		WaitInterval:             time.Second,
