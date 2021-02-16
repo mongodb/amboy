@@ -382,21 +382,24 @@ func (d *mongoDriver) getIDFromName(name string) string {
 	return name
 }
 
-func (d *mongoDriver) processNameForUsers(j *registry.JobInterchange) {
-	if !d.opts.UseGroups {
+func (d *mongoDriver) removeRetryFromID(j *registry.JobInterchange) {
+	if !j.RetryInfo.Retryable {
 		return
 	}
 
-	j.Name = j.Name[len(d.opts.GroupName)+1:]
+	prefix := retryAttemptPrefix(j.RetryInfo.CurrentAttempt)
+
+	j.Name = j.Name[len(prefix)+1:]
 }
 
-func (d *mongoDriver) processJobForGroup(j *registry.JobInterchange) {
-	if !d.opts.UseGroups {
+func (d *mongoDriver) addRetryToID(j *registry.JobInterchange) {
+	if !d.opts.UseRetries {
 		return
 	}
-
-	j.Group = d.opts.GroupName
-	j.Name = buildCompoundID(d.opts.GroupName, j.Name)
+	if !j.RetryInfo.Retryable {
+		return
+	}
+	j.Name = buildCompoundID(retryAttemptPrefix(j.RetryInfo.CurrentAttempt), j.Name)
 }
 
 func (d *mongoDriver) modifyQueryForGroup(q bson.M) {

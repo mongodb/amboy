@@ -243,14 +243,14 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 	// TODO (EVG-13540): ensure this is correct for grouped jobs (i.e. it may
 	// trim the grouped job ID off, which we have to make sure gets re-added
 	// before it's persisted).
-	id := makeRetryJobID(newJob.ID(), newInfo.CurrentTrial)
+	id := makeRetryJobID(newJob.ID(), newInfo.CurrentAttempt)
 	if id == "" {
 		return nil
 	}
 	newJob.SetID(id)
 	newInfo.NeedsRetry = false
 	newInfo.Retryable = false
-	newInfo.CurrentTrial++
+	newInfo.CurrentAttempt++
 	newJob.UpdateRetryInfo(newInfo.Options())
 
 	err := rh.queue.SaveAndPut(ctx, j, newJob)

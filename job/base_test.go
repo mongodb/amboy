@@ -154,19 +154,19 @@ func (s *BaseCheckSuite) TestUpdateRetryInfoSetsNonzeroFields() {
 
 	trial := 5
 	s.base.UpdateRetryInfo(amboy.JobRetryOptions{
-		CurrentTrial: utility.ToIntPtr(trial),
+		CurrentAttempt: utility.ToIntPtr(trial),
 	})
 
 	s.Require().Equal(amboy.JobRetryInfo{
-		Retryable:    true,
-		CurrentTrial: trial,
+		Retryable:      true,
+		CurrentAttempt: trial,
 	}, s.base.RetryInfo())
 
 	s.base.UpdateRetryInfo(amboy.JobRetryOptions{
 		Retryable: utility.FalsePtr(),
 	})
 	s.Require().Equal(amboy.JobRetryInfo{
-		CurrentTrial: trial,
+		CurrentAttempt: trial,
 	}, s.base.RetryInfo())
 
 	s.base.UpdateRetryInfo(amboy.JobRetryOptions{
@@ -174,7 +174,7 @@ func (s *BaseCheckSuite) TestUpdateRetryInfoSetsNonzeroFields() {
 	})
 
 	s.Require().Equal(amboy.JobRetryInfo{
-		NeedsRetry:   true,
-		CurrentTrial: trial,
+		NeedsRetry:     true,
+		CurrentAttempt: trial,
 	}, s.base.RetryInfo())
 }
