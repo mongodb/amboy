@@ -21,6 +21,7 @@ type remoteQueue interface {
 	// must be set before the queue can start. Once the queue has started, the
 	// driver cannot be modified.
 	SetDriver(remoteQueueDriver) error
+	// Driver returns the driver connected to the persistence layer.
 	Driver() remoteQueueDriver
 }
 

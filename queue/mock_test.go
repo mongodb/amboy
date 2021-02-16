@@ -31,35 +31,53 @@ type mockRemoteQueue struct {
 	remoteQueue
 
 	// Mockable methods
-	putJob        func(remoteQueue, context.Context, amboy.Job) error
-	getJob        func(q remoteQueue, ctx context.Context, id string) (amboy.Job, bool)
-	saveJob       func(remoteQueue, context.Context, amboy.Job) error
-	saveAndPutJob func(q remoteQueue, ctx context.Context, toSave, toPut amboy.RetryableJob) error
-	nextJob       func(remoteQueue, context.Context) amboy.Job
-	completeJob   func(remoteQueue, context.Context, amboy.Job)
-	jobResults    func(remoteQueue, context.Context) <-chan amboy.Job
-	jobStats      func(remoteQueue, context.Context) <-chan amboy.JobStatusInfo
-	queueStats    func(remoteQueue, context.Context) amboy.QueueStats
-	queueInfo     func(remoteQueue) amboy.QueueInfo
-	startQueue    func(remoteQueue, context.Context) error
-	closeQueue    func(remoteQueue, context.Context)
+	putJob        func(ctx context.Context, q remoteQueue, j amboy.Job) error
+	getJob        func(ctx context.Context, q remoteQueue, id string) (amboy.Job, bool)
+	saveJob       func(ctx context.Context, q remoteQueue, j amboy.Job) error
+	saveAndPutJob func(ctx context.Context, q remoteQueue, toSave, toPut amboy.RetryableJob) error
+	nextJob       func(ctx context.Context, q remoteQueue) amboy.Job
+	completeJob   func(ctx context.Context, q remoteQueue, j amboy.Job)
+	jobResults    func(ctx context.Context, q remoteQueue) <-chan amboy.Job
+	jobStats      func(ctx context.Context, q remoteQueue) <-chan amboy.JobStatusInfo
+	queueStats    func(ctx context.Context, q remoteQueue) amboy.QueueStats
+	queueInfo     func(q remoteQueue) amboy.QueueInfo
+	startQueue    func(ctx context.Context, q remoteQueue) error
+	closeQueue    func(ctx context.Context, q remoteQueue)
 }
 
-func newMockRemoteQueue(q remoteQueue, driver remoteQueueDriver, makeDispatcher func(q amboy.Queue) Dispatcher, rh amboy.RetryHandler) (*mockRemoteQueue, error) {
-	mq := &mockRemoteQueue{remoteQueue: q}
-	if driver != nil {
-		if err := q.SetDriver(driver); err != nil {
+type mockRemoteQueueOptions struct {
+	queue          remoteQueue
+	driver         remoteQueueDriver
+	makeDispatcher func(q amboy.Queue) Dispatcher
+	rh             amboy.RetryHandler
+}
+
+func (opts *mockRemoteQueueOptions) validate() error {
+	if opts.queue == nil {
+		return errors.New("cannot initialize mock remote queue without a backing remote queue implementation")
+	}
+
+	return nil
+}
+
+func newMockRemoteQueue(opts mockRemoteQueueOptions) (*mockRemoteQueue, error) {
+	if err := opts.validate(); err != nil {
+		return nil, errors.Wrap(err, "invalid options")
+	}
+	mq := &mockRemoteQueue{remoteQueue: opts.queue}
+	if opts.driver != nil {
+		if err := opts.queue.SetDriver(opts.driver); err != nil {
 			return nil, errors.Wrap(err, "configuring queue with driver")
 		}
 	}
-	if makeDispatcher != nil {
-		dispatcher := makeDispatcher(mq)
-		if driver != nil {
-			driver.SetDispatcher(dispatcher)
+	if opts.makeDispatcher != nil {
+		dispatcher := opts.makeDispatcher(mq)
+		if opts.driver != nil {
+			opts.driver.SetDispatcher(dispatcher)
 		}
 	}
-	if rh != nil {
-		if err := mq.SetRetryHandler(rh); err != nil {
+	if opts.rh != nil {
+		if err := mq.SetRetryHandler(opts.rh); err != nil {
 			return nil, errors.Wrap(err, "constructing queue with retry handler")
 		}
 	}
@@ -69,42 +87,42 @@ func newMockRemoteQueue(q remoteQueue, driver remoteQueueDriver, makeDispatcher 
 
 func (q *mockRemoteQueue) Put(ctx context.Context, j amboy.Job) error {
 	if q.putJob != nil {
-		return q.putJob(q.remoteQueue, ctx, j)
+		return q.putJob(ctx, q.remoteQueue, j)
 	}
 	return q.remoteQueue.Put(ctx, j)
 }
 
 func (q *mockRemoteQueue) Get(ctx context.Context, id string) (amboy.Job, bool) {
 	if q.getJob != nil {
-		return q.getJob(q.remoteQueue, ctx, id)
+		return q.getJob(ctx, q.remoteQueue, id)
 	}
 	return q.remoteQueue.Get(ctx, id)
 }
 
 func (q *mockRemoteQueue) Save(ctx context.Context, j amboy.Job) error {
 	if q.saveJob != nil {
-		return q.saveJob(q.remoteQueue, ctx, j)
+		return q.saveJob(ctx, q.remoteQueue, j)
 	}
 	return q.remoteQueue.Save(ctx, j)
 }
 
 func (q *mockRemoteQueue) SaveAndPut(ctx context.Context, toSave, toPut amboy.RetryableJob) error {
 	if q.saveAndPutJob != nil {
-		return q.saveAndPutJob(q.remoteQueue, ctx, toSave, toPut)
+		return q.saveAndPutJob(ctx, q.remoteQueue, toSave, toPut)
 	}
 	return q.remoteQueue.SaveAndPut(ctx, toSave, toPut)
 }
 
 func (q *mockRemoteQueue) Next(ctx context.Context) amboy.Job {
 	if q.nextJob != nil {
-		return q.nextJob(q.remoteQueue, ctx)
+		return q.nextJob(ctx, q.remoteQueue)
 	}
 	return q.remoteQueue.Next(ctx)
 }
 
 func (q *mockRemoteQueue) Complete(ctx context.Context, j amboy.Job) {
 	if q.completeJob != nil {
-		q.completeJob(q.remoteQueue, ctx, j)
+		q.completeJob(ctx, q.remoteQueue, j)
 		return
 	}
 	q.remoteQueue.Complete(ctx, j)
@@ -112,21 +130,21 @@ func (q *mockRemoteQueue) Complete(ctx context.Context, j amboy.Job) {
 
 func (q *mockRemoteQueue) Results(ctx context.Context) <-chan amboy.Job {
 	if q.jobResults != nil {
-		return q.jobResults(q.remoteQueue, ctx)
+		return q.jobResults(ctx, q.remoteQueue)
 	}
 	return q.remoteQueue.Results(ctx)
 }
 
 func (q *mockRemoteQueue) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 	if q.jobStats != nil {
-		return q.jobStats(q.remoteQueue, ctx)
+		return q.jobStats(ctx, q.remoteQueue)
 	}
 	return q.remoteQueue.JobStats(ctx)
 }
 
 func (q *mockRemoteQueue) Stats(ctx context.Context) amboy.QueueStats {
 	if q.queueStats != nil {
-		return q.queueStats(q.remoteQueue, ctx)
+		return q.queueStats(ctx, q.remoteQueue)
 	}
 	return q.remoteQueue.Stats(ctx)
 }
@@ -140,14 +158,14 @@ func (q *mockRemoteQueue) Info() amboy.QueueInfo {
 
 func (q *mockRemoteQueue) Start(ctx context.Context) error {
 	if q.startQueue != nil {
-		return q.startQueue(q.remoteQueue, ctx)
+		return q.startQueue(ctx, q.remoteQueue)
 	}
 	return q.remoteQueue.Start(ctx)
 }
 
 func (q *mockRemoteQueue) Close(ctx context.Context) {
 	if q.closeQueue != nil {
-		q.closeQueue(q.remoteQueue, ctx)
+		q.closeQueue(ctx, q.remoteQueue)
 		return
 	}
 	q.remoteQueue.Close(ctx)

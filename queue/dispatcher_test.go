@@ -283,7 +283,12 @@ func TestDispatcherImplementations(t *testing.T) {
 						assert.NoError(t, mDriver.getCollection().Database().Drop(tctx))
 					}()
 
-					mq, err := newMockRemoteQueue(q, driver, makeDispatcher, nil)
+					opts := mockRemoteQueueOptions{
+						queue:          q,
+						driver:         driver,
+						makeDispatcher: makeDispatcher,
+					}
+					mq, err := newMockRemoteQueue(opts)
 					require.NoError(t, err)
 
 					testCase(tctx, t, mq.Driver().Dispatcher(), mq)
