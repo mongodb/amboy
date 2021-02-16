@@ -53,7 +53,6 @@ type MongoDBOptions struct {
 	DB                       string
 	GroupName                string
 	UseGroups                bool
-	UseRetries               bool
 	Priority                 bool
 	CheckWaitUntil           bool
 	CheckDispatchBy          bool

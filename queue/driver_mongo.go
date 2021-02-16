@@ -238,6 +238,19 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 			},
 			Options: options.Index().SetSparse(true).SetUnique(true),
 		},
+		{
+			Keys: bsonx.Doc{
+				{
+					Key:   "retry_info.base_job_id",
+					Value: bsonx.Int32(1),
+				},
+				{
+					Key:   "retry_info.current_attempt",
+					Value: bsonx.Int32(-1),
+				},
+			},
+			Options: options.Index().SetUnique(true),
+		},
 	}
 
 	if d.opts.TTL > 0 {
@@ -250,22 +263,6 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 				},
 			},
 			Options: options.Index().SetExpireAfterSeconds(ttl),
-		})
-	}
-
-	if d.opts.UseRetries {
-		indexes = append(indexes, mongo.IndexModel{
-			Keys: bsonx.Doc{
-				{
-					Key:   "retry_info.base_job_id",
-					Value: bsonx.Int32(1),
-				},
-				{
-					Key:   "retry_info.current_attempt",
-					Value: bsonx.Int32(-1),
-				},
-			},
-			Options: options.Index().SetUnique(true),
 		})
 	}
 
