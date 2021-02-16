@@ -413,6 +413,7 @@ func (d *mongoDriver) addMetadata(j *registry.JobInterchange) {
 	d.addGroupToMetadata(j)
 }
 
+// kim: TODO: remove
 func (d *mongoDriver) removeMetadata(j *registry.JobInterchange) {
 	d.removeGroupFromMetadata(j)
 	d.removeRetryFromMetadata(j)
@@ -427,6 +428,7 @@ func (d *mongoDriver) addGroupToMetadata(j *registry.JobInterchange) {
 	j.Name = buildCompoundID(d.opts.GroupName, j.Name)
 }
 
+// kim: TODO: remove
 func (d *mongoDriver) removeGroupFromMetadata(j *registry.JobInterchange) {
 	if !d.opts.UseGroups {
 		return
@@ -443,6 +445,7 @@ func (d *mongoDriver) addRetryToMetadata(j *registry.JobInterchange) {
 	j.Name = buildCompoundID(retryAttemptPrefix(j.RetryInfo.CurrentAttempt), j.Name)
 }
 
+// kim: TODO: remove
 func (d *mongoDriver) removeRetryFromMetadata(j *registry.JobInterchange) {
 	if !j.RetryInfo.Retryable {
 		return
@@ -488,7 +491,8 @@ func (d *mongoDriver) Get(ctx context.Context, name string) (amboy.Job, error) {
 		return nil, errors.Wrapf(err, "GET problem decoding '%s'", name)
 	}
 
-	d.removeMetadata(j)
+	// kim: QUESTION: can this be removed?
+	// d.removeMetadata(j)
 
 	output, err := j.Resolve(d.opts.Format)
 	if err != nil {
@@ -500,8 +504,6 @@ func (d *mongoDriver) Get(ctx context.Context, name string) (amboy.Job, error) {
 }
 
 func (d *mongoDriver) GetAttempt(ctx context.Context, name string, attempt int) (amboy.RetryableJob, error) {
-	j := &registry.JobInterchange{}
-
 	// TODO (EVG-13540): should this handle getting a retryable job with attempt
 	// 0 by default? That seems like the only possible thing that can be done.
 	// kim: TODO: need to $or - either
@@ -519,39 +521,41 @@ func (d *mongoDriver) GetAttempt(ctx context.Context, name string, attempt int) 
 		return nil, errors.Wrapf(err, "GET problem fetching '%s'", name)
 	}
 
-	if err := res.Decode(j); err != nil {
+	ji := &registry.JobInterchange{}
+	if err := res.Decode(ji); err != nil {
 		return nil, errors.Wrapf(err, "GET problem decoding '%s'", name)
 	}
 
-	d.removeMetadata(j)
+	// kim: QUESTION: can this be removed?
+	// d.removeMetadata(j)
 
-	job, err := j.Resolve(d.opts.Format)
+	j, err := ji.Resolve(d.opts.Format)
 	if err != nil {
 		return nil, errors.Wrapf(err,
 			"GET problem converting '%s' to job object", name)
 	}
 
-	rj, ok := job.(amboy.RetryableJob)
+	rj, ok := j.(amboy.RetryableJob)
 	if !ok {
-		return nil, errors.Errorf("programmatic error: job '%s' is not retryable", job.ID())
+		return nil, errors.Errorf("programmatic error: job '%s' is not retryable", j.ID())
 	}
 
 	return rj, nil
 }
 
 func (d *mongoDriver) Put(ctx context.Context, j amboy.Job) error {
-	job, err := registry.MakeJobInterchange(j, d.opts.Format)
+	ji, err := registry.MakeJobInterchange(j, d.opts.Format)
 	if err != nil {
 		return errors.Wrap(err, "problem converting job to interchange format")
 	}
 
 	if j.ShouldApplyScopesOnEnqueue() {
-		job.Scopes = j.Scopes()
+		ji.Scopes = j.Scopes()
 	}
 
-	d.addMetadata(job)
+	d.addMetadata(ji)
 
-	if _, err = d.getCollection().InsertOne(ctx, job); err != nil {
+	if _, err = d.getCollection().InsertOne(ctx, ji); err != nil {
 		if isMongoDupKey(err) {
 			return amboy.NewDuplicateJobErrorf("job '%s' already exists", j.ID())
 		}
@@ -689,24 +693,24 @@ func (d *mongoDriver) prepareInterchange(j amboy.Job) (*registry.JobInterchange,
 	stat.ModificationTime = time.Now()
 	j.SetStatus(stat)
 
-	job, err := registry.MakeJobInterchange(j, d.opts.Format)
+	ji, err := registry.MakeJobInterchange(j, d.opts.Format)
 	if err != nil {
 		return nil, errors.Wrap(err, "problem converting job to interchange format")
 	}
-	return job, nil
+	return ji, nil
 }
 
-func (d *mongoDriver) doUpdate(ctx context.Context, job *registry.JobInterchange) error {
-	d.addMetadata(job)
+func (d *mongoDriver) doUpdate(ctx context.Context, ji *registry.JobInterchange) error {
+	d.addMetadata(ji)
 
-	query := d.getAtomicQuery(job.Name, job.Status.ModificationCount)
-	res, err := d.getCollection().ReplaceOne(ctx, query, job)
+	query := d.getAtomicQuery(ji.Name, ji.Status.ModificationCount)
+	res, err := d.getCollection().ReplaceOne(ctx, query, ji)
 	if err != nil {
-		return errors.Wrapf(err, "problem saving document %s: %+v", job.Name, res)
+		return errors.Wrapf(err, "problem saving document %s: %+v", ji.Name, res)
 	}
 
 	if res.MatchedCount == 0 {
-		return errors.Errorf("problem saving job [id=%s, matched=%d, modified=%d]", job.Name, res.MatchedCount, res.ModifiedCount)
+		return errors.Errorf("problem saving job [id=%s, matched=%d, modified=%d]", ji.Name, res.MatchedCount, res.ModifiedCount)
 	}
 	return nil
 }
@@ -732,8 +736,8 @@ func (d *mongoDriver) Jobs(ctx context.Context) <-chan amboy.Job {
 		}
 		var job amboy.Job
 		for iter.Next(ctx) {
-			j := &registry.JobInterchange{}
-			if err = iter.Decode(j); err != nil {
+			ji := &registry.JobInterchange{}
+			if err = iter.Decode(ji); err != nil {
 				grip.Warning(message.WrapError(err, message.Fields{
 					"id":        d.instanceID,
 					"service":   "amboy.queue.mdb",
@@ -746,9 +750,10 @@ func (d *mongoDriver) Jobs(ctx context.Context) <-chan amboy.Job {
 				continue
 			}
 
-			d.removeMetadata(j)
+			// kim: QUESTION: can this be removed?
+			// d.removeMetadata(j)
 
-			job, err = j.Resolve(d.opts.Format)
+			job, err = ji.Resolve(d.opts.Format)
 			if err != nil {
 				grip.Warning(message.WrapError(err, message.Fields{
 					"id":        d.instanceID,
@@ -805,8 +810,8 @@ func (d *mongoDriver) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 		}
 
 		for iter.Next(ctx) {
-			j := &registry.JobInterchange{}
-			if err := iter.Decode(j); err != nil {
+			ji := &registry.JobInterchange{}
+			if err := iter.Decode(ji); err != nil {
 				grip.Warning(message.WrapError(err, message.Fields{
 					"id":        d.instanceID,
 					"service":   "amboy.queue.monto",
@@ -817,12 +822,13 @@ func (d *mongoDriver) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 				}))
 				continue
 			}
-			d.removeMetadata(j)
-			j.Status.ID = j.Name
+			// kim: QUESTION: can this be removed?
+			d.removeMetadata(ji)
+			ji.Status.ID = ji.Name
 			select {
 			case <-ctx.Done():
 				return
-			case output <- j.Status:
+			case output <- ji.Status:
 			}
 
 		}
@@ -986,8 +992,8 @@ type dispatchAttemptInfo struct {
 func (d *mongoDriver) tryDispatchJob(ctx context.Context, iter *mongo.Cursor, startAt time.Time) (amboy.Job, dispatchAttemptInfo) {
 	var dispatchInfo dispatchAttemptInfo
 	for iter.Next(ctx) {
-		j := &registry.JobInterchange{}
-		if err := iter.Decode(j); err != nil {
+		ji := &registry.JobInterchange{}
+		if err := iter.Decode(ji); err != nil {
 			grip.Warning(message.WrapError(err, message.Fields{
 				"id":            d.instanceID,
 				"service":       "amboy.queue.mdb",
@@ -1001,7 +1007,11 @@ func (d *mongoDriver) tryDispatchJob(ctx context.Context, iter *mongo.Cursor, st
 			continue
 		}
 
-		job, err := j.Resolve(d.opts.Format)
+		// kim: QUESTION: why doesn't this have to remove the group metadata
+		// like the other places do, like Get()?
+		// d.removeMetadata(j)
+
+		j, err := ji.Resolve(d.opts.Format)
 		if err != nil {
 			grip.Warning(message.WrapError(err, message.Fields{
 				"id":            d.instanceID,
@@ -1016,19 +1026,21 @@ func (d *mongoDriver) tryDispatchJob(ctx context.Context, iter *mongo.Cursor, st
 			continue
 		}
 
-		if job.TimeInfo().IsStale() {
+		if j.TimeInfo().IsStale() {
 			// Delete stale jobs from the queue.
 			var res *mongo.DeleteResult
 
-			res, err = d.getCollection().DeleteOne(ctx, bson.M{"_id": job.ID()})
+			// kim: NOTE: since this has to include group, this should be j.Name
+			// instead of job.ID()
+			res, err = d.getCollection().DeleteOne(ctx, bson.M{"_id": j.ID()})
 			msg := message.Fields{
 				"id":            d.instanceID,
 				"service":       "amboy.queue.mdb",
 				"num_deleted":   res.DeletedCount,
 				"message":       "found stale job",
 				"operation":     "job staleness check",
-				"job_id":        job.ID(),
-				"job_type":      job.Type().Name,
+				"job_id":        j.ID(),
+				"job_type":      j.Type().Name,
 				"is_group":      d.opts.UseGroups,
 				"group":         d.opts.GroupName,
 				"duration_secs": time.Since(startAt).Seconds(),
@@ -1038,26 +1050,26 @@ func (d *mongoDriver) tryDispatchJob(ctx context.Context, iter *mongo.Cursor, st
 			continue
 		}
 
-		if !isDispatchable(job.Status(), d.opts.LockTimeout) {
+		if !isDispatchable(j.Status(), d.opts.LockTimeout) {
 			dispatchInfo.skips++
 			continue
-		} else if d.scopesInUse(ctx, job.Scopes()) && !jobCanRestart(job.Status(), d.opts.LockTimeout) {
+		} else if d.scopesInUse(ctx, j.Scopes()) && !jobCanRestart(j.Status(), d.opts.LockTimeout) {
 			dispatchInfo.skips++
 			continue
 		}
 
-		if err = d.dispatcher.Dispatch(ctx, job); err != nil {
+		if err = d.dispatcher.Dispatch(ctx, j); err != nil {
 			dispatchInfo.misses++
 			grip.DebugWhen(
-				isDispatchable(job.Status(), d.opts.LockTimeout),
+				isDispatchable(j.Status(), d.opts.LockTimeout),
 				message.WrapError(err, message.Fields{
 					"id":            d.instanceID,
 					"service":       "amboy.queue.mdb",
 					"operation":     "dispatch job",
-					"job_id":        job.ID(),
-					"job_type":      job.Type().Name,
-					"scopes":        job.Scopes(),
-					"stat":          job.Status(),
+					"job_id":        j.ID(),
+					"job_type":      j.Type().Name,
+					"scopes":        j.Scopes(),
+					"stat":          j.Status(),
 					"is_group":      d.opts.UseGroups,
 					"group":         d.opts.GroupName,
 					"dup_key":       isMongoDupKey(err),
@@ -1066,7 +1078,7 @@ func (d *mongoDriver) tryDispatchJob(ctx context.Context, iter *mongo.Cursor, st
 			)
 			continue
 		}
-		return job, dispatchInfo
+		return j, dispatchInfo
 	}
 
 	return nil, dispatchInfo
