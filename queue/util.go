@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// RandomString returns a cryptographically random string.
+// randomString returns a cryptographically random string.
 func randomString(x int) string {
 	b := make([]byte, x)
 	_, _ = rand.Read(b) // nolint
