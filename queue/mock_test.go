@@ -21,7 +21,7 @@ func init() {
 	mockJobCounters = &mockJobRunEnv{}
 	registry.AddJobType("mock", func() amboy.Job { return newMockJob() })
 	registry.AddJobType("sleep", func() amboy.Job { return newSleepJob() })
-	registry.AddJobType("retryable", func() amboy.Job { return &mockRetryableJob{} })
+	registry.AddJobType("mock-retryable", func() amboy.Job { return makeMockRetryableJob() })
 }
 
 // mockRetryableQueue provides a mock implementation of a remoteQueue whose
@@ -181,12 +181,24 @@ type mockRetryableJob struct {
 	op                func()
 }
 
+func makeMockRetryableJob() *mockRetryableJob {
+	j := &mockRetryableJob{
+		Base: job.Base{
+			JobType: amboy.JobType{
+				Name:    "mock-retryable",
+				Version: 0,
+			},
+		},
+	}
+	j.SetDependency(dependency.NewAlways())
+	return j
+}
+
 func newMockRetryableJob(id string) *mockRetryableJob {
-	j := &mockRetryableJob{}
+	j := makeMockRetryableJob()
 	j.UpdateRetryInfo(amboy.JobRetryOptions{
 		Retryable: utility.TruePtr(),
 	})
-	j.SetDependency(dependency.NewAlways())
 	j.SetID(fmt.Sprintf("mock-retryable-%s", id))
 	return j
 }

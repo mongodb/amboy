@@ -265,7 +265,6 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 					Value: bsonx.Int32(-1),
 				},
 			},
-			// kim: QUESTION: should this be unique? It seems like it should be.
 			Options: options.Index().SetUnique(true),
 		})
 	}

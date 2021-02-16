@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -255,5 +256,5 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 }
 
 func retryAttemptPrefix(attempt int) string {
-	return "attempt-%d"
+	return fmt.Sprintf("attempt-%d", attempt)
 }
