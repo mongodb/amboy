@@ -56,6 +56,7 @@ type QueueTestCase struct {
 	DispatchBeforeSupported bool
 	MaxTimeSupported        bool
 	ScopesSupported         bool
+	RetrySupported          bool
 	SkipUnordered           bool
 	IsRemote                bool
 	Skip                    bool
@@ -167,6 +168,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 			WaitUntilSupported: true,
 			MaxTimeSupported:   true,
 			ScopesSupported:    true,
+			RetrySupported:     true,
 			Constructor: func(ctx context.Context, name string, size int) (amboy.Queue, TestCloser, error) {
 				opts := MongoDBQueueCreationOptions{
 					Size:    size,
@@ -203,6 +205,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 			WaitUntilSupported: true,
 			MaxTimeSupported:   true,
 			ScopesSupported:    true,
+			RetrySupported:     true,
 			Constructor: func(ctx context.Context, name string, size int) (amboy.Queue, TestCloser, error) {
 				opts := MongoDBQueueCreationOptions{
 					Size:    size,
@@ -241,6 +244,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 			WaitUntilSupported: true,
 			MaxTimeSupported:   true,
 			ScopesSupported:    true,
+			RetrySupported:     true,
 			MaxSize:            32,
 			Constructor: func(ctx context.Context, name string, size int) (amboy.Queue, TestCloser, error) {
 				opts := MongoDBQueueCreationOptions{
@@ -277,6 +281,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 			IsRemote:           true,
 			WaitUntilSupported: true,
 			MaxTimeSupported:   true,
+			RetrySupported:     true,
 			ScopesSupported:    true,
 			OrderedSupported:   true,
 			Constructor: func(ctx context.Context, name string, size int) (amboy.Queue, TestCloser, error) {
@@ -447,6 +452,12 @@ func TestQueueSmoke(t *testing.T) {
 							if test.MaxTimeSupported {
 								t.Run("MaxTime", func(t *testing.T) {
 									MaxTimeTest(bctx, t, test, runner, size)
+								})
+							}
+
+							if test.RetrySupported && size.Size >= 2 {
+								t.Run("Retryable", func(t *testing.T) {
+									RetryableTest(bctx, t, test, runner, size)
 								})
 							}
 
@@ -1103,4 +1114,64 @@ func ApplyScopesOnEnqueueTest(bctx context.Context, t *testing.T, test QueueTest
 	}
 }
 
-// TODO (EVG-13540): write integration tests with remoteQueue and RetryHandler.
+func RetryableTest(bctx context.Context, t *testing.T, test QueueTestCase, runner PoolTestCase, size SizeTestCase) {
+	ctx, cancel := context.WithTimeout(bctx, time.Minute)
+	defer cancel()
+
+	q, closer, err := test.Constructor(ctx, newDriverID(), size.Size)
+	require.NoError(t, err)
+	defer func() {
+		assert.NoError(t, closer(ctx))
+	}()
+
+	rq, ok := q.(amboy.RetryableQueue)
+	require.True(t, ok, "queue is not retryable")
+
+	require.NoError(t, runner.SetPool(rq, size.Size))
+
+	rh, err := newBasicRetryHandler(rq, amboy.RetryHandlerOptions{})
+	require.NoError(t, err)
+	require.NoError(t, rq.SetRetryHandler(rh))
+
+	require.NoError(t, rq.Start(ctx))
+
+	j := newMockRetryableJob("id")
+	j.NumTimesToRetry = 1
+
+	require.NoError(t, rq.Put(ctx, j))
+	require.True(t, amboy.WaitInterval(ctx, rq, 100*time.Millisecond))
+
+	jobReenqueued := make(chan struct{})
+	go func() {
+		defer close(jobReenqueued)
+		for {
+			if ctx.Err() != nil {
+				return
+			}
+			if rq.Stats(ctx).Total > 1 {
+				return
+			}
+		}
+	}()
+	select {
+	case <-ctx.Done():
+	case <-jobReenqueued:
+		assert.True(t, rq.Stats(ctx).Total > 1)
+		require.True(t, amboy.WaitInterval(ctx, rq, 100*time.Millisecond))
+		var foundFirstAttempt, foundSecondAttempt bool
+		for completed := range rq.Results(ctx) {
+			rj, ok := completed.(amboy.RetryableJob)
+			require.True(t, ok)
+			assert.True(t, rj.RetryInfo().Retryable)
+			assert.False(t, rj.RetryInfo().NeedsRetry)
+			if rj.RetryInfo().CurrentTrial == 0 {
+				foundFirstAttempt = true
+			}
+			if rj.RetryInfo().CurrentTrial == 1 {
+				foundSecondAttempt = true
+			}
+		}
+		assert.True(t, foundFirstAttempt, "first job attempt should have completed")
+		assert.True(t, foundSecondAttempt, "second job attempt should have completed")
+	}
+}
