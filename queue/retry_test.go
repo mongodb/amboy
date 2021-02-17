@@ -328,3 +328,52 @@ func TestRetryHandlerImplementations(t *testing.T) {
 		})
 	}
 }
+
+// func TestRetryHandlerQueueIntegration(t *testing.T) {
+
+// }
+
+// func RetryableTest(bctx context.Context, t *testing.T, test QueueTestCase, runner PoolTestCase, size SizeTestCase) {
+// 	q, closer, err := test.Constructor(bctx, newDriverID(), size.Size)
+// 	require.NoError(t, err)
+// 	defer func() {
+// 		assert.NoError(t, closer(bctx))
+// 	}()
+// 	_, ok := q.(amboy.RetryableQueue)
+// 	require.True(t, ok, "queue is not retryable")
+//
+// 	/*
+// 		kim: TODO: test:
+// 		- mock retryable job sets needs retry on the first attempt and re-enqueues itself. Second job is identical except for things like NeedsRetry/CurrentAttempt
+// 		- mock retryable job does not set needs retry and does not re-enqueue.
+// 		- mock retryable job updates retry info to need retry and re-enqueues.
+// 		- mock retryable job updates retry info with different current attempt, and it fails to re-enqueue.
+// 	*/
+// 	// for testName, testCase := range map[string]func(ctx context.Context, t *testing.T, q amboy.RetryableQueue){
+// 	//     // "": func(ctx context.Context, t *testing.T, q amboy.RetryableQueue) {},
+// 	//     // "": func(ctx context.Context, t *testing.T, q amboy.RetryableQueue) {},
+// 	//     // "": func(ctx context.Context, t *testing.T, q amboy.RetryableQueue) {},
+// 	//     // "": func(ctx context.Context, t *testing.T, q amboy.RetryableQueue) {},
+// 	// } {
+// 	//     t.Run(testName, func(t *testing.T) {
+// 	//         ctx, cancel := context.WithTimeout(bctx, time.Minute)
+// 	//         defer cancel()
+// 	//
+// 	//         q, closer, err := test.Constructor(ctx, newDriverID(), size.Size)
+// 	//         require.NoError(t, err)
+// 	//         defer func() {
+// 	//             assert.NoError(t, closer(ctx))
+// 	//         }()
+// 	//         require.NoError(t, runner.SetPool(q, size.Size))
+// 	//
+// 	//         require.NoError(t, q.Start(ctx))
+// 	//
+// 	//         amboy.WithRetryableQueue(q, func(rq amboy.RetryableQueue) {
+// 	//             rh, err := newBasicRetryHandler(rq, amboy.RetryHandlerOptions{})
+// 	//             require.NoError(t, err)
+// 	//             require.NoError(t, rq.SetRetryHandler(rh))
+// 	//             testCase(ctx, t, rq)
+// 	//         })
+// 	//     })
+// 	// }
+// }
