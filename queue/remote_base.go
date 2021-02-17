@@ -161,7 +161,7 @@ func (q *remoteBase) Save(ctx context.Context, j amboy.Job) error {
 	return q.driver.Save(ctx, j)
 }
 
-func (q *remoteBase) SaveAndPut(ctx context.Context, toSave, toPut amboy.RetryableJob) error {
+func (q *remoteBase) SaveAndPut(ctx context.Context, toSave, toPut amboy.Job) error {
 	return q.driver.SaveAndPut(ctx, toSave, toPut)
 }
 

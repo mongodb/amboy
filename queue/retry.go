@@ -115,7 +115,7 @@ func (rh *basicRetryHandler) Put(ctx context.Context, j amboy.RetryableJob) erro
 
 func (rh *basicRetryHandler) Close(ctx context.Context) {
 	rh.mu.Lock()
-	if !rh.Started() {
+	if !rh.started {
 		rh.mu.Unlock()
 		return
 	}

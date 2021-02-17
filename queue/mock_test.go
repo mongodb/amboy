@@ -30,11 +30,15 @@ func init() {
 type mockRemoteQueue struct {
 	remoteQueue
 
+	driver       remoteQueueDriver
+	dispatcher   Dispatcher
+	retryHandler amboy.RetryHandler
+
 	// Mockable methods
 	putJob        func(ctx context.Context, q remoteQueue, j amboy.Job) error
 	getJob        func(ctx context.Context, q remoteQueue, id string) (amboy.Job, bool)
 	saveJob       func(ctx context.Context, q remoteQueue, j amboy.Job) error
-	saveAndPutJob func(ctx context.Context, q remoteQueue, toSave, toPut amboy.RetryableJob) error
+	saveAndPutJob func(ctx context.Context, q remoteQueue, toSave, toPut amboy.Job) error
 	nextJob       func(ctx context.Context, q remoteQueue) amboy.Job
 	completeJob   func(ctx context.Context, q remoteQueue, j amboy.Job)
 	jobResults    func(ctx context.Context, q remoteQueue) <-chan amboy.Job
@@ -46,10 +50,10 @@ type mockRemoteQueue struct {
 }
 
 type mockRemoteQueueOptions struct {
-	queue          remoteQueue
-	driver         remoteQueueDriver
-	makeDispatcher func(q amboy.Queue) Dispatcher
-	rh             amboy.RetryHandler
+	queue            remoteQueue
+	driver           remoteQueueDriver
+	makeDispatcher   func(q amboy.Queue) Dispatcher
+	makeRetryHandler func(q amboy.RetryableQueue) (amboy.RetryHandler, error)
 }
 
 func (opts *mockRemoteQueueOptions) validate() error {
@@ -71,18 +75,41 @@ func newMockRemoteQueue(opts mockRemoteQueueOptions) (*mockRemoteQueue, error) {
 		}
 	}
 	if opts.makeDispatcher != nil {
-		dispatcher := opts.makeDispatcher(mq)
+		mq.dispatcher = opts.makeDispatcher(mq)
 		if opts.driver != nil {
-			opts.driver.SetDispatcher(dispatcher)
+			opts.driver.SetDispatcher(mq.dispatcher)
 		}
 	}
-	if opts.rh != nil {
-		if err := mq.SetRetryHandler(opts.rh); err != nil {
+	if opts.makeRetryHandler != nil {
+		rh, err := opts.makeRetryHandler(mq)
+		if err != nil {
+			return nil, errors.Wrap(err, "initializing retry handler")
+		}
+		if err := mq.SetRetryHandler(rh); err != nil {
 			return nil, errors.Wrap(err, "constructing queue with retry handler")
 		}
 	}
 
 	return mq, nil
+}
+
+func (q *mockRemoteQueue) Driver() remoteQueueDriver {
+	return q.driver
+}
+
+func (q *mockRemoteQueue) SetDriver(d remoteQueueDriver) error {
+	q.driver = d
+	q.driver.SetDispatcher(q.dispatcher)
+	return nil
+}
+
+func (q *mockRemoteQueue) RetryHandler() amboy.RetryHandler {
+	return q.retryHandler
+}
+
+func (q *mockRemoteQueue) SetRetryHandler(rh amboy.RetryHandler) error {
+	q.retryHandler = rh
+	return rh.SetQueue(q)
 }
 
 func (q *mockRemoteQueue) Put(ctx context.Context, j amboy.Job) error {
@@ -106,7 +133,7 @@ func (q *mockRemoteQueue) Save(ctx context.Context, j amboy.Job) error {
 	return q.remoteQueue.Save(ctx, j)
 }
 
-func (q *mockRemoteQueue) SaveAndPut(ctx context.Context, toSave, toPut amboy.RetryableJob) error {
+func (q *mockRemoteQueue) SaveAndPut(ctx context.Context, toSave, toPut amboy.Job) error {
 	if q.saveAndPutJob != nil {
 		return q.saveAndPutJob(ctx, q.remoteQueue, toSave, toPut)
 	}

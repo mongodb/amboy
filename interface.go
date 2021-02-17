@@ -333,7 +333,7 @@ type RetryableQueue interface {
 	// SaveAndPut saves an existing job toSave in the queue (see Save) and
 	// inserts a new job toPut in the queue (see Put). Implementations must
 	// make this operation atomic.
-	SaveAndPut(ctx context.Context, toSave, toPut RetryableJob) error
+	SaveAndPut(ctx context.Context, toSave, toPut Job) error
 }
 
 // RetryHandler provides a means to retry RetryableJobs within a RetryableQueue.
