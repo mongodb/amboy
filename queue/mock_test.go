@@ -93,6 +93,8 @@ func newMockRemoteQueue(opts mockRemoteQueueOptions) (*mockRemoteQueue, error) {
 	return mq, nil
 }
 
+func (q *mockRemoteQueue) ID() string { return "mock-remote" }
+
 func (q *mockRemoteQueue) Driver() remoteQueueDriver {
 	return q.driver
 }
@@ -202,10 +204,24 @@ func (q *mockRemoteQueue) Close(ctx context.Context) {
 // whose runtime behavior is configurable.
 type mockRetryableJob struct {
 	job.Base
-	addError          error
-	addRetryableError error
-	updateRetryInfo   *amboy.JobRetryOptions
-	op                func()
+	ErrorToAdd          string                 `bson:"error_to_add" json:"error_to_add"`
+	RetryableErrorToAdd string                 `bson:"retryable_error_to_add" json:"retryable_error_to_add"`
+	NumTimesToRetry     int                    `bson:"num_times_to_retry" json:"num_times_to_retry"`
+	UpdatedRetryInfo    *amboy.JobRetryOptions `bson:"updated_retry_info" json:"updated_retry_info"`
+	op                  func(*mockRetryableJob)
+}
+
+func makeMockRetryableJob() *mockRetryableJob {
+	j := &mockRetryableJob{
+		Base: job.Base{
+			JobType: amboy.JobType{
+				Name:    "mock-retryable",
+				Version: 0,
+			},
+		},
+	}
+	j.SetDependency(dependency.NewAlways())
+	return j
 }
 
 func makeMockRetryableJob() *mockRetryableJob {
@@ -232,20 +248,26 @@ func newMockRetryableJob(id string) *mockRetryableJob {
 
 func (j *mockRetryableJob) Run(ctx context.Context) {
 	defer j.MarkComplete()
-	if j.addError != nil {
-		j.AddError(j.addError)
+	if j.ErrorToAdd != "" {
+		j.AddError(errors.New(j.ErrorToAdd))
+	}
+	if j.RetryableErrorToAdd != "" {
+		j.AddRetryableError(errors.New(j.RetryableErrorToAdd))
 	}
 
-	if j.addRetryableError != nil {
-		j.AddRetryableError(j.addRetryableError)
+	if j.UpdatedRetryInfo != nil {
+		j.UpdateRetryInfo(*j.UpdatedRetryInfo)
 	}
 
-	if j.updateRetryInfo != nil {
-		j.UpdateRetryInfo(*j.updateRetryInfo)
+	if j.NumTimesToRetry != 0 && j.RetryInfo().CurrentTrial < j.NumTimesToRetry {
+		j.NumTimesToRetry++
+		j.UpdateRetryInfo(amboy.JobRetryOptions{
+			NeedsRetry: utility.TruePtr(),
+		})
 	}
 
 	if j.op != nil {
-		j.op()
+		j.op(j)
 	}
 }
 
