@@ -199,7 +199,7 @@ func (rh *basicRetryHandler) handleJob(ctx context.Context, j amboy.RetryableJob
 			return nil
 		case <-timer.C:
 			if err := rh.tryEnqueueJob(ctx, j); err != nil {
-				catcher.Wrapf(rh.tryEnqueueJob(ctx, j), "enqueue retry job attempt %d", i)
+				catcher.Wrapf(err, "enqueue retry job attempt %d", i)
 				// TODO (EVG-13540): consider adding jitter.
 				timer.Reset(rh.opts.RetryBackoff)
 				continue
@@ -216,51 +216,59 @@ func (rh *basicRetryHandler) handleJob(ctx context.Context, j amboy.RetryableJob
 }
 
 func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.RetryableJob) error {
-	// Load the most up-to-date copy in case the cached in-memory job is
-	// outdated.
-	// TODO (EVG-13540): determine if this will be an expensive query or not.
-	reloadJob, ok := rh.queue.Get(ctx, j.ID())
-	if !ok {
-		return errors.New("could not find job")
-	}
-	newJob, ok := reloadJob.(amboy.RetryableJob)
-	if !ok {
-		return errors.New("job is not retryable")
-	}
+	originalInfo := j.RetryInfo()
+	err := func() error {
+		// Load the most up-to-date copy in case the cached in-memory job is
+		// outdated.
+		// TODO (EVG-13540): determine if this will be an expensive query or not.
+		reloadJob, ok := rh.queue.Get(ctx, j.ID())
+		if !ok {
+			return errors.New("could not find job")
+		}
+		newJob, ok := reloadJob.(amboy.RetryableJob)
+		if !ok {
+			return errors.New("job is not retryable")
+		}
 
-	newInfo := newJob.RetryInfo()
-	if !newInfo.Retryable || !newInfo.NeedsRetry {
+		newInfo := newJob.RetryInfo()
+		if !newInfo.Retryable || !newInfo.NeedsRetry {
+			return nil
+		}
+
+		// TODO (EVG-13584): add job retry locking mechanism (similar to
+		// (amboy.Job).Lock()) to ensure that this thread on this host has sole
+		// ownership of the job.
+
+		oldInfo := j.RetryInfo()
+
+		if oldInfo != newInfo {
+			return errors.New("precondition failed: in-memory retry information does not match queue's stored information")
+		}
+
+		newInfo.NeedsRetry = false
+		newInfo.Retryable = false
+		newInfo.CurrentAttempt++
+		newJob.UpdateRetryInfo(newInfo.Options())
+
+		oldInfo.NeedsRetry = false
+		j.UpdateRetryInfo(oldInfo.Options())
+
+		err := rh.queue.SaveAndPut(ctx, j, newJob)
+		if amboy.IsDuplicateJobError(err) {
+			// The job is already in the queue, do nothing.
+			return nil
+		} else if err != nil {
+			return errors.Wrap(err, "enqueueing retry job")
+		}
+
 		return nil
+	}()
+
+	if err != nil {
+		j.UpdateRetryInfo(originalInfo.Options())
 	}
 
-	// TODO (EVG-13584): add job retry locking mechanism (similar to
-	// (amboy.Job).Lock()) to ensure that this thread on this host has sole
-	// ownership of the job.
-
-	oldInfo := j.RetryInfo()
-
-	if oldInfo != newInfo {
-		return errors.New("precondition failed: in-memory retry information does not match queue's stored information")
-	}
-
-	oldInfo.NeedsRetry = false
-	oldInfo.Retryable = false
-	j.UpdateRetryInfo(oldInfo.Options())
-
-	newInfo.NeedsRetry = false
-	newInfo.Retryable = false
-	newInfo.CurrentAttempt++
-	newJob.UpdateRetryInfo(newInfo.Options())
-
-	err := rh.queue.SaveAndPut(ctx, j, newJob)
-	if amboy.IsDuplicateJobError(err) {
-		// The job is already in the queue, do nothing.
-		return nil
-	} else if err != nil {
-		return errors.Wrap(err, "enqueueing retry job")
-	}
-
-	return nil
+	return err
 }
 
 func retryAttemptPrefix(attempt int) string {

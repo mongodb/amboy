@@ -1,9 +1,13 @@
 package queue
 
 import (
+	"context"
 	"testing"
+	"time"
 
+	"github.com/evergreen-ci/utility"
 	"github.com/mongodb/amboy"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,101 +32,275 @@ func TestNewBasicRetryHandler(t *testing.T) {
 	})
 }
 
-// kim: TODO: unit test the retry handler with the mockRemoteQueue
 func TestRetryHandlerImplementations(t *testing.T) {
-	// kim: TODO: setup
-	// newMockRemoteQueue(nil options)
-	// Set mock methods to return dummy results needed, without actually
-	// modifying DB state at all.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	/*
-		kim: TODO: test:
-		- Retry handler fails in Start() without prior SetQueue()
-		- SetQueue() fails after Start()
-		- Started() is true after Start().
-		- Close() succeeds without start and stops all workers.
-		- Close() succeeds after start.
-		- Close() is safe to call multiple times.
-		- Put() succeeds on unstarted RetryHandler but doesn't trigger re-enqueue due to no workers
-		- Put() succeeds on already-started RetryHandler and triggers re-enqueue from workers
-		- Put() on closed RetryHandler doesn't trigger re-enqueue due to no workers.
-		- Also need to test functionality of options.
-	*/
+	for rhName, makeRetryHandler := range map[string]func(q amboy.RetryableQueue, opts amboy.RetryHandlerOptions) (amboy.RetryHandler, error){
+		"Basic": func(q amboy.RetryableQueue, opts amboy.RetryHandlerOptions) (amboy.RetryHandler, error) {
+			return newBasicRetryHandler(q, opts)
+		},
+	} {
+		t.Run(rhName, func(t *testing.T) {
+			for testName, testCase := range map[string]func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)){
+				"StartFailsWithoutQueue": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
+					_, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{})
+					require.NoError(t, err)
+
+					require.NoError(t, rh.SetQueue(nil))
+					assert.Error(t, rh.Start(ctx))
+				},
+				"IsStartedAfterStartSucceeds": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
+					_, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{})
+					require.NoError(t, err)
+
+					require.NoError(t, rh.Start(ctx))
+					assert.True(t, rh.Started())
+				},
+				"StartNoopsAfterAlreadyStarted": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
+					_, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{})
+					require.NoError(t, err)
+
+					require.NoError(t, rh.Start(ctx))
+					require.True(t, rh.Started())
+
+					require.NoError(t, rh.Start(ctx))
+					assert.True(t, rh.Started())
+				},
+				"CloseSucceedsWithoutFirstStarting": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
+					_, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{})
+					require.NoError(t, err)
+					require.False(t, rh.Started())
+
+					rh.Close(ctx)
+					assert.False(t, rh.Started())
+				},
+				"CloseStopsRetryHandlerAfterStart": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
+					_, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{})
+					require.NoError(t, err)
+
+					require.NoError(t, rh.Start(ctx))
+					require.True(t, rh.Started())
+
+					rh.Close(ctx)
+					assert.False(t, rh.Started())
+				},
+				"CloseIsIdempotent": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
+					_, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{})
+					require.NoError(t, err)
+
+					require.NoError(t, rh.Start(ctx))
+					require.True(t, rh.Started())
+
+					assert.NotPanics(t, func() {
+						rh.Close(ctx)
+						assert.False(t, rh.Started())
+						rh.Close(ctx)
+						assert.False(t, rh.Started())
+					})
+				},
+				"CanRestartAfterClose": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
+					_, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{})
+					require.NoError(t, err)
+
+					require.NoError(t, rh.Start(ctx))
+					require.True(t, rh.Started())
+
+					rh.Close(ctx)
+					require.False(t, rh.Started())
+
+					require.NoError(t, rh.Start(ctx))
+					assert.True(t, rh.Started())
+				},
+				"MockPutReenqueuesJob": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
+					mq, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{})
+					require.NoError(t, err)
+
+					j := newMockRetryableJob("id")
+					j.UpdateRetryInfo(amboy.JobRetryOptions{
+						NeedsRetry: utility.ToBoolPtr(true),
+					})
+
+					var calledGet, calledSave, calledSaveAndPut bool
+					mq.getJob = func(context.Context, remoteQueue, string) (amboy.Job, bool) {
+						calledGet = true
+						return j, true
+					}
+					mq.saveJob = func(context.Context, remoteQueue, amboy.Job) error {
+						calledSave = true
+						return nil
+					}
+					mq.saveAndPutJob = func(context.Context, remoteQueue, amboy.Job, amboy.Job) error {
+						calledSaveAndPut = true
+						return nil
+					}
+
+					require.NoError(t, rh.Start(ctx))
+					require.NoError(t, rh.Put(ctx, j))
+					time.Sleep(10 * time.Millisecond)
+
+					assert.True(t, calledGet)
+					assert.True(t, calledSave)
+					assert.True(t, calledSaveAndPut)
+				},
+				"PutSucceedsButDoesNothingIfUnstarted": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
+					mq, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{})
+					require.NoError(t, err)
+					var calledMockQueue bool
+					mq.getJob = func(ctx context.Context, q remoteQueue, id string) (amboy.Job, bool) {
+						calledMockQueue = true
+						return nil, false
+					}
+					mq.saveJob = func(context.Context, remoteQueue, amboy.Job) error {
+						calledMockQueue = true
+						return nil
+					}
+					mq.saveAndPutJob = func(ctx context.Context, q remoteQueue, toSave, toPut amboy.Job) error {
+						calledMockQueue = true
+						return nil
+					}
+
+					require.False(t, rh.Started())
+					require.NoError(t, rh.Put(ctx, newMockRetryableJob("id")))
+					time.Sleep(10 * time.Millisecond)
+
+					assert.False(t, calledMockQueue)
+					assert.Zero(t, mq.Stats(ctx).Total)
+				},
+				"MaxRetryAttemptsLimitsEnqueueAttempts": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
+					opts := amboy.RetryHandlerOptions{
+						RetryBackoff:     time.Millisecond,
+						MaxRetryAttempts: 3,
+					}
+					mq, rh, err := makeQueueAndRetryHandler(opts)
+					require.NoError(t, err)
+
+					j := newMockRetryableJob("id")
+					j.UpdateRetryInfo(amboy.JobRetryOptions{
+						NeedsRetry: utility.ToBoolPtr(true),
+					})
+
+					var getCalls, saveAndPutCalls int
+					mq.getJob = func(context.Context, remoteQueue, string) (amboy.Job, bool) {
+						getCalls++
+						return j, true
+					}
+					mq.saveJob = func(context.Context, remoteQueue, amboy.Job) error {
+						return nil
+					}
+					mq.saveAndPutJob = func(context.Context, remoteQueue, amboy.Job, amboy.Job) error {
+						saveAndPutCalls++
+						return errors.New("fail")
+					}
+
+					require.NoError(t, rh.Start(ctx))
+					require.NoError(t, rh.Put(ctx, j))
+
+					time.Sleep(2 * opts.RetryBackoff * time.Duration(opts.MaxRetryAttempts))
+
+					assert.Equal(t, opts.MaxRetryAttempts, getCalls)
+					assert.Equal(t, opts.MaxRetryAttempts, saveAndPutCalls)
+				},
+				"RetryBackoffWaitsBeforeAttemptingReenqueue": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
+					opts := amboy.RetryHandlerOptions{
+						RetryBackoff:     time.Millisecond,
+						MaxRetryAttempts: 6,
+					}
+					mq, rh, err := makeQueueAndRetryHandler(opts)
+					require.NoError(t, err)
+
+					j := newMockRetryableJob("id")
+					j.UpdateRetryInfo(amboy.JobRetryOptions{
+						NeedsRetry: utility.ToBoolPtr(true),
+					})
+
+					var getCalls, saveAndPutCalls int
+					mq.getJob = func(context.Context, remoteQueue, string) (amboy.Job, bool) {
+						getCalls++
+						return j, true
+					}
+					mq.saveJob = func(context.Context, remoteQueue, amboy.Job) error {
+						return nil
+					}
+					mq.saveAndPutJob = func(context.Context, remoteQueue, amboy.Job, amboy.Job) error {
+						saveAndPutCalls++
+						return errors.New("fail")
+					}
+
+					require.NoError(t, rh.Start(ctx))
+					require.NoError(t, rh.Put(ctx, j))
+
+					time.Sleep(time.Duration(opts.MaxRetryAttempts) * opts.RetryBackoff / 2)
+
+					assert.True(t, getCalls > 1, "worker should have had time to attempt more than once")
+					assert.True(t, getCalls < opts.MaxRetryAttempts, "worker should not have used up all attempts")
+					assert.True(t, saveAndPutCalls > 1, "workers should have had time to attempt more than once")
+					assert.True(t, saveAndPutCalls < opts.MaxRetryAttempts, "worker should not have used up all attempts")
+				},
+				"MaxRetryTimeStopsEnqueueAttemptsEarly": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
+					opts := amboy.RetryHandlerOptions{
+						RetryBackoff:     10 * time.Millisecond,
+						MaxRetryTime:     20 * time.Millisecond,
+						MaxRetryAttempts: 5,
+					}
+					mq, rh, err := makeQueueAndRetryHandler(opts)
+					require.NoError(t, err)
+
+					j := newMockRetryableJob("id")
+					j.UpdateRetryInfo(amboy.JobRetryOptions{
+						NeedsRetry: utility.ToBoolPtr(true),
+					})
+
+					var getCalls, saveAndPutCalls int
+					mq.getJob = func(context.Context, remoteQueue, string) (amboy.Job, bool) {
+						getCalls++
+						return j, true
+					}
+					mq.saveJob = func(context.Context, remoteQueue, amboy.Job) error {
+						return nil
+					}
+					mq.saveAndPutJob = func(context.Context, remoteQueue, amboy.Job, amboy.Job) error {
+						saveAndPutCalls++
+						return errors.New("fail")
+					}
+
+					require.NoError(t, rh.Start(ctx))
+					require.NoError(t, rh.Put(ctx, j))
+
+					time.Sleep(time.Duration(opts.MaxRetryAttempts) * opts.RetryBackoff)
+
+					assert.True(t, getCalls > 1, "worker should have had time to attempt more than once")
+					assert.True(t, getCalls < opts.MaxRetryAttempts, "worker should have aborted early before using up all attempts")
+					assert.True(t, saveAndPutCalls > 1, "workers should have had time to attempt more than once")
+					assert.True(t, saveAndPutCalls < opts.MaxRetryAttempts, "worker should have aborted early before using up all attempts")
+				},
+			} {
+				t.Run(testName, func(t *testing.T) {
+					tctx, tcancel := context.WithTimeout(ctx, 10*time.Second)
+					defer tcancel()
+
+					q, err := newRemoteUnordered(10)
+					require.NoError(t, err)
+
+					makeQueueAndRetryHandler := func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error) {
+						mqOpts := mockRemoteQueueOptions{
+							queue:          q,
+							makeDispatcher: NewDispatcher,
+							makeRetryHandler: func(q amboy.RetryableQueue) (amboy.RetryHandler, error) {
+								return makeRetryHandler(q, opts)
+							},
+						}
+						mq, err := newMockRemoteQueue(mqOpts)
+						if err != nil {
+							return nil, nil, errors.WithStack(err)
+						}
+
+						return mq, mq.RetryHandler(), nil
+					}
+
+					testCase(tctx, t, makeQueueAndRetryHandler)
+				})
+			}
+		})
+	}
 }
-
-// TestBasicRetryHandler tests functionality specific to the basicRetryHandler
-// implementation.
-func TestBasicRetryHandler(t *testing.T) {
-	// kim: TODO: setup
-	// newMockRemoteQueue(nil options)
-	// Set mock methods to return dummy results needed, without actually
-	// modifying DB state at all.
-	/*
-		kim: TODO: test:
-		- tryEnqueueJob() reloads the job from the queue (mock Get() so that it just roundtrips the in-memory job).
-		- tryEnqueueJob() fails when job cannot be reloaded from the queue.
-		- tryEnqueueJob() fails if the job it gets back is not retryable (mock Get() so that it returns a regular non-retryable job).
-		- tryEnqueueJob() no-ops if the reloaded job doesn't need to retry.
-		- tryEnqueueJob() fails if the old retry info does not match the reloaded retry info (i.e. the job's persistent state changed).
-		- tryEnqueueJob() fails if SaveAndPut() fails.
-		- tryEnqueueJob() no-ops if SaveAndPut() returns duplicate job error.
-		- tryEnqueueJob() succeeds and updates retry info of old and new job (check mock queue for expected calls and persistent state changes for old/new job state).
-		- tryEnqueueJob() no-ops if the old job ID is invalid (i.e. doesn't have ".attempt-${attempt_num}")
-		- When handleJob() fails to enqueue once, it tries again.
-		- When handleJob() exceeds MaxRetryAttempts, it gives up.
-		- When handleJob() exceeds MaxRetryTime, it gives up.
-		- When context errors, waitForJob() stops.
-		- When waitForJob() receives no job, it no-ops.
-		- When waitForJob() receives a job, it attempts to enqueue it (requires mock queue)
-		- When waitForJob() does not initially receive a job, it sleeps for RetryBackoff duration, then receives a job and enqueues it.
-	*/
-}
-
-// kim: TODO: write these once there's a mock queue to use and introspect.
-// func TestQueueRetryHandlerIntegration(t *testing.T) {
-//     ctx, cancel := context.WithCancel(context.Background())
-//     defer cancel()
-//     // kim: TODO: populate options
-//     dbOpts := MongoDBQueueCreationOptions{}
-//     for queueName, makeQueue := range map[string]func(ctx context.Context, t *testing.T) remoteQueue{
-//         // kim: TODO: need to propagate options to these
-//         "MongoUnordered": func(ctx context.Context, t *testing.T) remoteQueue {
-//             rq, err := NewMongoDBQueue(ctx, dbOpts)
-//             require.NoError(t, err)
-//             return rq
-//         },
-//         "MongoOrdered": func(ctx context.Context, t *testing.T) remoteQueue {
-//             rq, err := NewMongoDBQueue(ctx, dbOpts)
-//             require.NoError(t, err)
-//             return rq
-//         },
-//     } {
-//         t.Run(queueName, func(t *testing.T) {
-//             for testName, testCase := range map[string]func(ctx context.Context, t *testing.T, makeMockQueue func(ctx context.Context, t *testing.T) *mockRemoteQueue){
-//                 "InitializesUnstarted": func(ctx context.Context, t *testing.T, makeMockQueue func(ctx context.Context, t *testing.T) *mockRemoteQueue) {
-//                     rq := makeMockQueue(ctx, t)
-//                     rh := rq.RetryHandler()
-//                     require.NotZero(t, rh)
-//                     assert.False(t, rh.Started())
-//                 },
-//                 "": func(ctx context.Context, t *testing.T, makeMockQueue func(ctx context.Context, t *testing.T) *mockRemoteQueue) {},
-//                 // "": func(ctx context.Context, t *testing.T, makeMockQueue func(ctx context.Context, t *testing.T) *mockRemoteQueue) {},
-//                 // "": func(ctx context.Context, t *testing.T, makeMockQueue func(ctx context.Context, t *testing.T) *mockRemoteQueue) {},
-//                 // "": func(ctx context.Context, t *testing.T, makeMockQueue func(ctx context.Context, t *testing.T) *mockRemoteQueue) {},
-//                 // "": func(ctx context.Context, t *testing.T, makeMockQueue func(ctx context.Context, t *testing.T) *mockRemoteQueue) {},
-//             } {
-//                 t.Run(testName, func(t *testing.T) {
-//                     tctx, tcancel := context.WithTimeout(ctx, 30*time.Second)
-//                     defer tcancel()
-//					   makeMockQueue := func(ctx context.Context, t *testing.T) {
-//						   q := makeQueue(ctx, t)
-//						   mq, err := newMockRemoteQueue(mockRemoteQueueOptions{queue: q})
-//						   require.NoError(t, err)
-//					       return mq
-//					   }
-//                     testCase(tctx, t, makeMockQueue)
-//                 })
-//             }
-//         })
-//     }
-// }
