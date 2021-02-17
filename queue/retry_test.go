@@ -7,6 +7,7 @@ import (
 
 	"github.com/evergreen-ci/utility"
 	"github.com/mongodb/amboy"
+	"github.com/mongodb/amboy/registry"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -124,14 +125,38 @@ func TestRetryHandlerImplementations(t *testing.T) {
 					var calledGet, calledSave, calledSaveAndPut bool
 					mq.getJob = func(context.Context, remoteQueue, string) (amboy.Job, bool) {
 						calledGet = true
+						ji, err := registry.MakeJobInterchange(j, amboy.JSON)
+						if err != nil {
+							return nil, false
+						}
+						j, err := ji.Resolve(amboy.JSON)
+						if err != nil {
+							return nil, false
+						}
 						return j, true
 					}
 					mq.saveJob = func(context.Context, remoteQueue, amboy.Job) error {
 						calledSave = true
 						return nil
 					}
-					mq.saveAndPutJob = func(context.Context, remoteQueue, amboy.Job, amboy.Job) error {
+					mq.saveAndPutJob = func(_ context.Context, _ remoteQueue, toSave amboy.Job, toPut amboy.Job) error {
 						calledSaveAndPut = true
+
+						oldJob, ok := toSave.(amboy.RetryableJob)
+						if !ok {
+							return errors.New("expected retryable job")
+						}
+						assert.False(t, oldJob.RetryInfo().NeedsRetry)
+						// kim: TODO: update once PR is merged
+						assert.Zero(t, oldJob.RetryInfo().CurrentTrial)
+
+						newJob, ok := toPut.(amboy.RetryableJob)
+						if !ok {
+							return errors.New("expected retryable job")
+						}
+						assert.False(t, newJob.RetryInfo().NeedsRetry)
+						assert.Equal(t, 1, newJob.RetryInfo().CurrentTrial)
+
 						return nil
 					}
 
@@ -165,7 +190,6 @@ func TestRetryHandlerImplementations(t *testing.T) {
 					time.Sleep(10 * time.Millisecond)
 
 					assert.False(t, calledMockQueue)
-					assert.Zero(t, mq.Stats(ctx).Total)
 				},
 				"MaxRetryAttemptsLimitsEnqueueAttempts": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
 					opts := amboy.RetryHandlerOptions{

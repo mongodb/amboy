@@ -1037,6 +1037,7 @@ func (d *mongoDriver) tryDispatchJob(ctx context.Context, iter *mongo.Cursor, st
 			)
 			continue
 		}
+
 		return j, dispatchInfo
 	}
 

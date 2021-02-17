@@ -159,7 +159,6 @@ func (rh *basicRetryHandler) waitForJob(ctx context.Context) error {
 			// Once the job has been processed (either success or failure),
 			// mark it as processed so it does not attempt to retry again.
 			j.UpdateRetryInfo(amboy.JobRetryOptions{
-				Retryable:  utility.FalsePtr(),
 				NeedsRetry: utility.FalsePtr(),
 			})
 			// TODO (EVG-13540): this has to retry this op until success,
@@ -225,6 +224,7 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 		if !ok {
 			return errors.New("could not find job")
 		}
+
 		newJob, ok := reloadJob.(amboy.RetryableJob)
 		if !ok {
 			return errors.New("job is not retryable")
@@ -246,7 +246,6 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 		}
 
 		newInfo.NeedsRetry = false
-		newInfo.Retryable = false
 		newInfo.CurrentAttempt++
 		newJob.UpdateRetryInfo(newInfo.Options())
 
