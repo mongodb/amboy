@@ -400,9 +400,6 @@ func (d *mongoDriver) getIDWithGroup(name string) string {
 }
 
 func (d *mongoDriver) addMetadata(j *registry.JobInterchange) {
-	if j.RetryInfo.Retryable {
-		j.RetryInfo.BaseJobID = j.Name
-	}
 	d.addRetryToMetadata(j)
 	d.addGroupToMetadata(j)
 }
@@ -434,6 +431,7 @@ func (d *mongoDriver) addRetryToMetadata(j *registry.JobInterchange) {
 		return
 	}
 
+	j.RetryInfo.BaseJobID = j.Name
 	j.Name = buildCompoundID(retryAttemptPrefix(j.RetryInfo.CurrentAttempt), j.Name)
 }
 
@@ -717,8 +715,6 @@ func (d *mongoDriver) Jobs(ctx context.Context) <-chan amboy.Job {
 
 				continue
 			}
-
-			d.removeMetadata(ji)
 
 			var job amboy.Job
 			job, err = ji.Resolve(d.opts.Format)
