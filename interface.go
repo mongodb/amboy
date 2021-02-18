@@ -163,7 +163,7 @@ type JobRetryInfo struct {
 	// CurrentAttempt is the current attempt number. This is zero-indexed
 	// (unless otherwise set on enqueue), so the first time the job attempts to
 	// run, its value is 0. Each subsequent retry increments this value.
-	CurrentAttempt int `bson:"current_attempt,omitempty" json:"current_attempt,omitempty" yaml:"current_attempt,omitempty"`
+	CurrentAttempt int `bson:"current_attempt" json:"current_attempt,omitempty" yaml:"current_attempt,omitempty"`
 }
 
 // Options returns a JobRetryInfo as its equivalent JobRetryOptions. In other
@@ -333,7 +333,7 @@ type RetryableQueue interface {
 	// SaveAndPut saves an existing job toSave in the queue (see Save) and
 	// inserts a new job toPut in the queue (see Put). Implementations must
 	// make this operation atomic.
-	SaveAndPut(ctx context.Context, toSave, toPut RetryableJob) error
+	SaveAndPut(ctx context.Context, toSave, toPut Job) error
 }
 
 // RetryHandler provides a means to retry RetryableJobs within a RetryableQueue.
@@ -342,15 +342,14 @@ type RetryHandler interface {
 	// should be retried. Implementations may not be able to change their Queue
 	// association after starting.
 	SetQueue(RetryableQueue) error
-	// Start prepares the retry handler to begin processing jobs to retry.
+	// Start prepares the RetryHandler to begin processing jobs to retry.
 	Start(context.Context) error
 	// Started reports if the RetryHandler has started.
 	Started() bool
-	// Close aborts all retry work in progress and waits for all work to be
-	// return.
-	Close(context.Context)
-	// Put adds a job that must be retried to the retry handler.
+	// Put adds a job that must be retried into the RetryHandler.
 	Put(context.Context, RetryableJob) error
+	// Close aborts all retry work in progress and waits for all work to finish.
+	Close(context.Context)
 }
 
 // RetryHandlerOptions configures the behavior of a RetryHandler.

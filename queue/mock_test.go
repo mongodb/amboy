@@ -13,6 +13,7 @@ import (
 	"github.com/mongodb/amboy/dependency"
 	"github.com/mongodb/amboy/job"
 	"github.com/mongodb/amboy/registry"
+	"github.com/mongodb/grip"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
@@ -30,11 +31,16 @@ func init() {
 type mockRemoteQueue struct {
 	remoteQueue
 
+	driver       remoteQueueDriver
+	dispatcher   Dispatcher
+	retryHandler amboy.RetryHandler
+
 	// Mockable methods
 	putJob        func(ctx context.Context, q remoteQueue, j amboy.Job) error
 	getJob        func(ctx context.Context, q remoteQueue, id string) (amboy.Job, bool)
+	getJobAttempt func(ctx context.Context, q remoteQueue, id string, attempt int) (amboy.RetryableJob, bool)
 	saveJob       func(ctx context.Context, q remoteQueue, j amboy.Job) error
-	saveAndPutJob func(ctx context.Context, q remoteQueue, toSave, toPut amboy.RetryableJob) error
+	saveAndPutJob func(ctx context.Context, q remoteQueue, toSave, toPut amboy.Job) error
 	nextJob       func(ctx context.Context, q remoteQueue) amboy.Job
 	completeJob   func(ctx context.Context, q remoteQueue, j amboy.Job)
 	jobResults    func(ctx context.Context, q remoteQueue) <-chan amboy.Job
@@ -46,43 +52,72 @@ type mockRemoteQueue struct {
 }
 
 type mockRemoteQueueOptions struct {
-	queue          remoteQueue
-	driver         remoteQueueDriver
-	makeDispatcher func(q amboy.Queue) Dispatcher
-	rh             amboy.RetryHandler
+	queue            remoteQueue
+	driver           remoteQueueDriver
+	makeDispatcher   func(q amboy.Queue) Dispatcher
+	makeRetryHandler func(q amboy.RetryableQueue) (amboy.RetryHandler, error)
 }
 
 func (opts *mockRemoteQueueOptions) validate() error {
-	if opts.queue == nil {
-		return errors.New("cannot initialize mock remote queue without a backing remote queue implementation")
-	}
-
-	return nil
+	catcher := grip.NewBasicCatcher()
+	catcher.NewWhen(opts.queue == nil, "cannot initialize mock remote queue without a backing remote queue implementation")
+	return catcher.Resolve()
 }
 
 func newMockRemoteQueue(opts mockRemoteQueueOptions) (*mockRemoteQueue, error) {
 	if err := opts.validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid options")
 	}
+
 	mq := &mockRemoteQueue{remoteQueue: opts.queue}
+
+	if opts.makeDispatcher != nil {
+		mq.dispatcher = opts.makeDispatcher(mq)
+	} else {
+		mq.dispatcher = newMockDispatcher(mq)
+	}
+
 	if opts.driver != nil {
-		if err := opts.queue.SetDriver(opts.driver); err != nil {
+		if err := mq.SetDriver(opts.driver); err != nil {
 			return nil, errors.Wrap(err, "configuring queue with driver")
 		}
 	}
-	if opts.makeDispatcher != nil {
-		dispatcher := opts.makeDispatcher(mq)
-		if opts.driver != nil {
-			opts.driver.SetDispatcher(dispatcher)
+
+	if opts.makeRetryHandler != nil {
+		rh, err := opts.makeRetryHandler(mq)
+		if err != nil {
+			return nil, errors.Wrap(err, "initializing retry handler")
 		}
-	}
-	if opts.rh != nil {
-		if err := mq.SetRetryHandler(opts.rh); err != nil {
+		if err := mq.SetRetryHandler(rh); err != nil {
 			return nil, errors.Wrap(err, "constructing queue with retry handler")
 		}
 	}
 
 	return mq, nil
+}
+
+func (q *mockRemoteQueue) ID() string { return "mock-remote" }
+
+func (q *mockRemoteQueue) Driver() remoteQueueDriver {
+	return q.driver
+}
+
+func (q *mockRemoteQueue) SetDriver(d remoteQueueDriver) error {
+	if err := q.remoteQueue.SetDriver(d); err != nil {
+		return err
+	}
+	q.driver = d
+	q.driver.SetDispatcher(q.dispatcher)
+	return nil
+}
+
+func (q *mockRemoteQueue) RetryHandler() amboy.RetryHandler {
+	return q.retryHandler
+}
+
+func (q *mockRemoteQueue) SetRetryHandler(rh amboy.RetryHandler) error {
+	q.retryHandler = rh
+	return rh.SetQueue(q)
 }
 
 func (q *mockRemoteQueue) Put(ctx context.Context, j amboy.Job) error {
@@ -99,6 +134,13 @@ func (q *mockRemoteQueue) Get(ctx context.Context, id string) (amboy.Job, bool) 
 	return q.remoteQueue.Get(ctx, id)
 }
 
+func (q *mockRemoteQueue) GetAttempt(ctx context.Context, id string, attempt int) (amboy.RetryableJob, bool) {
+	if q.getJobAttempt != nil {
+		return q.getJobAttempt(ctx, q.remoteQueue, id, attempt)
+	}
+	return q.remoteQueue.GetAttempt(ctx, id, attempt)
+}
+
 func (q *mockRemoteQueue) Save(ctx context.Context, j amboy.Job) error {
 	if q.saveJob != nil {
 		return q.saveJob(ctx, q.remoteQueue, j)
@@ -106,7 +148,7 @@ func (q *mockRemoteQueue) Save(ctx context.Context, j amboy.Job) error {
 	return q.remoteQueue.Save(ctx, j)
 }
 
-func (q *mockRemoteQueue) SaveAndPut(ctx context.Context, toSave, toPut amboy.RetryableJob) error {
+func (q *mockRemoteQueue) SaveAndPut(ctx context.Context, toSave, toPut amboy.Job) error {
 	if q.saveAndPutJob != nil {
 		return q.saveAndPutJob(ctx, q.remoteQueue, toSave, toPut)
 	}
@@ -175,10 +217,11 @@ func (q *mockRemoteQueue) Close(ctx context.Context) {
 // whose runtime behavior is configurable.
 type mockRetryableJob struct {
 	job.Base
-	addError          error
-	addRetryableError error
-	updateRetryInfo   *amboy.JobRetryOptions
-	op                func()
+	ErrorToAdd          string                 `bson:"error_to_add" json:"error_to_add"`
+	RetryableErrorToAdd string                 `bson:"retryable_error_to_add" json:"retryable_error_to_add"`
+	NumTimesToRetry     int                    `bson:"num_times_to_retry" json:"num_times_to_retry"`
+	UpdatedRetryInfo    *amboy.JobRetryOptions `bson:"updated_retry_info" json:"updated_retry_info"`
+	op                  func(*mockRetryableJob)
 }
 
 func makeMockRetryableJob() *mockRetryableJob {
@@ -205,20 +248,26 @@ func newMockRetryableJob(id string) *mockRetryableJob {
 
 func (j *mockRetryableJob) Run(ctx context.Context) {
 	defer j.MarkComplete()
-	if j.addError != nil {
-		j.AddError(j.addError)
+	if j.ErrorToAdd != "" {
+		j.AddError(errors.New(j.ErrorToAdd))
+	}
+	if j.RetryableErrorToAdd != "" {
+		j.AddRetryableError(errors.New(j.RetryableErrorToAdd))
 	}
 
-	if j.addRetryableError != nil {
-		j.AddRetryableError(j.addRetryableError)
+	if j.UpdatedRetryInfo != nil {
+		j.UpdateRetryInfo(*j.UpdatedRetryInfo)
 	}
 
-	if j.updateRetryInfo != nil {
-		j.UpdateRetryInfo(*j.updateRetryInfo)
+	if j.NumTimesToRetry != 0 && j.RetryInfo().CurrentAttempt < j.NumTimesToRetry {
+		j.NumTimesToRetry++
+		j.UpdateRetryInfo(amboy.JobRetryOptions{
+			NeedsRetry: utility.TruePtr(),
+		})
 	}
 
 	if j.op != nil {
-		j.op()
+		j.op(j)
 	}
 }
 
