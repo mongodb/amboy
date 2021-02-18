@@ -171,6 +171,70 @@ func TestRetryHandlerImplementations(t *testing.T) {
 					assert.True(t, calledSave)
 					assert.True(t, calledSaveAndPut)
 				},
+				"MockPutReenqueuesJobWithScopes": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
+					mq, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{})
+					require.NoError(t, err)
+
+					scopes := []string{"scope0", "scope1"}
+
+					j := newMockRetryableJob("id")
+					j.UpdateRetryInfo(amboy.JobRetryOptions{
+						NeedsRetry: utility.ToBoolPtr(true),
+					})
+					j.SetScopes(scopes)
+					j.SetShouldApplyScopesOnEnqueue(true)
+
+					var calledGetAttempt, calledSave, calledSaveAndPut bool
+					mq.getJobAttempt = func(context.Context, remoteQueue, string, int) (amboy.RetryableJob, bool) {
+						calledGetAttempt = true
+						ji, err := registry.MakeJobInterchange(j, amboy.JSON)
+						if err != nil {
+							return nil, false
+						}
+						j, err := ji.Resolve(amboy.JSON)
+						if err != nil {
+							return nil, false
+						}
+						rj, ok := j.(amboy.RetryableJob)
+						if !ok {
+							return nil, false
+						}
+						return rj, true
+					}
+					mq.saveJob = func(context.Context, remoteQueue, amboy.Job) error {
+						calledSave = true
+						return nil
+					}
+					mq.saveAndPutJob = func(_ context.Context, _ remoteQueue, toSave amboy.Job, toPut amboy.Job) error {
+						calledSaveAndPut = true
+
+						oldJob, ok := toSave.(amboy.RetryableJob)
+						if !ok {
+							return errors.New("expected retryable job")
+						}
+						assert.False(t, oldJob.RetryInfo().NeedsRetry)
+						assert.Zero(t, oldJob.RetryInfo().CurrentAttempt)
+						assert.Zero(t, oldJob.Scopes())
+
+						newJob, ok := toPut.(amboy.RetryableJob)
+						if !ok {
+							return errors.New("expected retryable job")
+						}
+						assert.False(t, newJob.RetryInfo().NeedsRetry)
+						assert.Equal(t, 1, newJob.RetryInfo().CurrentAttempt)
+						assert.Equal(t, scopes, newJob.Scopes())
+
+						return nil
+					}
+
+					require.NoError(t, rh.Start(ctx))
+					require.NoError(t, rh.Put(ctx, j))
+					time.Sleep(100 * time.Millisecond)
+
+					assert.True(t, calledGetAttempt)
+					assert.True(t, calledSave)
+					assert.True(t, calledSaveAndPut)
+				},
 				"PutSucceedsButDoesNothingIfUnstarted": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
 					mq, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{})
 					require.NoError(t, err)

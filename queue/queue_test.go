@@ -1114,6 +1114,7 @@ func ApplyScopesOnEnqueueTest(bctx context.Context, t *testing.T, test QueueTest
 	}
 }
 
+// kim: TODO: add test for scoped job handing off scopes to retry job
 func RetryableTest(bctx context.Context, t *testing.T, test QueueTestCase, runner PoolTestCase, size SizeTestCase) {
 	ctx, cancel := context.WithTimeout(bctx, time.Minute)
 	defer cancel()

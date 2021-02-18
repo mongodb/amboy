@@ -214,6 +214,8 @@ func (rh *basicRetryHandler) handleJob(ctx context.Context, j amboy.RetryableJob
 
 func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.RetryableJob) error {
 	originalInfo := j.RetryInfo()
+	originalScopes := j.Scopes()
+
 	err := func() error {
 		oldInfo := j.RetryInfo()
 
@@ -243,6 +245,11 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 
 		oldInfo.NeedsRetry = false
 		j.UpdateRetryInfo(oldInfo.Options())
+		if j.ShouldApplyScopesOnEnqueue() {
+			// Unset the old job's scopes that were applied on enqueue now,
+			// which have been held until the job retries.
+			j.SetScopes(nil)
+		}
 
 		err := rh.queue.SaveAndPut(ctx, j, newJob)
 		if amboy.IsDuplicateJobError(err) {
@@ -258,13 +265,14 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 	if err != nil {
 		// Restore the original retry information if it failed to re-enqueue.
 		j.UpdateRetryInfo(originalInfo.Options())
+		j.SetScopes(originalScopes)
 	}
 
 	return err
 }
 
-// tryMarkProcessed attempts to mark the job as processed, so that it does not
-// attempt to retry again.
+// tryMarkProcessed attempts to mark the job as processed, indicating that it is
+// done retrying and will not attempt to retry again.
 func (rh *basicRetryHandler) tryMarkProcessed(ctx context.Context, j amboy.RetryableJob) error {
 	const (
 		attemptInterval = time.Second
@@ -285,6 +293,7 @@ func (rh *basicRetryHandler) tryMarkProcessed(ctx context.Context, j amboy.Retry
 			j.UpdateRetryInfo(amboy.JobRetryOptions{
 				NeedsRetry: utility.FalsePtr(),
 			})
+			j.SetScopes(nil)
 
 			if err := rh.queue.Save(ctx, j); err != nil {
 				if attempt+1 >= maxAttempts {
