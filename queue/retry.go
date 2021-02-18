@@ -159,24 +159,55 @@ func (rh *basicRetryHandler) waitForJob(ctx context.Context) error {
 				}))
 			}
 
-			// Once the job has been processed (either success or failure),
-			// mark it as processed so it does not attempt to retry again.
-			j.UpdateRetryInfo(amboy.JobRetryOptions{
-				NeedsRetry: utility.FalsePtr(),
-			})
-			// TODO (EVG-13540): this has to retry this op until success,
-			// like the theoretical infinite loop in queue.Complete(). It should
-			// also be done in a transaction-like way when the new job is
-			// inserted, so that the swap occurs safely.
-			if err := rh.queue.Save(ctx, j); err != nil {
-				grip.Critical(message.WrapError(err, message.Fields{
-					"message":  "could not save failed job",
+			if err := rh.tryMarkProcessed(ctx, j); err != nil {
+				grip.Error(message.WrapError(err, message.Fields{
+					"message":  "could not mark retryable job as processed",
 					"queue_id": rh.queue.ID(),
 					"job_id":   j.ID(),
 				}))
 			}
 
 			timer.Reset(rh.opts.WorkerCheckInterval)
+		}
+	}
+}
+
+// tryMarkProcessed attempts to mark the job as processed, so that it does not
+// attempt to retry again.
+func (rh *basicRetryHandler) tryMarkProcessed(ctx context.Context, j amboy.RetryableJob) error {
+	const (
+		attemptInterval = time.Second
+		maxAttempts     = 10
+	)
+
+	timer := time.NewTimer(0)
+	defer timer.Stop()
+
+	var attempt int
+	catcher := grip.NewBasicCatcher()
+	for {
+		select {
+		case <-ctx.Done():
+			catcher.Wrapf(ctx.Err(), "giving up on attempt %d", attempt+1)
+			return catcher.Resolve()
+		case <-timer.C:
+			j.UpdateRetryInfo(amboy.JobRetryOptions{
+				NeedsRetry: utility.FalsePtr(),
+			})
+
+			if err := rh.queue.Save(ctx, j); err != nil {
+				if attempt+1 >= maxAttempts {
+					return errors.Wrapf(catcher.Resolve(), "giving up after attempt %d", maxAttempts)
+				}
+
+				catcher.Wrapf(err, "attempt %d", attempt)
+				attempt++
+				timer.Reset(attemptInterval)
+
+				continue
+			}
+
+			return nil
 		}
 	}
 }
