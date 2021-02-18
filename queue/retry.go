@@ -155,6 +155,7 @@ func (rh *basicRetryHandler) waitForJob(ctx context.Context) error {
 					"queue_id": rh.queue.ID(),
 					"job_id":   j.ID(),
 				}))
+				j.AddError(err)
 			}
 
 			if err := rh.tryMarkProcessed(ctx, j); err != nil {
@@ -166,46 +167,6 @@ func (rh *basicRetryHandler) waitForJob(ctx context.Context) error {
 			}
 
 			timer.Reset(rh.opts.WorkerCheckInterval)
-		}
-	}
-}
-
-// tryMarkProcessed attempts to mark the job as processed, so that it does not
-// attempt to retry again.
-func (rh *basicRetryHandler) tryMarkProcessed(ctx context.Context, j amboy.RetryableJob) error {
-	const (
-		attemptInterval = time.Second
-		maxAttempts     = 10
-	)
-
-	timer := time.NewTimer(0)
-	defer timer.Stop()
-
-	var attempt int
-	catcher := grip.NewBasicCatcher()
-	for {
-		select {
-		case <-ctx.Done():
-			catcher.Wrapf(ctx.Err(), "giving up on attempt %d", attempt+1)
-			return catcher.Resolve()
-		case <-timer.C:
-			j.UpdateRetryInfo(amboy.JobRetryOptions{
-				NeedsRetry: utility.FalsePtr(),
-			})
-
-			if err := rh.queue.Save(ctx, j); err != nil {
-				if attempt+1 >= maxAttempts {
-					return errors.Wrapf(catcher.Resolve(), "giving up after attempt %d", maxAttempts)
-				}
-
-				catcher.Wrapf(err, "attempt %d", attempt)
-				attempt++
-				timer.Reset(attemptInterval)
-
-				continue
-			}
-
-			return nil
 		}
 	}
 }
@@ -300,6 +261,46 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 	}
 
 	return err
+}
+
+// tryMarkProcessed attempts to mark the job as processed, so that it does not
+// attempt to retry again.
+func (rh *basicRetryHandler) tryMarkProcessed(ctx context.Context, j amboy.RetryableJob) error {
+	const (
+		attemptInterval = time.Second
+		maxAttempts     = 10
+	)
+
+	timer := time.NewTimer(0)
+	defer timer.Stop()
+
+	var attempt int
+	catcher := grip.NewBasicCatcher()
+	for {
+		select {
+		case <-ctx.Done():
+			catcher.Wrapf(ctx.Err(), "giving up on attempt %d", attempt+1)
+			return catcher.Resolve()
+		case <-timer.C:
+			j.UpdateRetryInfo(amboy.JobRetryOptions{
+				NeedsRetry: utility.FalsePtr(),
+			})
+
+			if err := rh.queue.Save(ctx, j); err != nil {
+				if attempt+1 >= maxAttempts {
+					return errors.Wrapf(catcher.Resolve(), "giving up after attempt %d", maxAttempts)
+				}
+
+				catcher.Wrapf(err, "attempt %d", attempt)
+				attempt++
+				timer.Reset(attemptInterval)
+
+				continue
+			}
+
+			return nil
+		}
+	}
 }
 
 func retryAttemptPrefix(attempt int) string {
