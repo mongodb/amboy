@@ -342,15 +342,14 @@ type RetryHandler interface {
 	// should be retried. Implementations may not be able to change their Queue
 	// association after starting.
 	SetQueue(RetryableQueue) error
-	// Start prepares the retry handler to begin processing jobs to retry.
+	// Start prepares the RetryHandler to begin processing jobs to retry.
 	Start(context.Context) error
 	// Started reports if the RetryHandler has started.
 	Started() bool
-	// Close aborts all retry work in progress and waits for all work to be
-	// return.
-	Close(context.Context)
-	// Put adds a job that must be retried to the retry handler.
+	// Put adds a job that must be retried into the RetryHandler.
 	Put(context.Context, RetryableJob) error
+	// Close aborts all retry work in progress and waits for all work to finish.
+	Close(context.Context)
 }
 
 // RetryHandlerOptions configures the behavior of a RetryHandler.

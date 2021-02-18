@@ -13,7 +13,7 @@ import (
 // provides a common format for different Queue implementations to
 // report on their state.
 //
-// Implement's grip's message.Composer interface when passed as a
+// Implements grip's message.Composer interface when passed as a
 // pointer.
 type QueueStats struct {
 	Running   int            `bson:"running" json:"running" yaml:"running"`
