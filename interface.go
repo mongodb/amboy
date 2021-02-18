@@ -95,9 +95,6 @@ type Job interface {
 type RetryableJob interface {
 	Job
 
-	// SetID allows the job ID to be modified.
-	SetID(string)
-
 	// RetryInfo reports information about the job's retry behavior.
 	RetryInfo() JobRetryInfo
 	// UpdateRetryInfo method modifies all set fields from the given options.
@@ -160,10 +157,13 @@ type JobRetryInfo struct {
 	// NeedsRetry indicates whether the job is supposed to retry when it is
 	// complete. This will only be considered if Retryable is true.
 	NeedsRetry bool `bson:"needs_retry" json:"needs_retry,omitempty" yaml:"needs_retry,omitempty"`
-	// CurrentTrial is the current attempt number. This is zero-indexed, so the
-	// first time the job attempts to run, its value is 0. Each subsequent retry
-	// increments this value.
-	CurrentTrial int `bson:"current_trial,omitempty" json:"current_trial,omitempty" yaml:"current_trial,omitempty"`
+	// BaseJobID is the job ID of the original job that was retried, ignoring
+	// any additional retry metadata.
+	BaseJobID string `bson:"base_job_id,omitempty" json:"base_job_id,omitempty" yaml:"base_job_id,omitempty"`
+	// CurrentAttempt is the current attempt number. This is zero-indexed
+	// (unless otherwise set on enqueue), so the first time the job attempts to
+	// run, its value is 0. Each subsequent retry increments this value.
+	CurrentAttempt int `bson:"current_attempt,omitempty" json:"current_attempt,omitempty" yaml:"current_attempt,omitempty"`
 }
 
 // Options returns a JobRetryInfo as its equivalent JobRetryOptions. In other
@@ -171,9 +171,9 @@ type JobRetryInfo struct {
 // will have the same JobRetryInfo as this one.
 func (info *JobRetryInfo) Options() JobRetryOptions {
 	return JobRetryOptions{
-		Retryable:    &info.Retryable,
-		NeedsRetry:   &info.NeedsRetry,
-		CurrentTrial: &info.CurrentTrial,
+		Retryable:      &info.Retryable,
+		NeedsRetry:     &info.NeedsRetry,
+		CurrentAttempt: &info.CurrentAttempt,
 	}
 }
 
@@ -181,9 +181,9 @@ func (info *JobRetryInfo) Options() JobRetryOptions {
 // Their meaning corresponds to the fields in JobRetryInfo, but is more amenable
 // to optional input values.
 type JobRetryOptions struct {
-	Retryable    *bool `bson:"-" json:"-" yaml:"-"`
-	NeedsRetry   *bool `bson:"-" json:"-" yaml:"-"`
-	CurrentTrial *int  `bson:"-" json:"-" yaml:"-"`
+	Retryable      *bool `bson:"-" json:"-" yaml:"-"`
+	NeedsRetry     *bool `bson:"-" json:"-" yaml:"-"`
+	CurrentAttempt *int  `bson:"-" json:"-" yaml:"-"`
 }
 
 // Duration is a convenience function to return a duration for a job.
@@ -315,7 +315,13 @@ type QueueGroup interface {
 // RetryableQueue is the same as a Queue but supports additional operations for
 // retryable jobs.
 type RetryableQueue interface {
+	// Queue is identical to the standard queue interface, except:
+	// For retryable jobs, Get will retrieve the latest attempt of a job by ID.
 	Queue
+
+	// GetAttempt returns the job associated with the given attempt of the job
+	// and a bool indicating whether the job was found or not.
+	GetAttempt(ctx context.Context, id string, attempt int) (RetryableJob, bool)
 
 	// RetryHandler returns the handler for retrying a job in this queue.
 	RetryHandler() RetryHandler

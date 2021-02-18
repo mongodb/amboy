@@ -15,8 +15,13 @@ type remoteQueueDriver interface {
 	Open(context.Context) error
 	Close()
 
-	// Get finds a job by job ID.
+	// Get finds a job by job ID. For retryable jobs, this returns the latest
+	// job attempt.
 	Get(context.Context, string) (amboy.Job, error)
+	// GetAttempt returns a job by job ID and attempt number. Only applicable to
+	// retryable jobs. If used for a non-retryable job, this should return nil
+	// and an error.
+	GetAttempt(ctx context.Context, id string, attempt int) (amboy.RetryableJob, error)
 	// Put inserts a new job in the backing storage.
 	Put(context.Context, amboy.Job) error
 	// Save updates an existing job in the backing storage. Implementations may

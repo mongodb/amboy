@@ -92,6 +92,25 @@ func (q *remoteBase) Get(ctx context.Context, name string) (amboy.Job, bool) {
 	return job, true
 }
 
+func (q *remoteBase) GetAttempt(ctx context.Context, name string, attempt int) (amboy.RetryableJob, bool) {
+	if q.driver == nil {
+		return nil, false
+	}
+
+	j, err := q.driver.GetAttempt(ctx, name, attempt)
+	if err != nil {
+		grip.Debug(message.WrapError(err, message.Fields{
+			"driver":  q.driver.ID(),
+			"type":    q.driverType,
+			"name":    name,
+			"attempt": attempt,
+		}))
+		return nil, false
+	}
+
+	return j, true
+}
+
 func (q *remoteBase) jobServer(ctx context.Context) {
 	grip.Info("starting queue job server for remote queue")
 

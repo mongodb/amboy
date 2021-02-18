@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/evergreen-ci/utility"
 	"github.com/google/uuid"
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/job"
@@ -198,7 +199,88 @@ func (s *DriverSuite) TestSaveJobPersistsJobInDriver() {
 	s.Equal(1, s.driver.Stats(s.ctx).Total)
 }
 
-func (s *DriverSuite) TestSaveAndGetRoundTripObjects() {
+func (s *DriverSuite) TestPutAndGetJobRoundtripsSingleRetryableJob() {
+	j := newMockRetryableJob("id")
+
+	s.Require().NoError(s.driver.Put(s.ctx, j))
+
+	storedJob, err := s.driver.Get(s.ctx, j.ID())
+	s.Require().NoError(err)
+
+	storedRetryJob, ok := storedJob.(amboy.RetryableJob)
+	s.Require().True(ok)
+
+	s.Equal(j.ID(), storedRetryJob.ID())
+	s.Equal(j.RetryInfo(), storedRetryJob.RetryInfo())
+
+	s.Equal(1, s.driver.Stats(s.ctx).Total)
+}
+
+func (s *DriverSuite) TestPutAndGetJobRoundtripsLatestRetryableJob() {
+	j0 := newMockRetryableJob("id")
+	jobID := j0.ID()
+	j1 := newMockRetryableJob("id")
+	j1.UpdateRetryInfo(amboy.JobRetryOptions{
+		CurrentAttempt: utility.ToIntPtr(1),
+	})
+	j2 := newMockRetryableJob("id")
+	j2.UpdateRetryInfo(amboy.JobRetryOptions{
+		CurrentAttempt: utility.ToIntPtr(2),
+	})
+
+	s.Require().NoError(s.driver.Put(s.ctx, j1))
+	s.Require().NoError(s.driver.Put(s.ctx, j0))
+	s.Require().NoError(s.driver.Put(s.ctx, j2))
+
+	storedJob, err := s.driver.Get(s.ctx, jobID)
+	s.Require().NoError(err)
+
+	storedRetryJob, ok := storedJob.(amboy.RetryableJob)
+	s.Require().True(ok)
+
+	s.Equal(jobID, storedRetryJob.ID())
+	s.Equal(j2.RetryInfo(), storedRetryJob.RetryInfo())
+
+	s.Equal(3, s.driver.Stats(s.ctx).Total)
+}
+
+func (s *DriverSuite) TestPutAndGetAttemptRoundtripsRetryableJob() {
+	var jobs []amboy.RetryableJob
+	var jobID string
+	for i := 0; i < 3; i++ {
+		j := newMockRetryableJob("id")
+		jobID = j.ID()
+		j.UpdateRetryInfo(amboy.JobRetryOptions{
+			CurrentAttempt: utility.ToIntPtr(i),
+		})
+		s.Require().NoError(s.driver.Put(s.ctx, j))
+	}
+
+	for _, j := range jobs {
+		storedJob, err := s.driver.GetAttempt(s.ctx, jobID, j.RetryInfo().CurrentAttempt)
+		s.Require().NoError(err)
+
+		storedRetryJob, ok := storedJob.(amboy.RetryableJob)
+		s.Require().True(ok)
+
+		s.Equal(jobID, j.ID())
+		s.Equal(jobID, storedRetryJob.ID())
+		s.Equal(j.RetryInfo().CurrentAttempt, storedJob.RetryInfo().CurrentAttempt)
+	}
+	s.Equal(3, s.driver.Stats(s.ctx).Total)
+}
+
+func (s *DriverSuite) TestPutAndGetAttemptOnNonretryableJobFails() {
+	j := newMockJob()
+	j.SetID("foo")
+	s.Require().NoError(s.driver.Put(s.ctx, j))
+
+	storedJob, err := s.driver.GetAttempt(s.ctx, j.ID(), 0)
+	s.Error(err)
+	s.Zero(storedJob)
+}
+
+func (s *DriverSuite) TestPutAndGetRoundTripObjects() {
 	j := job.NewShellJob("echo foo", "")
 	name := j.ID()
 
@@ -370,8 +452,8 @@ func (s *DriverSuite) TestNextMethodDoesNotReturnLastJob() {
 func (s *DriverSuite) TestJobsMethodReturnsAllJobs() {
 	mocks := make(map[string]*job.ShellJob)
 
-	for idx := range [24]int{} {
-		name := fmt.Sprintf("echo test num %d", idx)
+	for i := 0; i < 24; i++ {
+		name := fmt.Sprintf("echo test num %d", i)
 		j := job.NewShellJob(name, "")
 		s.NoError(s.driver.Put(s.ctx, j))
 		mocks[j.ID()] = j

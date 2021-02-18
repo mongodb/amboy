@@ -179,7 +179,7 @@ func (j *JobTest) UpdateRetryInfo(opts amboy.JobRetryOptions) {
 	if opts.NeedsRetry != nil {
 		j.Retry.NeedsRetry = *opts.NeedsRetry
 	}
-	if opts.CurrentTrial != nil {
-		j.Retry.CurrentTrial = *opts.CurrentTrial
+	if opts.CurrentAttempt != nil {
+		j.Retry.CurrentAttempt = *opts.CurrentAttempt
 	}
 }
