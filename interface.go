@@ -366,6 +366,9 @@ type RetryHandlerOptions struct {
 	// NumWorkers is the maximum number of jobs that are allowed to retry in
 	// parallel.
 	NumWorkers int
+	// WorkerCheckInterval is the time interval retry workers will wait before
+	// attempting to pick up another job to retry.
+	WorkerCheckInterval time.Duration
 }
 
 func (opts *RetryHandlerOptions) Validate() error {

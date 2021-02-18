@@ -335,6 +335,43 @@ func TestRetryHandlerImplementations(t *testing.T) {
 					assert.True(t, saveAndPutCalls < opts.MaxRetryAttempts, "worker should have aborted early before using up all attempts")
 					assert.NotZero(t, saveCalls, "worker should have aborted early")
 				},
+				"CheckIntervalThrottlesJobPickupRate": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
+					opts := amboy.RetryHandlerOptions{
+						WorkerCheckInterval: 400 * time.Millisecond,
+					}
+					mq, rh, err := makeQueueAndRetryHandler(opts)
+					require.NoError(t, err)
+
+					j := newMockRetryableJob("id")
+					j.UpdateRetryInfo(amboy.JobRetryOptions{
+						NeedsRetry: utility.ToBoolPtr(true),
+					})
+
+					var getAttemptCalls, saveCalls, saveAndPutCalls int
+					mq.getJobAttempt = func(context.Context, remoteQueue, string, int) (amboy.RetryableJob, bool) {
+						getAttemptCalls++
+						return j, true
+					}
+					mq.saveJob = func(context.Context, remoteQueue, amboy.Job) error {
+						saveCalls++
+						return nil
+					}
+					mq.saveAndPutJob = func(context.Context, remoteQueue, amboy.Job, amboy.Job) error {
+						saveAndPutCalls++
+						return errors.New("fail")
+					}
+
+					require.NoError(t, rh.Start(ctx))
+
+					time.Sleep(10 * time.Millisecond)
+					require.NoError(t, rh.Put(ctx, j))
+
+					time.Sleep(opts.WorkerCheckInterval / 2)
+
+					assert.Zero(t, getAttemptCalls, "worker should not have checked for job yet")
+					assert.Zero(t, saveAndPutCalls, "worker should not have checked for job yet")
+					assert.Zero(t, saveCalls, "worker should not have checked for job yet")
+				},
 			} {
 				t.Run(testName, func(t *testing.T) {
 					tctx, tcancel := context.WithTimeout(ctx, 10*time.Second)

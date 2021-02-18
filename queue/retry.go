@@ -129,11 +129,13 @@ func (rh *basicRetryHandler) Close(ctx context.Context) {
 }
 
 func (rh *basicRetryHandler) waitForJob(ctx context.Context) error {
+	timer := time.NewTimer(0)
+	defer timer.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
-		default:
+		case <-timer.C:
 			var j amboy.RetryableJob
 			defer func() {
 				if err := recovery.HandlePanicWithError(recover(), nil, "handling job retry"); err != nil {
@@ -146,6 +148,7 @@ func (rh *basicRetryHandler) waitForJob(ctx context.Context) error {
 			// no-op loop.
 			j = rh.nextJob()
 			if j == nil {
+				timer.Reset(rh.opts.WorkerCheckInterval)
 				continue
 			}
 			if err := rh.handleJob(ctx, j); err != nil && ctx.Err() == nil {
@@ -166,8 +169,14 @@ func (rh *basicRetryHandler) waitForJob(ctx context.Context) error {
 			// also be done in a transaction-like way when the new job is
 			// inserted, so that the swap occurs safely.
 			if err := rh.queue.Save(ctx, j); err != nil {
-				grip.Critical(message.WrapError(err, message.Fields{}))
+				grip.Critical(message.WrapError(err, message.Fields{
+					"message":  "could not save failed job",
+					"queue_id": rh.queue.ID(),
+					"job_id":   j.ID(),
+				}))
 			}
+
+			timer.Reset(rh.opts.WorkerCheckInterval)
 		}
 	}
 }
