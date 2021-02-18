@@ -70,14 +70,14 @@ func newMockRemoteQueue(opts mockRemoteQueueOptions) (*mockRemoteQueue, error) {
 	}
 	mq := &mockRemoteQueue{remoteQueue: opts.queue}
 	if opts.driver != nil {
-		if err := opts.queue.SetDriver(opts.driver); err != nil {
+		if err := mq.SetDriver(opts.driver); err != nil {
 			return nil, errors.Wrap(err, "configuring queue with driver")
 		}
 	}
 	if opts.makeDispatcher != nil {
 		mq.dispatcher = opts.makeDispatcher(mq)
 		if opts.driver != nil {
-			opts.driver.SetDispatcher(mq.dispatcher)
+			mq.driver.SetDispatcher(mq.dispatcher)
 		}
 	}
 	if opts.makeRetryHandler != nil {
@@ -101,6 +101,7 @@ func (q *mockRemoteQueue) Driver() remoteQueueDriver {
 
 func (q *mockRemoteQueue) SetDriver(d remoteQueueDriver) error {
 	q.driver = d
+	q.remoteQueue.SetDriver(d)
 	q.driver.SetDispatcher(q.dispatcher)
 	return nil
 }
