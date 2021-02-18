@@ -148,14 +148,14 @@ func TestRetryHandlerImplementations(t *testing.T) {
 						}
 						assert.False(t, oldJob.RetryInfo().NeedsRetry)
 						// kim: TODO: update once PR is merged
-						assert.Zero(t, oldJob.RetryInfo().CurrentTrial)
+						assert.Zero(t, oldJob.RetryInfo().CurrentAttempt)
 
 						newJob, ok := toPut.(amboy.RetryableJob)
 						if !ok {
 							return errors.New("expected retryable job")
 						}
 						assert.False(t, newJob.RetryInfo().NeedsRetry)
-						assert.Equal(t, 1, newJob.RetryInfo().CurrentTrial)
+						assert.Equal(t, 1, newJob.RetryInfo().CurrentAttempt)
 
 						return nil
 					}

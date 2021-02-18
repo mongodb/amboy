@@ -224,19 +224,6 @@ func makeMockRetryableJob() *mockRetryableJob {
 	return j
 }
 
-func makeMockRetryableJob() *mockRetryableJob {
-	j := &mockRetryableJob{
-		Base: job.Base{
-			JobType: amboy.JobType{
-				Name:    "mock-retryable",
-				Version: 0,
-			},
-		},
-	}
-	j.SetDependency(dependency.NewAlways())
-	return j
-}
-
 func newMockRetryableJob(id string) *mockRetryableJob {
 	j := makeMockRetryableJob()
 	j.UpdateRetryInfo(amboy.JobRetryOptions{
@@ -259,7 +246,7 @@ func (j *mockRetryableJob) Run(ctx context.Context) {
 		j.UpdateRetryInfo(*j.UpdatedRetryInfo)
 	}
 
-	if j.NumTimesToRetry != 0 && j.RetryInfo().CurrentTrial < j.NumTimesToRetry {
+	if j.NumTimesToRetry != 0 && j.RetryInfo().CurrentAttempt < j.NumTimesToRetry {
 		j.NumTimesToRetry++
 		j.UpdateRetryInfo(amboy.JobRetryOptions{
 			NeedsRetry: utility.TruePtr(),

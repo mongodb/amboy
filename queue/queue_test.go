@@ -1164,10 +1164,10 @@ func RetryableTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 			require.True(t, ok)
 			assert.True(t, rj.RetryInfo().Retryable)
 			assert.False(t, rj.RetryInfo().NeedsRetry)
-			if rj.RetryInfo().CurrentTrial == 0 {
+			if rj.RetryInfo().CurrentAttempt == 0 {
 				foundFirstAttempt = true
 			}
-			if rj.RetryInfo().CurrentTrial == 1 {
+			if rj.RetryInfo().CurrentAttempt == 1 {
 				foundSecondAttempt = true
 			}
 		}
