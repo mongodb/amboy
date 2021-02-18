@@ -144,8 +144,6 @@ func (rh *basicRetryHandler) waitForJob(ctx context.Context) error {
 					}
 				}
 			}()
-			// TODO (EVG-13540): make this use a channel instead checking in a
-			// no-op loop.
 			j = rh.nextJob()
 			if j == nil {
 				timer.Reset(rh.opts.WorkerCheckInterval)
@@ -239,7 +237,6 @@ func (rh *basicRetryHandler) handleJob(ctx context.Context, j amboy.RetryableJob
 		case <-timer.C:
 			if err := rh.tryEnqueueJob(ctx, j); err != nil {
 				catcher.Wrapf(err, "enqueue retry job attempt %d", i)
-				// TODO (EVG-13540): consider adding jitter.
 				timer.Reset(rh.opts.RetryBackoff)
 				continue
 			}
