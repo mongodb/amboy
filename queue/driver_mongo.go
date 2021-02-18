@@ -188,9 +188,14 @@ func (d *mongoDriver) setupDB(ctx context.Context) error {
 
 func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 	primary := bsonx.Doc{}
+	retryableJobIDAndAttempt := bsonx.Doc{}
 
 	if d.opts.UseGroups {
 		primary = append(primary, bsonx.Elem{
+			Key:   "group",
+			Value: bsonx.Int32(1),
+		})
+		retryableJobIDAndAttempt = append(retryableJobIDAndAttempt, bsonx.Elem{
 			Key:   "group",
 			Value: bsonx.Int32(1),
 		})
@@ -238,20 +243,21 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 			},
 			Options: options.Index().SetSparse(true).SetUnique(true),
 		},
-		{
-			Keys: bsonx.Doc{
-				{
-					Key:   "retry_info.base_job_id",
-					Value: bsonx.Int32(1),
-				},
-				{
-					Key:   "retry_info.current_attempt",
-					Value: bsonx.Int32(-1),
-				},
-			},
-			Options: options.Index().SetSparse(true).SetUnique(true),
-		},
 	}
+
+	retryableJobIDAndAttempt = append(retryableJobIDAndAttempt,
+		bsonx.Elem{
+			Key:   "retry_info.base_job_id",
+			Value: bsonx.Int32(1),
+		},
+		bsonx.Elem{
+			Key:   "retry_info.current_attempt",
+			Value: bsonx.Int32(-1),
+		},
+	)
+	indexes = append(indexes, mongo.IndexModel{
+		Keys: retryableJobIDAndAttempt,
+	})
 
 	if d.opts.TTL > 0 {
 		ttl := int32(d.opts.TTL / time.Second)
@@ -454,10 +460,13 @@ func (d *mongoDriver) modifyQueryForGroup(q bson.M) {
 func (d *mongoDriver) Get(ctx context.Context, name string) (amboy.Job, error) {
 	j := &registry.JobInterchange{}
 
+	matchLatestRetry := bson.M{"retry_info.base_job_id": name}
+	d.modifyQueryForGroup(matchLatestRetry)
+
 	matchID := bson.M{
 		"$or": []bson.M{
 			{"_id": d.getIDWithGroup(name)},
-			{"retry_info.base_job_id": name},
+			matchLatestRetry,
 		},
 	}
 	byRetryAttempt := bson.M{
@@ -486,6 +495,8 @@ func (d *mongoDriver) GetAttempt(ctx context.Context, name string, attempt int) 
 		"retry_info.base_job_id":     name,
 		"retry_info.current_attempt": attempt,
 	}
+	d.modifyQueryForGroup(matchIDAndAttempt)
+
 	res := d.getCollection().FindOne(ctx, matchIDAndAttempt)
 	if err := res.Err(); err != nil {
 		return nil, errors.Wrapf(err, "GET problem fetching '%s'", name)
