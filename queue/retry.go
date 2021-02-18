@@ -217,17 +217,13 @@ func (rh *basicRetryHandler) handleJob(ctx context.Context, j amboy.RetryableJob
 func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.RetryableJob) error {
 	originalInfo := j.RetryInfo()
 	err := func() error {
+		oldInfo := j.RetryInfo()
+
 		// Load the most up-to-date copy in case the cached in-memory job is
 		// outdated.
-		// TODO (EVG-13540): determine if this will be an expensive query or not.
-		reloadJob, ok := rh.queue.Get(ctx, j.ID())
+		newJob, ok := rh.queue.GetAttempt(ctx, j.ID(), oldInfo.CurrentAttempt)
 		if !ok {
 			return errors.New("could not find job")
-		}
-
-		newJob, ok := reloadJob.(amboy.RetryableJob)
-		if !ok {
-			return errors.New("job is not retryable")
 		}
 
 		newInfo := newJob.RetryInfo()
@@ -238,8 +234,6 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 		// TODO (EVG-13584): add job retry locking mechanism (similar to
 		// (amboy.Job).Lock()) to ensure that this thread on this host has sole
 		// ownership of the job.
-
-		oldInfo := j.RetryInfo()
 
 		if oldInfo != newInfo {
 			return errors.New("precondition failed: in-memory retry information does not match queue's stored information")
@@ -254,7 +248,7 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 
 		err := rh.queue.SaveAndPut(ctx, j, newJob)
 		if amboy.IsDuplicateJobError(err) {
-			// The job is already in the queue, do nothing.
+			// The new job is already in the queue, do nothing.
 			return nil
 		} else if err != nil {
 			return errors.Wrap(err, "enqueueing retry job")
@@ -264,6 +258,7 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 	}()
 
 	if err != nil {
+		// Restore the original retry information if it failed to re-enqueue.
 		j.UpdateRetryInfo(originalInfo.Options())
 	}
 
