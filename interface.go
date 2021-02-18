@@ -163,7 +163,7 @@ type JobRetryInfo struct {
 	// CurrentAttempt is the current attempt number. This is zero-indexed
 	// (unless otherwise set on enqueue), so the first time the job attempts to
 	// run, its value is 0. Each subsequent retry increments this value.
-	CurrentAttempt int `bson:"current_attempt,omitempty" json:"current_attempt,omitempty" yaml:"current_attempt,omitempty"`
+	CurrentAttempt int `bson:"current_attempt" json:"current_attempt,omitempty" yaml:"current_attempt,omitempty"`
 }
 
 // Options returns a JobRetryInfo as its equivalent JobRetryOptions. In other
