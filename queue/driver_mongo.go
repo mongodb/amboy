@@ -612,17 +612,6 @@ func (d *mongoDriver) SaveAndPut(ctx context.Context, toSave amboy.Job, toPut am
 	defer sess.EndSession(ctx)
 
 	atomicSaveAndPut := func(sessCtx mongo.SessionContext) (interface{}, error) {
-		// TODO (EVG-13540): for a long-running job that has been lock pinged,
-		// we need to make sure that the modTS/modcount is okay to use. Save()
-		// should still succeed as long as:
-		// * Continuity of in-memory job: the dispatcher shares the same
-		// in-memory copy of the job as the retry handler.
-		// * Concurrency: the dispatcher never runs concurrently with the retry
-		// handler (which would modify modTS/modcount).
-		// * Precondition: the job is complete when this is called.
-		// We should verify these statements are true when doing tests of the
-		// retry handler.
-
 		if err = d.Save(sessCtx, toSave); err != nil {
 			return nil, errors.Wrap(err, "saving old job")
 		}
