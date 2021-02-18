@@ -13,6 +13,7 @@ import (
 	"github.com/mongodb/amboy/dependency"
 	"github.com/mongodb/amboy/job"
 	"github.com/mongodb/amboy/registry"
+	"github.com/mongodb/grip"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
@@ -58,29 +59,30 @@ type mockRemoteQueueOptions struct {
 }
 
 func (opts *mockRemoteQueueOptions) validate() error {
-	if opts.queue == nil {
-		return errors.New("cannot initialize mock remote queue without a backing remote queue implementation")
-	}
-
-	return nil
+	catcher := grip.NewBasicCatcher()
+	catcher.NewWhen(opts.queue == nil, "cannot initialize mock remote queue without a backing remote queue implementation")
+	return catcher.Resolve()
 }
 
 func newMockRemoteQueue(opts mockRemoteQueueOptions) (*mockRemoteQueue, error) {
 	if err := opts.validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid options")
 	}
+
 	mq := &mockRemoteQueue{remoteQueue: opts.queue}
+
+	if opts.makeDispatcher != nil {
+		mq.dispatcher = opts.makeDispatcher(mq)
+	} else {
+		mq.dispatcher = newMockDispatcher(mq)
+	}
+
 	if opts.driver != nil {
 		if err := mq.SetDriver(opts.driver); err != nil {
 			return nil, errors.Wrap(err, "configuring queue with driver")
 		}
 	}
-	if opts.makeDispatcher != nil {
-		mq.dispatcher = opts.makeDispatcher(mq)
-		if opts.driver != nil {
-			mq.driver.SetDispatcher(mq.dispatcher)
-		}
-	}
+
 	if opts.makeRetryHandler != nil {
 		rh, err := opts.makeRetryHandler(mq)
 		if err != nil {
