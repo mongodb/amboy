@@ -103,8 +103,10 @@ func (q *mockRemoteQueue) Driver() remoteQueueDriver {
 }
 
 func (q *mockRemoteQueue) SetDriver(d remoteQueueDriver) error {
+	if err := q.remoteQueue.SetDriver(d); err != nil {
+		return err
+	}
 	q.driver = d
-	q.remoteQueue.SetDriver(d)
 	q.driver.SetDispatcher(q.dispatcher)
 	return nil
 }
