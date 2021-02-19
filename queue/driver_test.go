@@ -14,12 +14,6 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-func defaultMongoDBTestOptions() MongoDBOptions {
-	opts := DefaultMongoDBOptions()
-	opts.DB = "amboy_test"
-	return opts
-}
-
 // All drivers should be able to pass this suite of tests which
 // exercise the complete functionality of the interface, without
 // reaching into the implementation details of any specific interface.
