@@ -168,7 +168,7 @@ func TestRetryHandlerImplementations(t *testing.T) {
 					time.Sleep(100 * time.Millisecond)
 
 					assert.True(t, calledGetAttempt)
-					assert.True(t, calledCompleteRetry)
+					assert.False(t, calledCompleteRetry)
 					assert.True(t, calledCompleteAndPut)
 				},
 				"PutSucceedsButDoesNothingIfUnstarted": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {

@@ -155,14 +155,14 @@ func (rh *basicRetryHandler) waitForJob(ctx context.Context) error {
 					"job_id":   j.ID(),
 				}))
 				j.AddError(err)
-			}
 
-			if err := rh.queue.CompleteRetry(ctx, j); err != nil {
-				grip.Warning(message.WrapError(err, message.Fields{
-					"message":  "failed to mark job retry as processed",
-					"job_id":   j.ID(),
-					"job_type": j.Type().Name,
-				}))
+				if err := rh.queue.CompleteRetry(ctx, j); err != nil {
+					grip.Warning(message.WrapError(err, message.Fields{
+						"message":  "failed to mark job retry as processed",
+						"job_id":   j.ID(),
+						"job_type": j.Type().Name,
+					}))
+				}
 			}
 
 			timer.Reset(rh.opts.WorkerCheckInterval)
@@ -195,11 +195,18 @@ func (rh *basicRetryHandler) handleJob(ctx context.Context, j amboy.RetryableJob
 		case <-ctx.Done():
 			return nil
 		case <-timer.C:
-			if err := rh.tryEnqueueJob(ctx, j); err != nil {
+			canRetry, err := rh.tryEnqueueJob(ctx, j)
+			if err != nil {
 				catcher.Wrapf(err, "enqueue retry job attempt %d", i)
-				timer.Reset(rh.opts.RetryBackoff)
-				continue
+
+				if canRetry {
+					timer.Reset(rh.opts.RetryBackoff)
+					continue
+				}
+
+				return catcher.Resolve()
 			}
+
 			return nil
 		}
 	}
@@ -211,22 +218,22 @@ func (rh *basicRetryHandler) handleJob(ctx context.Context, j amboy.RetryableJob
 	return errors.Errorf("exhausted all %d attempts to enqueue retry job without success", rh.opts.MaxRetryAttempts)
 }
 
-func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.RetryableJob) error {
+func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.RetryableJob) (canRetryOnErr bool, err error) {
 	originalInfo := j.RetryInfo()
 
-	err := func() error {
+	canRetry, err := func() (bool, error) {
 		oldInfo := j.RetryInfo()
 
 		// Load the most up-to-date copy in case the cached in-memory job is
 		// outdated.
 		newJob, ok := rh.queue.GetAttempt(ctx, j.ID(), oldInfo.CurrentAttempt)
 		if !ok {
-			return errors.New("could not find job")
+			return true, errors.New("could not find job")
 		}
 
 		newInfo := newJob.RetryInfo()
 		if !newInfo.Retryable || !newInfo.NeedsRetry {
-			return nil
+			return false, errors.New("job in the queue indicates the job does not need to retry anymore")
 		}
 
 		// TODO (EVG-13584): add job retry locking mechanism (similar to
@@ -234,7 +241,7 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 		// ownership of the job.
 
 		if oldInfo != newInfo {
-			return errors.New("precondition failed: in-memory retry information does not match queue's stored information")
+			return false, errors.New("in-memory retry information does not match queue's stored information")
 		}
 
 		newInfo.NeedsRetry = false
@@ -249,12 +256,12 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 		err := rh.queue.CompleteAndPut(ctx, j, newJob)
 		if amboy.IsDuplicateJobError(err) {
 			// The new job is already in the queue, do nothing.
-			return nil
+			return false, err
 		} else if err != nil {
-			return errors.Wrap(err, "enqueueing retry job")
+			return true, errors.Wrap(err, "enqueueing retry job")
 		}
 
-		return nil
+		return false, nil
 	}()
 
 	if err != nil {
@@ -262,7 +269,7 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 		j.UpdateRetryInfo(originalInfo.Options())
 	}
 
-	return err
+	return canRetry, err
 }
 
 func retryAttemptPrefix(attempt int) string {
