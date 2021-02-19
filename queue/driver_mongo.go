@@ -594,14 +594,14 @@ func isMongoDupKey(err error) bool {
 }
 
 func (d *mongoDriver) Save(ctx context.Context, j amboy.Job) error {
-	job, err := d.prepareInterchange(j)
+	ji, err := d.prepareInterchange(j)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	job.Scopes = j.Scopes()
+	ji.Scopes = j.Scopes()
 
-	return errors.WithStack(d.doUpdate(ctx, job))
+	return errors.WithStack(d.doUpdate(ctx, ji))
 }
 
 func (d *mongoDriver) SaveAndPut(ctx context.Context, toSave amboy.Job, toPut amboy.Job) error {
@@ -612,8 +612,8 @@ func (d *mongoDriver) SaveAndPut(ctx context.Context, toSave amboy.Job, toPut am
 	defer sess.EndSession(ctx)
 
 	atomicSaveAndPut := func(sessCtx mongo.SessionContext) (interface{}, error) {
-		if err = d.Save(sessCtx, toSave); err != nil {
-			return nil, errors.Wrap(err, "saving old job")
+		if err = d.Complete(sessCtx, toSave); err != nil {
+			return nil, errors.Wrap(err, "completing old job")
 		}
 
 		if err = d.Put(sessCtx, toPut); err != nil {
@@ -624,34 +624,27 @@ func (d *mongoDriver) SaveAndPut(ctx context.Context, toSave amboy.Job, toPut am
 	}
 
 	if _, err = sess.WithTransaction(ctx, atomicSaveAndPut); err != nil {
-		return errors.Wrap(err, "swapping scopes")
+		return errors.Wrap(err, "atomic save and put")
 	}
 
 	return nil
 }
 
 func (d *mongoDriver) Complete(ctx context.Context, j amboy.Job) error {
-	job, err := d.prepareInterchange(j)
+	ji, err := d.prepareInterchange(j)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	isRetryableJob := amboy.WithRetryableJob(j, func(rj amboy.RetryableJob) {
-		info := rj.RetryInfo()
-		if info.Retryable && info.NeedsRetry && rj.ShouldApplyScopesOnEnqueue() {
-			// If the job is supposed to retry and apply the scopes immediately
-			// to the retry job, we cannot let go of the scopes yet because they
-			// will need to be safely transferred to the retry job.
-			return
-		}
-		job.Scopes = nil
-	})
-
-	if !isRetryableJob {
-		job.Scopes = nil
+	// It is safe to drop the scopes now in all cases except for one - if the
+	// job still needs to retry and applies its scopes immediately to the retry
+	// job, we cannot let go of the scopes yet because they will need to be
+	// safely transferred to the retry job.
+	if !ji.RetryInfo.Retryable || !ji.RetryInfo.NeedsRetry || !ji.ApplyScopesOnEnqueue {
+		ji.Scopes = nil
 	}
 
-	return errors.WithStack(d.doUpdate(ctx, job))
+	return errors.WithStack(d.doUpdate(ctx, ji))
 }
 
 func (d *mongoDriver) prepareInterchange(j amboy.Job) (*registry.JobInterchange, error) {
@@ -716,8 +709,8 @@ func (d *mongoDriver) Jobs(ctx context.Context) <-chan amboy.Job {
 				continue
 			}
 
-			var job amboy.Job
-			job, err = ji.Resolve(d.opts.Format)
+			var j amboy.Job
+			j, err = ji.Resolve(d.opts.Format)
 			if err != nil {
 				grip.Warning(message.WrapError(err, message.Fields{
 					"id":        d.instanceID,
@@ -730,7 +723,7 @@ func (d *mongoDriver) Jobs(ctx context.Context) <-chan amboy.Job {
 				continue
 			}
 
-			output <- job
+			output <- j
 		}
 
 		grip.Error(message.WrapError(iter.Err(), message.Fields{

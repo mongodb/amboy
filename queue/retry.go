@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/evergreen-ci/utility"
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/grip"
 	"github.com/mongodb/grip/message"
@@ -158,11 +157,11 @@ func (rh *basicRetryHandler) waitForJob(ctx context.Context) error {
 				j.AddError(err)
 			}
 
-			if err := rh.tryMarkProcessed(ctx, j); err != nil {
-				grip.Error(message.WrapError(err, message.Fields{
-					"message":  "could not mark retryable job as processed",
-					"queue_id": rh.queue.ID(),
+			if err := rh.queue.CompleteRetry(ctx, j); err != nil {
+				grip.Warning(message.WrapError(err, message.Fields{
+					"message":  "failed to mark job retry as processed",
 					"job_id":   j.ID(),
+					"job_type": j.Type().Name,
 				}))
 			}
 
@@ -242,14 +241,10 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 		newInfo.NeedsRetry = false
 		newInfo.CurrentAttempt++
 		newJob.UpdateRetryInfo(newInfo.Options())
+		newJob.SetStatus(amboy.JobStatusInfo{})
 
 		oldInfo.NeedsRetry = false
 		j.UpdateRetryInfo(oldInfo.Options())
-		if j.ShouldApplyScopesOnEnqueue() {
-			// Unset the old job's scopes that were applied on enqueue now,
-			// which have been held until the job retries.
-			j.SetScopes(nil)
-		}
 
 		err := rh.queue.SaveAndPut(ctx, j, newJob)
 		if amboy.IsDuplicateJobError(err) {
@@ -269,47 +264,6 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 	}
 
 	return err
-}
-
-// tryMarkProcessed attempts to mark the job as processed, indicating that it is
-// done retrying and will not attempt to retry again.
-func (rh *basicRetryHandler) tryMarkProcessed(ctx context.Context, j amboy.RetryableJob) error {
-	const (
-		attemptInterval = time.Second
-		maxAttempts     = 10
-	)
-
-	timer := time.NewTimer(0)
-	defer timer.Stop()
-
-	var attempt int
-	catcher := grip.NewBasicCatcher()
-	for {
-		select {
-		case <-ctx.Done():
-			catcher.Wrapf(ctx.Err(), "giving up on attempt %d", attempt+1)
-			return catcher.Resolve()
-		case <-timer.C:
-			j.UpdateRetryInfo(amboy.JobRetryOptions{
-				NeedsRetry: utility.FalsePtr(),
-			})
-			j.SetScopes(nil)
-
-			if err := rh.queue.Save(ctx, j); err != nil {
-				if attempt+1 >= maxAttempts {
-					return errors.Wrapf(catcher.Resolve(), "giving up after attempt %d", maxAttempts)
-				}
-
-				catcher.Wrapf(err, "attempt %d", attempt)
-				attempt++
-				timer.Reset(attemptInterval)
-
-				continue
-			}
-
-			return nil
-		}
-	}
 }
 
 func retryAttemptPrefix(attempt int) string {
