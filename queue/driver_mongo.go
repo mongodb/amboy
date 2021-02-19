@@ -624,7 +624,7 @@ func (d *mongoDriver) CompleteAndPut(ctx context.Context, toComplete amboy.Job, 
 	}
 
 	if _, err = sess.WithTransaction(ctx, atomicCompleteAndPut); err != nil {
-		return errors.Wrap(err, "atomic save and put")
+		return errors.Wrap(err, "atomic complete and put")
 	}
 
 	return nil
