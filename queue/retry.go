@@ -242,6 +242,7 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 		newInfo.CurrentAttempt++
 		newJob.UpdateRetryInfo(newInfo.Options())
 		newJob.SetStatus(amboy.JobStatusInfo{})
+		newJob.SetTimeInfo(amboy.JobTimeInfo{})
 
 		oldInfo.NeedsRetry = false
 		j.UpdateRetryInfo(oldInfo.Options())

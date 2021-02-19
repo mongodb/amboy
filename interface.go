@@ -105,6 +105,10 @@ type RetryableJob interface {
 	// AddRetryableError annotates the job with an error and marks the job as
 	// needing to retry.
 	AddRetryableError(error)
+
+	// SetTimeInfo is like UpdateTimeInfo but overwrites all time info,
+	// including zero fields.
+	SetTimeInfo(JobTimeInfo)
 }
 
 // JobType contains information about the type of a job, which queues

@@ -113,7 +113,7 @@ func (s *BaseCheckSuite) TestDefaultTimeInfoIsUnset() {
 	s.Zero(ti.WaitUntil)
 }
 
-func (s *BaseCheckSuite) TestTimeInfoSetsValues() {
+func (s *BaseCheckSuite) TestUpdateTimeInfoSetsNonzeroValues() {
 	ti := s.base.TimeInfo()
 	ti.Start = time.Now()
 	ti.End = ti.Start.Add(time.Hour)
@@ -142,6 +142,20 @@ func (s *BaseCheckSuite) TestTimeInfoSetsValues() {
 	s.NotEqual(new.End, last.End)
 	s.Equal(result.Start, last.Start)
 	s.Equal(result.End, last.End)
+}
+
+func (s *BaseCheckSuite) TestSetTimeInfoSetsAllValues() {
+	ti := s.base.TimeInfo()
+	ti.Start = time.Now()
+	ti.End = ti.Start.Add(time.Hour)
+	s.Zero(ti.WaitUntil)
+	s.Equal(time.Hour, ti.Duration())
+
+	s.base.SetTimeInfo(ti)
+	s.Equal(ti, s.base.TimeInfo())
+
+	s.base.SetTimeInfo(amboy.JobTimeInfo{})
+	s.Zero(s.base.TimeInfo())
 }
 
 func (s *BaseCheckSuite) TestUpdateRetryInfoSetsNonzeroFields() {
