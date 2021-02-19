@@ -332,9 +332,10 @@ type RetryableQueue interface {
 	// and a bool indicating whether the job was found or not.
 	GetAttempt(ctx context.Context, id string, attempt int) (RetryableJob, bool)
 
-	// CompleteAndPut saves an existing job toComplete in the queue (see Save) and
-	// inserts a new job toPut in the queue (see Put). Implementations must
-	// make this operation atomic.
+	// CompleteAndPut marks an existing job toComplete in the queue (see
+	// CompleteRetry) as finished processing its retry and inserts a new job
+	// toPut in the queue (see Put). Implementations must make this operation
+	// atomic.
 	CompleteAndPut(ctx context.Context, toComplete, toPut Job) error
 
 	// CompleteRetry marks a job that needs to retry as finished processing, so
