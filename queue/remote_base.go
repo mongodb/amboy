@@ -273,10 +273,11 @@ func (q *remoteBase) CompleteRetry(ctx context.Context, j amboy.RetryableJob) er
 
 			if err := q.driver.Complete(ctx, j); err != nil {
 				catcher.Wrapf(err, "attempt %d", attempt)
-				if attempt >= 10 || isMongoDupKey(err) {
+				if isMongoDupKey(err) {
 					j.AddError(catcher.Resolve())
 					return errors.Wrapf(catcher.Resolve(), "giving up after attempt %d", attempt)
 				}
+
 				timer.Reset(retryInterval)
 				continue
 			}
