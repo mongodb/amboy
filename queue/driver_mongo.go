@@ -604,15 +604,15 @@ func (d *mongoDriver) Save(ctx context.Context, j amboy.Job) error {
 	return errors.WithStack(d.doUpdate(ctx, ji))
 }
 
-func (d *mongoDriver) SaveAndPut(ctx context.Context, toSave amboy.Job, toPut amboy.Job) error {
+func (d *mongoDriver) CompleteAndPut(ctx context.Context, toComplete amboy.Job, toPut amboy.Job) error {
 	sess, err := d.client.StartSession()
 	if err != nil {
 		return errors.Wrap(err, "starting transaction session")
 	}
 	defer sess.EndSession(ctx)
 
-	atomicSaveAndPut := func(sessCtx mongo.SessionContext) (interface{}, error) {
-		if err = d.Complete(sessCtx, toSave); err != nil {
+	atomicCompleteAndPut := func(sessCtx mongo.SessionContext) (interface{}, error) {
+		if err = d.Complete(sessCtx, toComplete); err != nil {
 			return nil, errors.Wrap(err, "completing old job")
 		}
 
@@ -623,7 +623,7 @@ func (d *mongoDriver) SaveAndPut(ctx context.Context, toSave amboy.Job, toPut am
 		return nil, nil
 	}
 
-	if _, err = sess.WithTransaction(ctx, atomicSaveAndPut); err != nil {
+	if _, err = sess.WithTransaction(ctx, atomicCompleteAndPut); err != nil {
 		return errors.Wrap(err, "atomic save and put")
 	}
 

@@ -122,7 +122,7 @@ func TestRetryHandlerImplementations(t *testing.T) {
 						NeedsRetry: utility.ToBoolPtr(true),
 					})
 
-					var calledGetAttempt, calledCompleteRetry, calledSaveAndPut bool
+					var calledGetAttempt, calledCompleteRetry, calledCompleteAndPut bool
 					mq.getJobAttempt = func(context.Context, remoteQueue, string, int) (amboy.RetryableJob, bool) {
 						calledGetAttempt = true
 						ji, err := registry.MakeJobInterchange(j, amboy.JSON)
@@ -143,10 +143,10 @@ func TestRetryHandlerImplementations(t *testing.T) {
 						calledCompleteRetry = true
 						return nil
 					}
-					mq.saveAndPutJob = func(_ context.Context, _ remoteQueue, toSave amboy.Job, toPut amboy.Job) error {
-						calledSaveAndPut = true
+					mq.completeAndPutJob = func(_ context.Context, _ remoteQueue, toComplete amboy.Job, toPut amboy.Job) error {
+						calledCompleteAndPut = true
 
-						oldJob, ok := toSave.(amboy.RetryableJob)
+						oldJob, ok := toComplete.(amboy.RetryableJob)
 						if !ok {
 							return errors.New("expected retryable job")
 						}
@@ -169,7 +169,7 @@ func TestRetryHandlerImplementations(t *testing.T) {
 
 					assert.True(t, calledGetAttempt)
 					assert.True(t, calledCompleteRetry)
-					assert.True(t, calledSaveAndPut)
+					assert.True(t, calledCompleteAndPut)
 				},
 				"PutSucceedsButDoesNothingIfUnstarted": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
 					mq, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{})
@@ -183,7 +183,7 @@ func TestRetryHandlerImplementations(t *testing.T) {
 						calledMockQueue = true
 						return nil
 					}
-					mq.saveAndPutJob = func(context.Context, remoteQueue, amboy.Job, amboy.Job) error {
+					mq.completeAndPutJob = func(context.Context, remoteQueue, amboy.Job, amboy.Job) error {
 						calledMockQueue = true
 						return nil
 					}
@@ -199,7 +199,7 @@ func TestRetryHandlerImplementations(t *testing.T) {
 					require.NoError(t, err)
 
 					j := newMockRetryableJob("id")
-					var getAttemptCalls, completeRetryCalls, saveAndPutCalls int
+					var getAttemptCalls, completeRetryCalls, completeAndPutCalls int
 					mq.getJobAttempt = func(context.Context, remoteQueue, string, int) (amboy.RetryableJob, bool) {
 						getAttemptCalls++
 						return j, true
@@ -208,8 +208,8 @@ func TestRetryHandlerImplementations(t *testing.T) {
 						completeRetryCalls++
 						return nil
 					}
-					mq.saveAndPutJob = func(context.Context, remoteQueue, amboy.Job, amboy.Job) error {
-						saveAndPutCalls++
+					mq.completeAndPutJob = func(context.Context, remoteQueue, amboy.Job, amboy.Job) error {
+						completeAndPutCalls++
 						return errors.New("fail")
 					}
 
@@ -219,7 +219,7 @@ func TestRetryHandlerImplementations(t *testing.T) {
 					time.Sleep(100 * time.Millisecond)
 
 					assert.NotZero(t, getAttemptCalls)
-					assert.Zero(t, saveAndPutCalls)
+					assert.Zero(t, completeAndPutCalls)
 					assert.NotZero(t, completeRetryCalls)
 				},
 				"MaxRetryAttemptsLimitsEnqueueAttempts": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
@@ -235,7 +235,7 @@ func TestRetryHandlerImplementations(t *testing.T) {
 						NeedsRetry: utility.ToBoolPtr(true),
 					})
 
-					var getAttemptCalls, completeRetryCalls, saveAndPutCalls int
+					var getAttemptCalls, completeRetryCalls, completeAndPutCalls int
 					mq.getJobAttempt = func(context.Context, remoteQueue, string, int) (amboy.RetryableJob, bool) {
 						getAttemptCalls++
 						return j, true
@@ -244,8 +244,8 @@ func TestRetryHandlerImplementations(t *testing.T) {
 						completeRetryCalls++
 						return nil
 					}
-					mq.saveAndPutJob = func(context.Context, remoteQueue, amboy.Job, amboy.Job) error {
-						saveAndPutCalls++
+					mq.completeAndPutJob = func(context.Context, remoteQueue, amboy.Job, amboy.Job) error {
+						completeAndPutCalls++
 						return errors.New("fail")
 					}
 
@@ -255,7 +255,7 @@ func TestRetryHandlerImplementations(t *testing.T) {
 					time.Sleep(3 * opts.RetryBackoff * time.Duration(opts.MaxRetryAttempts))
 
 					assert.Equal(t, opts.MaxRetryAttempts, getAttemptCalls)
-					assert.Equal(t, opts.MaxRetryAttempts, saveAndPutCalls)
+					assert.Equal(t, opts.MaxRetryAttempts, completeAndPutCalls)
 					assert.NotZero(t, completeRetryCalls)
 				},
 				"RetryBackoffWaitsBeforeAttemptingReenqueue": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
@@ -271,7 +271,7 @@ func TestRetryHandlerImplementations(t *testing.T) {
 						NeedsRetry: utility.ToBoolPtr(true),
 					})
 
-					var getAttemptCalls, completeRetryCalls, saveAndPutCalls int
+					var getAttemptCalls, completeRetryCalls, completeAndPutCalls int
 					mq.getJobAttempt = func(context.Context, remoteQueue, string, int) (amboy.RetryableJob, bool) {
 						getAttemptCalls++
 						return j, true
@@ -280,8 +280,8 @@ func TestRetryHandlerImplementations(t *testing.T) {
 						completeRetryCalls++
 						return nil
 					}
-					mq.saveAndPutJob = func(context.Context, remoteQueue, amboy.Job, amboy.Job) error {
-						saveAndPutCalls++
+					mq.completeAndPutJob = func(context.Context, remoteQueue, amboy.Job, amboy.Job) error {
+						completeAndPutCalls++
 						return errors.New("fail")
 					}
 
@@ -292,8 +292,8 @@ func TestRetryHandlerImplementations(t *testing.T) {
 
 					assert.True(t, getAttemptCalls > 1, "worker should have had time to attempt more than once")
 					assert.True(t, getAttemptCalls < opts.MaxRetryAttempts, "worker should not have used up all attempts")
-					assert.True(t, saveAndPutCalls > 1, "workers should have had time to attempt more than once")
-					assert.True(t, saveAndPutCalls < opts.MaxRetryAttempts, "worker should not have used up all attempts")
+					assert.True(t, completeAndPutCalls > 1, "workers should have had time to attempt more than once")
+					assert.True(t, completeAndPutCalls < opts.MaxRetryAttempts, "worker should not have used up all attempts")
 					assert.Zero(t, completeRetryCalls, "workers should not have used up all attempts")
 				},
 				"MaxRetryTimeStopsEnqueueAttemptsEarly": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
@@ -310,7 +310,7 @@ func TestRetryHandlerImplementations(t *testing.T) {
 						NeedsRetry: utility.ToBoolPtr(true),
 					})
 
-					var getAttemptCalls, completeRetryCalls, saveAndPutCalls int
+					var getAttemptCalls, completeRetryCalls, completeAndPutCalls int
 					mq.getJobAttempt = func(context.Context, remoteQueue, string, int) (amboy.RetryableJob, bool) {
 						getAttemptCalls++
 						return j, true
@@ -319,8 +319,8 @@ func TestRetryHandlerImplementations(t *testing.T) {
 						completeRetryCalls++
 						return nil
 					}
-					mq.saveAndPutJob = func(context.Context, remoteQueue, amboy.Job, amboy.Job) error {
-						saveAndPutCalls++
+					mq.completeAndPutJob = func(context.Context, remoteQueue, amboy.Job, amboy.Job) error {
+						completeAndPutCalls++
 						return errors.New("fail")
 					}
 
@@ -331,8 +331,8 @@ func TestRetryHandlerImplementations(t *testing.T) {
 
 					assert.True(t, getAttemptCalls > 1, "worker should have had time to attempt more than once")
 					assert.True(t, getAttemptCalls < opts.MaxRetryAttempts, "worker should have aborted early before using up all attempts")
-					assert.True(t, saveAndPutCalls > 1, "workers should have had time to attempt more than once")
-					assert.True(t, saveAndPutCalls < opts.MaxRetryAttempts, "worker should have aborted early before using up all attempts")
+					assert.True(t, completeAndPutCalls > 1, "workers should have had time to attempt more than once")
+					assert.True(t, completeAndPutCalls < opts.MaxRetryAttempts, "worker should have aborted early before using up all attempts")
 					assert.NotZero(t, completeRetryCalls, "worker should have aborted early")
 				},
 				"CheckIntervalThrottlesJobPickupRate": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
@@ -347,7 +347,7 @@ func TestRetryHandlerImplementations(t *testing.T) {
 						NeedsRetry: utility.ToBoolPtr(true),
 					})
 
-					var getAttemptCalls, completeRetryCalls, saveAndPutCalls int
+					var getAttemptCalls, completeRetryCalls, completeAndPutCalls int
 					mq.getJobAttempt = func(context.Context, remoteQueue, string, int) (amboy.RetryableJob, bool) {
 						getAttemptCalls++
 						return j, true
@@ -356,8 +356,8 @@ func TestRetryHandlerImplementations(t *testing.T) {
 						completeRetryCalls++
 						return nil
 					}
-					mq.saveAndPutJob = func(context.Context, remoteQueue, amboy.Job, amboy.Job) error {
-						saveAndPutCalls++
+					mq.completeAndPutJob = func(context.Context, remoteQueue, amboy.Job, amboy.Job) error {
+						completeAndPutCalls++
 						return errors.New("fail")
 					}
 
@@ -369,7 +369,7 @@ func TestRetryHandlerImplementations(t *testing.T) {
 					time.Sleep(opts.WorkerCheckInterval / 2)
 
 					assert.Zero(t, getAttemptCalls, "worker should not have checked for job yet")
-					assert.Zero(t, saveAndPutCalls, "worker should not have checked for job yet")
+					assert.Zero(t, completeAndPutCalls, "worker should not have checked for job yet")
 					assert.Zero(t, completeRetryCalls, "worker should not have checked for job yet")
 				},
 			} {

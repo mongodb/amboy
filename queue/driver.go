@@ -27,10 +27,10 @@ type remoteQueueDriver interface {
 	// Save updates an existing job in the backing storage. Implementations may
 	// not allow calls to Save to run concurrently.
 	Save(context.Context, amboy.Job) error
-	// SaveAndPut performs updates an existing job toSave and inserts a new job
-	// toPut atomically. Implementations may not allow calls to SaveAndPut to
-	// run concurrently.
-	SaveAndPut(ctx context.Context, toSave amboy.Job, toPut amboy.Job) error
+	// CompleteAndPut performs updates an existing job toComplete and inserts a
+	// new job toPut atomically. Implementations may not allow calls to
+	// CompleteAndPut to run concurrently.
+	CompleteAndPut(ctx context.Context, toComplete amboy.Job, toPut amboy.Job) error
 
 	Jobs(context.Context) <-chan amboy.Job
 	Next(context.Context) amboy.Job
