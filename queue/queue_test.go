@@ -1157,64 +1157,39 @@ func RetryableTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 				assert.True(t, foundSecondAttempt, "second job attempt should have completed")
 			}
 		},
-		// kim: TODO: need to somehow verify that no jobs are holding scopes in
-		// the DB. Maybe add another job with the same scope after these two
-		// jobs, then verify that it ran.
-		// "ScopedJobRetriesOnce": func(ctx context.Context, t *testing.T, rh amboy.RetryHandler, rq amboy.RetryableQueue) {
-		//     j := newMockRetryableJob("id")
-		//     j.NumTimesToRetry = 1
-		//     j.SetShouldApplyScopesOnEnqueue(true)
-		//     j.SetScopes([]string{"scope"})
-		//
-		//     require.NoError(t, rq.Put(ctx, j))
-		//     require.True(t, amboy.WaitInterval(ctx, rq, 100*time.Millisecond))
-		//
-		//     jobReenqueued := make(chan struct{})
-		//     go func() {
-		//         defer close(jobReenqueued)
-		//         for {
-		//             if ctx.Err() != nil {
-		//                 return
-		//             }
-		//             if rq.Stats(ctx).Total > 1 {
-		//                 return
-		//             }
-		//         }
-		//     }()
-		//
-		// checkAllJobs:
-		//     for {
-		//         select {
-		//         case <-ctx.Done():
-		//             require.FailNow(t, "context timed out before job was marked complete")
-		//         case <-jobReenqueued:
-		//             assert.True(t, rq.Stats(ctx).Total > 1)
-		//             require.True(t, amboy.WaitInterval(ctx, rq, 100*time.Millisecond))
-		//             var foundFirstAttempt, foundSecondAttempt bool
-		//             time.Sleep(500 * time.Millisecond)
-		//             for completed := range rq.Results(ctx) {
-		//                 if len(completed.Scopes()) != 0 {
-		//                     // Wait for all scopes to be dropped.
-		//                     continue checkAllJobs
-		//                 }
-		//                 rj, ok := completed.(amboy.RetryableJob)
-		//                 require.True(t, ok)
-		//                 assert.True(t, rj.RetryInfo().Retryable)
-		//                 assert.False(t, rj.RetryInfo().NeedsRetry)
-		//                 if rj.RetryInfo().CurrentAttempt == 0 {
-		//                     foundFirstAttempt = true
-		//                 }
-		//                 if rj.RetryInfo().CurrentAttempt == 1 {
-		//                     foundSecondAttempt = true
-		//                 }
-		//                 assert.Zero(t, rj.Scopes(), "all scopes should be released on completion")
-		//             }
-		//             assert.True(t, foundFirstAttempt, "first job attempt should have completed")
-		//             assert.True(t, foundSecondAttempt, "second job attempt should have completed")
-		//             break checkAllJobs
-		//         }
-		//     }
-		// },
+		"ScopedJobRetriesOnceThenAllowsLaterJobToTakeScope": func(ctx context.Context, t *testing.T, rh amboy.RetryHandler, rq amboy.RetryableQueue) {
+			j := newMockRetryableJob("id0")
+			j.NumTimesToRetry = 1
+			j.SetShouldApplyScopesOnEnqueue(true)
+			scopes := []string{"scope"}
+			j.SetScopes(scopes)
+
+			require.NoError(t, rq.Put(ctx, j))
+			require.True(t, amboy.WaitInterval(ctx, rq, 100*time.Millisecond))
+
+			jobAfterRetry := newMockRetryableJob("id1")
+			jobAfterRetry.SetScopes(scopes)
+
+			require.NoError(t, rq.Put(ctx, jobAfterRetry))
+			require.True(t, amboy.WaitInterval(ctx, rq, 100*time.Millisecond))
+
+			assert.Equal(t, 3, rq.Stats(ctx).Completed)
+			var foundFirstAttempt, foundSecondAttempt bool
+			for completed := range rq.Results(ctx) {
+				amboy.WithRetryableJob(completed, func(rj amboy.RetryableJob) {
+					assert.True(t, rj.RetryInfo().Retryable)
+					assert.False(t, rj.RetryInfo().NeedsRetry)
+					if rj.RetryInfo().CurrentAttempt == 0 {
+						foundFirstAttempt = true
+					}
+					if rj.RetryInfo().CurrentAttempt == 1 {
+						foundSecondAttempt = true
+					}
+				})
+			}
+			assert.True(t, foundFirstAttempt, "first job attempt should have completed")
+			assert.True(t, foundSecondAttempt, "second job attempt should have completed")
+		},
 	} {
 		t.Run(testName, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(bctx, time.Minute)
