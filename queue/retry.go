@@ -253,7 +253,7 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 		oldInfo.NeedsRetry = false
 		j.UpdateRetryInfo(oldInfo.Options())
 
-		err := rh.queue.CompleteAndPut(ctx, j, newJob)
+		err = rh.queue.CompleteAndPut(ctx, j, newJob)
 		if amboy.IsDuplicateJobError(err) {
 			// The new job is already in the queue, do nothing.
 			return false, err
