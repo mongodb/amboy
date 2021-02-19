@@ -186,7 +186,7 @@ func (rh *basicRetryHandler) handleJob(ctx context.Context, j amboy.RetryableJob
 	catcher := grip.NewBasicCatcher()
 	timer := time.NewTimer(0)
 	defer timer.Stop()
-	for i := 0; i < rh.opts.MaxRetryAttempts; i++ {
+	for i := 1; i <= rh.opts.MaxRetryAttempts; i++ {
 		if time.Since(startAt) > rh.opts.MaxRetryTime {
 			return errors.Errorf("giving up after %d attempts, %f seconds due to maximum retry time", i, rh.opts.MaxRetryTime.Seconds())
 		}
