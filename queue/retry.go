@@ -213,7 +213,6 @@ func (rh *basicRetryHandler) handleJob(ctx context.Context, j amboy.RetryableJob
 
 func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.RetryableJob) error {
 	originalInfo := j.RetryInfo()
-	originalScopes := j.Scopes()
 
 	err := func() error {
 		oldInfo := j.RetryInfo()
@@ -261,7 +260,6 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 	if err != nil {
 		// Restore the original retry information if it failed to re-enqueue.
 		j.UpdateRetryInfo(originalInfo.Options())
-		j.SetScopes(originalScopes)
 	}
 
 	return err

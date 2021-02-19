@@ -277,10 +277,11 @@ func (q *remoteBase) CompleteRetry(ctx context.Context, j amboy.RetryableJob) er
 					j.AddError(catcher.Resolve())
 					return errors.Wrapf(catcher.Resolve(), "giving up after attempt %d", attempt)
 				}
+				timer.Reset(retryInterval)
 				continue
 			}
 
-			timer.Reset(retryInterval)
+			return nil
 		}
 	}
 
