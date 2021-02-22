@@ -576,20 +576,26 @@ func (d *mongoDriver) getAtomicQuery(jobName string, modCount int) bson.M {
 }
 
 func isMongoDupKey(err error) bool {
-	wce, werrs := getMongoDupKeyErrors(err)
-	return wce != nil || len(werrs) != 0
+	dupKeyErrs := getMongoDupKeyErrors(err)
+	return dupKeyErrs.writeConcernError != nil || len(dupKeyErrs.writeErrors) != 0 || dupKeyErrs.commandError != nil
 }
 
 func isMongoDupScope(err error) bool {
-	wce, werrs := getMongoDupKeyErrors(err)
-	if wce != nil {
+	dupKeyErrs := getMongoDupKeyErrors(err)
+	if wce := dupKeyErrs.writeConcernError; wce != nil {
 		if strings.Contains(wce.Message, " scopes_1 ") {
 			return true
 		}
 	}
 
-	for _, werr := range werrs {
+	for _, werr := range dupKeyErrs.writeErrors {
 		if strings.Contains(werr.Message, " scopes_1 ") {
+			return true
+		}
+	}
+
+	if ce := dupKeyErrs.commandError; ce != nil {
+		if strings.Contains(ce.Message, " scopes_1 ") {
 			return true
 		}
 	}
@@ -597,41 +603,73 @@ func isMongoDupScope(err error) bool {
 	return false
 }
 
-func getMongoDupKeyErrors(err error) (*mongo.WriteConcernError, []mongo.WriteError) {
-	we, ok := errors.Cause(err).(mongo.WriteException)
-	if !ok {
-		return nil, nil
-	}
-
-	return getMongoDupKeyWriteConcernError(we), getMongoDupKeyWriteErrors(we)
+type mongoDupKeyErrors struct {
+	writeConcernError *mongo.WriteConcernError
+	writeErrors       []mongo.WriteError
+	commandError      *mongo.CommandError
 }
 
-func getMongoDupKeyWriteConcernError(we mongo.WriteException) *mongo.WriteConcernError {
-	wce := we.WriteConcernError
+func getMongoDupKeyErrors(err error) mongoDupKeyErrors {
+	var dupKeyErrs mongoDupKeyErrors
+
+	if we, ok := errors.Cause(err).(mongo.WriteException); ok {
+		dupKeyErrs.writeConcernError = getMongoDupKeyWriteConcernError(we)
+		dupKeyErrs.writeErrors = getMongoDupKeyWriteErrors(we)
+	}
+
+	if ce, ok := errors.Cause(err).(mongo.CommandError); ok {
+		dupKeyErrs.commandError = getMongoDupKeyCommandError(ce)
+	}
+
+	return dupKeyErrs
+}
+
+func getMongoDupKeyWriteConcernError(err mongo.WriteException) *mongo.WriteConcernError {
+	wce := err.WriteConcernError
 	if wce == nil {
 		return nil
 	}
 
-	if wce.Code == 11000 || wce.Code == 11001 || wce.Code == 12582 || wce.Code == 16460 && strings.Contains(wce.Message, " E11000 ") {
+	switch wce.Code {
+	case 11000, 11001, 12582:
 		return wce
+	case 16460:
+		if strings.Contains(wce.Message, " E11000 ") {
+			return wce
+		}
+		return nil
+	default:
+		return nil
 	}
-
-	return nil
 }
 
-func getMongoDupKeyWriteErrors(we mongo.WriteException) []mongo.WriteError {
-	if len(we.WriteErrors) == 0 {
+func getMongoDupKeyWriteErrors(err mongo.WriteException) []mongo.WriteError {
+	if len(err.WriteErrors) == 0 {
 		return nil
 	}
 
 	var werrs []mongo.WriteError
-	for _, werr := range we.WriteErrors {
+	for _, werr := range err.WriteErrors {
 		if werr.Code == 11000 {
 			werrs = append(werrs, werr)
 		}
 	}
 
 	return werrs
+}
+
+func getMongoDupKeyCommandError(err mongo.CommandError) *mongo.CommandError {
+	switch err.Code {
+	case 11000, 11001:
+		return &err
+	case 16460:
+		if strings.Contains(err.Message, " E11000 ") {
+			return &err
+		}
+		return nil
+	default:
+		return nil
+	}
 }
 
 func (d *mongoDriver) Save(ctx context.Context, j amboy.Job) error {

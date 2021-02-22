@@ -396,8 +396,8 @@ func (s *DriverSuite) TestCompleteAndPutJobsFailsWithDuplicateJobID() {
 
 	err := s.driver.CompleteAndPut(s.ctx, j1, j2)
 	s.Require().Error(err)
-	s.True(amboy.IsDuplicateJobError(err))
-	s.False(amboy.IsDuplicateJobScopeError(err))
+	s.True(amboy.IsDuplicateJobError(err), "error: %v", err)
+	s.False(amboy.IsDuplicateJobScopeError(err), "error: %v", err)
 }
 
 func (s *DriverSuite) TestCompleteAndPutJobsSucceedsWithDuplicateScopes() {
@@ -433,8 +433,8 @@ func (s *DriverSuite) TestCompleteAndPutJobsFailsWithDuplicateJobScopesAppliedOn
 
 	err := s.driver.CompleteAndPut(s.ctx, j1, j2)
 	s.Require().Error(err)
-	s.True(amboy.IsDuplicateJobError(err))
-	s.True(amboy.IsDuplicateJobScopeError(err))
+	s.True(amboy.IsDuplicateJobError(err), "error: %v", err)
+	s.True(amboy.IsDuplicateJobScopeError(err), "error: %v", err)
 }
 
 func (s *DriverSuite) TestReloadRefreshesJobFromMemory() {
