@@ -152,6 +152,10 @@ func (j *JobTest) UpdateTimeInfo(i amboy.JobTimeInfo) {
 	j.TimingInfo = i
 }
 
+func (j *JobTest) SetTimeInfo(i amboy.JobTimeInfo) {
+	j.TimingInfo = i
+}
+
 func (j *JobTest) SetScopes(in []string) {
 	j.LockScopes = in
 }

@@ -456,7 +456,7 @@ func TestQueueSmoke(t *testing.T) {
 							}
 
 							if test.RetrySupported && size.Size >= 2 {
-								t.Run("Retryable", func(t *testing.T) {
+								t.Run("Retry", func(t *testing.T) {
 									RetryableTest(bctx, t, test, runner, size)
 								})
 							}
@@ -1115,63 +1115,105 @@ func ApplyScopesOnEnqueueTest(bctx context.Context, t *testing.T, test QueueTest
 }
 
 func RetryableTest(bctx context.Context, t *testing.T, test QueueTestCase, runner PoolTestCase, size SizeTestCase) {
-	ctx, cancel := context.WithTimeout(bctx, time.Minute)
-	defer cancel()
+	for testName, testCase := range map[string]func(ctx context.Context, t *testing.T, rh amboy.RetryHandler, rq amboy.RetryableQueue){
+		"JobRetriesOnce": func(ctx context.Context, t *testing.T, rh amboy.RetryHandler, rq amboy.RetryableQueue) {
+			j := newMockRetryableJob("id")
+			j.NumTimesToRetry = 1
 
-	q, closer, err := test.Constructor(ctx, newDriverID(), size.Size)
-	require.NoError(t, err)
-	defer func() {
-		assert.NoError(t, closer(ctx))
-	}()
+			require.NoError(t, rq.Put(ctx, j))
+			require.True(t, amboy.WaitInterval(ctx, rq, 100*time.Millisecond))
 
-	rq, ok := q.(amboy.RetryableQueue)
-	require.True(t, ok, "queue is not retryable")
-
-	require.NoError(t, runner.SetPool(rq, size.Size))
-
-	rh, err := newBasicRetryHandler(rq, amboy.RetryHandlerOptions{})
-	require.NoError(t, err)
-	require.NoError(t, rq.SetRetryHandler(rh))
-
-	require.NoError(t, rq.Start(ctx))
-
-	j := newMockRetryableJob("id")
-	j.NumTimesToRetry = 1
-
-	require.NoError(t, rq.Put(ctx, j))
-	require.True(t, amboy.WaitInterval(ctx, rq, 100*time.Millisecond))
-
-	jobReenqueued := make(chan struct{})
-	go func() {
-		defer close(jobReenqueued)
-		for {
-			if ctx.Err() != nil {
-				return
+			jobReenqueued := make(chan struct{})
+			go func() {
+				defer close(jobReenqueued)
+				for {
+					if ctx.Err() != nil {
+						return
+					}
+					if rq.Stats(ctx).Total > 1 {
+						return
+					}
+				}
+			}()
+			select {
+			case <-ctx.Done():
+			case <-jobReenqueued:
+				assert.True(t, rq.Stats(ctx).Total > 1)
+				require.True(t, amboy.WaitInterval(ctx, rq, 100*time.Millisecond))
+				var foundFirstAttempt, foundSecondAttempt bool
+				for completed := range rq.Results(ctx) {
+					rj, ok := completed.(amboy.RetryableJob)
+					require.True(t, ok)
+					assert.True(t, rj.RetryInfo().Retryable)
+					assert.False(t, rj.RetryInfo().NeedsRetry)
+					if rj.RetryInfo().CurrentAttempt == 0 {
+						foundFirstAttempt = true
+					}
+					if rj.RetryInfo().CurrentAttempt == 1 {
+						foundSecondAttempt = true
+					}
+				}
+				assert.True(t, foundFirstAttempt, "first job attempt should have completed")
+				assert.True(t, foundSecondAttempt, "second job attempt should have completed")
 			}
-			if rq.Stats(ctx).Total > 1 {
-				return
+		},
+		"ScopedJobRetriesOnceThenAllowsLaterJobToTakeScope": func(ctx context.Context, t *testing.T, rh amboy.RetryHandler, rq amboy.RetryableQueue) {
+			j := newMockRetryableJob("id0")
+			j.NumTimesToRetry = 1
+			j.SetShouldApplyScopesOnEnqueue(true)
+			scopes := []string{"scope"}
+			j.SetScopes(scopes)
+
+			require.NoError(t, rq.Put(ctx, j))
+			require.True(t, amboy.WaitInterval(ctx, rq, 100*time.Millisecond))
+
+			jobAfterRetry := newMockRetryableJob("id1")
+			jobAfterRetry.SetScopes(scopes)
+
+			require.NoError(t, rq.Put(ctx, jobAfterRetry))
+			require.True(t, amboy.WaitInterval(ctx, rq, 100*time.Millisecond))
+
+			assert.Equal(t, 3, rq.Stats(ctx).Completed)
+			var foundFirstAttempt, foundSecondAttempt bool
+			for completed := range rq.Results(ctx) {
+				amboy.WithRetryableJob(completed, func(rj amboy.RetryableJob) {
+					assert.True(t, rj.RetryInfo().Retryable)
+					assert.False(t, rj.RetryInfo().NeedsRetry)
+					if rj.RetryInfo().CurrentAttempt == 0 {
+						foundFirstAttempt = true
+					}
+					if rj.RetryInfo().CurrentAttempt == 1 {
+						foundSecondAttempt = true
+					}
+				})
 			}
-		}
-	}()
-	select {
-	case <-ctx.Done():
-	case <-jobReenqueued:
-		assert.True(t, rq.Stats(ctx).Total > 1)
-		require.True(t, amboy.WaitInterval(ctx, rq, 100*time.Millisecond))
-		var foundFirstAttempt, foundSecondAttempt bool
-		for completed := range rq.Results(ctx) {
-			rj, ok := completed.(amboy.RetryableJob)
-			require.True(t, ok)
-			assert.True(t, rj.RetryInfo().Retryable)
-			assert.False(t, rj.RetryInfo().NeedsRetry)
-			if rj.RetryInfo().CurrentAttempt == 0 {
-				foundFirstAttempt = true
-			}
-			if rj.RetryInfo().CurrentAttempt == 1 {
-				foundSecondAttempt = true
-			}
-		}
-		assert.True(t, foundFirstAttempt, "first job attempt should have completed")
-		assert.True(t, foundSecondAttempt, "second job attempt should have completed")
+			assert.True(t, foundFirstAttempt, "first job attempt should have completed")
+			assert.True(t, foundSecondAttempt, "second job attempt should have completed")
+		},
+	} {
+		t.Run(testName, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(bctx, time.Minute)
+			defer cancel()
+
+			q, closer, err := test.Constructor(ctx, newDriverID(), size.Size)
+			require.NoError(t, err)
+			defer func() {
+				assert.NoError(t, closer(ctx))
+			}()
+
+			rq, ok := q.(amboy.RetryableQueue)
+			require.True(t, ok, "queue is not retryable")
+
+			require.NoError(t, runner.SetPool(rq, size.Size))
+
+			rh, err := newBasicRetryHandler(rq, amboy.RetryHandlerOptions{})
+			require.NoError(t, err)
+			require.NoError(t, rq.SetRetryHandler(rh))
+
+			require.NoError(t, rq.Start(ctx))
+
+			testCase(ctx, t, rh, rq)
+		})
 	}
+
 }

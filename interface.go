@@ -79,8 +79,10 @@ type Job interface {
 	Lock(owner string, lockTimeout time.Duration) error
 	Unlock(owner string, lockTimeout time.Duration)
 
-	// Scope provides the ability to provide more configurable
-	// exclusion a job can provide.
+	// Scope provides the ability to configure mutual exclusion for a job in a
+	// queue. When called, these methods do not actually take a lock; rather,
+	// they signal the intention to lock within the queue. It is invalid for end
+	// users to call SetScopes after the job has already dispatched.
 	Scopes() []string
 	SetScopes([]string)
 
@@ -103,6 +105,10 @@ type RetryableJob interface {
 	// AddRetryableError annotates the job with an error and marks the job as
 	// needing to retry.
 	AddRetryableError(error)
+
+	// SetTimeInfo is like UpdateTimeInfo but overwrites all time info,
+	// including zero fields.
+	SetTimeInfo(JobTimeInfo)
 }
 
 // JobType contains information about the type of a job, which queues
@@ -319,10 +325,6 @@ type RetryableQueue interface {
 	// For retryable jobs, Get will retrieve the latest attempt of a job by ID.
 	Queue
 
-	// GetAttempt returns the job associated with the given attempt of the job
-	// and a bool indicating whether the job was found or not.
-	GetAttempt(ctx context.Context, id string, attempt int) (RetryableJob, bool)
-
 	// RetryHandler returns the handler for retrying a job in this queue.
 	RetryHandler() RetryHandler
 	// SetRetryHandler permits runtime substitution of RetryHandler
@@ -330,10 +332,19 @@ type RetryableQueue interface {
 	// to change RetryHandler implementations after starting the Queue.
 	SetRetryHandler(RetryHandler) error
 
-	// SaveAndPut saves an existing job toSave in the queue (see Save) and
-	// inserts a new job toPut in the queue (see Put). Implementations must
-	// make this operation atomic.
-	SaveAndPut(ctx context.Context, toSave, toPut Job) error
+	// GetAttempt returns the job associated with the given attempt of the job
+	// and a bool indicating whether the job was found or not.
+	GetAttempt(ctx context.Context, id string, attempt int) (RetryableJob, bool)
+
+	// CompleteAndPut marks an existing job toComplete in the queue (see
+	// CompleteRetry) as finished processing its retry and inserts a new job
+	// toPut in the queue (see Put). Implementations must make this operation
+	// atomic.
+	CompleteAndPut(ctx context.Context, toComplete, toPut Job) error
+
+	// CompleteRetry marks a job that needs to retry as finished processing, so
+	// that it will no longer retry.
+	CompleteRetry(ctx context.Context, j RetryableJob) error
 }
 
 // RetryHandler provides a means to retry RetryableJobs within a RetryableQueue.
@@ -366,6 +377,9 @@ type RetryHandlerOptions struct {
 	// NumWorkers is the maximum number of jobs that are allowed to retry in
 	// parallel.
 	NumWorkers int
+	// WorkerCheckInterval is the time interval retry workers will wait before
+	// attempting to pick up another job to retry.
+	WorkerCheckInterval time.Duration
 }
 
 func (opts *RetryHandlerOptions) Validate() error {

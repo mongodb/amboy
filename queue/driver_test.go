@@ -302,7 +302,7 @@ func (s *DriverSuite) TestPutAndGetRoundTripObjects() {
 	}
 }
 
-func (s *DriverSuite) TestSaveAndPutUpdatesExistingAndAddsNewJob() {
+func (s *DriverSuite) TestCompleteAndPutUpdatesExistingAndAddsNewJob() {
 	j1 := job.NewShellJob("echo foo", "")
 	j2 := job.NewShellJob("echo bar", "")
 
@@ -315,7 +315,7 @@ func (s *DriverSuite) TestSaveAndPutUpdatesExistingAndAddsNewJob() {
 		ModificationCount: 50,
 	})
 
-	s.Require().NoError(s.driver.SaveAndPut(s.ctx, j1, j2))
+	s.Require().NoError(s.driver.CompleteAndPut(s.ctx, j1, j2))
 
 	reloaded1, err := s.driver.Get(s.ctx, j1.ID())
 	s.Require().NoError(err)
@@ -326,7 +326,7 @@ func (s *DriverSuite) TestSaveAndPutUpdatesExistingAndAddsNewJob() {
 	s.Equal(j2.Status().ModificationCount, reloaded2.Status().ModificationCount)
 }
 
-func (s *DriverSuite) TestSaveAndPutIsAtomic() {
+func (s *DriverSuite) TestCompleteAndPutIsAtomic() {
 	j := job.NewShellJob("echo foo", "")
 
 	j.SetStatus(amboy.JobStatusInfo{
@@ -339,14 +339,14 @@ func (s *DriverSuite) TestSaveAndPutIsAtomic() {
 		ModificationCount: 50,
 	})
 
-	s.Require().Error(s.driver.SaveAndPut(s.ctx, j, j))
+	s.Require().Error(s.driver.CompleteAndPut(s.ctx, j, j))
 
 	reloaded, err := s.driver.Get(s.ctx, j.ID())
 	s.Require().NoError(err)
-	s.Equal(5, reloaded.Status().ModificationCount, "SaveAndPut should be atomic")
+	s.Equal(5, reloaded.Status().ModificationCount, "CompleteAndPut should be atomic")
 }
 
-func (s *DriverSuite) TestSaveAndPutAtomicallySwapsScopes() {
+func (s *DriverSuite) TestCompleteAndPutAtomicallySwapsScopes() {
 	j1 := job.NewShellJob("echo foo", "")
 	j2 := job.NewShellJob("echo bar", "")
 
@@ -357,7 +357,7 @@ func (s *DriverSuite) TestSaveAndPutAtomicallySwapsScopes() {
 	j2.SetScopes(j1.Scopes())
 	j1.SetScopes(nil)
 
-	s.Require().NoError(s.driver.SaveAndPut(s.ctx, j1, j2))
+	s.Require().NoError(s.driver.CompleteAndPut(s.ctx, j1, j2))
 
 	reloaded1, err := s.driver.Get(s.ctx, j1.ID())
 	s.Require().NoError(err)

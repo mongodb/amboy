@@ -269,6 +269,14 @@ func (b *Base) UpdateTimeInfo(i amboy.JobTimeInfo) {
 	}
 }
 
+// SetTimeInfo sets the value of time in the job, including unset fields.
+func (b *Base) SetTimeInfo(i amboy.JobTimeInfo) {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	b.timeInfo = i
+}
+
 // SetScopes overrides the jobs current scopes with those from the
 // argument. To unset scopes, pass nil to this method.
 func (b *Base) SetScopes(scopes []string) {

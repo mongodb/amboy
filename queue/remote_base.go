@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/evergreen-ci/utility"
 	"github.com/google/uuid"
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/grip"
@@ -161,8 +162,8 @@ func (q *remoteBase) Save(ctx context.Context, j amboy.Job) error {
 	return q.driver.Save(ctx, j)
 }
 
-func (q *remoteBase) SaveAndPut(ctx context.Context, toSave, toPut amboy.Job) error {
-	return q.driver.SaveAndPut(ctx, toSave, toPut)
+func (q *remoteBase) CompleteAndPut(ctx context.Context, toComplete, toPut amboy.Job) error {
+	return q.driver.CompleteAndPut(ctx, toComplete, toPut)
 }
 
 // Complete takes a context and, asynchronously, marks the job
@@ -246,6 +247,46 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
 		}
 
 	}
+}
+
+func (q *remoteBase) CompleteRetry(ctx context.Context, j amboy.RetryableJob) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	const retryInterval = time.Second
+	timer := time.NewTimer(0)
+	defer timer.Stop()
+
+	var attempt int
+	catcher := grip.NewBasicCatcher()
+
+	for attempt = 1; attempt <= 10; attempt++ {
+		select {
+		case <-ctx.Done():
+			catcher.Add(ctx.Err())
+			return errors.Wrapf(catcher.Resolve(), "giving up after attempt %d", attempt)
+		case <-timer.C:
+			j.UpdateRetryInfo(amboy.JobRetryOptions{
+				NeedsRetry: utility.FalsePtr(),
+			})
+
+			if err := q.driver.Complete(ctx, j); err != nil {
+				catcher.Wrapf(err, "attempt %d", attempt)
+				if isMongoDupKey(err) {
+					j.AddError(catcher.Resolve())
+					return errors.Wrapf(catcher.Resolve(), "giving up after attempt %d", attempt)
+				}
+
+				timer.Reset(retryInterval)
+				continue
+			}
+
+			return nil
+		}
+	}
+
+	return errors.Wrapf(catcher.Resolve(), "giving up after attempt %d", attempt)
 }
 
 // Results provides a generator that iterates all completed jobs.
