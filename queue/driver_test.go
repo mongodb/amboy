@@ -106,8 +106,6 @@ func (s *DriverSuite) TestPutJobDoesNotAllowDuplicateIds() {
 	}
 }
 
-// kim: TODO: test:
-// - CompleteAndPut fails due to duplicate job ID error.
 func (s *DriverSuite) TestPutJobDoesNotAllowDuplicateScopeAppliedInQueue() {
 	j1 := job.NewShellJob("echo foo", "")
 	j2 := job.NewShellJob("echo bar", "")
@@ -321,7 +319,7 @@ func (s *DriverSuite) TestPutAndGetRoundTripObjects() {
 	}
 }
 
-func (s *DriverSuite) TestCompleteAndPutUpdatesExistingAndAddsNewJob() {
+func (s *DriverSuite) TestCompleteAndPutJobsUpdatesExistingAndAddsNewJob() {
 	j1 := job.NewShellJob("echo foo", "")
 	j2 := job.NewShellJob("echo bar", "")
 
@@ -345,7 +343,7 @@ func (s *DriverSuite) TestCompleteAndPutUpdatesExistingAndAddsNewJob() {
 	s.Equal(j2.Status().ModificationCount, reloaded2.Status().ModificationCount)
 }
 
-func (s *DriverSuite) TestCompleteAndPutIsAtomic() {
+func (s *DriverSuite) TestCompleteAndPutJobsIsAtomic() {
 	j := job.NewShellJob("echo foo", "")
 
 	j.SetStatus(amboy.JobStatusInfo{
@@ -365,15 +363,17 @@ func (s *DriverSuite) TestCompleteAndPutIsAtomic() {
 	s.Equal(5, reloaded.Status().ModificationCount, "CompleteAndPut should be atomic")
 }
 
-func (s *DriverSuite) TestCompleteAndPutAtomicallySwapsScopes() {
+func (s *DriverSuite) TestCompleteAndPutJobsAtomicallySwapsScopes() {
 	j1 := job.NewShellJob("echo foo", "")
 	j2 := job.NewShellJob("echo bar", "")
 
 	j1.SetScopes([]string{"scope"})
+	j1.SetShouldApplyScopesOnEnqueue(true)
 
 	s.Require().NoError(s.driver.Put(s.ctx, j1))
 
 	j2.SetScopes(j1.Scopes())
+	j2.SetShouldApplyScopesOnEnqueue(true)
 	j1.SetScopes(nil)
 
 	s.Require().NoError(s.driver.CompleteAndPut(s.ctx, j1, j2))
@@ -385,6 +385,56 @@ func (s *DriverSuite) TestCompleteAndPutAtomicallySwapsScopes() {
 	reloaded2, err := s.driver.Get(s.ctx, j2.ID())
 	s.Require().NoError(err)
 	s.Equal(j2.Scopes(), reloaded2.Scopes())
+}
+
+func (s *DriverSuite) TestCompleteAndPutJobsFailsWithDuplicateJobID() {
+	j1 := job.NewShellJob("echo foo", "")
+	j2 := job.NewShellJob("echo bar", "")
+
+	s.Require().NoError(s.driver.Put(s.ctx, j1))
+	s.Require().NoError(s.driver.Put(s.ctx, j2))
+
+	err := s.driver.CompleteAndPut(s.ctx, j1, j2)
+	s.Require().Error(err)
+	s.True(amboy.IsDuplicateJobError(err))
+	s.False(amboy.IsDuplicateJobScopeError(err))
+}
+
+func (s *DriverSuite) TestCompleteAndPutJobsSucceedsWithDuplicateScopes() {
+	j1 := job.NewShellJob("echo foo", "")
+	j2 := job.NewShellJob("echo bar", "")
+	j3 := job.NewShellJob("echo bat", "")
+
+	scopes := []string{"scope"}
+	j3.SetScopes(scopes)
+
+	s.Require().NoError(s.driver.Put(s.ctx, j1))
+	s.Require().NoError(s.driver.Put(s.ctx, j3))
+
+	j2.SetScopes(scopes)
+
+	s.NoError(s.driver.CompleteAndPut(s.ctx, j1, j2))
+}
+
+func (s *DriverSuite) TestCompleteAndPutJobsFailsWithDuplicateJobScopesAppliedOnEnqueue() {
+	j1 := job.NewShellJob("echo foo", "")
+	j2 := job.NewShellJob("echo bar", "")
+	j3 := job.NewShellJob("echo bat", "")
+
+	scopes := []string{"scope"}
+	j3.SetScopes(scopes)
+	j3.SetShouldApplyScopesOnEnqueue(true)
+
+	s.Require().NoError(s.driver.Put(s.ctx, j1))
+	s.Require().NoError(s.driver.Put(s.ctx, j3))
+
+	j2.SetScopes(scopes)
+	j2.SetShouldApplyScopesOnEnqueue(true)
+
+	err := s.driver.CompleteAndPut(s.ctx, j1, j2)
+	s.Require().Error(err)
+	s.True(amboy.IsDuplicateJobError(err))
+	s.True(amboy.IsDuplicateJobScopeError(err))
 }
 
 func (s *DriverSuite) TestReloadRefreshesJobFromMemory() {

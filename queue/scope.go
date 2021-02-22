@@ -3,6 +3,7 @@ package queue
 import (
 	"sync"
 
+	"github.com/mongodb/amboy"
 	"github.com/pkg/errors"
 )
 
@@ -46,7 +47,7 @@ func (s *scopeManagerImpl) Acquire(id string, scopes []string) error {
 		if holder == id {
 			continue
 		}
-		return errors.Errorf("could not acquire lock scope '%s' held by '%s' not '%s'", sc, holder, id)
+		return amboy.NewDuplicateJobScopeErrorf("could not acquire lock scope '%s' held by '%s' not '%s'", sc, holder, id)
 	}
 
 	for _, sc := range scopesToAcquire {
