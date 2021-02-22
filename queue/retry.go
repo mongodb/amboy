@@ -156,6 +156,8 @@ func (rh *basicRetryHandler) waitForJob(ctx context.Context) error {
 				}))
 				j.AddError(err)
 
+				// Since the job could not retry successfully, do not let the
+				// job retry again.
 				if err := rh.queue.CompleteRetry(ctx, j); err != nil {
 					grip.Warning(message.WrapError(err, message.Fields{
 						"message":  "failed to mark job retry as processed",
