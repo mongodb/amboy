@@ -14,4 +14,8 @@ func TestDuplicateError(t *testing.T) {
 	assert.True(t, IsDuplicateJobError(NewDuplicateJobErrorf("err")))
 	assert.True(t, IsDuplicateJobError(NewDuplicateJobErrorf("err %s", "err")))
 	assert.True(t, IsDuplicateJobError(MakeDuplicateJobError(errors.New("err"))))
+
+	assert.True(t, IsDuplicateJobError(NewDuplicateJobScopeError("err")))
+	// err := NewDuplicateJobError("scope error")
+	// assert.True(t, IsDuplicateJobError(err))
 }

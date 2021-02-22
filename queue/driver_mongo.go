@@ -535,6 +535,9 @@ func (d *mongoDriver) Put(ctx context.Context, j amboy.Job) error {
 
 	if _, err = d.getCollection().InsertOne(ctx, ji); err != nil {
 		if isMongoDupKey(err) {
+			if isMongoDupScope(err) {
+				return amboy.NewDuplicateJobScopeErrorf("job scopes '%s' conflict", j.Scopes())
+			}
 			return amboy.NewDuplicateJobErrorf("job '%s' already exists", j.ID())
 		}
 
@@ -573,24 +576,62 @@ func (d *mongoDriver) getAtomicQuery(jobName string, modCount int) bson.M {
 }
 
 func isMongoDupKey(err error) bool {
-	// TODO  (EVG-13591): handle duplicate write errors due to scopes separately
-	// from write errors due to job ID clashes.
-	we, ok := errors.Cause(err).(mongo.WriteException)
-	if !ok {
-		return false
-	}
-	if we.WriteConcernError != nil {
-		wce := we.WriteConcernError
-		return wce.Code == 11000 || wce.Code == 11001 || wce.Code == 12582 || wce.Code == 16460 && strings.Contains(wce.Message, " E11000 ")
-	}
-	if we.WriteErrors != nil && len(we.WriteErrors) > 0 {
-		for _, wErr := range we.WriteErrors {
-			if wErr.Code == 11000 {
-				return true
-			}
+	wce, werrs := getMongoDupKeyErrors(err)
+	return wce != nil || len(werrs) != 0
+}
+
+func isMongoDupScope(err error) bool {
+	wce, werrs := getMongoDupKeyErrors(err)
+	if wce != nil {
+		if strings.Contains(wce.Message, " scopes_1 ") {
+			return true
 		}
 	}
+
+	for _, werr := range werrs {
+		if strings.Contains(werr.Message, " scopes_1 ") {
+			return true
+		}
+	}
+
 	return false
+}
+
+func getMongoDupKeyErrors(err error) (*mongo.WriteConcernError, []mongo.WriteError) {
+	we, ok := errors.Cause(err).(mongo.WriteException)
+	if !ok {
+		return nil, nil
+	}
+
+	return getMongoDupKeyWriteConcernError(we), getMongoDupKeyWriteErrors(we)
+}
+
+func getMongoDupKeyWriteConcernError(we mongo.WriteException) *mongo.WriteConcernError {
+	wce := we.WriteConcernError
+	if wce == nil {
+		return nil
+	}
+
+	if wce.Code == 11000 || wce.Code == 11001 || wce.Code == 12582 || wce.Code == 16460 && strings.Contains(wce.Message, " E11000 ") {
+		return wce
+	}
+
+	return nil
+}
+
+func getMongoDupKeyWriteErrors(we mongo.WriteException) []mongo.WriteError {
+	if len(we.WriteErrors) == 0 {
+		return nil
+	}
+
+	var werrs []mongo.WriteError
+	for _, werr := range we.WriteErrors {
+		if werr.Code == 11000 {
+			werrs = append(werrs, werr)
+		}
+	}
+
+	return werrs
 }
 
 func (d *mongoDriver) Save(ctx context.Context, j amboy.Job) error {

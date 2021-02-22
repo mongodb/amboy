@@ -101,8 +101,27 @@ func (s *DriverSuite) TestPutJobDoesNotAllowDuplicateIds() {
 	for i := 0; i < 10; i++ {
 		err := s.driver.Put(ctx, j)
 		s.Error(err)
-		s.True(amboy.IsDuplicateJobError(err))
+		s.Require().True(amboy.IsDuplicateJobError(err))
+		s.Require().False(amboy.IsDuplicateJobScopeError(err))
 	}
+}
+
+// kim: TODO: test:
+// - CompleteAndPut fails due to duplicate job ID error.
+func (s *DriverSuite) TestPutJobDoesNotAllowDuplicateScopeAppliedInQueue() {
+	j1 := job.NewShellJob("echo foo", "")
+	j2 := job.NewShellJob("echo bar", "")
+
+	scopes := []string{"scope"}
+	j1.SetShouldApplyScopesOnEnqueue(true)
+	j1.SetScopes(scopes)
+	j2.SetShouldApplyScopesOnEnqueue(true)
+	j2.SetScopes(scopes)
+
+	s.Require().NoError(s.driver.Put(s.ctx, j1))
+	err := s.driver.Put(s.ctx, j2)
+	s.True(amboy.IsDuplicateJobError(err))
+	s.True(amboy.IsDuplicateJobScopeError(err))
 }
 
 func (s *DriverSuite) TestPutJobDoesNotApplyScopesInQueueByDefault() {
@@ -367,10 +386,6 @@ func (s *DriverSuite) TestCompleteAndPutAtomicallySwapsScopes() {
 	s.Require().NoError(err)
 	s.Equal(j2.Scopes(), reloaded2.Scopes())
 }
-
-// kim: TODO: test:
-// - Put fails due to duplicate scope error (need unique index).
-// - SaveAndPut fails due to duplicate job ID error.
 
 func (s *DriverSuite) TestReloadRefreshesJobFromMemory() {
 	j := job.NewShellJob("echo foo", "")
