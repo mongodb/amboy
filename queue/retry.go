@@ -257,16 +257,6 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 
 		err = rh.queue.CompleteAndPut(ctx, j, newJob)
 		if amboy.IsDuplicateJobError(err) {
-			// Either:
-			// - The new job is already in the queue, so do nothing.
-			// - The new job cannot acquire its scopes, because another job is
-			//   currently holding the scope its trying to acquire. It cannot be
-			//   held by the job currently attempting to retry, because that job
-			//   should drop its scopes before the new job attempts to acquire
-			//   them. There's nothing we can do in this case, so give up now.
-			//   The only way this could occur would be if the job's scopes to
-			//   acquire were modified after the job was enqueued, which is an
-			//   invalid use of scopes.
 			return false, err
 		} else if err != nil {
 			return true, errors.Wrap(err, "enqueueing retry job")
