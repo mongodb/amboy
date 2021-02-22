@@ -345,4 +345,7 @@ func (b *Base) UpdateRetryInfo(opts amboy.JobRetryOptions) {
 	if opts.CurrentAttempt != nil {
 		b.retryInfo.CurrentAttempt = *opts.CurrentAttempt
 	}
+	if opts.MaxAttempts != nil {
+		b.retryInfo.MaxAttempts = *opts.MaxAttempts
+	}
 }

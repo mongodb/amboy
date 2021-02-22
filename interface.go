@@ -170,17 +170,32 @@ type JobRetryInfo struct {
 	// (unless otherwise set on enqueue), so the first time the job attempts to
 	// run, its value is 0. Each subsequent retry increments this value.
 	CurrentAttempt int `bson:"current_attempt" json:"current_attempt,omitempty" yaml:"current_attempt,omitempty"`
+	// MaxAttempts is the maximum number of attempts for a job. This is
+	// 1-indexed since it is a count. For example, if this is set to 3, the job
+	// will be allowed to run 3 times at most. If unset, the default maximum
+	// attempts is 10.
+	MaxAttempts int `bson:"max_attempts,omitempty" json:"max_attempts,omitempty" yaml:"max_attempts,omitempty"`
 }
 
 // Options returns a JobRetryInfo as its equivalent JobRetryOptions. In other
 // words, if the returned result is used with Job.UpdateRetryInfo(), the job
-// will have the same JobRetryInfo as this one.
+// will be populated with the same information as this JobRetryInfo.
 func (info *JobRetryInfo) Options() JobRetryOptions {
 	return JobRetryOptions{
 		Retryable:      &info.Retryable,
 		NeedsRetry:     &info.NeedsRetry,
 		CurrentAttempt: &info.CurrentAttempt,
+		MaxAttempts:    &info.MaxAttempts,
 	}
+}
+
+const defaultRetryableMaxAttempts = 10
+
+func (info *JobRetryInfo) GetMaxAttempts() int {
+	if info.MaxAttempts <= 0 {
+		return defaultRetryableMaxAttempts
+	}
+	return info.MaxAttempts
 }
 
 // JobRetryOptions represents configuration options for a job that can retry.
@@ -190,6 +205,7 @@ type JobRetryOptions struct {
 	Retryable      *bool `bson:"-" json:"-" yaml:"-"`
 	NeedsRetry     *bool `bson:"-" json:"-" yaml:"-"`
 	CurrentAttempt *int  `bson:"-" json:"-" yaml:"-"`
+	MaxAttempts    *int  `bson:"-" json:"-" yaml:"-"`
 }
 
 // Duration is a convenience function to return a duration for a job.
@@ -366,7 +382,9 @@ type RetryHandler interface {
 // RetryHandlerOptions configures the behavior of a RetryHandler.
 type RetryHandlerOptions struct {
 	// MaxRetryAttempts is the maximum number of times that the retry handler is
-	// allowed to attempt to retry a job before it gives up.
+	// allowed to attempt to retry a job before it gives up. This is referring
+	// to the retry handler's attempts to internally retry the job and is
+	// unrelated to the job's particular max attempt setting.
 	MaxRetryAttempts int
 	// MaxRetryAttempts is the maximum time that the retry handler is allowed to
 	// attempt to retry a job before it gives up.

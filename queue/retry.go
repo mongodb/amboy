@@ -237,6 +237,9 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 		if !newInfo.Retryable || !newInfo.NeedsRetry {
 			return false, errors.New("job in the queue indicates the job does not need to retry anymore")
 		}
+		if oldInfo.CurrentAttempt+1 > newInfo.GetMaxAttempts() {
+			return false, errors.New("job has exceeded its maximum attempt limit")
+		}
 
 		// TODO (EVG-13584): add job retry locking mechanism (similar to
 		// (amboy.Job).Lock()) to ensure that this thread on this host has sole
