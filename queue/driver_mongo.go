@@ -746,7 +746,11 @@ func (d *mongoDriver) Jobs(ctx context.Context) <-chan amboy.Job {
 				continue
 			}
 
-			output <- j
+			select {
+			case <-ctx.Done():
+				return
+			case output <- j:
+			}
 		}
 
 		grip.Error(message.WrapError(iter.Err(), message.Fields{
@@ -758,7 +762,104 @@ func (d *mongoDriver) Jobs(ctx context.Context) <-chan amboy.Job {
 			"message":   "database interface error",
 		}))
 	}()
+
 	return output
+}
+
+func (d *mongoDriver) getRetryingQuery() bson.M {
+	q := bson.M{
+		"status.completed":       true,
+		"retry_info.retryable":   true,
+		"retry_info.needs_retry": true,
+	}
+	d.modifyQueryForGroup(q)
+	return q
+}
+
+func (d *mongoDriver) RetryableJobs(ctx context.Context, filter RetryableJobFilter) <-chan amboy.RetryableJob {
+	jobs := make(chan amboy.RetryableJob)
+
+	go func() {
+		defer close(jobs)
+
+		var q bson.M
+		switch filter {
+		case RetryableJobAll:
+			q = bson.M{"retry_info.retryable": true}
+			d.modifyQueryForGroup(q)
+		case RetryableJobAllRetrying:
+			q = d.getRetryingQuery()
+		case RetryableJobActiveRetrying:
+			q = d.getRetryingQuery()
+			q["status.mod_ts"] = bson.M{"$gte": time.Now().Add(-d.LockTimeout())}
+		case RetryableJobStaleRetrying:
+			q = d.getRetryingQuery()
+			q["status.mod_ts"] = bson.M{"$lte": time.Now().Add(-d.LockTimeout())}
+		default:
+			return
+		}
+
+		iter, err := d.getCollection().Find(ctx, q, options.Find().SetSort(bson.M{"status.mod_ts": -1}))
+		if err != nil {
+			grip.Warning(message.WrapError(err, message.Fields{
+				"id":        d.instanceID,
+				"service":   "amboy.queue.mdb",
+				"is_group":  d.opts.UseGroups,
+				"group":     d.opts.GroupName,
+				"operation": "retrying job iterator",
+				"message":   "problem with query",
+			}))
+			return
+		}
+		for iter.Next(ctx) {
+			ji := &registry.JobInterchange{}
+			if err = iter.Decode(ji); err != nil {
+				grip.Warning(message.WrapError(err, message.Fields{
+					"id":        d.instanceID,
+					"service":   "amboy.queue.mdb",
+					"is_group":  d.opts.UseGroups,
+					"group":     d.opts.GroupName,
+					"operation": "retrying job iterator",
+					"message":   "problem reading job from cursor",
+				}))
+
+				continue
+			}
+
+			var j amboy.Job
+			j, err = ji.Resolve(d.opts.Format)
+			if err != nil {
+				grip.Warning(message.WrapError(err, message.Fields{
+					"id":        d.instanceID,
+					"service":   "amboy.queue.mdb",
+					"operation": "retrying job iterator",
+					"is_group":  d.opts.UseGroups,
+					"group":     d.opts.GroupName,
+					"message":   "problem converting job object",
+				}))
+				continue
+			}
+
+			amboy.WithRetryableJob(j, func(rj amboy.RetryableJob) {
+				select {
+				case <-ctx.Done():
+					return
+				case jobs <- rj:
+				}
+			})
+		}
+
+		grip.Error(message.WrapError(iter.Err(), message.Fields{
+			"id":        d.instanceID,
+			"service":   "amboy.queue.mdb",
+			"is_group":  d.opts.UseGroups,
+			"group":     d.opts.GroupName,
+			"operation": "retrying job iterator",
+			"message":   "database interface error",
+		}))
+	}()
+
+	return jobs
 }
 
 func (d *mongoDriver) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
@@ -813,16 +914,13 @@ func (d *mongoDriver) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 			}
 
 		}
-
 	}()
 
 	return output
 }
 
 func (d *mongoDriver) getNextQuery() bson.M {
-	d.mu.RLock()
 	lockTimeout := d.LockTimeout()
-	d.mu.RUnlock()
 	now := time.Now()
 	qd := bson.M{
 		"$or": []bson.M{

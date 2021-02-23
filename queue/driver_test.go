@@ -473,6 +473,191 @@ func (s *DriverSuite) TestJobsMethodReturnsAllJobs() {
 	s.Equal(counter, len(mocks))
 }
 
+func (s *DriverSuite) TestRetryableJobsReturnsAllRetryableJobs() {
+	rj := newMockRetryableJob("id")
+	s.Require().NoError(s.driver.Put(s.ctx, rj))
+	s.Require().NoError(s.driver.Put(s.ctx, newMockJob()))
+	s.Require().NoError(s.driver.Put(s.ctx, job.NewShellJob("echo foo", "")))
+
+	var found int
+	for j := range s.driver.RetryableJobs(s.ctx, RetryableJobAll) {
+		found++
+		s.Equal(rj.ID(), j.ID())
+	}
+	s.Equal(1, found)
+}
+
+func (s *DriverSuite) TestRetryableJobsStopsWithContextError() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var ids []string
+	for i := 0; i < 100; i++ {
+		j := newMockRetryableJob(fmt.Sprintf("id%d", i))
+		s.Require().NoError(s.driver.Put(ctx, j))
+		ids = append(ids, j.ID())
+	}
+
+	var found int
+	for j := range s.driver.RetryableJobs(ctx, RetryableJobAll) {
+		cancel()
+		found++
+		s.Contains(ids, j.ID())
+	}
+	s.NotZero(found)
+	s.True(found < len(ids))
+}
+
+func (s *DriverSuite) TestRetryableJobsReturnsAllRetryingJobs() {
+	var expectedIDs []string
+
+	j0 := newMockRetryableJob("id0")
+	s.Require().NoError(s.driver.Put(s.ctx, j0))
+
+	j1 := newMockRetryableJob("id1")
+	j1.SetStatus(amboy.JobStatusInfo{
+		Completed:         true,
+		ModificationTime:  time.Now(),
+		ModificationCount: 50,
+	})
+	j1.UpdateRetryInfo(amboy.JobRetryOptions{
+		NeedsRetry: utility.TruePtr(),
+	})
+	expectedIDs = append(expectedIDs, j1.ID())
+	s.Require().NoError(s.driver.Put(s.ctx, j1))
+
+	j2 := newMockRetryableJob("id2")
+	j2.SetStatus(amboy.JobStatusInfo{
+		Completed: true,
+	})
+	j2.UpdateRetryInfo(amboy.JobRetryOptions{
+		NeedsRetry: utility.TruePtr(),
+	})
+	expectedIDs = append(expectedIDs, j2.ID())
+	s.Require().NoError(s.driver.Put(s.ctx, j2))
+
+	j3 := newMockRetryableJob("id3")
+	j3.UpdateRetryInfo(amboy.JobRetryOptions{
+		NeedsRetry: utility.TruePtr(),
+	})
+	s.Require().NoError(s.driver.Put(s.ctx, j3))
+
+	var foundIDs []string
+	for j := range s.driver.RetryableJobs(s.ctx, RetryableJobAllRetrying) {
+		foundIDs = append(foundIDs, j.ID())
+	}
+	missingExpected, foundUnexpected := utility.StringSliceSymmetricDifference(expectedIDs, foundIDs)
+	s.Empty(missingExpected, "missing expected IDs %s", missingExpected)
+	s.Empty(foundUnexpected, "found unexpected IDs %s", foundUnexpected)
+}
+
+func (s *DriverSuite) TestRetryableJobsReturnsActiveRetryingJobs() {
+	var expectedIDs []string
+
+	j0 := newMockRetryableJob("id0")
+	s.Require().NoError(s.driver.Put(s.ctx, j0))
+
+	j1 := newMockRetryableJob("id1")
+	j1.SetStatus(amboy.JobStatusInfo{
+		Completed:         true,
+		ModificationTime:  time.Now(),
+		ModificationCount: 50,
+	})
+	j1.UpdateRetryInfo(amboy.JobRetryOptions{
+		NeedsRetry: utility.TruePtr(),
+	})
+	expectedIDs = append(expectedIDs, j1.ID())
+	s.Require().NoError(s.driver.Put(s.ctx, j1))
+
+	j2 := newMockRetryableJob("id2")
+	j2.SetStatus(amboy.JobStatusInfo{
+		Completed: true,
+	})
+	j2.UpdateRetryInfo(amboy.JobRetryOptions{
+		NeedsRetry: utility.TruePtr(),
+	})
+	s.Require().NoError(s.driver.Put(s.ctx, j2))
+
+	j3 := newMockRetryableJob("id3")
+	j3.UpdateRetryInfo(amboy.JobRetryOptions{
+		NeedsRetry: utility.TruePtr(),
+	})
+	s.Require().NoError(s.driver.Put(s.ctx, j3))
+
+	j4 := newMockRetryableJob("id4")
+	j4.SetStatus(amboy.JobStatusInfo{
+		Completed:        true,
+		ModificationTime: time.Now().Add(time.Minute),
+	})
+	j4.UpdateRetryInfo(amboy.JobRetryOptions{
+		NeedsRetry: utility.TruePtr(),
+	})
+	expectedIDs = append(expectedIDs, j4.ID())
+	s.Require().NoError(s.driver.Put(s.ctx, j4))
+
+	var foundIDs []string
+	for j := range s.driver.RetryableJobs(s.ctx, RetryableJobActiveRetrying) {
+		foundIDs = append(foundIDs, j.ID())
+	}
+	missingExpected, foundUnexpected := utility.StringSliceSymmetricDifference(expectedIDs, foundIDs)
+	s.Empty(missingExpected, "missing expected IDs %s", missingExpected)
+	s.Empty(foundUnexpected, "found unexpected IDs %s", foundUnexpected)
+}
+
+func (s *DriverSuite) TestRetryableJobsReturnsStaleRetryingJobs() {
+	var expectedIDs []string
+
+	j0 := newMockRetryableJob("id0")
+	s.Require().NoError(s.driver.Put(s.ctx, j0))
+
+	j1 := newMockRetryableJob("id1")
+	j1.SetStatus(amboy.JobStatusInfo{
+		Completed:         true,
+		ModificationTime:  time.Now(),
+		ModificationCount: 50,
+	})
+	j1.UpdateRetryInfo(amboy.JobRetryOptions{
+		NeedsRetry: utility.TruePtr(),
+	})
+	s.Require().NoError(s.driver.Put(s.ctx, j1))
+
+	j2 := newMockRetryableJob("id2")
+	j2.SetStatus(amboy.JobStatusInfo{
+		Completed: true,
+	})
+	j2.UpdateRetryInfo(amboy.JobRetryOptions{
+		NeedsRetry: utility.TruePtr(),
+	})
+	s.Require().NoError(s.driver.Put(s.ctx, j2))
+	expectedIDs = append(expectedIDs, j2.ID())
+
+	j3 := newMockRetryableJob("id3")
+	j3.UpdateRetryInfo(amboy.JobRetryOptions{
+		NeedsRetry: utility.TruePtr(),
+	})
+	s.Require().NoError(s.driver.Put(s.ctx, j3))
+
+	j4 := newMockRetryableJob("id4")
+	j4.SetStatus(amboy.JobStatusInfo{
+		Completed:         true,
+		ModificationTime:  time.Now().Add(-100 * s.driver.LockTimeout()),
+		ModificationCount: 50,
+	})
+	j4.UpdateRetryInfo(amboy.JobRetryOptions{
+		NeedsRetry: utility.TruePtr(),
+	})
+	expectedIDs = append(expectedIDs, j4.ID())
+	s.Require().NoError(s.driver.Put(s.ctx, j4))
+
+	var foundIDs []string
+	for j := range s.driver.RetryableJobs(s.ctx, RetryableJobStaleRetrying) {
+		foundIDs = append(foundIDs, j.ID())
+	}
+	missingExpected, foundUnexpected := utility.StringSliceSymmetricDifference(expectedIDs, foundIDs)
+	s.Empty(missingExpected, "missing expected IDs %s", missingExpected)
+	s.Empty(foundUnexpected, "found unexpected IDs %s", foundUnexpected)
+}
+
 func (s *DriverSuite) TestStatsMethodReturnsAllJobs() {
 	names := make(map[string]struct{})
 

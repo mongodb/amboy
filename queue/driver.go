@@ -27,12 +27,14 @@ type remoteQueueDriver interface {
 	// Save updates an existing job in the backing storage. Implementations may
 	// not allow calls to Save to run concurrently.
 	Save(context.Context, amboy.Job) error
-	// CompleteAndPut performs updates an existing job toComplete and inserts a
-	// new job toPut atomically. Implementations may not allow calls to
-	// CompleteAndPut to run concurrently.
+	// CompleteAndPut updates an existing job toComplete and inserts a new job
+	// toPut atomically. Implementations may not allow calls to CompleteAndPut
+	// to run concurrently.
 	CompleteAndPut(ctx context.Context, toComplete amboy.Job, toPut amboy.Job) error
 
 	Jobs(context.Context) <-chan amboy.Job
+	// RetryableJobs returns retryable jobs, subject to a filter.
+	RetryableJobs(context.Context, RetryableJobFilter) <-chan amboy.RetryableJob
 	Next(context.Context) amboy.Job
 
 	Stats(context.Context) amboy.QueueStats
@@ -44,6 +46,22 @@ type remoteQueueDriver interface {
 	SetDispatcher(Dispatcher)
 	Dispatcher() Dispatcher
 }
+
+// RetryableJobFilter represents a filter on jobs that are currently retrying.
+type RetryableJobFilter string
+
+const (
+	// RetryableJobAll refers to all retryable jobs.
+	RetryableJobAll RetryableJobFilter = "all"
+	// RetryableJobAllRetrying refers to all jobs that are currently waiting to
+	// retry.
+	RetryableJobAllRetrying RetryableJobFilter = "all-retrying"
+	// RetryableJobActiveRetrying refers to jobs that have recently retried.
+	RetryableJobActiveRetrying RetryableJobFilter = "active-retrying"
+	// RetryableJobStaleRetrying refers to jobs that should be retrying but have
+	// not done so recently.
+	RetryableJobStaleRetrying RetryableJobFilter = "stale-retrying"
+)
 
 // MongoDBOptions is a struct passed to the NewMongo constructor to
 // communicate mgoDriver specific settings about the driver's behavior
