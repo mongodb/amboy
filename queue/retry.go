@@ -53,26 +53,12 @@ func (rh *basicRetryHandler) Start(ctx context.Context) error {
 
 	workerCtx, workerCancel := context.WithCancel(ctx)
 	rh.cancelWorkers = workerCancel
+
 	for i := 0; i < rh.opts.NumWorkers; i++ {
 		rh.wg.Add(1)
-		go func() {
-			defer func() {
-				if err := recovery.HandlePanicWithError(recover(), nil, "retry handler worker"); err != nil {
-					go func() {
-						grip.Error(message.WrapError(rh.waitForJob(workerCtx), message.Fields{
-							"message":  "retry job worker failed",
-							"service":  "amboy.queue.retry",
-							"queue_id": rh.queue.ID(),
-						}))
-					}()
-					return
-				}
-				rh.wg.Done()
-			}()
-
-			grip.Error(rh.waitForJob(workerCtx))
-		}()
+		go rh.waitForJob(workerCtx)
 	}
+
 	return nil
 }
 
@@ -127,22 +113,47 @@ func (rh *basicRetryHandler) Close(ctx context.Context) {
 	rh.wg.Wait()
 }
 
-func (rh *basicRetryHandler) waitForJob(ctx context.Context) error {
+func (rh *basicRetryHandler) waitForJob(ctx context.Context) {
+	defer func() {
+		if err := recovery.HandlePanicWithError(recover(), nil, "retry handler worker"); err != nil {
+			grip.Error(message.WrapError(err, message.Fields{
+				"message":  "retry job worker failed",
+				"service":  "amboy.queue.retry",
+				"queue_id": rh.queue.ID(),
+			}))
+			go rh.waitForJob(ctx)
+			return
+		}
+
+		rh.wg.Done()
+	}()
+
 	timer := time.NewTimer(0)
 	defer timer.Stop()
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
+			return
 		case <-timer.C:
 			var j amboy.RetryableJob
+
 			defer func() {
 				if err := recovery.HandlePanicWithError(recover(), nil, "handling job retry"); err != nil {
+					fields := message.Fields{
+						"message":  "job retry failed",
+						"service":  "amboy.queue.retry",
+						"queue_id": rh.queue.ID(),
+					}
+					if j != nil {
+						fields["job_id"] = j.ID()
+					}
+					grip.Error(message.WrapError(err, fields))
 					if j != nil {
 						rh.pending[j.ID()] = j
 					}
 				}
 			}()
+
 			j = rh.nextJob()
 			if j == nil {
 				timer.Reset(rh.opts.WorkerCheckInterval)
@@ -241,12 +252,16 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 			return false, errors.New("job has exceeded its maximum attempt limit")
 		}
 
-		// TODO (EVG-13584): add job retry locking mechanism (similar to
-		// (amboy.Job).Lock()) to ensure that this thread on this host has sole
-		// ownership of the job.
-
 		if oldInfo != newInfo {
 			return false, errors.New("in-memory retry information does not match queue's stored information")
+		}
+
+		// Lock the job so that this retry handler has sole ownership of it.
+		if err = j.Lock(rh.queue.ID(), rh.queue.Info().LockTimeout); err != nil {
+			return false, errors.Wrap(err, "locking job")
+		}
+		if err = rh.queue.Save(ctx, j); err != nil {
+			return false, errors.Wrap(err, "saving job lock")
 		}
 
 		newInfo.NeedsRetry = false

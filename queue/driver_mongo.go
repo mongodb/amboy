@@ -641,29 +641,6 @@ func (d *mongoDriver) Complete(ctx context.Context, j amboy.Job) error {
 	// job, we cannot let go of the scopes yet because they will need to be
 	// safely transferred to the retry job.
 	if !ji.RetryInfo.Retryable || !ji.RetryInfo.NeedsRetry || !ji.ApplyScopesOnEnqueue {
-		// kim: NOTE: retryable errors are implicitly handled here simply by
-		// updating NeedsRetry.
-		// If a retryable error is added:
-		//  - Complete succeeds and sets NeedsRetry = true. The retry handler will
-		//    handle it eventually since NeedsRetry is persisted.
-		//  - Complete fails and fails to set NeedsRetry, but Amboy will restart
-		//    stuck in progress jobs.
-		// If no retryable error is added:
-		//	- Complete succeeds and job does not need to retry, so it sets
-		//	  NeedsRetry = false. The retry handler will ignore the job.
-		//  - Complete fails and Amboy's policy is to restart stuck in progress
-		//    jobs.
-		// The only problem case would be when Retryable/NeedsRetry are both true
-		// in-memory but someone unsets them manually in the DB. In that case, the
-		// retry handler will retry the job even though someone manually set it to
-		// not run.
-		// It might be complicated, but one potential way to do it would be to check
-		// Retryable and only update the RetryInfo if Retryable if still true when
-		// Complete occurs.
-		// Another way would be for someone to also reset the modcount to 0 when
-		// they unset the retryable options (which will cause the pinger to abort
-		// and also cause the complete save to fail). As long as they mark the job
-		// complete, it should be fine and it won't magically restart again.
 		ji.Scopes = nil
 	}
 
