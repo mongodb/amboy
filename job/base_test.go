@@ -166,29 +166,33 @@ func (s *BaseCheckSuite) TestUpdateRetryInfoSetsNonzeroFields() {
 		Retryable: true,
 	}, s.base.RetryInfo())
 
-	trial := 5
+	attempt := 5
+	maxAttempt := 10
 	s.base.UpdateRetryInfo(amboy.JobRetryOptions{
-		CurrentAttempt: utility.ToIntPtr(trial),
+		CurrentAttempt: utility.ToIntPtr(attempt),
+		MaxAttempts:    utility.ToIntPtr(maxAttempt),
 	})
-
 	s.Require().Equal(amboy.JobRetryInfo{
 		Retryable:      true,
-		CurrentAttempt: trial,
+		CurrentAttempt: attempt,
+		MaxAttempts:    maxAttempt,
 	}, s.base.RetryInfo())
 
 	s.base.UpdateRetryInfo(amboy.JobRetryOptions{
 		Retryable: utility.FalsePtr(),
 	})
 	s.Require().Equal(amboy.JobRetryInfo{
-		CurrentAttempt: trial,
+		Retryable:      false,
+		CurrentAttempt: attempt,
+		MaxAttempts:    maxAttempt,
 	}, s.base.RetryInfo())
 
 	s.base.UpdateRetryInfo(amboy.JobRetryOptions{
 		NeedsRetry: utility.TruePtr(),
 	})
-
 	s.Require().Equal(amboy.JobRetryInfo{
 		NeedsRetry:     true,
-		CurrentAttempt: trial,
+		CurrentAttempt: attempt,
+		MaxAttempts:    maxAttempt,
 	}, s.base.RetryInfo())
 }
