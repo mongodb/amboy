@@ -535,6 +535,9 @@ func (d *mongoDriver) Put(ctx context.Context, j amboy.Job) error {
 
 	if _, err = d.getCollection().InsertOne(ctx, ji); err != nil {
 		if isMongoDupKey(err) {
+			if isMongoDupScope(err) {
+				return amboy.NewDuplicateJobScopeErrorf("job scopes '%s' conflict", j.Scopes())
+			}
 			return amboy.NewDuplicateJobErrorf("job '%s' already exists", j.ID())
 		}
 
@@ -573,24 +576,103 @@ func (d *mongoDriver) getAtomicQuery(jobName string, modCount int) bson.M {
 }
 
 func isMongoDupKey(err error) bool {
-	// TODO  (EVG-13591): handle duplicate write errors due to scopes separately
-	// from write errors due to job ID clashes.
-	we, ok := errors.Cause(err).(mongo.WriteException)
-	if !ok {
-		return false
-	}
-	if we.WriteConcernError != nil {
-		wce := we.WriteConcernError
-		return wce.Code == 11000 || wce.Code == 11001 || wce.Code == 12582 || wce.Code == 16460 && strings.Contains(wce.Message, " E11000 ")
-	}
-	if we.WriteErrors != nil && len(we.WriteErrors) > 0 {
-		for _, wErr := range we.WriteErrors {
-			if wErr.Code == 11000 {
-				return true
-			}
+	dupKeyErrs := getMongoDupKeyErrors(err)
+	return dupKeyErrs.writeConcernError != nil || len(dupKeyErrs.writeErrors) != 0 || dupKeyErrs.commandError != nil
+}
+
+func isMongoDupScope(err error) bool {
+	dupKeyErrs := getMongoDupKeyErrors(err)
+	if wce := dupKeyErrs.writeConcernError; wce != nil {
+		if strings.Contains(wce.Message, " scopes_1 ") {
+			return true
 		}
 	}
+
+	for _, werr := range dupKeyErrs.writeErrors {
+		if strings.Contains(werr.Message, " scopes_1 ") {
+			return true
+		}
+	}
+
+	if ce := dupKeyErrs.commandError; ce != nil {
+		if strings.Contains(ce.Message, " scopes_1 ") {
+			return true
+		}
+	}
+
 	return false
+}
+
+type mongoDupKeyErrors struct {
+	writeConcernError *mongo.WriteConcernError
+	writeErrors       []mongo.WriteError
+	commandError      *mongo.CommandError
+}
+
+func getMongoDupKeyErrors(err error) mongoDupKeyErrors {
+	var dupKeyErrs mongoDupKeyErrors
+
+	if we, ok := errors.Cause(err).(mongo.WriteException); ok {
+		dupKeyErrs.writeConcernError = getMongoDupKeyWriteConcernError(we)
+		dupKeyErrs.writeErrors = getMongoDupKeyWriteErrors(we)
+	}
+
+	if ce, ok := errors.Cause(err).(mongo.CommandError); ok {
+		dupKeyErrs.commandError = getMongoDupKeyCommandError(ce)
+	}
+
+	return dupKeyErrs
+}
+
+// TODO: this logic is a copy-paste and could potentially be replaced by
+// upgrading the Go driver to a newer version:
+// (https://github.com/mongodb/mongo-go-driver/blob/213fb80b373f70dba4f9f516dc4c718abe41c76b/mongo/errors.go#L87-L96)
+func getMongoDupKeyWriteConcernError(err mongo.WriteException) *mongo.WriteConcernError {
+	wce := err.WriteConcernError
+	if wce == nil {
+		return nil
+	}
+
+	switch wce.Code {
+	case 11000, 11001, 12582:
+		return wce
+	case 16460:
+		if strings.Contains(wce.Message, " E11000 ") {
+			return wce
+		}
+		return nil
+	default:
+		return nil
+	}
+}
+
+func getMongoDupKeyWriteErrors(err mongo.WriteException) []mongo.WriteError {
+	if len(err.WriteErrors) == 0 {
+		return nil
+	}
+
+	var werrs []mongo.WriteError
+	for _, werr := range err.WriteErrors {
+		if werr.Code == 11000 {
+			werrs = append(werrs, werr)
+		}
+	}
+
+	return werrs
+}
+
+func getMongoDupKeyCommandError(err mongo.CommandError) *mongo.CommandError {
+	switch err.Code {
+	case 11000, 11001:
+		return &err
+	case 16460:
+		if strings.Contains(err.Message, " E11000 ") {
+			return &err
+		}
+		return nil
+	default:
+		return nil
+	}
 }
 
 func (d *mongoDriver) Save(ctx context.Context, j amboy.Job) error {
