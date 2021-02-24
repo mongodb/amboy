@@ -31,29 +31,67 @@ type DriverSuite struct {
 
 func TestDriverSuiteWithMongoDBInstance(t *testing.T) {
 	tests := new(DriverSuite)
-	name := "test-" + uuid.New().String()
-	opts := DefaultMongoDBOptions()
-	opts.DB = "amboy_test"
+	for driverName, driverType := range map[string]struct {
+		constructor func() (remoteQueueDriver, error)
+		tearDown    func() error
+	}{
+		"Basic": {
+			constructor: func() (remoteQueueDriver, error) {
+				id := "test-" + uuid.New().String()
+				opts := DefaultMongoDBOptions()
+				opts.DB = "amboy_test"
 
-	tests.driverConstructor = func() (remoteQueueDriver, error) {
-		return newMongoDriver(name, opts)
+				return newMongoDriver(id, opts)
+			},
+			tearDown: func() error {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+
+				mDriver, ok := tests.driver.(*mongoDriver)
+				if !ok {
+					return errors.New("cannot tear down mongo driver tests because test suite is not running a mongo driver")
+				}
+				if err := mDriver.getCollection().Database().Drop(ctx); err != nil {
+					return errors.Wrapf(err, "removing collection '%s'", mDriver.getCollection().Name())
+				}
+				return nil
+
+			},
+		},
+		"Grouped": {
+			constructor: func() (remoteQueueDriver, error) {
+				id := "test-" + uuid.New().String()
+				groupName := "group-" + uuid.New().String()
+				opts := DefaultMongoDBOptions()
+				opts.DB = "amboy_test"
+				opts.UseGroups = true
+				opts.GroupName = groupName
+
+				return newMongoDriver(id, opts)
+			},
+			tearDown: func() error {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+
+				mDriver, ok := tests.driver.(*mongoDriver)
+				if !ok {
+					return errors.New("cannot tear down mongo driver tests because test suite is not running a mongo driver")
+				}
+				if err := mDriver.getCollection().Database().Drop(ctx); err != nil {
+					return errors.Wrapf(err, "removing collection '%s'", mDriver.getCollection().Name())
+				}
+				return nil
+
+			},
+		},
+	} {
+		t.Run(driverName, func(t *testing.T) {
+			tests.driverConstructor = driverType.constructor
+			tests.tearDown = driverType.tearDown
+
+			suite.Run(t, tests)
+		})
 	}
-
-	tests.tearDown = func() error {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-
-		mDriver, ok := tests.driver.(*mongoDriver)
-		if !ok {
-			return errors.New("cannot tear down mongo driver tests because test suite is not running a mongo driver")
-		}
-		if err := mDriver.getCollection().Database().Drop(ctx); err != nil {
-			return errors.Wrapf(err, "removing collection '%s'", mDriver.getCollection().Name())
-		}
-		return nil
-	}
-
-	suite.Run(t, tests)
 }
 
 // Implementation of the suite:

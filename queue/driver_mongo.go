@@ -14,6 +14,7 @@ import (
 	"github.com/mongodb/amboy/registry"
 	"github.com/mongodb/grip"
 	"github.com/mongodb/grip/message"
+	"github.com/mongodb/grip/recovery"
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -678,7 +679,17 @@ func (d *mongoDriver) doUpdate(ctx context.Context, ji *registry.JobInterchange)
 func (d *mongoDriver) Jobs(ctx context.Context) <-chan amboy.Job {
 	output := make(chan amboy.Job)
 	go func() {
-		defer close(output)
+		defer func() {
+			if err := recovery.HandlePanicWithError(recover(), nil, "getting jobs"); err != nil {
+				grip.Error(message.WrapError(err, message.Fields{
+					"message":   "failed while getting jobs from the DB",
+					"operation": "job iterator",
+					"service":   "amboy.queue.mdb",
+					"driver_id": d.ID(),
+				}))
+			}
+			close(output)
+		}()
 		q := bson.M{}
 		d.modifyQueryForGroup(q)
 
@@ -736,7 +747,7 @@ func (d *mongoDriver) Jobs(ctx context.Context) <-chan amboy.Job {
 			"is_group":  d.opts.UseGroups,
 			"group":     d.opts.GroupName,
 			"operation": "job iterator",
-			"message":   "database interface error",
+			"message":   "database iterator error",
 		}))
 	}()
 
@@ -757,7 +768,17 @@ func (d *mongoDriver) RetryableJobs(ctx context.Context, filter RetryableJobFilt
 	jobs := make(chan amboy.RetryableJob)
 
 	go func() {
-		defer close(jobs)
+		defer func() {
+			if err := recovery.HandlePanicWithError(recover(), nil, "getting retryable jobs"); err != nil {
+				grip.Error(message.WrapError(err, message.Fields{
+					"message":   "failed while getting retryable jobs from the DB",
+					"operation": "retryable job iterator",
+					"service":   "amboy.queue.mdb",
+					"driver_id": d.ID(),
+				}))
+			}
+			close(jobs)
+		}()
 
 		var q bson.M
 		switch filter {
@@ -783,7 +804,7 @@ func (d *mongoDriver) RetryableJobs(ctx context.Context, filter RetryableJobFilt
 				"service":   "amboy.queue.mdb",
 				"is_group":  d.opts.UseGroups,
 				"group":     d.opts.GroupName,
-				"operation": "retrying job iterator",
+				"operation": "retryable job iterator",
 				"message":   "problem with query",
 			}))
 			return
@@ -796,10 +817,9 @@ func (d *mongoDriver) RetryableJobs(ctx context.Context, filter RetryableJobFilt
 					"service":   "amboy.queue.mdb",
 					"is_group":  d.opts.UseGroups,
 					"group":     d.opts.GroupName,
-					"operation": "retrying job iterator",
+					"operation": "retryable job iterator",
 					"message":   "problem reading job from cursor",
 				}))
-
 				continue
 			}
 
@@ -809,7 +829,7 @@ func (d *mongoDriver) RetryableJobs(ctx context.Context, filter RetryableJobFilt
 				grip.Warning(message.WrapError(err, message.Fields{
 					"id":        d.instanceID,
 					"service":   "amboy.queue.mdb",
-					"operation": "retrying job iterator",
+					"operation": "retryable job iterator",
 					"is_group":  d.opts.UseGroups,
 					"group":     d.opts.GroupName,
 					"message":   "problem converting job object",
@@ -831,8 +851,8 @@ func (d *mongoDriver) RetryableJobs(ctx context.Context, filter RetryableJobFilt
 			"service":   "amboy.queue.mdb",
 			"is_group":  d.opts.UseGroups,
 			"group":     d.opts.GroupName,
-			"operation": "retrying job iterator",
-			"message":   "database interface error",
+			"operation": "retryable job iterator",
+			"message":   "database iterator error",
 		}))
 	}()
 

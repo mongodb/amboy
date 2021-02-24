@@ -469,9 +469,9 @@ func (q *remoteBase) lockDispatch(j amboy.Job) bool {
 
 func (q *remoteBase) monitorStaleRetryingJobs(ctx context.Context) {
 	defer func() {
-		if err := recovery.HandlePanicWithError(recover(), nil, "retry handler stuck retry job monitor"); err != nil {
+		if err := recovery.HandlePanicWithError(recover(), nil, "stale retry job monitor"); err != nil {
 			grip.Error(message.WrapError(err, message.Fields{
-				"message":  "stuck retry job monitor failed",
+				"message":  "stale retry job monitor failed",
 				"service":  "amboy.queue.mdb",
 				"queue_id": q.ID(),
 			}))
