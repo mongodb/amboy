@@ -36,8 +36,7 @@ func TestSimpleRemoteOrderedSuiteMongoDB(t *testing.T) {
 
 func (s *SimpleRemoteOrderedSuite) SetupSuite() {
 	name := "test-" + uuid.New().String()
-	opts := DefaultMongoDBOptions()
-	opts.DB = "amboy_test"
+	opts := defaultMongoDBTestOptions()
 	s.driverConstructor = func() (remoteQueueDriver, error) {
 		return newMongoDriver(name, opts)
 	}

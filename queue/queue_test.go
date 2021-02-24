@@ -175,7 +175,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 					Size:    size,
 					Name:    name,
 					Ordered: false,
-					MDB:     DefaultMongoDBOptions(),
+					MDB:     defaultMongoDBTestOptions(),
 					Client:  client,
 				}
 				opts.MDB.Format = amboy.BSON2
@@ -212,7 +212,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 					Size:    size,
 					Name:    name,
 					Ordered: false,
-					MDB:     DefaultMongoDBOptions(),
+					MDB:     defaultMongoDBTestOptions(),
 					Client:  client,
 				}
 				opts.MDB.Format = amboy.BSON2
@@ -252,7 +252,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 					Size:    size,
 					Name:    name,
 					Ordered: false,
-					MDB:     DefaultMongoDBOptions(),
+					MDB:     defaultMongoDBTestOptions(),
 					Client:  client,
 				}
 				opts.MDB.Format = amboy.BSON
@@ -290,7 +290,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 					Size:    size,
 					Name:    name,
 					Ordered: true,
-					MDB:     DefaultMongoDBOptions(),
+					MDB:     defaultMongoDBTestOptions(),
 					Client:  client,
 				}
 				opts.MDB.Format = amboy.BSON2
