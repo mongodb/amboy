@@ -203,6 +203,8 @@ func (info *JobRetryInfo) Options() JobRetryOptions {
 
 const defaultRetryableMaxAttempts = 10
 
+// GetMaxAttempts returns the maximum number of times a job is allowed to
+// attempt. It defaults the maximum attempts if it's unset.
 func (info *JobRetryInfo) GetMaxAttempts() int {
 	if info.MaxAttempts <= 0 {
 		return defaultRetryableMaxAttempts
@@ -413,6 +415,7 @@ type RetryHandlerOptions struct {
 	WorkerCheckInterval time.Duration
 }
 
+// Validate checks that all retry handler options are valid.
 func (opts *RetryHandlerOptions) Validate() error {
 	catcher := grip.NewBasicCatcher()
 	catcher.NewWhen(opts.MaxRetryAttempts < 0, "cannot have negative max retry attempts")

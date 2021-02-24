@@ -132,6 +132,9 @@ func (b *Base) Lock(id string, lockTimeout time.Duration) error {
 		return errors.Errorf("cannot take lock for '%s' because lock has been held for %s by %s",
 			id, time.Since(b.status.ModificationTime), b.status.Owner)
 	}
+	if b.status.Completed && b.retryInfo.NeedsRetry && time.Since(b.status.ModificationTime) < lockTimeout && b.status.Owner != id {
+		return errors.Errorf("cannot take retry lock for '%s' because lock has been held for %s by %s", id, time.Since(b.status.ModificationTime), b.status.Owner)
+	}
 	b.status.InProgress = true
 	b.status.Owner = id
 	b.status.ModificationTime = time.Now()
