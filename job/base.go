@@ -348,4 +348,10 @@ func (b *Base) UpdateRetryInfo(opts amboy.JobRetryOptions) {
 	if opts.MaxAttempts != nil {
 		b.retryInfo.MaxAttempts = *opts.MaxAttempts
 	}
+	if opts.DispatchBy != nil {
+		b.retryInfo.DispatchBy = *opts.DispatchBy
+	}
+	if opts.WaitUntil != nil {
+		b.retryInfo.WaitUntil = *opts.WaitUntil
+	}
 }

@@ -251,9 +251,25 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 
 		newInfo.NeedsRetry = false
 		newInfo.CurrentAttempt++
+		var dispatchBy time.Time
+		if newInfo.DispatchBy != 0 {
+			dispatchBy = time.Now().Add(newInfo.DispatchBy)
+		} else {
+			dispatchBy = newJob.TimeInfo().DispatchBy
+		}
+		var waitUntil time.Time
+		if newInfo.WaitUntil != 0 {
+			waitUntil = time.Now().Add(newInfo.WaitUntil)
+		} else {
+			waitUntil = newJob.TimeInfo().WaitUntil
+		}
+		newJob.SetTimeInfo(amboy.JobTimeInfo{
+			DispatchBy: dispatchBy,
+			WaitUntil:  waitUntil,
+			MaxTime:    newJob.TimeInfo().MaxTime,
+		})
 		newJob.UpdateRetryInfo(newInfo.Options())
 		newJob.SetStatus(amboy.JobStatusInfo{})
-		newJob.SetTimeInfo(amboy.JobTimeInfo{})
 
 		oldInfo.NeedsRetry = false
 		j.UpdateRetryInfo(oldInfo.Options())

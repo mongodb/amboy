@@ -113,13 +113,15 @@ func TestRetryHandlerImplementations(t *testing.T) {
 					require.NoError(t, rh.Start(ctx))
 					assert.True(t, rh.Started())
 				},
-				"MockPutReenqueuesJob": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
+				"MockPutReenqueuesJobWithExpectedState": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
 					mq, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{})
 					require.NoError(t, err)
 
 					j := newMockRetryableJob("id")
 					j.UpdateRetryInfo(amboy.JobRetryOptions{
-						NeedsRetry: utility.ToBoolPtr(true),
+						NeedsRetry: utility.TruePtr(),
+						WaitUntil:  utility.ToTimeDurationPtr(time.Minute),
+						DispatchBy: utility.ToTimeDurationPtr(time.Hour),
 					})
 
 					var calledGetAttempt, calledCompleteRetry, calledCompleteAndPut bool
@@ -159,6 +161,13 @@ func TestRetryHandlerImplementations(t *testing.T) {
 						}
 						assert.False(t, newJob.RetryInfo().NeedsRetry)
 						assert.Equal(t, 1, newJob.RetryInfo().CurrentAttempt)
+						assert.NotZero(t, newJob.TimeInfo().Created)
+						assert.NotEqual(t, oldJob.TimeInfo().Created, newJob.TimeInfo().Created)
+						assert.Zero(t, newJob.TimeInfo().Start)
+						assert.Zero(t, newJob.TimeInfo().End)
+						assert.WithinDuration(t, time.Now().Add(j.RetryInfo().WaitUntil), newJob.TimeInfo().WaitUntil, time.Second)
+						assert.WithinDuration(t, time.Now().Add(j.RetryInfo().DispatchBy), newJob.TimeInfo().DispatchBy, time.Second)
+						assert.Zero(t, newJob.Status())
 
 						return nil
 					}
@@ -264,7 +273,7 @@ func TestRetryHandlerImplementations(t *testing.T) {
 
 					j := newMockRetryableJob("id")
 					j.UpdateRetryInfo(amboy.JobRetryOptions{
-						NeedsRetry: utility.ToBoolPtr(true),
+						NeedsRetry: utility.TruePtr(),
 					})
 
 					var getAttemptCalls, completeRetryCalls, completeAndPutCalls int
@@ -300,7 +309,7 @@ func TestRetryHandlerImplementations(t *testing.T) {
 
 					j := newMockRetryableJob("id")
 					j.UpdateRetryInfo(amboy.JobRetryOptions{
-						NeedsRetry: utility.ToBoolPtr(true),
+						NeedsRetry: utility.TruePtr(),
 					})
 
 					var getAttemptCalls, completeRetryCalls, completeAndPutCalls int
@@ -339,7 +348,7 @@ func TestRetryHandlerImplementations(t *testing.T) {
 
 					j := newMockRetryableJob("id")
 					j.UpdateRetryInfo(amboy.JobRetryOptions{
-						NeedsRetry: utility.ToBoolPtr(true),
+						NeedsRetry: utility.TruePtr(),
 					})
 
 					var getAttemptCalls, completeRetryCalls, completeAndPutCalls int
@@ -376,7 +385,7 @@ func TestRetryHandlerImplementations(t *testing.T) {
 
 					j := newMockRetryableJob("id")
 					j.UpdateRetryInfo(amboy.JobRetryOptions{
-						NeedsRetry: utility.ToBoolPtr(true),
+						NeedsRetry: utility.TruePtr(),
 					})
 
 					var getAttemptCalls, completeRetryCalls, completeAndPutCalls int

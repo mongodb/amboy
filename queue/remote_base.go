@@ -57,6 +57,13 @@ func (q *remoteBase) ID() string {
 // same job to a queue more than once, but this depends on the
 // implementation of the underlying driver.
 func (q *remoteBase) Put(ctx context.Context, j amboy.Job) error {
+	if err := q.validateAndPreparePut(j); err != nil {
+		return err
+	}
+	return q.driver.Put(ctx, j)
+}
+
+func (q *remoteBase) validateAndPreparePut(j amboy.Job) error {
 	if j.Type().Version < 0 {
 		return errors.New("cannot add jobs with versions less than 0")
 	}
@@ -66,10 +73,10 @@ func (q *remoteBase) Put(ctx context.Context, j amboy.Job) error {
 	})
 
 	if err := j.TimeInfo().Validate(); err != nil {
-		return errors.Wrap(err, "invalid job timeinfo")
+		return errors.Wrap(err, "invalid job time info")
 	}
 
-	return q.driver.Put(ctx, j)
+	return nil
 }
 
 // Get retrieves a job from the queue's storage. The second value
@@ -163,6 +170,9 @@ func (q *remoteBase) Save(ctx context.Context, j amboy.Job) error {
 }
 
 func (q *remoteBase) CompleteAndPut(ctx context.Context, toComplete, toPut amboy.Job) error {
+	if err := q.validateAndPreparePut(toPut); err != nil {
+		return errors.Wrap(err, "invalid job to put")
+	}
 	return q.driver.CompleteAndPut(ctx, toComplete, toPut)
 }
 
