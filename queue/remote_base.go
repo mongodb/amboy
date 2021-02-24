@@ -11,6 +11,7 @@ import (
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/grip"
 	"github.com/mongodb/grip/message"
+	"github.com/mongodb/grip/recovery"
 	"github.com/pkg/errors"
 )
 
@@ -414,6 +415,7 @@ func (q *remoteBase) Start(ctx context.Context) error {
 		if err = q.retryHandler.Start(ctx); err != nil {
 			return errors.Wrap(err, "starting retry handler in remote queue")
 		}
+		go q.monitorStaleRetryingJobs(ctx)
 	}
 
 	go q.jobServer(ctx)
@@ -465,20 +467,35 @@ func (q *remoteBase) lockDispatch(j amboy.Job) bool {
 	return true
 }
 
-func isDispatchable(stat amboy.JobStatusInfo, lockTimeout time.Duration) bool {
-	if jobCanRestart(stat, lockTimeout) {
-		return true
-	}
-	if stat.Completed {
-		return false
-	}
-	if stat.InProgress {
-		return false
-	}
+func (q *remoteBase) monitorStaleRetryingJobs(ctx context.Context) {
+	defer func() {
+		if err := recovery.HandlePanicWithError(recover(), nil, "stale retry job monitor"); err != nil {
+			grip.Error(message.WrapError(err, message.Fields{
+				"message":  "stale retry job monitor failed",
+				"service":  "amboy.queue.mdb",
+				"queue_id": q.ID(),
+			}))
+			go q.monitorStaleRetryingJobs(ctx)
+		}
+	}()
 
-	return true
-}
-
-func jobCanRestart(stat amboy.JobStatusInfo, lockTimeout time.Duration) bool {
-	return stat.InProgress && time.Since(stat.ModificationTime) > lockTimeout
+	const monitorInterval = time.Second
+	timer := time.NewTimer(0)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+			for j := range q.driver.RetryableJobs(ctx, RetryableJobStaleRetrying) {
+				grip.Error(message.WrapError(q.retryHandler.Put(ctx, j), message.Fields{
+					"message":  "could not enqueue stale retrying job",
+					"service":  "amboy.queue.mdb",
+					"job_id":   j.ID(),
+					"queue_id": q.ID(),
+				}))
+			}
+			timer.Reset(monitorInterval)
+		}
+	}
 }

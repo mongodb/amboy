@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/evergreen-ci/utility"
 	"github.com/google/uuid"
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/job"
@@ -1137,6 +1138,7 @@ func RetryableTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 			}()
 			select {
 			case <-ctx.Done():
+				require.FailNow(t, ctx.Err().Error())
 			case <-jobReenqueued:
 				assert.True(t, rq.Stats(ctx).Total > 1)
 				require.True(t, amboy.WaitInterval(ctx, rq, 100*time.Millisecond))
@@ -1158,7 +1160,7 @@ func RetryableTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 			}
 		},
 		"ScopedJobRetriesOnceThenAllowsLaterJobToTakeScope": func(ctx context.Context, t *testing.T, rh amboy.RetryHandler, rq amboy.RetryableQueue) {
-			j := newMockRetryableJob("id0")
+			j := newMockRetryableJob("id")
 			j.NumTimesToRetry = 1
 			j.SetShouldApplyScopesOnEnqueue(true)
 			scopes := []string{"scope"}
@@ -1189,6 +1191,53 @@ func RetryableTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 			}
 			assert.True(t, foundFirstAttempt, "first job attempt should have completed")
 			assert.True(t, foundSecondAttempt, "second job attempt should have completed")
+		},
+		"StaleRetryingJobsAreDetectedAndRetried": func(ctx context.Context, t *testing.T, rh amboy.RetryHandler, rq amboy.RetryableQueue) {
+			j := newMockRetryableJob("id")
+			j.SetStatus(amboy.JobStatusInfo{
+				Completed:        true,
+				ModificationTime: time.Now().Add(-100 * rq.Info().LockTimeout),
+			})
+			j.UpdateRetryInfo(amboy.JobRetryOptions{
+				NeedsRetry: utility.TruePtr(),
+			})
+			// Prevent the retry job from executing.
+			j.UpdateTimeInfo(amboy.JobTimeInfo{
+				WaitUntil: time.Now().Add(time.Hour),
+			})
+
+			require.NoError(t, rq.Put(ctx, j))
+			jobReenqueued := make(chan struct{})
+			go func() {
+				defer close(jobReenqueued)
+				for {
+					if ctx.Err() != nil {
+						return
+					}
+					if rq.Stats(ctx).Total > 1 {
+						return
+					}
+				}
+			}()
+
+			select {
+			case <-ctx.Done():
+				require.FailNow(t, ctx.Err().Error())
+			case <-jobReenqueued:
+				assert.Equal(t, 2, rq.Stats(ctx).Total)
+				assert.Equal(t, 1, rq.Stats(ctx).Completed)
+				assert.Equal(t, 1, rq.Stats(ctx).Pending)
+
+				rj0, ok := rq.GetAttempt(ctx, j.ID(), 0)
+				require.True(t, ok)
+				assert.True(t, rj0.RetryInfo().Retryable)
+				assert.False(t, rj0.RetryInfo().NeedsRetry)
+
+				rj1, ok := rq.GetAttempt(ctx, j.ID(), 1)
+				require.True(t, ok)
+				assert.True(t, rj1.RetryInfo().Retryable)
+				assert.False(t, rj1.RetryInfo().NeedsRetry)
+			}
 		},
 	} {
 		t.Run(testName, func(t *testing.T) {
