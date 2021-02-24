@@ -169,15 +169,21 @@ func (q *remoteBase) Save(ctx context.Context, j amboy.Job) error {
 	return q.driver.Save(ctx, j)
 }
 
-func (q *remoteBase) CompleteAndPut(ctx context.Context, toComplete, toPut amboy.Job) error {
+func (q *remoteBase) CompleteRetryingAndPut(ctx context.Context, toComplete, toPut amboy.RetryableJob) error {
+	q.prepareCompleteRetrying(toComplete)
 	if err := q.validateAndPreparePut(toPut); err != nil {
 		return errors.Wrap(err, "invalid job to put")
 	}
 	return q.driver.CompleteAndPut(ctx, toComplete, toPut)
 }
 
-// Complete takes a context and, asynchronously, marks the job
-// complete, in the queue.
+func (q *remoteBase) prepareCompleteRetrying(j amboy.RetryableJob) {
+	j.UpdateRetryInfo(amboy.JobRetryOptions{
+		NeedsRetry: utility.FalsePtr(),
+	})
+}
+
+// Complete marks the job complete in the queue.
 func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
 	if ctx.Err() != nil {
 		return
@@ -259,7 +265,7 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
 	}
 }
 
-func (q *remoteBase) CompleteRetry(ctx context.Context, j amboy.RetryableJob) error {
+func (q *remoteBase) CompleteRetrying(ctx context.Context, j amboy.RetryableJob) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -277,9 +283,7 @@ func (q *remoteBase) CompleteRetry(ctx context.Context, j amboy.RetryableJob) er
 			catcher.Add(ctx.Err())
 			return errors.Wrapf(catcher.Resolve(), "giving up after attempt %d", attempt)
 		case <-timer.C:
-			j.UpdateRetryInfo(amboy.JobRetryOptions{
-				NeedsRetry: utility.FalsePtr(),
-			})
+			q.prepareCompleteRetrying(j)
 
 			if err := q.driver.Complete(ctx, j); err != nil {
 				catcher.Wrapf(err, "attempt %d", attempt)

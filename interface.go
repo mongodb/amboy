@@ -366,15 +366,14 @@ type RetryableQueue interface {
 	// and a bool indicating whether the job was found or not.
 	GetAttempt(ctx context.Context, id string, attempt int) (RetryableJob, bool)
 
-	// CompleteAndPut marks an existing job toComplete in the queue (see
-	// CompleteRetry) as finished processing its retry and inserts a new job
-	// toPut in the queue (see Put). Implementations must make this operation
-	// atomic.
-	CompleteAndPut(ctx context.Context, toComplete, toPut Job) error
+	// CompleteRetryingAndPut marks an existing job toComplete in the queue (see
+	// CompleteRetrying) as finished retrying and inserts a new job toPut in the
+	// queue (see Put). Implementations must make this operation atomic.
+	CompleteRetryingAndPut(ctx context.Context, toComplete, toPut RetryableJob) error
 
-	// CompleteRetry marks a job that needs to retry as finished processing, so
+	// CompleteRetrying marks a job that is retrying as finished processing, so
 	// that it will no longer retry.
-	CompleteRetry(ctx context.Context, j RetryableJob) error
+	CompleteRetrying(ctx context.Context, j RetryableJob) error
 }
 
 // RetryHandler provides a means to retry RetryableJobs within a RetryableQueue.
