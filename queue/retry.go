@@ -11,12 +11,36 @@ import (
 	"github.com/mongodb/grip/message"
 	"github.com/mongodb/grip/recovery"
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/mongo"
 )
+
+// statsRetryHandler is the same as an amboy.RetryHandler but allows it to
+// provide additional runtime statistics on its jobs. This is primarily for
+// queue-internal tracking and testing purposes.
+type statsRetryHandler interface {
+	amboy.RetryHandler
+	// stats returns information about the job statistics for an
+	// amboy.RetryHandler. Results are reset with each runtime execution.
+	stats() retryHandlerStats
+}
+
+// retryHandlerStats captures runtime statistics on an amboy.RetryHandler.
+type retryHandlerStats struct {
+	pending   int
+	completed int
+	retried   int
+}
+
+type retryingJobOutcome struct {
+	job     amboy.RetryableJob
+	retried bool
+}
 
 type basicRetryHandler struct {
 	queue         amboy.RetryableQueue
 	opts          amboy.RetryHandlerOptions
 	pending       map[string]amboy.RetryableJob
+	completed     map[string]retryingJobOutcome
 	started       bool
 	wg            sync.WaitGroup
 	mu            sync.RWMutex
@@ -31,9 +55,10 @@ func newBasicRetryHandler(q amboy.RetryableQueue, opts amboy.RetryHandlerOptions
 		return nil, errors.Wrap(err, "invalid options")
 	}
 	return &basicRetryHandler{
-		queue:   q,
-		opts:    opts,
-		pending: map[string]amboy.RetryableJob{},
+		queue:     q,
+		opts:      opts,
+		pending:   map[string]amboy.RetryableJob{},
+		completed: map[string]retryingJobOutcome{},
 	}, nil
 }
 
@@ -159,7 +184,8 @@ func (rh *basicRetryHandler) waitForJob(ctx context.Context) {
 				timer.Reset(rh.opts.WorkerCheckInterval)
 				continue
 			}
-			if err := rh.handleJob(ctx, j); err != nil && ctx.Err() == nil {
+			var err error
+			if err = rh.handleJob(ctx, j); err != nil && ctx.Err() == nil {
 				grip.Error(message.WrapError(err, message.Fields{
 					"message":  "could not retry job",
 					"queue_id": rh.queue.ID(),
@@ -177,6 +203,13 @@ func (rh *basicRetryHandler) waitForJob(ctx context.Context) {
 					}))
 				}
 			}
+
+			rh.mu.Lock()
+			rh.completed[j.ID()] = retryingJobOutcome{
+				job:     j,
+				retried: err == nil,
+			}
+			rh.mu.Unlock()
 
 			timer.Reset(rh.opts.WorkerCheckInterval)
 		}
@@ -201,7 +234,7 @@ func (rh *basicRetryHandler) handleJob(ctx context.Context, j amboy.RetryableJob
 	defer timer.Stop()
 	for i := 1; i <= rh.opts.MaxRetryAttempts; i++ {
 		if time.Since(startAt) > rh.opts.MaxRetryTime {
-			return errors.Errorf("giving up after %d attempts, %f seconds due to maximum retry time", i, rh.opts.MaxRetryTime.Seconds())
+			return errors.Errorf("giving up after %d attempts, %.3f due to maximum retry time", i, rh.opts.MaxRetryTime.Seconds())
 		}
 
 		select {
@@ -267,7 +300,7 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 		rh.prepareNewRetryJob(newJob)
 
 		err = rh.queue.CompleteRetryingAndPut(ctx, j, newJob)
-		if amboy.IsDuplicateJobError(err) {
+		if amboy.IsDuplicateJobError(err) || errors.Cause(err) == mongo.ErrNoDocuments {
 			return false, err
 		} else if err != nil {
 			return true, errors.Wrap(err, "enqueueing retry job")
@@ -291,13 +324,13 @@ func (rh *basicRetryHandler) prepareNewRetryJob(j amboy.RetryableJob) {
 	j.UpdateRetryInfo(ri.Options())
 
 	ti := j.TimeInfo()
-	dispatchBy := ti.DispatchBy
-	if ri.DispatchBy != 0 {
-		dispatchBy = time.Now().Add(ri.DispatchBy)
-	}
 	waitUntil := ti.WaitUntil
 	if ri.WaitUntil != 0 {
 		waitUntil = time.Now().Add(ri.WaitUntil)
+	}
+	dispatchBy := ti.DispatchBy
+	if ri.DispatchBy != 0 {
+		dispatchBy = time.Now().Add(ri.DispatchBy)
 	}
 	j.SetTimeInfo(amboy.JobTimeInfo{
 		DispatchBy: dispatchBy,
@@ -306,6 +339,24 @@ func (rh *basicRetryHandler) prepareNewRetryJob(j amboy.RetryableJob) {
 	})
 
 	j.SetStatus(amboy.JobStatusInfo{})
+}
+
+func (rh *basicRetryHandler) stats() retryHandlerStats {
+	rh.mu.RLock()
+	defer rh.mu.RUnlock()
+
+	var numRetried int
+	for _, outcome := range rh.completed {
+		if outcome.retried {
+			numRetried++
+		}
+	}
+
+	return retryHandlerStats{
+		pending:   len(rh.pending),
+		retried:   numRetried,
+		completed: len(rh.completed),
+	}
 }
 
 func retryAttemptPrefix(attempt int) string {

@@ -238,7 +238,7 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
 						"retry_count": count,
 						"message":     "after 10 retries, aborting marking job complete",
 					}))
-				} else if isMongoDupKey(err) {
+				} else if isMongoDupKey(err) || isMongoNoDocumentsMatched(err) {
 					grip.Warning(message.WrapError(err, message.Fields{
 						"job_id":      id,
 						"driver_type": q.driverType,
@@ -288,7 +288,7 @@ func (q *remoteBase) CompleteRetrying(ctx context.Context, j amboy.RetryableJob)
 
 			if err := q.driver.Complete(ctx, j); err != nil {
 				catcher.Wrapf(err, "attempt %d", attempt)
-				if isMongoDupKey(err) {
+				if isMongoDupKey(err) || isMongoNoDocumentsMatched(err) {
 					j.AddError(catcher.Resolve())
 					return errors.Wrapf(catcher.Resolve(), "giving up after attempt %d", attempt)
 				}
