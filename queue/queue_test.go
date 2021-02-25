@@ -1152,7 +1152,7 @@ func RetryableTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 					if ctx.Err() != nil {
 						return
 					}
-					if rq.Stats(ctx).Total > 1 {
+					if rq.Stats(ctx).IsComplete() {
 						return
 					}
 				}
@@ -1188,10 +1188,10 @@ func RetryableTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 			j.SetScopes(scopes)
 
 			require.NoError(t, rq.Put(ctx, j))
-			require.True(t, amboy.WaitInterval(ctx, rq, 100*time.Millisecond))
 
 			jobAfterRetry := newMockRetryableJob("id1")
 			jobAfterRetry.SetScopes(scopes)
+			require.True(t, amboy.WaitInterval(ctx, rq, 100*time.Millisecond))
 
 			require.NoError(t, rq.Put(ctx, jobAfterRetry))
 			require.True(t, amboy.WaitInterval(ctx, rq, 100*time.Millisecond))
@@ -1222,20 +1222,16 @@ func RetryableTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 			j.UpdateRetryInfo(amboy.JobRetryOptions{
 				NeedsRetry: utility.TruePtr(),
 			})
-			// Prevent the retry job from executing.
-			j.UpdateTimeInfo(amboy.JobTimeInfo{
-				WaitUntil: time.Now().Add(time.Hour),
-			})
 
 			require.NoError(t, rq.Put(ctx, j))
-			jobReenqueued := make(chan struct{})
+			jobsDone := make(chan struct{})
 			go func() {
-				defer close(jobReenqueued)
+				defer close(jobsDone)
 				for {
 					if ctx.Err() != nil {
 						return
 					}
-					if rq.Stats(ctx).Total > 1 {
+					if rq.Stats(ctx).IsComplete() {
 						return
 					}
 				}
@@ -1244,10 +1240,9 @@ func RetryableTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 			select {
 			case <-ctx.Done():
 				require.FailNow(t, ctx.Err().Error())
-			case <-jobReenqueued:
+			case <-jobsDone:
 				assert.Equal(t, 2, rq.Stats(ctx).Total)
-				assert.Equal(t, 1, rq.Stats(ctx).Completed)
-				assert.Equal(t, 1, rq.Stats(ctx).Pending)
+				assert.Equal(t, 2, rq.Stats(ctx).Completed)
 
 				rj0, ok := rq.GetAttempt(ctx, j.ID(), 0)
 				require.True(t, ok)

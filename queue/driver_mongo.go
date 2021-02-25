@@ -1260,8 +1260,38 @@ func (d *mongoDriver) scopesInUse(ctx context.Context, scopes []string) bool {
 func (d *mongoDriver) Stats(ctx context.Context) amboy.QueueStats {
 	coll := d.getCollection()
 
-	var numJobs int64
 	var err error
+
+	// Because these queries are not done atomically, the order of queries is
+	// critical to detecting when a queue is complete. Since the statistics are
+	// not all fetched in a single atomic query, it's possible that the
+	// statistics will not consistently add up within a single Stats() query.
+	// For example, if a lot of jobs are inserted in the queue in between
+	// counting the Total documents and counting the Pending documents, you
+	// would get a result where # Pending jobs is greater than # Total jobs, and
+	// # Completed is negative.
+	//
+	// For the sake of checking completeness of the queue in tests, it's fine to
+	// query for Retrying before any queries related to Complete, because
+	// Retrying is a subset of Complete and the queue should not be considered
+	// complete if any jobs are still retrying.
+	//
+	// TODO: improve these queries to aggregate all the statistics in an atomic
+	// query so it is consistent rather than eventually consistent.
+
+	retryingQuery := d.getRetryingQuery()
+	numRetrying, err := coll.CountDocuments(ctx, retryingQuery)
+	grip.Warning(message.WrapError(err, message.Fields{
+		"id":         d.instanceID,
+		"service":    "amboy.queue.mdb",
+		"collection": coll.Name(),
+		"is_group":   d.opts.UseGroups,
+		"group":      d.opts.GroupName,
+		"operation":  "queue stats",
+		"message":    "problem counting retrying jobs",
+	}))
+
+	var numJobs int64
 	if d.opts.UseGroups {
 		numJobs, err = coll.CountDocuments(ctx, bson.M{"group": d.opts.GroupName})
 	} else {
@@ -1280,7 +1310,7 @@ func (d *mongoDriver) Stats(ctx context.Context) amboy.QueueStats {
 
 	pendingQuery := bson.M{"status.completed": false}
 	d.modifyQueryForGroup(pendingQuery)
-	pending, err := coll.CountDocuments(ctx, pendingQuery)
+	numPending, err := coll.CountDocuments(ctx, pendingQuery)
 	grip.Warning(message.WrapError(err, message.Fields{
 		"id":         d.instanceID,
 		"service":    "amboy.queue.mdb",
@@ -1291,9 +1321,9 @@ func (d *mongoDriver) Stats(ctx context.Context) amboy.QueueStats {
 		"message":    "problem counting pending jobs",
 	}))
 
-	lockedQuery := bson.M{"status.completed": false, "status.in_prog": true}
-	d.modifyQueryForGroup(lockedQuery)
-	numLocked, err := coll.CountDocuments(ctx, lockedQuery)
+	inProgQuery := bson.M{"status.completed": false, "status.in_prog": true}
+	d.modifyQueryForGroup(inProgQuery)
+	numInProg, err := coll.CountDocuments(ctx, inProgQuery)
 	grip.Warning(message.WrapError(err, message.Fields{
 		"id":         d.instanceID,
 		"service":    "amboy.queue.mdb",
@@ -1301,14 +1331,15 @@ func (d *mongoDriver) Stats(ctx context.Context) amboy.QueueStats {
 		"is_group":   d.opts.UseGroups,
 		"group":      d.opts.GroupName,
 		"operation":  "queue stats",
-		"message":    "problem counting locked jobs",
+		"message":    "problem counting in-progress jobs",
 	}))
 
 	return amboy.QueueStats{
 		Total:     int(numJobs),
-		Pending:   int(pending),
-		Completed: int(numJobs - pending),
-		Running:   int(numLocked),
+		Pending:   int(numPending),
+		Running:   int(numInProg),
+		Completed: int(numJobs - numPending),
+		Retrying:  int(numRetrying),
 	}
 }
 

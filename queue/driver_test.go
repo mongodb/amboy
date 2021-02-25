@@ -522,6 +522,46 @@ func (s *DriverSuite) TestStatsCallReportsCompletedJobs() {
 	s.Equal(0, s.driver.Stats(s.ctx).Running)
 }
 
+func (s *DriverSuite) TestStatsCountsAreAccurate() {
+	const numEnqueued = 30
+	for i := 0; i < numEnqueued; i++ {
+		j := newMockJob()
+		j.SetID(uuid.New().String())
+		s.Require().NoError(s.driver.Put(s.ctx, j))
+	}
+
+	const numRunning = 50
+	for i := 0; i < numRunning; i++ {
+		j := newMockJob()
+		j.SetID(uuid.New().String())
+		j.SetStatus(amboy.JobStatusInfo{InProgress: true})
+		s.Require().NoError(s.driver.Put(s.ctx, j))
+	}
+
+	const numCompleted = 10
+	for i := 0; i < numCompleted; i++ {
+		j := newMockJob()
+		j.SetID(uuid.New().String())
+		j.SetStatus(amboy.JobStatusInfo{Completed: true})
+		s.Require().NoError(s.driver.Put(s.ctx, j))
+	}
+
+	const numRetrying = 5
+	for i := 0; i < numRetrying; i++ {
+		j := newMockRetryableJob(uuid.New().String())
+		j.UpdateRetryInfo(amboy.JobRetryOptions{NeedsRetry: utility.TruePtr()})
+		j.SetStatus(amboy.JobStatusInfo{Completed: true})
+		s.Require().NoError(s.driver.Put(s.ctx, j))
+	}
+
+	stats := s.driver.Stats(s.ctx)
+	s.Equal(numEnqueued+numRunning, stats.Pending)
+	s.Equal(numRunning, stats.Running)
+	s.Equal(numCompleted+numRetrying, stats.Completed)
+	s.Equal(numRetrying, stats.Retrying)
+	s.Equal(numEnqueued+numRunning+numCompleted+numRetrying, stats.Total)
+}
+
 func (s *DriverSuite) TestNextMethodSkipsCompletedJobs() {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
@@ -763,7 +803,7 @@ func (s *DriverSuite) TestRetryableJobsReturnsStaleRetryingJobs() {
 	s.Empty(foundUnexpected, "found unexpected IDs %s", foundUnexpected)
 }
 
-func (s *DriverSuite) TestStatsMethodReturnsAllJobs() {
+func (s *DriverSuite) TestJobStatsMethodReturnsAllJobs() {
 	names := make(map[string]struct{})
 
 	for i := 0; i < 30; i++ {

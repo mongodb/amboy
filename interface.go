@@ -355,6 +355,7 @@ type QueueGroup interface {
 type RetryableQueue interface {
 	// Queue is identical to the standard queue interface, except:
 	// For retryable jobs, Get will retrieve the latest attempt of a job by ID.
+	// Results will only return completed jobs that are not retrying.
 	Queue
 
 	// RetryHandler returns the handler for retrying a job in this queue.
