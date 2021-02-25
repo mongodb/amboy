@@ -11,7 +11,6 @@ import (
 	"github.com/mongodb/grip/message"
 	"github.com/mongodb/grip/recovery"
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // statsRetryHandler is the same as an amboy.RetryHandler but allows it to
@@ -300,7 +299,7 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 		rh.prepareNewRetryJob(newJob)
 
 		err = rh.queue.CompleteRetryingAndPut(ctx, j, newJob)
-		if amboy.IsDuplicateJobError(err) || errors.Cause(err) == mongo.ErrNoDocuments {
+		if amboy.IsDuplicateJobError(err) || isMongoNoDocumentsMatched(err) {
 			return false, err
 		} else if err != nil {
 			return true, errors.Wrap(err, "enqueueing retry job")
