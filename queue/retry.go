@@ -169,7 +169,7 @@ func (rh *basicRetryHandler) waitForJob(ctx context.Context) {
 
 				// Since the job could not retry successfully, do not let the
 				// job retry again.
-				if err := rh.queue.CompleteRetry(ctx, j); err != nil {
+				if err := rh.queue.CompleteRetrying(ctx, j); err != nil {
 					grip.Warning(message.WrapError(err, message.Fields{
 						"message":  "failed to mark job retry as processed",
 						"job_id":   j.ID(),
@@ -264,16 +264,9 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 			return false, errors.Wrap(err, "saving job lock")
 		}
 
-		newInfo.NeedsRetry = false
-		newInfo.CurrentAttempt++
-		newJob.UpdateRetryInfo(newInfo.Options())
-		newJob.SetStatus(amboy.JobStatusInfo{})
-		newJob.SetTimeInfo(amboy.JobTimeInfo{})
+		rh.prepareNewRetryJob(newJob)
 
-		oldInfo.NeedsRetry = false
-		j.UpdateRetryInfo(oldInfo.Options())
-
-		err = rh.queue.CompleteAndPut(ctx, j, newJob)
+		err = rh.queue.CompleteRetryingAndPut(ctx, j, newJob)
 		if amboy.IsDuplicateJobError(err) {
 			return false, err
 		} else if err != nil {
@@ -289,6 +282,30 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 	}
 
 	return canRetry, err
+}
+
+func (rh *basicRetryHandler) prepareNewRetryJob(j amboy.RetryableJob) {
+	ri := j.RetryInfo()
+	ri.NeedsRetry = false
+	ri.CurrentAttempt++
+	j.UpdateRetryInfo(ri.Options())
+
+	ti := j.TimeInfo()
+	dispatchBy := ti.DispatchBy
+	if ri.DispatchBy != 0 {
+		dispatchBy = time.Now().Add(ri.DispatchBy)
+	}
+	waitUntil := ti.WaitUntil
+	if ri.WaitUntil != 0 {
+		waitUntil = time.Now().Add(ri.WaitUntil)
+	}
+	j.SetTimeInfo(amboy.JobTimeInfo{
+		DispatchBy: dispatchBy,
+		WaitUntil:  waitUntil,
+		MaxTime:    ti.MaxTime,
+	})
+
+	j.SetStatus(amboy.JobStatusInfo{})
 }
 
 func retryAttemptPrefix(attempt int) string {

@@ -122,7 +122,7 @@ type JobType struct {
 
 // JobStatusInfo contains information about the current status of a
 // job and is reported by the Status and set by the SetStatus methods
-// in the Job interface.e
+// in the Job interface.
 type JobStatusInfo struct {
 	ID                string    `bson:"id,omitempty" json:"id,omitempty" yaml:"id,omitempty"`
 	Owner             string    `bson:"owner" json:"owner" yaml:"owner"`
@@ -175,6 +175,16 @@ type JobRetryInfo struct {
 	// will be allowed to run 3 times at most. If unset, the default maximum
 	// attempts is 10.
 	MaxAttempts int `bson:"max_attempts,omitempty" json:"max_attempts,omitempty" yaml:"max_attempts,omitempty"`
+	// DispatchBy reflects the amount of time (relative to when the job is
+	// retried) that the retried job has to dispatch for execution. If this
+	// deadline elapses, the job will not run. This is analogous to
+	// (JobTimeInfo).DispatchBy.
+	DispatchBy time.Duration `bson:"dispatch_by,omitempty" json:"dispatch_by,omitempty" yaml:"dispatch_by,omitempty"`
+	// WaitUntil reflects the amount of time (relative to when the job is
+	// retried) that the retried job has to wait before it can be dispatched for
+	// execution. The job will not run until this waiting period elapses. This
+	// is analogous to (JobTimeInfo).WaitUntil.
+	WaitUntil time.Duration `bson:"wait_until,omitempty" json:"wait_until,omitempty" yaml:"wait_until,omitempty"`
 }
 
 // Options returns a JobRetryInfo as its equivalent JobRetryOptions. In other
@@ -186,6 +196,8 @@ func (info *JobRetryInfo) Options() JobRetryOptions {
 		NeedsRetry:     &info.NeedsRetry,
 		CurrentAttempt: &info.CurrentAttempt,
 		MaxAttempts:    &info.MaxAttempts,
+		DispatchBy:     &info.DispatchBy,
+		WaitUntil:      &info.WaitUntil,
 	}
 }
 
@@ -204,10 +216,12 @@ func (info *JobRetryInfo) GetMaxAttempts() int {
 // Their meaning corresponds to the fields in JobRetryInfo, but is more amenable
 // to optional input values.
 type JobRetryOptions struct {
-	Retryable      *bool `bson:"-" json:"-" yaml:"-"`
-	NeedsRetry     *bool `bson:"-" json:"-" yaml:"-"`
-	CurrentAttempt *int  `bson:"-" json:"-" yaml:"-"`
-	MaxAttempts    *int  `bson:"-" json:"-" yaml:"-"`
+	Retryable      *bool          `bson:"-" json:"-" yaml:"-"`
+	NeedsRetry     *bool          `bson:"-" json:"-" yaml:"-"`
+	CurrentAttempt *int           `bson:"-" json:"-" yaml:"-"`
+	MaxAttempts    *int           `bson:"-" json:"-" yaml:"-"`
+	DispatchBy     *time.Duration `bson:"-" json:"-" yaml:"-"`
+	WaitUntil      *time.Duration `bson:"-" json:"-" yaml:"-"`
 }
 
 // Duration is a convenience function to return a duration for a job.
@@ -354,15 +368,14 @@ type RetryableQueue interface {
 	// and a bool indicating whether the job was found or not.
 	GetAttempt(ctx context.Context, id string, attempt int) (RetryableJob, bool)
 
-	// CompleteAndPut marks an existing job toComplete in the queue (see
-	// CompleteRetry) as finished processing its retry and inserts a new job
-	// toPut in the queue (see Put). Implementations must make this operation
-	// atomic.
-	CompleteAndPut(ctx context.Context, toComplete, toPut Job) error
+	// CompleteRetryingAndPut marks an existing job toComplete in the queue (see
+	// CompleteRetrying) as finished retrying and inserts a new job toPut in the
+	// queue (see Put). Implementations must make this operation atomic.
+	CompleteRetryingAndPut(ctx context.Context, toComplete, toPut RetryableJob) error
 
-	// CompleteRetry marks a job that needs to retry as finished processing, so
+	// CompleteRetrying marks a job that is retrying as finished processing, so
 	// that it will no longer retry.
-	CompleteRetry(ctx context.Context, j RetryableJob) error
+	CompleteRetrying(ctx context.Context, j RetryableJob) error
 }
 
 // RetryHandler provides a means to retry RetryableJobs within a RetryableQueue.
