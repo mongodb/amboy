@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/evergreen-ci/utility"
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/grip"
 	"github.com/mongodb/grip/message"
@@ -13,33 +14,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-// statsRetryHandler is the same as an amboy.RetryHandler but allows it to
-// provide additional runtime statistics on its jobs. This is primarily for
-// queue-internal tracking and testing purposes.
-type statsRetryHandler interface {
-	amboy.RetryHandler
-	// stats returns information about the job statistics for an
-	// amboy.RetryHandler. Results are reset with each runtime execution.
-	stats() retryHandlerStats
-}
-
-// retryHandlerStats captures runtime statistics on an amboy.RetryHandler.
-type retryHandlerStats struct {
-	pending   int
-	completed int
-	retried   int
-}
-
-type retryingJobOutcome struct {
-	job     amboy.RetryableJob
-	retried bool
-}
-
 type basicRetryHandler struct {
 	queue         amboy.RetryableQueue
 	opts          amboy.RetryHandlerOptions
 	pending       map[string]amboy.RetryableJob
-	completed     map[string]retryingJobOutcome
 	started       bool
 	wg            sync.WaitGroup
 	mu            sync.RWMutex
@@ -54,10 +32,9 @@ func newBasicRetryHandler(q amboy.RetryableQueue, opts amboy.RetryHandlerOptions
 		return nil, errors.Wrap(err, "invalid options")
 	}
 	return &basicRetryHandler{
-		queue:     q,
-		opts:      opts,
-		pending:   map[string]amboy.RetryableJob{},
-		completed: map[string]retryingJobOutcome{},
+		queue:   q,
+		opts:    opts,
+		pending: map[string]amboy.RetryableJob{},
 	}, nil
 }
 
@@ -173,7 +150,9 @@ func (rh *basicRetryHandler) waitForJob(ctx context.Context) {
 					}
 					grip.Error(message.WrapError(err, fields))
 					if j != nil {
+						rh.mu.Lock()
 						rh.pending[j.ID()] = j
+						rh.mu.Unlock()
 					}
 				}
 			}()
@@ -203,13 +182,6 @@ func (rh *basicRetryHandler) waitForJob(ctx context.Context) {
 				}
 			}
 
-			rh.mu.Lock()
-			rh.completed[j.ID()] = retryingJobOutcome{
-				job:     j,
-				retried: err == nil,
-			}
-			rh.mu.Unlock()
-
 			timer.Reset(rh.opts.WorkerCheckInterval)
 		}
 	}
@@ -231,6 +203,10 @@ func (rh *basicRetryHandler) handleJob(ctx context.Context, j amboy.RetryableJob
 	catcher := grip.NewBasicCatcher()
 	timer := time.NewTimer(0)
 	defer timer.Stop()
+
+	j.UpdateRetryInfo(amboy.JobRetryOptions{
+		Start: utility.ToTimePtr(time.Now()),
+	})
 	for i := 1; i <= rh.opts.MaxRetryAttempts; i++ {
 		if time.Since(startAt) > rh.opts.MaxRetryTime {
 			return errors.Errorf("giving up after %d attempts, %.3f due to maximum retry time", i, rh.opts.MaxRetryTime.Seconds())
@@ -284,10 +260,6 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Retryabl
 			return false, errors.New("job has exceeded its maximum attempt limit")
 		}
 
-		if oldInfo != newInfo {
-			return false, errors.New("in-memory retry information does not match queue's stored information")
-		}
-
 		// Lock the job so that this retry handler has sole ownership of it.
 		if err = j.Lock(rh.queue.ID(), rh.queue.Info().LockTimeout); err != nil {
 			return false, errors.Wrap(err, "locking job")
@@ -320,6 +292,8 @@ func (rh *basicRetryHandler) prepareNewRetryJob(j amboy.RetryableJob) {
 	ri := j.RetryInfo()
 	ri.NeedsRetry = false
 	ri.CurrentAttempt++
+	ri.Start = time.Time{}
+	ri.End = time.Time{}
 	j.UpdateRetryInfo(ri.Options())
 
 	ti := j.TimeInfo()
@@ -338,24 +312,6 @@ func (rh *basicRetryHandler) prepareNewRetryJob(j amboy.RetryableJob) {
 	})
 
 	j.SetStatus(amboy.JobStatusInfo{})
-}
-
-func (rh *basicRetryHandler) stats() retryHandlerStats {
-	rh.mu.RLock()
-	defer rh.mu.RUnlock()
-
-	var numRetried int
-	for _, outcome := range rh.completed {
-		if outcome.retried {
-			numRetried++
-		}
-	}
-
-	return retryHandlerStats{
-		pending:   len(rh.pending),
-		retried:   numRetried,
-		completed: len(rh.completed),
-	}
 }
 
 func retryAttemptPrefix(attempt int) string {

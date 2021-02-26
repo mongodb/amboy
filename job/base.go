@@ -357,4 +357,10 @@ func (b *Base) UpdateRetryInfo(opts amboy.JobRetryOptions) {
 	if opts.WaitUntil != nil {
 		b.retryInfo.WaitUntil = *opts.WaitUntil
 	}
+	if opts.Start != nil {
+		b.retryInfo.Start = *opts.Start
+	}
+	if opts.End != nil {
+		b.retryInfo.End = *opts.End
+	}
 }
