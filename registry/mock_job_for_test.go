@@ -186,4 +186,19 @@ func (j *JobTest) UpdateRetryInfo(opts amboy.JobRetryOptions) {
 	if opts.CurrentAttempt != nil {
 		j.Retry.CurrentAttempt = *opts.CurrentAttempt
 	}
+	if opts.MaxAttempts != nil {
+		j.Retry.MaxAttempts = *opts.MaxAttempts
+	}
+	if opts.DispatchBy != nil {
+		j.Retry.DispatchBy = *opts.DispatchBy
+	}
+	if opts.WaitUntil != nil {
+		j.Retry.WaitUntil = *opts.WaitUntil
+	}
+	if opts.Start != nil {
+		j.Retry.Start = *opts.Start
+	}
+	if opts.End != nil {
+		j.Retry.End = *opts.End
+	}
 }
