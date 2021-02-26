@@ -257,7 +257,13 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 	indexes := []mongo.IndexModel{
 		{Keys: primary},
 		{Keys: retryableJobIDAndAttempt},
-		{Keys: retrying},
+		{
+			Keys: retrying,
+			// We have to shorten the index name because the docs limit index name
+			// length to 127 bytes for MongoDB 4.0.
+			// Source: https://docs.mongodb.com/manual/reference/limits/#Index-Name-Length
+			Options: options.Index().SetName("retrying_jobs"),
+		},
 		// TODO (EVG-14163): this should take queue group isolation into account.
 		{
 			Keys: bsonx.Doc{
