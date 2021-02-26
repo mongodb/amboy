@@ -139,7 +139,7 @@ func TestDispatcherImplementations(t *testing.T) {
 		}
 	}
 
-	opts := DefaultMongoDBOptions()
+	opts := defaultMongoDBTestOptions()
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(opts.URI))
 	require.NoError(t, err)
 

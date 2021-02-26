@@ -576,6 +576,12 @@ func (d *mongoDriver) getAtomicQuery(jobName string, modCount int) bson.M {
 	}
 }
 
+var errMongoNoDocumentsMatched = errors.New("no documents matched")
+
+func isMongoNoDocumentsMatched(err error) bool {
+	return errors.Cause(err) == errMongoNoDocumentsMatched
+}
+
 func isMongoDupKey(err error) bool {
 	dupKeyErrs := getMongoDupKeyErrors(err)
 	return dupKeyErrs.writeConcernError != nil || len(dupKeyErrs.writeErrors) != 0 || dupKeyErrs.commandError != nil
@@ -753,7 +759,7 @@ func (d *mongoDriver) doUpdate(ctx context.Context, ji *registry.JobInterchange)
 	}
 
 	if res.MatchedCount == 0 {
-		return errors.Errorf("problem saving job [id=%s, matched=%d, modified=%d]", ji.Name, res.MatchedCount, res.ModifiedCount)
+		return errors.Wrapf(errMongoNoDocumentsMatched, "problem saving job [id=%s, matched=%d, modified=%d]", ji.Name, res.MatchedCount, res.ModifiedCount)
 	}
 	return nil
 }

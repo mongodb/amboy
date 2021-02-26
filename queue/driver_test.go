@@ -38,8 +38,7 @@ func TestDriverSuiteWithMongoDBInstance(t *testing.T) {
 		"Basic": {
 			constructor: func() (remoteQueueDriver, error) {
 				id := "test-" + uuid.New().String()
-				opts := DefaultMongoDBOptions()
-				opts.DB = "amboy_test"
+				opts := defaultMongoDBTestOptions()
 
 				return newMongoDriver(id, opts)
 			},
@@ -58,12 +57,11 @@ func TestDriverSuiteWithMongoDBInstance(t *testing.T) {
 
 			},
 		},
-		"Grouped": {
+		"Group": {
 			constructor: func() (remoteQueueDriver, error) {
 				id := "test-" + uuid.New().String()
 				groupName := "group-" + uuid.New().String()
-				opts := DefaultMongoDBOptions()
-				opts.DB = "amboy_test"
+				opts := defaultMongoDBTestOptions()
 				opts.UseGroups = true
 				opts.GroupName = groupName
 
@@ -793,7 +791,7 @@ func (s *DriverSuite) TestReturnsDefaultLockTimeout() {
 }
 
 func (s *DriverSuite) TestInfoReturnsConfigurableLockTimeout() {
-	opts := DefaultMongoDBOptions()
+	opts := defaultMongoDBTestOptions()
 	opts.LockTimeout = 25 * time.Minute
 	d, err := newMongoDriver(s.T().Name(), opts)
 	s.Require().NoError(err)

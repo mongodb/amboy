@@ -33,8 +33,7 @@ type RemoteUnorderedSuite struct {
 func TestRemoteUnorderedMongoSuite(t *testing.T) {
 	tests := new(RemoteUnorderedSuite)
 	name := "test-" + uuid.New().String()
-	opts := DefaultMongoDBOptions()
-	opts.DB = "amboy_test"
+	opts := defaultMongoDBTestOptions()
 
 	tests.driverConstructor = func() (remoteQueueDriver, error) {
 		return newMongoDriver(name, opts)
@@ -341,7 +340,7 @@ func (s *RemoteUnorderedSuite) TestInfoReturnsDefaultLockTimeout() {
 }
 
 func (s *RemoteUnorderedSuite) TestInfoReturnsConfigurableLockTimeout() {
-	opts := DefaultMongoDBOptions()
+	opts := defaultMongoDBTestOptions()
 	opts.LockTimeout = 30 * time.Minute
 	d, err := newMongoDriver(s.T().Name(), opts)
 	s.Require().NoError(err)

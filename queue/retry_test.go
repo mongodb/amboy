@@ -11,6 +11,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func TestNewBasicRetryHandler(t *testing.T) {
@@ -238,10 +240,14 @@ func TestRetryHandlerImplementations(t *testing.T) {
 						CurrentAttempt: utility.ToIntPtr(9),
 						MaxAttempts:    utility.ToIntPtr(10),
 					})
-					var getAttemptCalls, completeRetryingCalls, completeRetryingAndPutCalls int
+					var getAttemptCalls, saveCalls, completeRetryingCalls, completeRetryingAndPutCalls int
 					mq.getJobAttempt = func(context.Context, remoteQueue, string, int) (amboy.RetryableJob, bool) {
 						getAttemptCalls++
 						return j, true
+					}
+					mq.saveJob = func(context.Context, remoteQueue, amboy.Job) error {
+						saveCalls++
+						return nil
 					}
 					mq.completeRetryingJob = func(context.Context, remoteQueue, amboy.RetryableJob) error {
 						completeRetryingCalls++
@@ -260,6 +266,20 @@ func TestRetryHandlerImplementations(t *testing.T) {
 					assert.NotZero(t, getAttemptCalls)
 					assert.Zero(t, completeRetryingAndPutCalls)
 					assert.NotZero(t, completeRetryingCalls)
+				},
+				"PutFailsWithNilJob": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
+					_, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{})
+					require.NoError(t, err)
+
+					assert.Error(t, rh.Put(ctx, nil))
+				},
+				"PutFailsWithDuplicateJob": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
+					_, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{})
+					require.NoError(t, err)
+
+					j := newMockRetryableJob("id")
+					require.NoError(t, rh.Put(ctx, j))
+					assert.Error(t, rh.Put(ctx, j))
 				},
 				"MaxRetryAttemptsLimitsEnqueueAttempts": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
 					opts := amboy.RetryHandlerOptions{
@@ -458,6 +478,502 @@ func TestRetryHandlerImplementations(t *testing.T) {
 					}
 
 					testCase(tctx, t, makeQueueAndRetryHandler)
+				})
+			}
+		})
+	}
+}
+
+func TestRetryHandlerQueueIntegration(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	opts := defaultMongoDBTestOptions()
+
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(opts.URI))
+	require.NoError(t, err)
+
+	driver, err := openNewMongoDriver(ctx, newDriverID(), opts, client)
+	require.NoError(t, err)
+
+	require.NoError(t, driver.Open(ctx))
+	defer driver.Close()
+
+	mDriver, ok := driver.(*mongoDriver)
+	require.True(t, ok)
+
+	for rhName, makeRetryHandler := range map[string]func(q amboy.RetryableQueue, opts amboy.RetryHandlerOptions) (statsRetryHandler, error){
+		"Basic": func(q amboy.RetryableQueue, opts amboy.RetryHandlerOptions) (statsRetryHandler, error) {
+			return newBasicRetryHandler(q, opts)
+		},
+	} {
+		t.Run(rhName, func(t *testing.T) {
+			for queueName, makeQueue := range map[string]func(size int) (remoteQueue, error){
+				"RemoteUnordered": func(size int) (remoteQueue, error) {
+					q, err := newRemoteUnordered(size)
+					if err != nil {
+						return nil, errors.WithStack(err)
+					}
+					return q, nil
+				},
+				"RemoteOrdered": func(size int) (remoteQueue, error) {
+					q, err := newSimpleRemoteOrdered(size)
+					if err != nil {
+						return nil, errors.WithStack(err)
+					}
+					return q, nil
+				},
+			} {
+				t.Run(queueName, func(t *testing.T) {
+					for testName, testCase := range map[string]func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (remoteQueue, statsRetryHandler, error)){
+						"RetryingSucceedsAndQueueHasExpectedState": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (remoteQueue, statsRetryHandler, error)) {
+							q, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{
+								MaxRetryAttempts: 1,
+							})
+							require.NoError(t, err)
+
+							require.NoError(t, rh.Start(ctx))
+
+							j := newMockRetryableJob("id")
+							j.UpdateRetryInfo(amboy.JobRetryOptions{
+								NeedsRetry: utility.TruePtr(),
+							})
+							now := utility.BSONTime(time.Now())
+							j.UpdateTimeInfo(amboy.JobTimeInfo{
+								Start:      now,
+								End:        now,
+								WaitUntil:  now.Add(time.Hour),
+								DispatchBy: now.Add(2 * time.Hour),
+								MaxTime:    time.Minute,
+							})
+							j.SetStatus(amboy.JobStatusInfo{
+								Completed:         true,
+								ModificationCount: 10,
+								ModificationTime:  now,
+								Owner:             q.ID(),
+							})
+
+							require.NoError(t, q.Put(ctx, j))
+							require.Equal(t, 1, q.Stats(ctx).Total)
+
+							require.NoError(t, rh.Put(ctx, j))
+
+							jobRetried := make(chan struct{})
+							go func() {
+								defer close(jobRetried)
+								for {
+									select {
+									case <-ctx.Done():
+										return
+									default:
+										if rh.stats().retried > 0 {
+											return
+										}
+									}
+								}
+							}()
+
+							select {
+							case <-ctx.Done():
+								require.FailNow(t, "context is done before job could retry")
+							case <-jobRetried:
+								oldJob, ok := q.GetAttempt(ctx, j.ID(), 0)
+								require.True(t, ok, "old job should still exist")
+
+								oldRetryInfo := oldJob.RetryInfo()
+								assert.True(t, oldRetryInfo.Retryable)
+								assert.False(t, oldRetryInfo.NeedsRetry)
+								assert.Zero(t, oldRetryInfo.CurrentAttempt)
+								assert.Equal(t, bsonJobStatusInfo(j.Status()), oldJob.Status())
+								assert.Equal(t, bsonJobTimeInfo(j.TimeInfo()), oldJob.TimeInfo())
+
+								newJob, ok := q.GetAttempt(ctx, j.ID(), 1)
+								require.True(t, ok, "new job should have been enqueued")
+
+								newRetryInfo := newJob.RetryInfo()
+								assert.True(t, newRetryInfo.Retryable)
+								assert.False(t, newRetryInfo.NeedsRetry)
+								assert.Equal(t, 1, newRetryInfo.CurrentAttempt)
+
+								assert.False(t, newJob.Status().InProgress)
+								assert.False(t, newJob.Status().Completed)
+								assert.Zero(t, newJob.Status().Owner)
+								assert.Zero(t, newJob.Status().ModificationCount)
+								assert.Zero(t, newJob.Status().ModificationTime)
+								assert.Zero(t, newJob.Status().Errors)
+								assert.Zero(t, newJob.Status().ErrorCount)
+
+								assert.NotZero(t, newJob.TimeInfo().Created)
+								assert.NotEqual(t, j.TimeInfo().Created, newJob.TimeInfo().Created)
+								assert.Zero(t, newJob.TimeInfo().Start)
+								assert.Zero(t, newJob.TimeInfo().End)
+								assert.Equal(t, j.TimeInfo().DispatchBy, utility.BSONTime(newJob.TimeInfo().DispatchBy))
+								assert.Equal(t, j.TimeInfo().WaitUntil, utility.BSONTime(newJob.TimeInfo().WaitUntil))
+								assert.Equal(t, j.TimeInfo().MaxTime, newJob.TimeInfo().MaxTime)
+							}
+						},
+						"RetryingSucceedsWithScopedJob": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (remoteQueue, statsRetryHandler, error)) {
+							q, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{
+								MaxRetryAttempts: 1,
+							})
+							require.NoError(t, err)
+
+							require.NoError(t, rh.Start(ctx))
+
+							j := newMockRetryableJob("id")
+							scopes := []string{"scope"}
+							j.SetScopes(scopes)
+							j.SetShouldApplyScopesOnEnqueue(true)
+							j.UpdateRetryInfo(amboy.JobRetryOptions{
+								NeedsRetry: utility.TruePtr(),
+							})
+							now := utility.BSONTime(time.Now())
+							j.UpdateTimeInfo(amboy.JobTimeInfo{
+								Start:      now,
+								End:        now,
+								WaitUntil:  now.Add(time.Hour),
+								DispatchBy: now.Add(2 * time.Hour),
+								MaxTime:    time.Minute,
+							})
+							j.SetStatus(amboy.JobStatusInfo{
+								Completed:         true,
+								ModificationCount: 10,
+								ModificationTime:  now,
+								Owner:             q.ID(),
+							})
+
+							require.NoError(t, q.Put(ctx, j))
+							require.Equal(t, 1, q.Stats(ctx).Total)
+
+							require.NoError(t, rh.Put(ctx, j))
+
+							jobRetried := make(chan struct{})
+							go func() {
+								defer close(jobRetried)
+								for {
+									select {
+									case <-ctx.Done():
+										return
+									default:
+										if rh.stats().retried > 0 {
+											return
+										}
+									}
+								}
+							}()
+
+							select {
+							case <-ctx.Done():
+								require.FailNow(t, "context is done before job could retry")
+							case <-jobRetried:
+								oldJob, ok := q.GetAttempt(ctx, j.ID(), 0)
+								require.True(t, ok, "old job should still exist")
+
+								oldRetryInfo := oldJob.RetryInfo()
+								assert.True(t, oldRetryInfo.Retryable)
+								assert.False(t, oldRetryInfo.NeedsRetry)
+								assert.Zero(t, oldRetryInfo.CurrentAttempt)
+								assert.Equal(t, scopes, oldJob.Scopes())
+								assert.Equal(t, bsonJobStatusInfo(j.Status()), oldJob.Status())
+								assert.Equal(t, bsonJobTimeInfo(j.TimeInfo()), oldJob.TimeInfo())
+
+								newJob, ok := q.GetAttempt(ctx, j.ID(), 1)
+								require.True(t, ok, "new job should have been enqueued")
+
+								newRetryInfo := newJob.RetryInfo()
+								assert.True(t, newRetryInfo.Retryable)
+								assert.False(t, newRetryInfo.NeedsRetry)
+								assert.Equal(t, 1, newRetryInfo.CurrentAttempt)
+
+								assert.False(t, newJob.Status().InProgress)
+								assert.False(t, newJob.Status().Completed)
+								assert.Zero(t, newJob.Status().Owner)
+								assert.Zero(t, newJob.Status().ModificationCount)
+								assert.Zero(t, newJob.Status().ModificationTime)
+								assert.Zero(t, newJob.Status().Errors)
+								assert.Zero(t, newJob.Status().ErrorCount)
+
+								assert.NotZero(t, newJob.TimeInfo().Created)
+								assert.NotEqual(t, j.TimeInfo().Created, newJob.TimeInfo().Created)
+								assert.Zero(t, newJob.TimeInfo().Start)
+								assert.Zero(t, newJob.TimeInfo().End)
+								assert.Equal(t, scopes, newJob.Scopes())
+								assert.Equal(t, j.TimeInfo().DispatchBy, utility.BSONTime(newJob.TimeInfo().DispatchBy))
+								assert.Equal(t, j.TimeInfo().WaitUntil, utility.BSONTime(newJob.TimeInfo().WaitUntil))
+								assert.Equal(t, j.TimeInfo().MaxTime, newJob.TimeInfo().MaxTime)
+							}
+						},
+						"RetryingPopulatesOptionsInNewJob": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (remoteQueue, statsRetryHandler, error)) {
+							q, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{
+								MaxRetryAttempts: 1,
+							})
+							require.NoError(t, err)
+
+							require.NoError(t, rh.Start(ctx))
+
+							j := newMockRetryableJob("id")
+							now := utility.BSONTime(time.Now())
+							j.UpdateRetryInfo(amboy.JobRetryOptions{
+								NeedsRetry:  utility.TruePtr(),
+								MaxAttempts: utility.ToIntPtr(5),
+								WaitUntil:   utility.ToTimeDurationPtr(time.Hour),
+								DispatchBy:  utility.ToTimeDurationPtr(2 * time.Hour),
+							})
+							j.UpdateTimeInfo(amboy.JobTimeInfo{
+								Start:      now,
+								End:        now,
+								WaitUntil:  now.Add(-time.Minute),
+								DispatchBy: now.Add(2 * time.Minute),
+								MaxTime:    time.Minute,
+							})
+							j.SetStatus(amboy.JobStatusInfo{
+								Completed:         true,
+								ModificationCount: 10,
+								ModificationTime:  now,
+								Owner:             q.ID(),
+							})
+
+							require.NoError(t, q.Put(ctx, j))
+
+							require.NoError(t, rh.Put(ctx, j))
+
+							jobRetried := make(chan struct{})
+							go func() {
+								defer close(jobRetried)
+								for {
+									select {
+									case <-ctx.Done():
+										return
+									default:
+										if rh.stats().retried > 0 {
+											return
+										}
+									}
+								}
+							}()
+
+							select {
+							case <-ctx.Done():
+								require.FailNow(t, "context is done before job could retry")
+							case <-jobRetried:
+								oldJob, ok := q.GetAttempt(ctx, j.ID(), 0)
+								require.True(t, ok, "old job should still exist")
+								assert.False(t, oldJob.RetryInfo().NeedsRetry)
+								assert.Zero(t, oldJob.RetryInfo().CurrentAttempt)
+								assert.Equal(t, bsonJobStatusInfo(j.Status()), oldJob.Status())
+								assert.Equal(t, bsonJobTimeInfo(j.TimeInfo()), oldJob.TimeInfo())
+
+								newJob, ok := q.GetAttempt(ctx, j.ID(), 1)
+								require.True(t, ok, "new job should have been enqueued")
+
+								assert.True(t, newJob.RetryInfo().Retryable)
+								assert.False(t, newJob.RetryInfo().NeedsRetry)
+								assert.Equal(t, 1, newJob.RetryInfo().CurrentAttempt)
+								assert.Equal(t, j.RetryInfo().MaxAttempts, newJob.RetryInfo().MaxAttempts)
+								assert.Equal(t, j.RetryInfo().DispatchBy, newJob.RetryInfo().DispatchBy)
+								assert.Equal(t, j.RetryInfo().WaitUntil, newJob.RetryInfo().WaitUntil)
+
+								assert.NotZero(t, newJob.TimeInfo().Created)
+								assert.NotEqual(t, j.TimeInfo().Created, newJob.TimeInfo().Created)
+								assert.Zero(t, newJob.TimeInfo().Start)
+								assert.Zero(t, newJob.TimeInfo().End)
+								assert.NotEqual(t, j.TimeInfo().DispatchBy, utility.BSONTime(newJob.TimeInfo().DispatchBy))
+								assert.WithinDuration(t, now.Add(j.RetryInfo().DispatchBy), newJob.TimeInfo().DispatchBy, time.Minute)
+								assert.NotEqual(t, j.TimeInfo().WaitUntil, utility.BSONTime(newJob.TimeInfo().WaitUntil))
+								assert.WithinDuration(t, now.Add(j.RetryInfo().WaitUntil), newJob.TimeInfo().WaitUntil, time.Minute)
+								assert.Equal(t, j.TimeInfo().MaxTime, newJob.TimeInfo().MaxTime)
+							}
+						},
+						"RetryingFailsIfJobIsNotInQueue": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (remoteQueue, statsRetryHandler, error)) {
+							q, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{
+								MaxRetryAttempts: 1,
+							})
+							require.NoError(t, err)
+
+							require.NoError(t, rh.Start(ctx))
+
+							j := newMockRetryableJob("id")
+							now := utility.BSONTime(time.Now())
+							j.UpdateRetryInfo(amboy.JobRetryOptions{
+								NeedsRetry: utility.TruePtr(),
+							})
+							j.SetStatus(amboy.JobStatusInfo{
+								Completed:         true,
+								ModificationCount: 10,
+								ModificationTime:  now,
+								Owner:             q.ID(),
+							})
+
+							require.NoError(t, rh.Put(ctx, j))
+
+							jobProcessed := make(chan struct{})
+							go func() {
+								defer close(jobProcessed)
+								for {
+									select {
+									case <-ctx.Done():
+										return
+									default:
+										if rh.stats().completed > 0 {
+											return
+										}
+									}
+								}
+							}()
+
+							select {
+							case <-ctx.Done():
+								require.FailNow(t, "context is done before job could retry")
+							case <-jobProcessed:
+								assert.Zero(t, q.Stats(ctx).Total, "queue state should not be modified when retrying job is missing from queue")
+							}
+						},
+						"RetryNoopsIfJobRetryIsAlreadyInQueue": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (remoteQueue, statsRetryHandler, error)) {
+							q, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{
+								MaxRetryAttempts: 1,
+							})
+							require.NoError(t, err)
+
+							require.NoError(t, rh.Start(ctx))
+
+							j := newMockRetryableJob("id")
+							now := utility.BSONTime(time.Now())
+							j.UpdateRetryInfo(amboy.JobRetryOptions{
+								NeedsRetry:     utility.TruePtr(),
+								CurrentAttempt: utility.ToIntPtr(0),
+							})
+							j.SetStatus(amboy.JobStatusInfo{
+								Completed:         true,
+								ModificationCount: 10,
+								ModificationTime:  now,
+								Owner:             q.ID(),
+							})
+
+							require.NoError(t, q.Put(ctx, j))
+
+							ji, err := registry.MakeJobInterchange(j, amboy.JSON)
+							require.NoError(t, err)
+							jobCopy, err := ji.Resolve(amboy.JSON)
+							require.NoError(t, err)
+							jobRetry, ok := jobCopy.(amboy.RetryableJob)
+							require.True(t, ok, "job should be retryable")
+							jobRetry.UpdateRetryInfo(amboy.JobRetryOptions{
+								NeedsRetry:     utility.FalsePtr(),
+								CurrentAttempt: utility.ToIntPtr(1),
+							})
+
+							require.NoError(t, q.Put(ctx, jobRetry))
+
+							retryProcessed := make(chan struct{})
+							go func() {
+								defer close(retryProcessed)
+								for {
+									select {
+									case <-ctx.Done():
+										return
+									default:
+										if rh.stats().completed > 0 {
+											return
+										}
+									}
+								}
+							}()
+
+							require.NoError(t, rh.Put(ctx, j))
+
+							select {
+							case <-ctx.Done():
+								require.FailNow(t, "context is done before job could retry")
+							case <-retryProcessed:
+								assert.Zero(t, rh.stats().retried)
+								assert.Equal(t, 2, q.Stats(ctx).Total)
+								storedJob, ok := q.GetAttempt(ctx, j.ID(), 1)
+								require.True(t, ok)
+								assert.Equal(t, bsonJobTimeInfo(jobRetry.TimeInfo()), bsonJobTimeInfo(storedJob.TimeInfo()))
+								assert.Equal(t, bsonJobStatusInfo(jobRetry.Status()), bsonJobStatusInfo(storedJob.Status()))
+								assert.Equal(t, jobRetry.RetryInfo(), jobRetry.RetryInfo())
+							}
+						},
+						"RetryNoopsIfJobInQueueDoesNotNeedToRetry": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (remoteQueue, statsRetryHandler, error)) {
+							q, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{
+								MaxRetryAttempts: 1,
+							})
+							require.NoError(t, err)
+
+							require.NoError(t, rh.Start(ctx))
+
+							j := newMockRetryableJob("id")
+							now := utility.BSONTime(time.Now())
+							j.SetStatus(amboy.JobStatusInfo{
+								Completed:         true,
+								ModificationCount: 10,
+								ModificationTime:  now,
+								Owner:             q.ID(),
+							})
+
+							require.NoError(t, q.Put(ctx, j))
+
+							j.UpdateRetryInfo(amboy.JobRetryOptions{
+								NeedsRetry: utility.TruePtr(),
+							})
+
+							retryProcessed := make(chan struct{})
+							go func() {
+								defer close(retryProcessed)
+								for {
+									select {
+									case <-ctx.Done():
+										return
+									default:
+										if rh.stats().completed > 0 {
+											return
+										}
+									}
+								}
+							}()
+
+							require.NoError(t, rh.Put(ctx, j))
+
+							select {
+							case <-ctx.Done():
+								require.FailNow(t, "context is done before job could retry")
+							case <-retryProcessed:
+								assert.Zero(t, rh.stats().retried)
+								assert.Equal(t, 1, q.Stats(ctx).Total)
+								storedJob, ok := q.GetAttempt(ctx, j.ID(), 0)
+								require.True(t, ok)
+								assert.False(t, storedJob.RetryInfo().NeedsRetry)
+							}
+						},
+						// "": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (remoteQueue, statsRetryHandler, error)) {},
+					} {
+						t.Run(testName, func(t *testing.T) {
+							tctx, tcancel := context.WithTimeout(ctx, 30*time.Second)
+							defer tcancel()
+
+							require.NoError(t, mDriver.getCollection().Database().Drop(tctx))
+							defer func() {
+								assert.NoError(t, mDriver.getCollection().Database().Drop(tctx))
+							}()
+
+							makeQueueAndRetryHandler := func(opts amboy.RetryHandlerOptions) (remoteQueue, statsRetryHandler, error) {
+								q, err := makeQueue(10)
+								if err != nil {
+									return nil, nil, errors.WithStack(err)
+								}
+								if err := q.SetDriver(driver); err != nil {
+									return nil, nil, errors.WithStack(err)
+								}
+								rh, err := makeRetryHandler(q, opts)
+								if err != nil {
+									return nil, nil, errors.WithStack(err)
+								}
+								return q, rh, nil
+							}
+
+							testCase(tctx, t, makeQueueAndRetryHandler)
+						})
+					}
 				})
 			}
 		})

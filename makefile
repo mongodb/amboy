@@ -159,6 +159,7 @@ vendor-clean:
 	rm -rf vendor/github.com/evergreen-ci/poplar/vendor/github.com/mongodb/amboy/
 	rm -rf vendor/github.com/evergreen-ci/poplar/vendor/github.com/mongodb/grip/
 	rm -rf vendor/github.com/evergreen-ci/utility/file.go
+	rm -rf vendor/github.com/evergreen-ci/utility/gitignore.go
 	rm -rf vendor/github.com/evergreen-ci/utility/http.go
 	rm -rf vendor/github.com/evergreen-ci/utility/network.go
 	rm -rf vendor/github.com/evergreen-ci/utility/parsing.go

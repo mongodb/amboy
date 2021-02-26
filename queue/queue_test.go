@@ -175,7 +175,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 					Size:    size,
 					Name:    name,
 					Ordered: false,
-					MDB:     DefaultMongoDBOptions(),
+					MDB:     defaultMongoDBTestOptions(),
 					Client:  client,
 				}
 				opts.MDB.Format = amboy.BSON2
@@ -212,7 +212,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 					Size:    size,
 					Name:    name,
 					Ordered: false,
-					MDB:     DefaultMongoDBOptions(),
+					MDB:     defaultMongoDBTestOptions(),
 					Client:  client,
 				}
 				opts.MDB.Format = amboy.BSON2
@@ -252,7 +252,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 					Size:    size,
 					Name:    name,
 					Ordered: false,
-					MDB:     DefaultMongoDBOptions(),
+					MDB:     defaultMongoDBTestOptions(),
 					Client:  client,
 				}
 				opts.MDB.Format = amboy.BSON
@@ -290,7 +290,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 					Size:    size,
 					Name:    name,
 					Ordered: true,
-					MDB:     DefaultMongoDBOptions(),
+					MDB:     defaultMongoDBTestOptions(),
 					Client:  client,
 				}
 				opts.MDB.Format = amboy.BSON2
@@ -411,6 +411,15 @@ func TestQueueSmoke(t *testing.T) {
 				}
 
 				t.Run(runner.Name+"Pool", func(t *testing.T) {
+					var (
+						testRetryOnce                sync.Once
+						testWaitUntilOnce            sync.Once
+						testDispatchBeforeOnce       sync.Once
+						testMaxTimeOnce              sync.Once
+						testScopesOnce               sync.Once
+						testApplyScopesOnEnqueueOnce sync.Once
+					)
+
 					for _, size := range DefaultSizeTestCases() {
 						if test.MaxSize > 0 && size.Size > test.MaxSize {
 							continue
@@ -440,25 +449,33 @@ func TestQueueSmoke(t *testing.T) {
 								})
 							}
 							if test.WaitUntilSupported {
-								t.Run("WaitUntil", func(t *testing.T) {
-									WaitUntilTest(bctx, t, test, runner, size)
+								testWaitUntilOnce.Do(func() {
+									t.Run("WaitUntil", func(t *testing.T) {
+										WaitUntilTest(bctx, t, test, runner, size)
+									})
 								})
 							}
 
 							if test.DispatchBeforeSupported {
-								t.Run("DispatchBefore", func(t *testing.T) {
-									DispatchBeforeTest(bctx, t, test, runner, size)
+								testDispatchBeforeOnce.Do(func() {
+									t.Run("DispatchBefore", func(t *testing.T) {
+										DispatchBeforeTest(bctx, t, test, runner, size)
+									})
 								})
 							}
 							if test.MaxTimeSupported {
-								t.Run("MaxTime", func(t *testing.T) {
-									MaxTimeTest(bctx, t, test, runner, size)
+								testMaxTimeOnce.Do(func() {
+									t.Run("MaxTime", func(t *testing.T) {
+										MaxTimeTest(bctx, t, test, runner, size)
+									})
 								})
 							}
 
 							if test.RetrySupported && size.Size >= 2 {
-								t.Run("Retry", func(t *testing.T) {
-									RetryableTest(bctx, t, test, runner, size)
+								testRetryOnce.Do(func() {
+									t.Run("Retry", func(t *testing.T) {
+										RetryableTest(bctx, t, test, runner, size)
+									})
 								})
 							}
 
@@ -467,14 +484,18 @@ func TestQueueSmoke(t *testing.T) {
 							})
 
 							if test.ScopesSupported {
-								if test.SingleWorker && (!test.OrderedSupported || test.OrderedStartsBefore) && size.Size >= 4 && size.Size <= 32 {
-									t.Run("ScopedLock", func(t *testing.T) {
-										ScopedLockTest(bctx, t, test, runner, size)
+								if test.SingleWorker && (!test.OrderedSupported || test.OrderedStartsBefore) && size.Size >= 4 {
+									testScopesOnce.Do(func() {
+										t.Run("ScopedLock", func(t *testing.T) {
+											ScopedLockTest(bctx, t, test, runner, size)
+										})
 									})
 								}
-								if size.Size <= 4 {
-									t.Run("ApplyScopesOnEnqueue", func(t *testing.T) {
-										ApplyScopesOnEnqueueTest(bctx, t, test, runner, size)
+								if size.Size >= 2 {
+									testApplyScopesOnEnqueueOnce.Do(func() {
+										t.Run("ApplyScopesOnEnqueue", func(t *testing.T) {
+											ApplyScopesOnEnqueueTest(bctx, t, test, runner, size)
+										})
 									})
 								}
 							}
