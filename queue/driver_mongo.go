@@ -190,13 +190,11 @@ func (d *mongoDriver) setupDB(ctx context.Context) error {
 func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 	primary := bsonx.Doc{}
 	retryableJobIDAndAttempt := bsonx.Doc{}
-	retrying := bsonx.Doc{}
 
 	if d.opts.UseGroups {
 		group := bsonx.Elem{Key: "group", Value: bsonx.Int32(1)}
 		primary = append(primary, group)
 		retryableJobIDAndAttempt = append(retryableJobIDAndAttempt, group)
-		retrying = append(retrying, group)
 	}
 
 	primary = append(primary,
@@ -239,33 +237,9 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 		},
 	)
 
-	retrying = append(retrying,
-		bsonx.Elem{
-			Key:   "status.completed",
-			Value: bsonx.Int32(1),
-		},
-		bsonx.Elem{
-			Key:   "retry_info.retryable",
-			Value: bsonx.Int32(1),
-		},
-		bsonx.Elem{
-			Key:   "retry_info.needs_retry",
-			Value: bsonx.Int32(1),
-		},
-	)
-
 	indexes := []mongo.IndexModel{
 		{Keys: primary},
 		{Keys: retryableJobIDAndAttempt},
-		{
-			Keys: retrying,
-			// We have to shorten the index name because the index name length
-			// is limited to 127 bytes for MongoDB 4.0.
-			// Source: https://docs.mongodb.com/manual/reference/limits/#Index-Name-Length
-			// TODO: this only affects tests. Remove the custom index name once
-			// CI tests have upgraded to MongoDB 4.2+.
-			Options: options.Index().SetName("retrying_jobs"),
-		},
 		// TODO (EVG-14163): this should take queue group isolation into account.
 		{
 			Keys: bsonx.Doc{
@@ -301,28 +275,16 @@ func (d *mongoDriver) reportingIndexes() []mongo.IndexModel {
 	completedCreated := bsonx.Doc{}
 	typeCompletedInProgModTs := bsonx.Doc{}
 	typeCompletedEnd := bsonx.Doc{}
+	retrying := bsonx.Doc{}
 
 	if d.opts.UseGroups {
-		completedInProgModTs = append(completedInProgModTs, bsonx.Elem{
-			Key:   "group",
-			Value: bsonx.Int32(1),
-		})
-		completedEnd = append(completedEnd, bsonx.Elem{
-			Key:   "group",
-			Value: bsonx.Int32(1),
-		})
-		completedCreated = append(completedCreated, bsonx.Elem{
-			Key:   "group",
-			Value: bsonx.Int32(1),
-		})
-		typeCompletedInProgModTs = append(typeCompletedInProgModTs, bsonx.Elem{
-			Key:   "group",
-			Value: bsonx.Int32(1),
-		})
-		typeCompletedEnd = append(typeCompletedEnd, bsonx.Elem{
-			Key:   "group",
-			Value: bsonx.Int32(1),
-		})
+		group := bsonx.Elem{Key: "group", Value: bsonx.Int32(1)}
+		completedInProgModTs = append(completedInProgModTs, group)
+		completedEnd = append(completedEnd, group)
+		completedCreated = append(completedCreated, group)
+		typeCompletedInProgModTs = append(typeCompletedInProgModTs, group)
+		typeCompletedEnd = append(typeCompletedEnd, group)
+		retrying = append(retrying, group)
 	}
 
 	completedInProgModTs = append(completedInProgModTs,
@@ -400,6 +362,30 @@ func (d *mongoDriver) reportingIndexes() []mongo.IndexModel {
 		},
 	)
 	indexes = append(indexes, mongo.IndexModel{Keys: typeCompletedEnd})
+
+	retrying = append(retrying,
+		bsonx.Elem{
+			Key:   "status.completed",
+			Value: bsonx.Int32(1),
+		},
+		bsonx.Elem{
+			Key:   "retry_info.retryable",
+			Value: bsonx.Int32(1),
+		},
+		bsonx.Elem{
+			Key:   "retry_info.needs_retry",
+			Value: bsonx.Int32(1),
+		},
+	)
+	indexes = append(indexes, mongo.IndexModel{
+		Keys: retrying,
+		// We have to shorten the index name because the index name length
+		// is limited to 127 bytes for MongoDB 4.0.
+		// Source: https://docs.mongodb.com/manual/reference/limits/#Index-Name-Length
+		// TODO: this only affects tests. Remove the custom index name once
+		// CI tests have upgraded to MongoDB 4.2+.
+		Options: options.Index().SetName("retrying_jobs"),
+	})
 
 	return indexes
 }
