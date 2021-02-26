@@ -181,6 +181,7 @@ func (q *remoteBase) CompleteRetryingAndPut(ctx context.Context, toComplete, toP
 func (q *remoteBase) prepareCompleteRetrying(j amboy.RetryableJob) {
 	j.UpdateRetryInfo(amboy.JobRetryOptions{
 		NeedsRetry: utility.FalsePtr(),
+		End:        utility.ToTimePtr(time.Now()),
 	})
 }
 

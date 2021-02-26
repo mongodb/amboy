@@ -185,6 +185,10 @@ type JobRetryInfo struct {
 	// execution. The job will not run until this waiting period elapses. This
 	// is analogous to (JobTimeInfo).WaitUntil.
 	WaitUntil time.Duration `bson:"wait_until,omitempty" json:"wait_until,omitempty" yaml:"wait_until,omitempty"`
+	// Start is the time that the job began retrying.
+	Start time.Time `bson:"start,omitempty" json:"start,omitempty" yaml:"start,omitempty"`
+	// End is the time that the job finished retrying.
+	End time.Time `bson:"end,omitempty" json:"end,omitempty" yaml:"end,omitempty"`
 }
 
 // Options returns a JobRetryInfo as its equivalent JobRetryOptions. In other
@@ -198,6 +202,8 @@ func (info *JobRetryInfo) Options() JobRetryOptions {
 		MaxAttempts:    &info.MaxAttempts,
 		DispatchBy:     &info.DispatchBy,
 		WaitUntil:      &info.WaitUntil,
+		Start:          &info.Start,
+		End:            &info.End,
 	}
 }
 
@@ -222,6 +228,8 @@ type JobRetryOptions struct {
 	MaxAttempts    *int           `bson:"-" json:"-" yaml:"-"`
 	DispatchBy     *time.Duration `bson:"-" json:"-" yaml:"-"`
 	WaitUntil      *time.Duration `bson:"-" json:"-" yaml:"-"`
+	Start          *time.Time     `bson:"-" json:"-" yaml:"-"`
+	End            *time.Time     `bson:"-" json:"-" yaml:"-"`
 }
 
 // Duration is a convenience function to return a duration for a job.

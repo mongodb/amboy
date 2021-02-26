@@ -185,7 +185,7 @@ phony += vendor-clean
 
 # clean and other utility targets
 clean:
-	rm -rf $(name) $(lintDeps) $(buildDir)/output.*
+	rm -rf $(lintDeps) $(buildDir)/output.*
 phony += clean
 # end dependency targets
 
