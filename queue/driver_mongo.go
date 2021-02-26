@@ -262,6 +262,8 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 			// We have to shorten the index name because the index name length
 			// is limited to 127 bytes for MongoDB 4.0.
 			// Source: https://docs.mongodb.com/manual/reference/limits/#Index-Name-Length
+			// TODO: this only affects tests. Remove the custom index name once
+			// CI tests have upgraded to MongoDB 4.2+.
 			Options: options.Index().SetName("retrying_jobs"),
 		},
 		// TODO (EVG-14163): this should take queue group isolation into account.
