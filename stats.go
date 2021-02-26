@@ -35,11 +35,11 @@ func (s QueueStats) String() string {
 
 // IsComplete returns true when the total number of jobs are equal to
 // the number completed, or if the number of completed and blocked are
-// greater than or equal to total. For retryable queues, f any job is retrying,
+// greater than or equal to total. For retryable queues, if any job is retrying,
 // it is not considered complete. This method is used by the Wait functions to
 // determine when a queue has completed all actionable work.
 func (s QueueStats) IsComplete() bool {
-	if s.Retrying != 0 {
+	if s.Retrying > 0 {
 		return false
 	}
 
