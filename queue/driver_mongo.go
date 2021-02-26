@@ -259,8 +259,8 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 		{Keys: retryableJobIDAndAttempt},
 		{
 			Keys: retrying,
-			// We have to shorten the index name because the docs limit index name
-			// length to 127 bytes for MongoDB 4.0.
+			// We have to shorten the index name because the index name length
+			// is limited to 127 bytes for MongoDB 4.0.
 			// Source: https://docs.mongodb.com/manual/reference/limits/#Index-Name-Length
 			Options: options.Index().SetName("retrying_jobs"),
 		},
