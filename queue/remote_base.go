@@ -276,10 +276,10 @@ func (q *remoteBase) CompleteRetrying(ctx context.Context, j amboy.RetryableJob)
 	timer := time.NewTimer(0)
 	defer timer.Stop()
 
-	var attempt int
+	const maxAttempts = 10
 	catcher := grip.NewBasicCatcher()
 
-	for attempt = 1; attempt <= 10; attempt++ {
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		select {
 		case <-ctx.Done():
 			catcher.Add(ctx.Err())
@@ -293,6 +293,13 @@ func (q *remoteBase) CompleteRetrying(ctx context.Context, j amboy.RetryableJob)
 					j.AddError(catcher.Resolve())
 					return errors.Wrapf(catcher.Resolve(), "giving up after attempt %d", attempt)
 				}
+				grip.Debug(message.WrapError(err, message.Fields{
+					"message":  "failed to mark job as completed retrying",
+					"attempt":  attempt,
+					"job_id":   j.ID(),
+					"queue_id": q.ID(),
+					"service":  "amboy.queue.mdb",
+				}))
 
 				timer.Reset(retryInterval)
 				continue
@@ -302,7 +309,7 @@ func (q *remoteBase) CompleteRetrying(ctx context.Context, j amboy.RetryableJob)
 		}
 	}
 
-	return errors.Wrapf(catcher.Resolve(), "giving up after attempt %d", attempt)
+	return errors.Wrapf(catcher.Resolve(), "giving up after attempt %d", maxAttempts)
 }
 
 // Results provides a generator that iterates all completed jobs.

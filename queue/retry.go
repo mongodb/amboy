@@ -168,6 +168,7 @@ func (rh *basicRetryHandler) waitForJob(ctx context.Context) {
 					"message":  "could not retry job",
 					"queue_id": rh.queue.ID(),
 					"job_id":   j.ID(),
+					"service":  "amboy.queue.retry",
 				}))
 				j.AddError(err)
 
@@ -178,6 +179,7 @@ func (rh *basicRetryHandler) waitForJob(ctx context.Context) {
 						"message":  "failed to mark job retry as processed",
 						"job_id":   j.ID(),
 						"job_type": j.Type().Name,
+						"service":  "amboy.queue.retry",
 					}))
 				}
 			}
@@ -209,7 +211,8 @@ func (rh *basicRetryHandler) handleJob(ctx context.Context, j amboy.RetryableJob
 	})
 	for i := 1; i <= rh.opts.MaxRetryAttempts; i++ {
 		if time.Since(startAt) > rh.opts.MaxRetryTime {
-			return errors.Errorf("giving up after %d attempts, %.3f due to maximum retry time", i, rh.opts.MaxRetryTime.Seconds())
+			catcher.Errorf("giving up after %s (%d attempts) due to exceeding maximum allowed retry time", rh.opts.MaxRetryTime.String(), i)
+			return catcher.Resolve()
 		}
 
 		select {
@@ -219,6 +222,17 @@ func (rh *basicRetryHandler) handleJob(ctx context.Context, j amboy.RetryableJob
 			canRetry, err := rh.tryEnqueueJob(ctx, j)
 			if err != nil {
 				catcher.Wrapf(err, "enqueue retry job attempt %d", i)
+				grip.Debug(message.WrapError(err, message.Fields{
+					"message":        "failed to enqueue job retry",
+					"job_id":         j.ID(),
+					"queue_id":       rh.queue.ID(),
+					"attempt":        i,
+					"max_attempts":   rh.opts.MaxRetryAttempts,
+					"retry_time":     time.Since(startAt),
+					"max_retry_time": rh.opts.MaxRetryTime.String(),
+					"can_retry":      canRetry,
+					"service":        "amboy.queue.retry",
+				}))
 
 				if canRetry {
 					timer.Reset(rh.opts.RetryBackoff)
