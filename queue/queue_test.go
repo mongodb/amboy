@@ -411,7 +411,14 @@ func TestQueueSmoke(t *testing.T) {
 				}
 
 				t.Run(runner.Name+"Pool", func(t *testing.T) {
-					var testRetryOnce, testWaitUntilOnce, testDispatchBeforeOnce, testMaxTimeOnce, testScopesOnce, testApplyScopesOnEnqueueOnce sync.Once
+					var (
+						testRetryOnce                sync.Once
+						testWaitUntilOnce            sync.Once
+						testDispatchBeforeOnce       sync.Once
+						testMaxTimeOnce              sync.Once
+						testScopesOnce               sync.Once
+						testApplyScopesOnEnqueueOnce sync.Once
+					)
 
 					for _, size := range DefaultSizeTestCases() {
 						if test.MaxSize > 0 && size.Size > test.MaxSize {
