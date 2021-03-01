@@ -372,6 +372,10 @@ type RetryableQueue interface {
 	// to change RetryHandler implementations after starting the Queue.
 	SetRetryHandler(RetryHandler) error
 
+	// SetStaleRetryingMonitorInterval configures how frequently the
+	// RetryableQueue should be checked for jobs that are retrying but stale.
+	SetStaleRetryingMonitorInterval(time.Duration)
+
 	// GetAttempt returns the job associated with the given attempt of the job
 	// and a bool indicating whether the job was found or not.
 	GetAttempt(ctx context.Context, id string, attempt int) (RetryableJob, bool)

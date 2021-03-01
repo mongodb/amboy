@@ -47,8 +47,12 @@ type MongoDBQueueGroupOptions struct {
 	// to each queue, based on the queue ID passed to it.
 	WorkerPoolSize func(string) int
 
-	// RetryHandlerOpts configure how retryable jobs are handled.
+	// RetryHandler configure how retryable jobs are handled.
 	RetryHandler amboy.RetryHandlerOptions
+
+	// StaleRetryingCheckFrequency is how often queues periodically check for
+	// stale retrying jobs.
+	StaleRetryingCheckFrequency time.Duration
 
 	// PruneFrequency is how often Prune runs by default.
 	PruneFrequency time.Duration
@@ -89,12 +93,16 @@ func (opts *MongoDBQueueGroupOptions) constructor(ctx context.Context, name stri
 			return nil, errors.Wrap(err, "configuring queue with runner")
 		}
 	}
+
 	rh, err := newBasicRetryHandler(q, opts.RetryHandler)
 	if err != nil {
 		return nil, errors.Wrap(err, "initializing retry handler")
 	}
 	if err = q.SetRetryHandler(rh); err != nil {
 		return nil, errors.Wrap(err, "configuring queue with retry handler")
+	}
+	if opts.StaleRetryingCheckFrequency != 0 {
+		q.SetStaleRetryingMonitorInterval(opts.StaleRetryingCheckFrequency)
 	}
 
 	return q, nil

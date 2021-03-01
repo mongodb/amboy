@@ -28,17 +28,18 @@ type remoteQueue interface {
 }
 
 type remoteBase struct {
-	id           string
-	started      bool
-	driver       remoteQueueDriver
-	dispatcher   Dispatcher
-	driverType   string
-	channel      chan amboy.Job
-	blocked      map[string]struct{}
-	dispatched   map[string]struct{}
-	runner       amboy.Runner
-	retryHandler amboy.RetryHandler
-	mutex        sync.RWMutex
+	id                        string
+	started                   bool
+	driver                    remoteQueueDriver
+	dispatcher                Dispatcher
+	driverType                string
+	channel                   chan amboy.Job
+	blocked                   map[string]struct{}
+	dispatched                map[string]struct{}
+	runner                    amboy.Runner
+	retryHandler              amboy.RetryHandler
+	staleRetryMonitorInterval time.Duration
+	mutex                     sync.RWMutex
 }
 
 func newRemoteBase() *remoteBase {
@@ -385,6 +386,10 @@ func (q *remoteBase) SetRetryHandler(rh amboy.RetryHandler) error {
 	return rh.SetQueue(q)
 }
 
+func (q *remoteBase) SetStaleRetryingMonitorInterval(interval time.Duration) {
+	q.staleRetryMonitorInterval = interval
+}
+
 // Driver provides access to the embedded driver instance which
 // provides access to the Queue's persistence layer. This method is
 // not part of the amboy.Queue interface.
@@ -501,7 +506,10 @@ func (q *remoteBase) monitorStaleRetryingJobs(ctx context.Context) {
 		}
 	}()
 
-	const monitorInterval = time.Second
+	monitorInterval := time.Second
+	if q.staleRetryMonitorInterval != 0 {
+		monitorInterval = q.staleRetryMonitorInterval
+	}
 	timer := time.NewTimer(0)
 	defer timer.Stop()
 	for {

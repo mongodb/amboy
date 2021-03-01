@@ -273,13 +273,13 @@ func TestRetryHandlerImplementations(t *testing.T) {
 
 					assert.Error(t, rh.Put(ctx, nil))
 				},
-				"PutFailsWithDuplicateJob": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
+				"PutIsIdempotent": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
 					_, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{})
 					require.NoError(t, err)
 
 					j := newMockRetryableJob("id")
 					require.NoError(t, rh.Put(ctx, j))
-					assert.Error(t, rh.Put(ctx, j))
+					assert.NoError(t, rh.Put(ctx, j))
 				},
 				"MaxRetryAttemptsLimitsEnqueueAttempts": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
 					opts := amboy.RetryHandlerOptions{
