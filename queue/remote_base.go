@@ -314,7 +314,11 @@ func (q *remoteBase) Results(ctx context.Context) <-chan amboy.Job {
 			if ctx.Err() != nil {
 				return
 			}
-			if j.Status().Completed {
+			completed := j.Status().Completed
+			amboy.WithRetryableJob(j, func(rj amboy.RetryableJob) {
+				completed = completed && !rj.RetryInfo().NeedsRetry
+			})
+			if completed {
 				select {
 				case <-ctx.Done():
 					return

@@ -192,14 +192,9 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 	retryableJobIDAndAttempt := bsonx.Doc{}
 
 	if d.opts.UseGroups {
-		primary = append(primary, bsonx.Elem{
-			Key:   "group",
-			Value: bsonx.Int32(1),
-		})
-		retryableJobIDAndAttempt = append(retryableJobIDAndAttempt, bsonx.Elem{
-			Key:   "group",
-			Value: bsonx.Int32(1),
-		})
+		group := bsonx.Elem{Key: "group", Value: bsonx.Int32(1)}
+		primary = append(primary, group)
+		retryableJobIDAndAttempt = append(retryableJobIDAndAttempt, group)
 	}
 
 	primary = append(primary,
@@ -231,21 +226,6 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 		})
 	}
 
-	indexes := []mongo.IndexModel{
-		{
-			Keys: primary,
-		},
-		{
-			Keys: bsonx.Doc{
-				{
-					Key:   "scopes",
-					Value: bsonx.Int32(1),
-				},
-			},
-			Options: options.Index().SetSparse(true).SetUnique(true),
-		},
-	}
-
 	retryableJobIDAndAttempt = append(retryableJobIDAndAttempt,
 		bsonx.Elem{
 			Key:   "retry_info.base_job_id",
@@ -256,9 +236,21 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 			Value: bsonx.Int32(-1),
 		},
 	)
-	indexes = append(indexes, mongo.IndexModel{
-		Keys: retryableJobIDAndAttempt,
-	})
+
+	indexes := []mongo.IndexModel{
+		{Keys: primary},
+		{Keys: retryableJobIDAndAttempt},
+		// TODO (EVG-14163): this should take queue group isolation into account.
+		{
+			Keys: bsonx.Doc{
+				{
+					Key:   "scopes",
+					Value: bsonx.Int32(1),
+				},
+			},
+			Options: options.Index().SetSparse(true).SetUnique(true),
+		},
+	}
 
 	if d.opts.TTL > 0 {
 		ttl := int32(d.opts.TTL / time.Second)
@@ -283,28 +275,16 @@ func (d *mongoDriver) reportingIndexes() []mongo.IndexModel {
 	completedCreated := bsonx.Doc{}
 	typeCompletedInProgModTs := bsonx.Doc{}
 	typeCompletedEnd := bsonx.Doc{}
+	retrying := bsonx.Doc{}
 
 	if d.opts.UseGroups {
-		completedInProgModTs = append(completedInProgModTs, bsonx.Elem{
-			Key:   "group",
-			Value: bsonx.Int32(1),
-		})
-		completedEnd = append(completedEnd, bsonx.Elem{
-			Key:   "group",
-			Value: bsonx.Int32(1),
-		})
-		completedCreated = append(completedCreated, bsonx.Elem{
-			Key:   "group",
-			Value: bsonx.Int32(1),
-		})
-		typeCompletedInProgModTs = append(typeCompletedInProgModTs, bsonx.Elem{
-			Key:   "group",
-			Value: bsonx.Int32(1),
-		})
-		typeCompletedEnd = append(typeCompletedEnd, bsonx.Elem{
-			Key:   "group",
-			Value: bsonx.Int32(1),
-		})
+		group := bsonx.Elem{Key: "group", Value: bsonx.Int32(1)}
+		completedInProgModTs = append(completedInProgModTs, group)
+		completedEnd = append(completedEnd, group)
+		completedCreated = append(completedCreated, group)
+		typeCompletedInProgModTs = append(typeCompletedInProgModTs, group)
+		typeCompletedEnd = append(typeCompletedEnd, group)
+		retrying = append(retrying, group)
 	}
 
 	completedInProgModTs = append(completedInProgModTs,
@@ -382,6 +362,30 @@ func (d *mongoDriver) reportingIndexes() []mongo.IndexModel {
 		},
 	)
 	indexes = append(indexes, mongo.IndexModel{Keys: typeCompletedEnd})
+
+	retrying = append(retrying,
+		bsonx.Elem{
+			Key:   "status.completed",
+			Value: bsonx.Int32(1),
+		},
+		bsonx.Elem{
+			Key:   "retry_info.retryable",
+			Value: bsonx.Int32(1),
+		},
+		bsonx.Elem{
+			Key:   "retry_info.needs_retry",
+			Value: bsonx.Int32(1),
+		},
+	)
+	indexes = append(indexes, mongo.IndexModel{
+		Keys: retrying,
+		// We have to shorten the index name because the index name length
+		// is limited to 127 bytes for MongoDB 4.0.
+		// Source: https://docs.mongodb.com/manual/reference/limits/#Index-Name-Length
+		// TODO: this only affects tests. Remove the custom index name once
+		// CI tests have upgraded to MongoDB 4.2+.
+		Options: options.Index().SetName("retrying_jobs"),
+	})
 
 	return indexes
 }
@@ -842,16 +846,6 @@ func (d *mongoDriver) Jobs(ctx context.Context) <-chan amboy.Job {
 	return output
 }
 
-func (d *mongoDriver) getRetryingQuery() bson.M {
-	q := bson.M{
-		"status.completed":       true,
-		"retry_info.retryable":   true,
-		"retry_info.needs_retry": true,
-	}
-	d.modifyQueryForGroup(q)
-	return q
-}
-
 func (d *mongoDriver) RetryableJobs(ctx context.Context, filter RetryableJobFilter) <-chan amboy.RetryableJob {
 	jobs := make(chan amboy.RetryableJob)
 
@@ -872,18 +866,18 @@ func (d *mongoDriver) RetryableJobs(ctx context.Context, filter RetryableJobFilt
 		switch filter {
 		case RetryableJobAll:
 			q = bson.M{"retry_info.retryable": true}
-			d.modifyQueryForGroup(q)
 		case RetryableJobAllRetrying:
-			q = d.getRetryingQuery()
+			q = d.getRetryingQuery(bson.M{})
 		case RetryableJobActiveRetrying:
-			q = d.getRetryingQuery()
+			q = d.getRetryingQuery(bson.M{})
 			q["status.mod_ts"] = bson.M{"$gte": time.Now().Add(-d.LockTimeout())}
 		case RetryableJobStaleRetrying:
-			q = d.getRetryingQuery()
+			q = d.getRetryingQuery(bson.M{})
 			q["status.mod_ts"] = bson.M{"$lte": time.Now().Add(-d.LockTimeout())}
 		default:
 			return
 		}
+		d.modifyQueryForGroup(q)
 
 		iter, err := d.getCollection().Find(ctx, q, options.Find().SetSort(bson.M{"status.mod_ts": -1}))
 		if err != nil {
@@ -1009,15 +1003,10 @@ func (d *mongoDriver) getNextQuery() bson.M {
 	now := time.Now()
 	qd := bson.M{
 		"$or": []bson.M{
-			{
-				"status.completed": false,
-				"status.in_prog":   false,
-			},
-			{
-				"status.completed": false,
-				"status.in_prog":   true,
-				"status.mod_ts":    bson.M{"$lte": now.Add(-lockTimeout)},
-			},
+			d.getUnstartedQuery(bson.M{}),
+			d.getInProgQuery(
+				bson.M{"status.mod_ts": bson.M{"$lte": now.Add(-lockTimeout)}},
+			),
 		},
 	}
 
@@ -1247,6 +1236,7 @@ func (d *mongoDriver) scopesInUse(ctx context.Context, scopes []string) bool {
 	if len(scopes) == 0 {
 		return false
 	}
+	// TODO (EVG-14163): this should take queue group isolation into account.
 	num, err := d.getCollection().CountDocuments(ctx, bson.M{
 		"status.in_prog": true,
 		"scopes":         bson.M{"$in": scopes}})
@@ -1260,14 +1250,85 @@ func (d *mongoDriver) scopesInUse(ctx context.Context, scopes []string) bool {
 func (d *mongoDriver) Stats(ctx context.Context) amboy.QueueStats {
 	coll := d.getCollection()
 
-	var numJobs int64
-	var err error
-	if d.opts.UseGroups {
-		numJobs, err = coll.CountDocuments(ctx, bson.M{"group": d.opts.GroupName})
-	} else {
-		numJobs, err = coll.EstimatedDocumentCount(ctx)
+	statusFilter := bson.M{
+		"$or": []bson.M{
+			d.getPendingQuery(bson.M{}),
+			d.getInProgQuery(bson.M{}),
+			d.getRetryingQuery(bson.M{}),
+		},
+	}
+	d.modifyQueryForGroup(statusFilter)
+	matchStatus := bson.M{"$match": statusFilter}
+	groupStatuses := bson.M{
+		"$group": bson.M{
+			"_id": bson.M{
+				"completed":   "$status.completed",
+				"in_prog":     "$status.in_prog",
+				"needs_retry": "$retry_info.needs_retry",
+			},
+			"count": bson.M{"$sum": 1},
+		},
+	}
+	pipeline := []bson.M{matchStatus, groupStatuses}
+
+	c, err := coll.Aggregate(ctx, pipeline)
+	if err != nil {
+		grip.Warning(message.WrapError(err, message.Fields{
+			"id":         d.instanceID,
+			"service":    "amboy.queue.mdb",
+			"collection": coll.Name(),
+			"is_group":   d.opts.UseGroups,
+			"group":      d.opts.GroupName,
+			"operation":  "queue stats",
+			"message":    "could not count documents by status",
+		}))
+		return amboy.QueueStats{}
+	}
+	statusGroups := []struct {
+		ID struct {
+			Completed  bool `bson:"completed"`
+			InProg     bool `bson:"in_prog"`
+			NeedsRetry bool `bson:"needs_retry"`
+		} `bson:"_id"`
+		Count int `bson:"count"`
+	}{}
+	if err := c.All(ctx, &statusGroups); err != nil {
+		grip.Warning(message.WrapError(err, message.Fields{
+			"id":         d.instanceID,
+			"service":    "amboy.queue.mdb",
+			"collection": coll.Name(),
+			"is_group":   d.opts.UseGroups,
+			"group":      d.opts.GroupName,
+			"operation":  "queue stats",
+			"message":    "failed to decode counts by status",
+		}))
+		return amboy.QueueStats{}
 	}
 
+	var pending, inProg, retrying int
+	for _, group := range statusGroups {
+		if !group.ID.Completed {
+			pending += group.Count
+		}
+		if group.ID.InProg {
+			inProg += group.Count
+		}
+		if group.ID.Completed && group.ID.NeedsRetry {
+			retrying += group.Count
+		}
+	}
+
+	// The aggregation cannot also count all the documents in the collection
+	// without a collection scan, so query it separately. Because completed is
+	// calculated between two non-atomic queries, the statistics could be
+	// inconsistent (i.e. you could have an incorrect count of completed jobs).
+
+	var total int64
+	if d.opts.UseGroups {
+		total, err = coll.CountDocuments(ctx, bson.M{"group": d.opts.GroupName})
+	} else {
+		total, err = coll.EstimatedDocumentCount(ctx)
+	}
 	grip.Warning(message.WrapError(err, message.Fields{
 		"id":         d.instanceID,
 		"service":    "amboy.queue.mdb",
@@ -1275,41 +1336,52 @@ func (d *mongoDriver) Stats(ctx context.Context) amboy.QueueStats {
 		"operation":  "queue stats",
 		"is_group":   d.opts.UseGroups,
 		"group":      d.opts.GroupName,
-		"message":    "problem counting all jobs",
+		"message":    "problem counting total jobs",
 	}))
 
-	pendingQuery := bson.M{"status.completed": false}
-	d.modifyQueryForGroup(pendingQuery)
-	pending, err := coll.CountDocuments(ctx, pendingQuery)
-	grip.Warning(message.WrapError(err, message.Fields{
-		"id":         d.instanceID,
-		"service":    "amboy.queue.mdb",
-		"collection": coll.Name(),
-		"operation":  "queue stats",
-		"is_group":   d.opts.UseGroups,
-		"group":      d.opts.GroupName,
-		"message":    "problem counting pending jobs",
-	}))
-
-	lockedQuery := bson.M{"status.completed": false, "status.in_prog": true}
-	d.modifyQueryForGroup(lockedQuery)
-	numLocked, err := coll.CountDocuments(ctx, lockedQuery)
-	grip.Warning(message.WrapError(err, message.Fields{
-		"id":         d.instanceID,
-		"service":    "amboy.queue.mdb",
-		"collection": coll.Name(),
-		"is_group":   d.opts.UseGroups,
-		"group":      d.opts.GroupName,
-		"operation":  "queue stats",
-		"message":    "problem counting locked jobs",
-	}))
+	completed := int(total) - pending
 
 	return amboy.QueueStats{
-		Total:     int(numJobs),
-		Pending:   int(pending),
-		Completed: int(numJobs - pending),
-		Running:   int(numLocked),
+		Total:     int(total),
+		Pending:   pending,
+		Running:   inProg,
+		Completed: completed,
+		Retrying:  retrying,
 	}
+}
+
+// getPendingQuery modifies the query to find jobs that are pending.
+func (d *mongoDriver) getPendingQuery(q bson.M) bson.M {
+	q["status.completed"] = false
+	return q
+}
+
+// getUnstartedQuery modifies the query to find jobs that have not started yet.
+func (d *mongoDriver) getUnstartedQuery(q bson.M) bson.M {
+	q = d.getPendingQuery(q)
+	q["status.in_prog"] = false
+	return q
+}
+
+// getInProgQuery modifies the query to find jobs that are in progress.
+func (d *mongoDriver) getInProgQuery(q bson.M) bson.M {
+	q = d.getPendingQuery(q)
+	q["status.in_prog"] = true
+	return q
+}
+
+// getCompletedQuery modifies the query to find jobs that are completed.
+func (d *mongoDriver) getCompletedQuery(q bson.M) bson.M {
+	q["status.completed"] = true
+	return q
+}
+
+// getRetryingQuery modifies the query to find jobs that are retrying.
+func (d *mongoDriver) getRetryingQuery(q bson.M) bson.M {
+	q = d.getCompletedQuery(q)
+	q["retry_info.retryable"] = true
+	q["retry_info.needs_retry"] = true
+	return q
 }
 
 func (d *mongoDriver) LockTimeout() time.Duration {
