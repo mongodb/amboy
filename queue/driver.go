@@ -18,10 +18,9 @@ type remoteQueueDriver interface {
 	// Get finds a job by job ID. For retryable jobs, this returns the latest
 	// job attempt.
 	Get(context.Context, string) (amboy.Job, error)
-	// GetAttempt returns a job by job ID and attempt number. Only applicable to
-	// retryable jobs. If used for a non-retryable job, this should return nil
-	// and an error.
-	GetAttempt(ctx context.Context, id string, attempt int) (amboy.RetryableJob, error)
+	// GetAttempt returns a retryable job by job ID and attempt number. If used
+	// to find a non-retryable job, this should return nil job and an error.
+	GetAttempt(ctx context.Context, id string, attempt int) (amboy.Job, error)
 	// Put inserts a new job in the backing storage.
 	Put(context.Context, amboy.Job) error
 	// Save updates an existing job in the backing storage. Implementations may
@@ -34,7 +33,7 @@ type remoteQueueDriver interface {
 
 	Jobs(context.Context) <-chan amboy.Job
 	// RetryableJobs returns retryable jobs, subject to a filter.
-	RetryableJobs(context.Context, RetryableJobFilter) <-chan amboy.RetryableJob
+	RetryableJobs(context.Context, retryableJobFilter) <-chan amboy.Job
 	Next(context.Context) amboy.Job
 
 	Stats(context.Context) amboy.QueueStats
@@ -47,20 +46,21 @@ type remoteQueueDriver interface {
 	Dispatcher() Dispatcher
 }
 
-// RetryableJobFilter represents a filter on jobs that are currently retrying.
-type RetryableJobFilter string
+// retryableJobFilter represents a query filter on retryable jobs.
+type retryableJobFilter string
 
 const (
 	// RetryableJobAll refers to all retryable jobs.
-	RetryableJobAll RetryableJobFilter = "all"
-	// RetryableJobAllRetrying refers to all jobs that are currently waiting to
-	// retry.
-	RetryableJobAllRetrying RetryableJobFilter = "all-retrying"
-	// RetryableJobActiveRetrying refers to jobs that have recently retried.
-	RetryableJobActiveRetrying RetryableJobFilter = "active-retrying"
-	// RetryableJobStaleRetrying refers to jobs that should be retrying but have
-	// not done so recently.
-	RetryableJobStaleRetrying RetryableJobFilter = "stale-retrying"
+	retryableJobAll retryableJobFilter = "all-retryable"
+	// RetryableJobAllRetrying refers to all retryable jobs that are currently
+	// waiting to retry.
+	retryableJobAllRetrying retryableJobFilter = "all-retrying"
+	// RetryableJobActiveRetrying refers to retryable jobs that have recently
+	// retried.
+	retryableJobActiveRetrying retryableJobFilter = "active-retrying"
+	// RetryableJobStaleRetrying refers to retryable jobs that should be
+	// retrying but have not done so recently.
+	retryableJobStaleRetrying retryableJobFilter = "stale-retrying"
 )
 
 // MongoDBOptions is a struct passed to the NewMongo constructor to

@@ -1165,14 +1165,11 @@ func RetryableTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 				require.True(t, amboy.WaitInterval(ctx, rq, 100*time.Millisecond))
 				var foundFirstAttempt, foundSecondAttempt bool
 				for completed := range rq.Results(ctx) {
-					rj, ok := completed.(amboy.RetryableJob)
-					require.True(t, ok)
-					assert.True(t, rj.RetryInfo().Retryable)
-					assert.False(t, rj.RetryInfo().NeedsRetry)
-					if rj.RetryInfo().CurrentAttempt == 0 {
+					assert.False(t, completed.RetryInfo().ShouldRetry())
+					if completed.RetryInfo().CurrentAttempt == 0 {
 						foundFirstAttempt = true
 					}
-					if rj.RetryInfo().CurrentAttempt == 1 {
+					if completed.RetryInfo().CurrentAttempt == 1 {
 						foundSecondAttempt = true
 					}
 				}
@@ -1199,16 +1196,13 @@ func RetryableTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 			assert.Equal(t, 3, rq.Stats(ctx).Completed)
 			var foundFirstAttempt, foundSecondAttempt bool
 			for completed := range rq.Results(ctx) {
-				amboy.WithRetryableJob(completed, func(rj amboy.RetryableJob) {
-					assert.True(t, rj.RetryInfo().Retryable)
-					assert.False(t, rj.RetryInfo().NeedsRetry)
-					if rj.RetryInfo().CurrentAttempt == 0 {
-						foundFirstAttempt = true
-					}
-					if rj.RetryInfo().CurrentAttempt == 1 {
-						foundSecondAttempt = true
-					}
-				})
+				assert.False(t, completed.RetryInfo().ShouldRetry())
+				if completed.RetryInfo().CurrentAttempt == 0 {
+					foundFirstAttempt = true
+				}
+				if completed.RetryInfo().CurrentAttempt == 1 {
+					foundSecondAttempt = true
+				}
 			}
 			assert.True(t, foundFirstAttempt, "first job attempt should have completed")
 			assert.True(t, foundSecondAttempt, "second job attempt should have completed")

@@ -260,11 +260,8 @@ func (s *DriverSuite) TestPutAndGetJobRoundtripsSingleRetryableJob() {
 	storedJob, err := s.driver.Get(s.ctx, j.ID())
 	s.Require().NoError(err)
 
-	storedRetryJob, ok := storedJob.(amboy.RetryableJob)
-	s.Require().True(ok)
-
-	s.Equal(j.ID(), storedRetryJob.ID())
-	s.Equal(j.RetryInfo(), storedRetryJob.RetryInfo())
+	s.Equal(j.ID(), storedJob.ID())
+	s.Equal(j.RetryInfo(), storedJob.RetryInfo())
 
 	s.Equal(1, s.driver.Stats(s.ctx).Total)
 }
@@ -288,17 +285,14 @@ func (s *DriverSuite) TestPutAndGetJobRoundtripsLatestRetryableJob() {
 	storedJob, err := s.driver.Get(s.ctx, jobID)
 	s.Require().NoError(err)
 
-	storedRetryJob, ok := storedJob.(amboy.RetryableJob)
-	s.Require().True(ok)
-
-	s.Equal(jobID, storedRetryJob.ID())
-	s.Equal(j2.RetryInfo(), storedRetryJob.RetryInfo())
+	s.Equal(jobID, storedJob.ID())
+	s.Equal(j2.RetryInfo(), storedJob.RetryInfo())
 
 	s.Equal(3, s.driver.Stats(s.ctx).Total)
 }
 
 func (s *DriverSuite) TestPutAndGetAttemptRoundtripsRetryableJob() {
-	var jobs []amboy.RetryableJob
+	var jobs []amboy.Job
 	var jobID string
 	for i := 0; i < 3; i++ {
 		j := newMockRetryableJob("id")
@@ -313,11 +307,8 @@ func (s *DriverSuite) TestPutAndGetAttemptRoundtripsRetryableJob() {
 		storedJob, err := s.driver.GetAttempt(s.ctx, jobID, j.RetryInfo().CurrentAttempt)
 		s.Require().NoError(err)
 
-		storedRetryJob, ok := storedJob.(amboy.RetryableJob)
-		s.Require().True(ok)
-
 		s.Equal(jobID, j.ID())
-		s.Equal(jobID, storedRetryJob.ID())
+		s.Equal(jobID, storedJob.ID())
 		s.Equal(j.RetryInfo().CurrentAttempt, storedJob.RetryInfo().CurrentAttempt)
 	}
 	s.Equal(3, s.driver.Stats(s.ctx).Total)
@@ -625,7 +616,7 @@ func (s *DriverSuite) TestRetryableJobsReturnsAllRetryableJobs() {
 	s.Require().NoError(s.driver.Put(s.ctx, job.NewShellJob("echo foo", "")))
 
 	var found int
-	for j := range s.driver.RetryableJobs(s.ctx, RetryableJobAll) {
+	for j := range s.driver.RetryableJobs(s.ctx, retryableJobAll) {
 		found++
 		s.Equal(rj.ID(), j.ID())
 	}
@@ -644,7 +635,7 @@ func (s *DriverSuite) TestRetryableJobsStopsWithContextError() {
 	}
 
 	var found int
-	for j := range s.driver.RetryableJobs(ctx, RetryableJobAll) {
+	for j := range s.driver.RetryableJobs(ctx, retryableJobAll) {
 		cancel()
 		found++
 		s.Contains(ids, j.ID())
@@ -688,7 +679,7 @@ func (s *DriverSuite) TestRetryableJobsReturnsAllRetryingJobs() {
 	s.Require().NoError(s.driver.Put(s.ctx, j3))
 
 	var foundIDs []string
-	for j := range s.driver.RetryableJobs(s.ctx, RetryableJobAllRetrying) {
+	for j := range s.driver.RetryableJobs(s.ctx, retryableJobAllRetrying) {
 		foundIDs = append(foundIDs, j.ID())
 	}
 	missingExpected, foundUnexpected := utility.StringSliceSymmetricDifference(expectedIDs, foundIDs)
@@ -741,7 +732,7 @@ func (s *DriverSuite) TestRetryableJobsReturnsActiveRetryingJobs() {
 	s.Require().NoError(s.driver.Put(s.ctx, j4))
 
 	var foundIDs []string
-	for j := range s.driver.RetryableJobs(s.ctx, RetryableJobActiveRetrying) {
+	for j := range s.driver.RetryableJobs(s.ctx, retryableJobActiveRetrying) {
 		foundIDs = append(foundIDs, j.ID())
 	}
 	missingExpected, foundUnexpected := utility.StringSliceSymmetricDifference(expectedIDs, foundIDs)
@@ -795,7 +786,7 @@ func (s *DriverSuite) TestRetryableJobsReturnsStaleRetryingJobs() {
 	s.Require().NoError(s.driver.Put(s.ctx, j4))
 
 	var foundIDs []string
-	for j := range s.driver.RetryableJobs(s.ctx, RetryableJobStaleRetrying) {
+	for j := range s.driver.RetryableJobs(s.ctx, retryableJobStaleRetrying) {
 		foundIDs = append(foundIDs, j.ID())
 	}
 	missingExpected, foundUnexpected := utility.StringSliceSymmetricDifference(expectedIDs, foundIDs)

@@ -495,7 +495,7 @@ func (d *mongoDriver) Get(ctx context.Context, name string) (amboy.Job, error) {
 	return output, nil
 }
 
-func (d *mongoDriver) GetAttempt(ctx context.Context, name string, attempt int) (amboy.RetryableJob, error) {
+func (d *mongoDriver) GetAttempt(ctx context.Context, name string, attempt int) (amboy.Job, error) {
 	matchIDAndAttempt := bson.M{
 		"retry_info.base_job_id":     name,
 		"retry_info.current_attempt": attempt,
@@ -518,12 +518,7 @@ func (d *mongoDriver) GetAttempt(ctx context.Context, name string, attempt int) 
 			"GET problem converting '%s' to job object", name)
 	}
 
-	rj, ok := j.(amboy.RetryableJob)
-	if !ok {
-		return nil, errors.Errorf("programmatic error: job '%s' is not retryable", j.ID())
-	}
-
-	return rj, nil
+	return j, nil
 }
 
 func (d *mongoDriver) Put(ctx context.Context, j amboy.Job) error {
@@ -733,7 +728,7 @@ func (d *mongoDriver) Complete(ctx context.Context, j amboy.Job) error {
 	// job still needs to retry and applies its scopes immediately to the retry
 	// job, we cannot let go of the scopes yet because they will need to be
 	// safely transferred to the retry job.
-	if !ji.RetryInfo.Retryable || !ji.RetryInfo.NeedsRetry || !ji.ApplyScopesOnEnqueue {
+	if !ji.RetryInfo.ShouldRetry() || !ji.ApplyScopesOnEnqueue {
 		ji.Scopes = nil
 	}
 
@@ -846,8 +841,8 @@ func (d *mongoDriver) Jobs(ctx context.Context) <-chan amboy.Job {
 	return output
 }
 
-func (d *mongoDriver) RetryableJobs(ctx context.Context, filter RetryableJobFilter) <-chan amboy.RetryableJob {
-	jobs := make(chan amboy.RetryableJob)
+func (d *mongoDriver) RetryableJobs(ctx context.Context, filter retryableJobFilter) <-chan amboy.Job {
+	jobs := make(chan amboy.Job)
 
 	go func() {
 		defer func() {
@@ -864,14 +859,14 @@ func (d *mongoDriver) RetryableJobs(ctx context.Context, filter RetryableJobFilt
 
 		var q bson.M
 		switch filter {
-		case RetryableJobAll:
+		case retryableJobAll:
 			q = bson.M{"retry_info.retryable": true}
-		case RetryableJobAllRetrying:
+		case retryableJobAllRetrying:
 			q = d.getRetryingQuery(bson.M{})
-		case RetryableJobActiveRetrying:
+		case retryableJobActiveRetrying:
 			q = d.getRetryingQuery(bson.M{})
 			q["status.mod_ts"] = bson.M{"$gte": time.Now().Add(-d.LockTimeout())}
-		case RetryableJobStaleRetrying:
+		case retryableJobStaleRetrying:
 			q = d.getRetryingQuery(bson.M{})
 			q["status.mod_ts"] = bson.M{"$lte": time.Now().Add(-d.LockTimeout())}
 		default:
@@ -919,13 +914,11 @@ func (d *mongoDriver) RetryableJobs(ctx context.Context, filter RetryableJobFilt
 				continue
 			}
 
-			amboy.WithRetryableJob(j, func(rj amboy.RetryableJob) {
-				select {
-				case <-ctx.Done():
-					return
-				case jobs <- rj:
-				}
-			})
+			select {
+			case <-ctx.Done():
+				return
+			case jobs <- j:
+			}
 		}
 
 		grip.Error(message.WrapError(iter.Err(), message.Fields{
