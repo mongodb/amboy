@@ -28,17 +28,18 @@ type remoteQueue interface {
 }
 
 type remoteBase struct {
-	id           string
-	started      bool
-	driver       remoteQueueDriver
-	dispatcher   Dispatcher
-	driverType   string
-	channel      chan amboy.Job
-	blocked      map[string]struct{}
-	dispatched   map[string]struct{}
-	runner       amboy.Runner
-	retryHandler amboy.RetryHandler
-	mutex        sync.RWMutex
+	id                        string
+	started                   bool
+	driver                    remoteQueueDriver
+	dispatcher                Dispatcher
+	driverType                string
+	channel                   chan amboy.Job
+	blocked                   map[string]struct{}
+	dispatched                map[string]struct{}
+	runner                    amboy.Runner
+	retryHandler              amboy.RetryHandler
+	staleRetryMonitorInterval time.Duration
+	mutex                     sync.RWMutex
 }
 
 func newRemoteBase() *remoteBase {
@@ -276,10 +277,10 @@ func (q *remoteBase) CompleteRetrying(ctx context.Context, j amboy.RetryableJob)
 	timer := time.NewTimer(0)
 	defer timer.Stop()
 
-	var attempt int
+	const maxAttempts = 10
 	catcher := grip.NewBasicCatcher()
 
-	for attempt = 1; attempt <= 10; attempt++ {
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		select {
 		case <-ctx.Done():
 			catcher.Add(ctx.Err())
@@ -293,6 +294,13 @@ func (q *remoteBase) CompleteRetrying(ctx context.Context, j amboy.RetryableJob)
 					j.AddError(catcher.Resolve())
 					return errors.Wrapf(catcher.Resolve(), "giving up after attempt %d", attempt)
 				}
+				grip.Debug(message.WrapError(err, message.Fields{
+					"message":  "failed to mark retrying job as completed",
+					"attempt":  attempt,
+					"job_id":   j.ID(),
+					"queue_id": q.ID(),
+					"service":  "amboy.queue.mdb",
+				}))
 
 				timer.Reset(retryInterval)
 				continue
@@ -302,7 +310,7 @@ func (q *remoteBase) CompleteRetrying(ctx context.Context, j amboy.RetryableJob)
 		}
 	}
 
-	return errors.Wrapf(catcher.Resolve(), "giving up after attempt %d", attempt)
+	return errors.Wrapf(catcher.Resolve(), "giving up after attempt %d", maxAttempts)
 }
 
 // Results provides a generator that iterates all completed jobs.
@@ -365,12 +373,16 @@ func (q *remoteBase) SetRunner(r amboy.Runner) error {
 	return nil
 }
 
+// RetryHandler provides access to the embedded amboy.RetryHandler for the
+// queue.
 func (q *remoteBase) RetryHandler() amboy.RetryHandler {
 	q.mutex.RLock()
 	defer q.mutex.RUnlock()
 	return q.retryHandler
 }
 
+// SetRetryHandler allows callers to inject alternative amboy.RetryHandler
+// instances. If this is unset, the queue will not support retrying jobs.
 func (q *remoteBase) SetRetryHandler(rh amboy.RetryHandler) error {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
@@ -380,6 +392,13 @@ func (q *remoteBase) SetRetryHandler(rh amboy.RetryHandler) error {
 	q.retryHandler = rh
 
 	return rh.SetQueue(q)
+}
+
+// SetStaleRetryingMonitorInterval configures how frequently the queue will
+// check for stale retrying jobs. If this is unspecified, the default is 1
+// second.
+func (q *remoteBase) SetStaleRetryingMonitorInterval(interval time.Duration) {
+	q.staleRetryMonitorInterval = interval
 }
 
 // Driver provides access to the embedded driver instance which
@@ -486,6 +505,10 @@ func (q *remoteBase) lockDispatch(j amboy.Job) bool {
 	return true
 }
 
+// defaultStaleRetryingMonitorInterval is the default frequency that an
+// amboy.RetryableQueue will check for stale retrying jobs.
+const defaultStaleRetryingMonitorInterval = time.Second
+
 func (q *remoteBase) monitorStaleRetryingJobs(ctx context.Context) {
 	defer func() {
 		if err := recovery.HandlePanicWithError(recover(), nil, "stale retry job monitor"); err != nil {
@@ -498,7 +521,10 @@ func (q *remoteBase) monitorStaleRetryingJobs(ctx context.Context) {
 		}
 	}()
 
-	const monitorInterval = time.Second
+	monitorInterval := defaultStaleRetryingMonitorInterval
+	if q.staleRetryMonitorInterval != 0 {
+		monitorInterval = q.staleRetryMonitorInterval
+	}
 	timer := time.NewTimer(0)
 	defer timer.Stop()
 	for {

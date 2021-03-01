@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"time"
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/grip"
@@ -19,6 +20,9 @@ type MongoDBQueueCreationOptions struct {
 	MDB          MongoDBOptions
 	Client       *mongo.Client
 	RetryHandler amboy.RetryHandlerOptions
+	// StaleRetryingCheckFrequency is how often the queue periodically checks
+	// for stale retrying jobs.
+	StaleRetryingCheckFrequency time.Duration
 }
 
 // NewMongoDBQueue builds a new queue that persists jobs to a MongoDB
@@ -40,6 +44,11 @@ func (opts *MongoDBQueueCreationOptions) Validate() error {
 
 	catcher.NewWhen(opts.Client == nil && (opts.MDB.URI == "" && opts.MDB.DB == ""),
 		"must specify database options")
+
+	catcher.NewWhen(opts.StaleRetryingCheckFrequency < 0, "stale retrying check frequency cannot be negative")
+	if opts.StaleRetryingCheckFrequency == 0 {
+		opts.StaleRetryingCheckFrequency = defaultStaleRetryingMonitorInterval
+	}
 
 	return catcher.Resolve()
 }

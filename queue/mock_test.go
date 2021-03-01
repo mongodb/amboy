@@ -121,6 +121,10 @@ func (q *mockRemoteQueue) SetRetryHandler(rh amboy.RetryHandler) error {
 	return rh.SetQueue(q)
 }
 
+func (q *mockRemoteQueue) SetStaleRetryingMonitorInterval(interval time.Duration) {
+	q.remoteQueue.SetStaleRetryingMonitorInterval(interval)
+}
+
 func (q *mockRemoteQueue) Put(ctx context.Context, j amboy.Job) error {
 	if q.putJob != nil {
 		return q.putJob(ctx, q.remoteQueue, j)
