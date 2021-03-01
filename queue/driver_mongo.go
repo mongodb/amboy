@@ -1370,12 +1370,13 @@ func (d *mongoDriver) getInProgQuery(q bson.M) bson.M {
 	return q
 }
 
+// getCompletedQuery modifies the query to find jobs that are completed.
 func (d *mongoDriver) getCompletedQuery(q bson.M) bson.M {
 	q["status.completed"] = true
 	return q
 }
 
-// getPendingQuery modifies the query to find jobs that are retrying.
+// getRetryingQuery modifies the query to find jobs that are retrying.
 func (d *mongoDriver) getRetryingQuery(q bson.M) bson.M {
 	q = d.getCompletedQuery(q)
 	q["retry_info.retryable"] = true

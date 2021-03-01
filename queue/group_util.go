@@ -190,10 +190,10 @@ func (c *cacheImpl) Prune(ctx context.Context) error {
 
 							// It's possible for a job to be enqueued in between
 							// the queue completeness check and closing the
-							// queue. In this case, job that was just enqueued
-							// will not execute unless the queue is restarted.
-							// This log makes it easier to identify if/when this
-							// occurs.
+							// queue. In this case, the job that was just
+							// enqueued will not execute unless the queue is
+							// restarted. This log makes it easier to identify
+							// if/when this occurs.
 							grip.Info(message.Fields{
 								"message":  "pruning completed queue",
 								"queue_id": item.q.ID(),
