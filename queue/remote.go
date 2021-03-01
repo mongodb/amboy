@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"time"
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/grip"
@@ -19,6 +20,9 @@ type MongoDBQueueCreationOptions struct {
 	MDB          MongoDBOptions
 	Client       *mongo.Client
 	RetryHandler amboy.RetryHandlerOptions
+	// StaleRetryingCheckFrequency is how often the queue periodically checks
+	// for stale retrying jobs.
+	StaleRetryingCheckFrequency time.Duration
 }
 
 // NewMongoDBQueue builds a new queue that persists jobs to a MongoDB

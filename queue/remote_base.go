@@ -295,7 +295,7 @@ func (q *remoteBase) CompleteRetrying(ctx context.Context, j amboy.RetryableJob)
 					return errors.Wrapf(catcher.Resolve(), "giving up after attempt %d", attempt)
 				}
 				grip.Debug(message.WrapError(err, message.Fields{
-					"message":  "failed to mark job as completed retrying",
+					"message":  "failed to mark retrying job as completed",
 					"attempt":  attempt,
 					"job_id":   j.ID(),
 					"queue_id": q.ID(),
@@ -369,12 +369,16 @@ func (q *remoteBase) SetRunner(r amboy.Runner) error {
 	return nil
 }
 
+// RetryHandler provides access to the embedded amboy.RetryHandler for the
+// queue.
 func (q *remoteBase) RetryHandler() amboy.RetryHandler {
 	q.mutex.RLock()
 	defer q.mutex.RUnlock()
 	return q.retryHandler
 }
 
+// SetRetryHandler allows callers to inject alternative amboy.RetryHandler
+// instances. If this is unset, the queue will not support retrying jobs.
 func (q *remoteBase) SetRetryHandler(rh amboy.RetryHandler) error {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
@@ -386,6 +390,9 @@ func (q *remoteBase) SetRetryHandler(rh amboy.RetryHandler) error {
 	return rh.SetQueue(q)
 }
 
+// SetStaleRetryingMonitorInterval configures how frequently the queue will
+// check for stale retrying jobs. If this is unspecified, the default is 1
+// second.
 func (q *remoteBase) SetStaleRetryingMonitorInterval(interval time.Duration) {
 	q.staleRetryMonitorInterval = interval
 }
@@ -494,6 +501,10 @@ func (q *remoteBase) lockDispatch(j amboy.Job) bool {
 	return true
 }
 
+// defaultStaleRetryingMonitorInterval is the default frequency that an
+// amboy.RetryableQueue will check for stale retrying jobs.
+const defaultStaleRetryingMonitorInterval = time.Second
+
 func (q *remoteBase) monitorStaleRetryingJobs(ctx context.Context) {
 	defer func() {
 		if err := recovery.HandlePanicWithError(recover(), nil, "stale retry job monitor"); err != nil {
@@ -506,7 +517,7 @@ func (q *remoteBase) monitorStaleRetryingJobs(ctx context.Context) {
 		}
 	}()
 
-	monitorInterval := time.Second
+	monitorInterval := defaultStaleRetryingMonitorInterval
 	if q.staleRetryMonitorInterval != 0 {
 		monitorInterval = q.staleRetryMonitorInterval
 	}
