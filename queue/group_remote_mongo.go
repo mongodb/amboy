@@ -131,6 +131,10 @@ func (opts MongoDBQueueGroupOptions) validate() error {
 	if opts.DefaultWorkers == 0 && opts.WorkerPoolSize == nil {
 		catcher.New("must specify either a default worker pool size or a WorkerPoolSize function")
 	}
+	catcher.NewWhen(opts.StaleRetryingCheckFrequency < 0, "stale retrying check frequency cannot be negative")
+	if opts.StaleRetryingCheckFrequency == 0 {
+		opts.StaleRetryingCheckFrequency = defaultStaleRetryingMonitorInterval
+	}
 	return catcher.Resolve()
 }
 
