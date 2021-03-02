@@ -19,29 +19,31 @@ func TestNewBasicRetryHandler(t *testing.T) {
 	q, err := newRemoteUnordered(1)
 	require.NoError(t, err)
 	t.Run("SucceedsWithQueue", func(t *testing.T) {
-		rh, err := newBasicRetryHandler(q, amboy.RetryHandlerOptions{})
+		rh, err := NewBasicRetryHandler(q, amboy.RetryHandlerOptions{})
 		assert.NoError(t, err)
 		assert.NotZero(t, rh)
 	})
 	t.Run("FailsWithNilQueue", func(t *testing.T) {
-		rh, err := newBasicRetryHandler(nil, amboy.RetryHandlerOptions{})
+		rh, err := NewBasicRetryHandler(nil, amboy.RetryHandlerOptions{})
 		assert.Error(t, err)
 		assert.Zero(t, rh)
 	})
 	t.Run("FailsWithInvalidOptions", func(t *testing.T) {
-		rh, err := newBasicRetryHandler(q, amboy.RetryHandlerOptions{NumWorkers: -1})
+		rh, err := NewBasicRetryHandler(q, amboy.RetryHandlerOptions{NumWorkers: -1})
 		assert.Error(t, err)
 		assert.Zero(t, rh)
 	})
 }
 
 func TestRetryHandlerImplementations(t *testing.T) {
+	assert.Implements(t, (*amboy.RetryHandler)(nil), &BasicRetryHandler{})
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	for rhName, makeRetryHandler := range map[string]func(q amboy.RetryableQueue, opts amboy.RetryHandlerOptions) (amboy.RetryHandler, error){
 		"Basic": func(q amboy.RetryableQueue, opts amboy.RetryHandlerOptions) (amboy.RetryHandler, error) {
-			return newBasicRetryHandler(q, opts)
+			return NewBasicRetryHandler(q, opts)
 		},
 	} {
 		t.Run(rhName, func(t *testing.T) {
@@ -500,7 +502,7 @@ func TestRetryHandlerQueueIntegration(t *testing.T) {
 
 	for rhName, makeRetryHandler := range map[string]func(q amboy.RetryableQueue, opts amboy.RetryHandlerOptions) (amboy.RetryHandler, error){
 		"Basic": func(q amboy.RetryableQueue, opts amboy.RetryHandlerOptions) (amboy.RetryHandler, error) {
-			return newBasicRetryHandler(q, opts)
+			return NewBasicRetryHandler(q, opts)
 		},
 	} {
 		t.Run(rhName, func(t *testing.T) {

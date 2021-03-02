@@ -14,7 +14,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-type basicRetryHandler struct {
+// BasicRetryHandler implements the amboy.RetryHandler interface. It provides a
+// simple component that can be attached to an amboy.RetryableQueue to support
+// automatically retrying jobs.
+type BasicRetryHandler struct {
 	queue         amboy.RetryableQueue
 	opts          amboy.RetryHandlerOptions
 	pending       map[string]amboy.Job
@@ -24,21 +27,24 @@ type basicRetryHandler struct {
 	cancelWorkers context.CancelFunc
 }
 
-func newBasicRetryHandler(q amboy.RetryableQueue, opts amboy.RetryHandlerOptions) (*basicRetryHandler, error) {
+// NewBasicRetryHandler initializes and returns an BasicRetryHandler that can be
+// used as an amboy.RetryHandler implementation.
+func NewBasicRetryHandler(q amboy.RetryableQueue, opts amboy.RetryHandlerOptions) (*BasicRetryHandler, error) {
 	if q == nil {
 		return nil, errors.New("queue cannot be nil")
 	}
 	if err := opts.Validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid options")
 	}
-	return &basicRetryHandler{
+	return &BasicRetryHandler{
 		queue:   q,
 		opts:    opts,
 		pending: map[string]amboy.Job{},
 	}, nil
 }
 
-func (rh *basicRetryHandler) Start(ctx context.Context) error {
+// Start initiates processing of jobs that need to retry.
+func (rh *BasicRetryHandler) Start(ctx context.Context) error {
 	rh.mu.Lock()
 	defer rh.mu.Unlock()
 
@@ -63,13 +69,17 @@ func (rh *basicRetryHandler) Start(ctx context.Context) error {
 	return nil
 }
 
-func (rh *basicRetryHandler) Started() bool {
+// Started returns whether or not the BasicRetryHandler has started processing
+// retryable jobs or not.
+func (rh *BasicRetryHandler) Started() bool {
 	rh.mu.RLock()
 	defer rh.mu.RUnlock()
 	return rh.started
 }
 
-func (rh *basicRetryHandler) SetQueue(q amboy.RetryableQueue) error {
+// SetQueue provides a mechanism to swap out amboy.RetryableQueue
+// implementations before it has started processing retryable jobs.
+func (rh *BasicRetryHandler) SetQueue(q amboy.RetryableQueue) error {
 	rh.mu.Lock()
 	defer rh.mu.Unlock()
 	if rh.started {
@@ -79,7 +89,8 @@ func (rh *basicRetryHandler) SetQueue(q amboy.RetryableQueue) error {
 	return nil
 }
 
-func (rh *basicRetryHandler) Put(ctx context.Context, j amboy.Job) error {
+// Put adds a new job to be retried.
+func (rh *BasicRetryHandler) Put(ctx context.Context, j amboy.Job) error {
 	if j == nil {
 		return errors.New("cannot retry a nil job")
 	}
@@ -99,7 +110,9 @@ func (rh *basicRetryHandler) Put(ctx context.Context, j amboy.Job) error {
 	return nil
 }
 
-func (rh *basicRetryHandler) Close(ctx context.Context) {
+// Close finishes processing the remaining retrying jobs and cleans up all
+// resources.
+func (rh *BasicRetryHandler) Close(ctx context.Context) {
 	rh.mu.Lock()
 	if !rh.started {
 		rh.mu.Unlock()
@@ -114,7 +127,7 @@ func (rh *basicRetryHandler) Close(ctx context.Context) {
 	rh.wg.Wait()
 }
 
-func (rh *basicRetryHandler) waitForJob(ctx context.Context) {
+func (rh *BasicRetryHandler) waitForJob(ctx context.Context) {
 	defer func() {
 		if err := recovery.HandlePanicWithError(recover(), nil, "retry handler worker"); err != nil {
 			grip.Error(message.WrapError(err, message.Fields{
@@ -189,7 +202,7 @@ func (rh *basicRetryHandler) waitForJob(ctx context.Context) {
 	}
 }
 
-func (rh *basicRetryHandler) nextJob() amboy.Job {
+func (rh *BasicRetryHandler) nextJob() amboy.Job {
 	rh.mu.RLock()
 	defer rh.mu.RUnlock()
 	for id, found := range rh.pending {
@@ -200,7 +213,7 @@ func (rh *basicRetryHandler) nextJob() amboy.Job {
 	return nil
 }
 
-func (rh *basicRetryHandler) handleJob(ctx context.Context, j amboy.Job) error {
+func (rh *BasicRetryHandler) handleJob(ctx context.Context, j amboy.Job) error {
 	startAt := time.Now()
 	catcher := grip.NewBasicCatcher()
 	timer := time.NewTimer(0)
@@ -253,7 +266,7 @@ func (rh *basicRetryHandler) handleJob(ctx context.Context, j amboy.Job) error {
 	return errors.Errorf("exhausted all %d attempts to enqueue retry job without success", rh.opts.MaxRetryAttempts)
 }
 
-func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Job) (canRetryOnErr bool, err error) {
+func (rh *BasicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Job) (canRetryOnErr bool, err error) {
 	originalInfo := j.RetryInfo()
 
 	canRetry, err := func() (bool, error) {
@@ -309,7 +322,7 @@ func (rh *basicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Job) (ca
 	return canRetry, err
 }
 
-func (rh *basicRetryHandler) prepareNewRetryJob(j amboy.Job) {
+func (rh *BasicRetryHandler) prepareNewRetryJob(j amboy.Job) {
 	ri := j.RetryInfo()
 	ri.NeedsRetry = false
 	ri.CurrentAttempt++

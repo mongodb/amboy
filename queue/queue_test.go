@@ -1265,7 +1265,7 @@ func RetryableTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 
 			require.NoError(t, runner.SetPool(rq, size.Size))
 
-			rh, err := newBasicRetryHandler(rq, amboy.RetryHandlerOptions{})
+			rh, err := NewBasicRetryHandler(rq, amboy.RetryHandlerOptions{})
 			require.NoError(t, err)
 			require.NoError(t, rq.SetRetryHandler(rh))
 

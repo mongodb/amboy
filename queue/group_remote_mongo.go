@@ -94,7 +94,7 @@ func (opts *MongoDBQueueGroupOptions) constructor(ctx context.Context, name stri
 		}
 	}
 
-	rh, err := newBasicRetryHandler(q, opts.RetryHandler)
+	rh, err := NewBasicRetryHandler(q, opts.RetryHandler)
 	if err != nil {
 		return nil, errors.Wrap(err, "initializing retry handler")
 	}
