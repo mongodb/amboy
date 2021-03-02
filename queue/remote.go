@@ -68,7 +68,7 @@ func (opts *MongoDBQueueCreationOptions) build(ctx context.Context) (amboy.Retry
 		}
 	}
 
-	rh, err := newBasicRetryHandler(q, opts.RetryHandler)
+	rh, err := NewBasicRetryHandler(q, opts.RetryHandler)
 	if err != nil {
 		return nil, errors.Wrap(err, "initializing retry handler")
 	}
