@@ -105,6 +105,15 @@ func (rh *BasicRetryHandler) Put(ctx context.Context, j amboy.Job) error {
 		return nil
 	}
 
+	grip.Debug(message.Fields{
+		"message":     "put job in retry handler",
+		"job_id":      j.ID(),
+		"job_attempt": j.RetryInfo().CurrentAttempt,
+		"num_pending": len(rh.pending),
+		"queue_id":    rh.queue.ID(),
+		"service":     "amboy.queue.retry",
+	})
+
 	rh.pending[j.ID()] = j
 
 	return nil
@@ -160,6 +169,7 @@ func (rh *BasicRetryHandler) waitForJob(ctx context.Context) {
 					}
 					if j != nil {
 						fields["job_id"] = j.ID()
+						fields["job_attempt"] = j.RetryInfo().CurrentAttempt
 					}
 					grip.Error(message.WrapError(err, fields))
 					if j != nil {
@@ -175,8 +185,18 @@ func (rh *BasicRetryHandler) waitForJob(ctx context.Context) {
 				timer.Reset(rh.opts.WorkerCheckInterval)
 				continue
 			}
-			var err error
-			if err = rh.handleJob(ctx, j); err != nil && ctx.Err() == nil {
+
+			grip.Debug(message.Fields{
+				"message":     "retrying job",
+				"job_id":      j.ID(),
+				"job_attempt": j.RetryInfo().CurrentAttempt,
+				"num_pending": len(rh.pending),
+				"queue_id":    rh.queue.ID(),
+				"service":     "amboy.queue.retry",
+			})
+			startAt := time.Now()
+
+			if err := rh.handleJob(ctx, j); err != nil && ctx.Err() == nil {
 				grip.Error(message.WrapError(err, message.Fields{
 					"message":  "could not retry job",
 					"queue_id": rh.queue.ID(),
@@ -196,6 +216,16 @@ func (rh *BasicRetryHandler) waitForJob(ctx context.Context) {
 					}))
 				}
 			}
+
+			grip.Debug(message.Fields{
+				"message":     "finished retrying job",
+				"job_id":      j.ID(),
+				"job_attempt": j.RetryInfo().CurrentAttempt,
+				"num_pending": len(rh.pending),
+				"queue_id":    rh.queue.ID(),
+				"duration":    time.Since(startAt),
+				"service":     "amboy.queue.retry",
+			})
 
 			timer.Reset(rh.opts.WorkerCheckInterval)
 		}
