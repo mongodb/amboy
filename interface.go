@@ -90,10 +90,14 @@ type Job interface {
 	Lock(owner string, lockTimeout time.Duration) error
 	Unlock(owner string, lockTimeout time.Duration)
 
-	// Scope provides the ability to configure mutual exclusion for a job in a
-	// queue. When called, these methods do not actually take a lock; rather,
-	// they signal the intention to lock within the queue. It is invalid for end
-	// users to call SetScopes after the job has already dispatched.
+	// Scopes provide the ability to configure mutual exclusion for a job in a
+	// queue. The Scopes method returns the current mutual exclusion locks for
+	// the job.
+	// SetScopes configures the mutually exclusive lock(s) that a job in a queue
+	// should acquire. When called, it does not actually take a lock; rather, it
+	// signals the intention to lock within the queue. This is typically called
+	// when first initializing the job before enqueueing it; it is invalid for
+	// end users to call SetScopes after the job has already dispatched.
 	Scopes() []string
 	SetScopes([]string)
 
@@ -126,31 +130,31 @@ type JobStatusInfo struct {
 	Errors            []string  `bson:"errors,omitempty" json:"errors,omitempty" yaml:"errors,omitempty"`
 }
 
-// JobTimeInfo stores timing information for a job and is used by both
-// the Runner and Job implementations to track how long jobs take to
-// execute.
-//
-// Additionally, the Queue implementations __may__ use WaitUntil to
-// defer the execution of a job, until WaitUntil refers to a time in
-// the past.
-//
-// If the DispatchBy deadline is specified, and the queue
-// implementation supports it, the queue may drop the job if the
-// deadline is in the past when the job would be dispatched.
+// JobTimeInfo stores timing information for a job and is used by both the
+// Runner and Job implementations to track how long jobs take to execute.
 type JobTimeInfo struct {
-	Created    time.Time     `bson:"created,omitempty" json:"created,omitempty" yaml:"created,omitempty"`
-	Start      time.Time     `bson:"start,omitempty" json:"start,omitempty" yaml:"start,omitempty"`
-	End        time.Time     `bson:"end,omitempty" json:"end,omitempty" yaml:"end,omitempty"`
-	WaitUntil  time.Time     `bson:"wait_until" json:"wait_until,omitempty" yaml:"wait_until,omitempty"`
-	DispatchBy time.Time     `bson:"dispatch_by" json:"dispatch_by,omitempty" yaml:"dispatch_by,omitempty"`
-	MaxTime    time.Duration `bson:"max_time" json:"max_time,omitempty" yaml:"max_time,omitempty"`
+	Created time.Time `bson:"created,omitempty" json:"created,omitempty" yaml:"created,omitempty"`
+	Start   time.Time `bson:"start,omitempty" json:"start,omitempty" yaml:"start,omitempty"`
+	End     time.Time `bson:"end,omitempty" json:"end,omitempty" yaml:"end,omitempty"`
+	// WaitUntil defers execution of a job until a particular time has elapsed.
+	// Support for this feature in Queue implementations is optional.
+	WaitUntil time.Time `bson:"wait_until" json:"wait_until,omitempty" yaml:"wait_until,omitempty"`
+	// DispatchBy is a deadline before which the job must run. Support for this
+	// feature in Queue implementations is optional. Queues that support this
+	// feature may remove the job if the deadline has passed.
+	DispatchBy time.Time `bson:"dispatch_by" json:"dispatch_by,omitempty" yaml:"dispatch_by,omitempty"`
+	// MaxTime is the maximum time that the job is allowed to run. If the
+	// runtime exceeds this duration, the Queue should abort the job.
+	MaxTime time.Duration `bson:"max_time" json:"max_time,omitempty" yaml:"max_time,omitempty"`
 }
 
 // JobRetryInfo stores configuration and information for a job that can retry.
 // Support for retrying jobs is only supported by RetryableQueues.
 type JobRetryInfo struct {
-	// Retryable indicates whether the job should use Amboy's built-in retry
-	// mechanism.
+	// Retryable indicates whether the job can use Amboy's built-in retry
+	// mechanism. This should typically be set when first initializing the job;
+	// it is invalid for end users to modify Retryable once the job has already
+	// been dispatched.
 	Retryable bool `bson:"retryable" json:"retryable,omitempty" yaml:"retryable,omitempty"`
 	// NeedsRetry indicates whether the job is supposed to retry when it is
 	// complete. This will only be considered if Retryable is true.

@@ -2,15 +2,16 @@
 Waiting for Jobs to Complete
 
 The amboy package proves a number of generic methods that, using the
-Queue.Stats() method, block until all jobs are complete. They provide
-different semantics, which may be useful in different
-circumstances. All of these functions wait until the total number of
-jobs submitted to the queue is equal to the number of completed jobs,
-and as a result these methods don't prevent other threads from adding
-jobs to the queue after beginning to wait.
+Queue.Stats() method, block until all jobs are complete. They provide different
+semantics, which may be useful in different circumstances. All of the Wait*
+functions wait until the total number of jobs submitted to the queue is equal to
+the number of completed jobs, and as a result these methods don't prevent other
+threads from adding jobs to the queue after beginning to wait. As a special
+case, retryable queues will also wait until there are no retrying jobs
+remaining.
 
-Additionally, there are a set of methods that allow callers to wait for
-a specific job to complete.
+Additionally, there are a set of methods, WaitJob*, that allow callers to wait
+for a specific job to complete.
 */
 package amboy
 
