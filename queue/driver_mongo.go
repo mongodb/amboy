@@ -1003,7 +1003,7 @@ func (d *mongoDriver) getNextQuery() bson.M {
 	now := time.Now()
 	qd := bson.M{
 		"$or": []bson.M{
-			d.getUnstartedQuery(bson.M{}),
+			d.getPendingQuery(bson.M{}),
 			d.getInProgQuery(
 				bson.M{"status.mod_ts": bson.M{"$lte": now.Add(-lockTimeout)}},
 			),
@@ -1307,7 +1307,7 @@ func (d *mongoDriver) Stats(ctx context.Context) amboy.QueueStats {
 
 	var pending, inProg, retrying int
 	for _, group := range statusGroups {
-		if !group.ID.Completed {
+		if !group.ID.InProg && !group.ID.Completed {
 			pending += group.Count
 		}
 		if group.ID.InProg {
@@ -1339,7 +1339,7 @@ func (d *mongoDriver) Stats(ctx context.Context) amboy.QueueStats {
 		"message":    "problem counting total jobs",
 	}))
 
-	completed := int(total) - pending
+	completed := int(total) - pending - inProg
 
 	return amboy.QueueStats{
 		Total:     int(total),
@@ -1350,22 +1350,16 @@ func (d *mongoDriver) Stats(ctx context.Context) amboy.QueueStats {
 	}
 }
 
-// getPendingQuery modifies the query to find jobs that are pending.
+// getPendingQuery modifies the query to find jobs that have not started yet.
 func (d *mongoDriver) getPendingQuery(q bson.M) bson.M {
 	q["status.completed"] = false
-	return q
-}
-
-// getUnstartedQuery modifies the query to find jobs that have not started yet.
-func (d *mongoDriver) getUnstartedQuery(q bson.M) bson.M {
-	q = d.getPendingQuery(q)
 	q["status.in_prog"] = false
 	return q
 }
 
 // getInProgQuery modifies the query to find jobs that are in progress.
 func (d *mongoDriver) getInProgQuery(q bson.M) bson.M {
-	q = d.getPendingQuery(q)
+	q["status.completed"] = false
 	q["status.in_prog"] = true
 	return q
 }

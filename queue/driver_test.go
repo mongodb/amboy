@@ -555,7 +555,7 @@ func (s *DriverSuite) TestStatsCountsAreAccurate() {
 	}
 
 	stats := s.driver.Stats(s.ctx)
-	s.Equal(numEnqueued+numRunning, stats.Pending)
+	s.Equal(numEnqueued, stats.Pending)
 	s.Equal(numRunning, stats.Running)
 	s.Equal(numCompleted+numRetrying, stats.Completed)
 	s.Equal(numRetrying, stats.Retrying)
@@ -588,7 +588,7 @@ func (s *DriverSuite) TestNextMethodDoesNotReturnLastJob() {
 	s.NoError(s.driver.Put(s.ctx, j))
 	s.Equal(1, s.driver.Stats(s.ctx).Total)
 	s.Equal(0, s.driver.Stats(s.ctx).Blocked)
-	s.Equal(1, s.driver.Stats(s.ctx).Pending)
+	s.Equal(1, s.driver.Stats(s.ctx).Running)
 	s.Equal(0, s.driver.Stats(s.ctx).Completed)
 
 	s.Nil(s.driver.Next(ctx), fmt.Sprintf("%T", s.driver))
