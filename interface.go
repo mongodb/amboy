@@ -90,10 +90,13 @@ type Job interface {
 	Lock(owner string, lockTimeout time.Duration) error
 	Unlock(owner string, lockTimeout time.Duration)
 
-	// Scope provides the ability to configure mutual exclusion for a job in a
-	// queue. When called, these methods do not actually take a lock; rather,
-	// they signal the intention to lock within the queue. It is invalid for end
-	// users to call SetScopes after the job has already dispatched.
+	// Scopes provide the ability to configure mutual exclusion for a job in a
+	// queue.
+	// SetScopes configure the mutually exclusive lock(s) that a job in a queue
+	// should acquire. When called, it does not actually take a lock; rather, it
+	// signals the intention to lock within the queue. This is typically called
+	// when first initializing the job before enqueueing it; it is invalid for
+	// end users to call SetScopes after the job has already dispatched.
 	Scopes() []string
 	SetScopes([]string)
 
@@ -147,8 +150,10 @@ type JobTimeInfo struct {
 // JobRetryInfo stores configuration and information for a job that can retry.
 // Support for retrying jobs is only supported by RetryableQueues.
 type JobRetryInfo struct {
-	// Retryable indicates whether the job should use Amboy's built-in retry
-	// mechanism.
+	// Retryable indicates whether the job can use Amboy's built-in retry
+	// mechanism. This should typically be set when first initializing the job;
+	// it is invalid for end users to modify Retryable once the job has already
+	// been dispatched.
 	Retryable bool `bson:"retryable" json:"retryable,omitempty" yaml:"retryable,omitempty"`
 	// NeedsRetry indicates whether the job is supposed to retry when it is
 	// complete. This will only be considered if Retryable is true.

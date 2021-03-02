@@ -1,6 +1,6 @@
 /*
-Package queue provides several implementations of the amboy.Queue
-interface capable of processing amboy.Job implementations.
+Package queue provides several implementations of the amboy.Queue and
+amboy.RemoteQueue interface capable of processing amboy.Job implementations.
 */
 package queue
 
