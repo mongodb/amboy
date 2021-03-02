@@ -1169,10 +1169,7 @@ func (d *mongoDriver) tryDispatchJob(ctx context.Context, iter *mongo.Cursor, st
 		}
 
 		if j.TimeInfo().IsStale() {
-			// Delete stale jobs from the queue.
-			var res *mongo.DeleteResult
-
-			res, err = d.getCollection().DeleteOne(ctx, bson.M{"_id": j.ID()})
+			res, err := d.getCollection().DeleteOne(ctx, bson.M{"_id": ji.Name})
 			msg := message.Fields{
 				"id":            d.instanceID,
 				"service":       "amboy.queue.mdb",
