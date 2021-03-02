@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"time"
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/grip"
@@ -13,17 +14,21 @@ import (
 // queue, that store jobs in a remote persistence layer to support
 // distributed systems of workers.
 type MongoDBQueueCreationOptions struct {
-	Size    int
-	Name    string
-	Ordered bool
-	MDB     MongoDBOptions
-	Client  *mongo.Client
+	Size         int
+	Name         string
+	Ordered      bool
+	MDB          MongoDBOptions
+	Client       *mongo.Client
+	RetryHandler amboy.RetryHandlerOptions
+	// StaleRetryingCheckFrequency is how often the queue periodically checks
+	// for stale retrying jobs.
+	StaleRetryingCheckFrequency time.Duration
 }
 
 // NewMongoDBQueue builds a new queue that persists jobs to a MongoDB
 // instance. These queues allow workers running in multiple processes
 // to service shared workloads in multiple processes.
-func NewMongoDBQueue(ctx context.Context, opts MongoDBQueueCreationOptions) (amboy.Queue, error) {
+func NewMongoDBQueue(ctx context.Context, opts MongoDBQueueCreationOptions) (amboy.RetryableQueue, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -40,12 +45,36 @@ func (opts *MongoDBQueueCreationOptions) Validate() error {
 	catcher.NewWhen(opts.Client == nil && (opts.MDB.URI == "" && opts.MDB.DB == ""),
 		"must specify database options")
 
+	catcher.NewWhen(opts.StaleRetryingCheckFrequency < 0, "stale retrying check frequency cannot be negative")
+	if opts.StaleRetryingCheckFrequency == 0 {
+		opts.StaleRetryingCheckFrequency = defaultStaleRetryingMonitorInterval
+	}
+
 	return catcher.Resolve()
 }
 
-func (opts *MongoDBQueueCreationOptions) build(ctx context.Context) (amboy.Queue, error) {
+func (opts *MongoDBQueueCreationOptions) build(ctx context.Context) (amboy.RetryableQueue, error) {
 	var driver remoteQueueDriver
 	var err error
+
+	var q remoteQueue
+	if opts.Ordered {
+		if q, err = newSimpleRemoteOrdered(opts.Size); err != nil {
+			return nil, errors.Wrap(err, "initializing ordered queue")
+		}
+	} else {
+		if q, err = newRemoteUnordered(opts.Size); err != nil {
+			return nil, errors.Wrap(err, "initializing unordered queue")
+		}
+	}
+
+	rh, err := NewBasicRetryHandler(q, opts.RetryHandler)
+	if err != nil {
+		return nil, errors.Wrap(err, "initializing retry handler")
+	}
+	if err = q.SetRetryHandler(rh); err != nil {
+		return nil, errors.Wrap(err, "configuring queue retry handler")
+	}
 
 	if opts.Client == nil {
 		if opts.MDB.UseGroups {
@@ -71,13 +100,6 @@ func (opts *MongoDBQueueCreationOptions) build(ctx context.Context) (amboy.Queue
 
 	if err != nil {
 		return nil, errors.Wrap(err, "problem building driver")
-	}
-
-	var q remoteQueue
-	if opts.Ordered {
-		q = newSimpleRemoteOrdered(opts.Size)
-	} else {
-		q = newRemoteUnordered(opts.Size)
 	}
 
 	if err = q.SetDriver(driver); err != nil {

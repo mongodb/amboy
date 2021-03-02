@@ -47,6 +47,13 @@ type MongoDBQueueGroupOptions struct {
 	// to each queue, based on the queue ID passed to it.
 	WorkerPoolSize func(string) int
 
+	// RetryHandler configure how retryable jobs are handled.
+	RetryHandler amboy.RetryHandlerOptions
+
+	// StaleRetryingCheckFrequency is how often queues periodically check for
+	// stale retrying jobs.
+	StaleRetryingCheckFrequency time.Duration
+
 	// PruneFrequency is how often Prune runs by default.
 	PruneFrequency time.Duration
 
@@ -59,7 +66,7 @@ type MongoDBQueueGroupOptions struct {
 	TTL time.Duration
 }
 
-func (opts *MongoDBQueueGroupOptions) constructor(ctx context.Context, name string) remoteQueue {
+func (opts *MongoDBQueueGroupOptions) constructor(ctx context.Context, name string) (remoteQueue, error) {
 	workers := opts.DefaultWorkers
 	if opts.WorkerPoolSize != nil {
 		workers = opts.WorkerPoolSize(name)
@@ -69,18 +76,36 @@ func (opts *MongoDBQueueGroupOptions) constructor(ctx context.Context, name stri
 	}
 
 	var q remoteQueue
+	var err error
 	if opts.Ordered {
-		q = newSimpleRemoteOrdered(workers)
+		if q, err = newSimpleRemoteOrdered(workers); err != nil {
+			return nil, errors.Wrap(err, "initializing ordered queue")
+		}
 	} else {
-		q = newRemoteUnordered(workers)
+		if q, err = newRemoteUnordered(workers); err != nil {
+			return nil, errors.Wrap(err, "initializing unordered queue")
+		}
 	}
 
 	if opts.Abortable {
 		p := pool.NewAbortablePool(workers, q)
-		grip.Debug(q.SetRunner(p))
+		if err = q.SetRunner(p); err != nil {
+			return nil, errors.Wrap(err, "configuring queue with runner")
+		}
 	}
 
-	return q
+	rh, err := NewBasicRetryHandler(q, opts.RetryHandler)
+	if err != nil {
+		return nil, errors.Wrap(err, "initializing retry handler")
+	}
+	if err = q.SetRetryHandler(rh); err != nil {
+		return nil, errors.Wrap(err, "configuring queue with retry handler")
+	}
+	if opts.StaleRetryingCheckFrequency != 0 {
+		q.SetStaleRetryingMonitorInterval(opts.StaleRetryingCheckFrequency)
+	}
+
+	return q, nil
 }
 
 func (opts MongoDBQueueGroupOptions) validate() error {
@@ -105,6 +130,10 @@ func (opts MongoDBQueueGroupOptions) validate() error {
 	}
 	if opts.DefaultWorkers == 0 && opts.WorkerPoolSize == nil {
 		catcher.New("must specify either a default worker pool size or a WorkerPoolSize function")
+	}
+	catcher.NewWhen(opts.StaleRetryingCheckFrequency < 0, "stale retrying check frequency cannot be negative")
+	if opts.StaleRetryingCheckFrequency == 0 {
+		opts.StaleRetryingCheckFrequency = defaultStaleRetryingMonitorInterval
 	}
 	return catcher.Resolve()
 }
@@ -230,7 +259,10 @@ func (g *remoteMongoQueueGroup) Queues(ctx context.Context) []string {
 
 func (g *remoteMongoQueueGroup) startProcessingRemoteQueue(ctx context.Context, coll string) (amboy.Queue, error) {
 	coll = trimJobsSuffix(coll)
-	q := g.opts.constructor(ctx, coll)
+	q, err := g.opts.constructor(ctx, coll)
+	if err != nil {
+		return nil, errors.Wrap(err, "constructing queue")
+	}
 
 	d, err := openNewMongoDriver(ctx, coll, g.dbOpts, g.client)
 	if err != nil {
@@ -272,16 +304,8 @@ func (g *remoteMongoQueueGroup) getExistingCollections(ctx context.Context, clie
 // that the caller must add a job to the queue within the TTL, or else it may have attempted to add
 // a job to a closed queue.
 func (g *remoteMongoQueueGroup) Get(ctx context.Context, id string) (amboy.Queue, error) {
-	g.mu.RLock()
-	if queue, ok := g.queues[id]; ok {
-		g.ttlMap[id] = time.Now()
-		g.mu.RUnlock()
-		return queue, nil
-	}
-	g.mu.RUnlock()
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	// Check again in case the map was modified after we released the read lock.
 	if queue, ok := g.queues[id]; ok {
 		g.ttlMap[id] = time.Now()
 		return queue, nil
@@ -375,7 +399,7 @@ func (g *remoteMongoQueueGroup) Prune(ctx context.Context) error {
 					return
 				}
 				if queue, ok := g.queues[g.idFromCollection(nextColl)]; ok {
-					queue.Runner().Close(ctx)
+					queue.Close(ctx)
 					select {
 					case <-ctx.Done():
 						return
@@ -413,7 +437,7 @@ func (g *remoteMongoQueueGroup) Close(ctx context.Context) error {
 			go func(queue amboy.Queue) {
 				defer recovery.LogStackTraceAndContinue("panic in remote queue group closer")
 				defer wg.Done()
-				queue.Runner().Close(ctx)
+				queue.Close(ctx)
 			}(queue)
 		}
 		wg.Wait()

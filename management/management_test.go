@@ -33,8 +33,7 @@ func TestManagerSuiteBackedByMongoDB(t *testing.T) {
 	name := uuid.New().String()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	opts := queue.DefaultMongoDBOptions()
-	opts.DB = "amboy_test"
+	opts := defaultMongoDBTestOptions()
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(opts.URI))
 	require.NoError(t, err)
 	s.factory = func() Manager {
@@ -74,8 +73,7 @@ func TestManagerSuiteBackedByMongoDBSingleGroup(t *testing.T) {
 	name := uuid.New().String()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	opts := queue.DefaultMongoDBOptions()
-	opts.DB = "amboy_test"
+	opts := defaultMongoDBTestOptions()
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(opts.URI))
 	require.NoError(t, err)
 	s.factory = func() Manager {
@@ -120,8 +118,7 @@ func TestManagerSuiteBackedByMongoDBMultiGroup(t *testing.T) {
 	name := uuid.New().String()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	opts := queue.DefaultMongoDBOptions()
-	opts.DB = "amboy_test"
+	opts := defaultMongoDBTestOptions()
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(opts.URI))
 	require.NoError(t, err)
 	s.factory = func() Manager {

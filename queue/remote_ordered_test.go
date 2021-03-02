@@ -36,8 +36,7 @@ func TestSimpleRemoteOrderedSuiteMongoDB(t *testing.T) {
 
 func (s *SimpleRemoteOrderedSuite) SetupSuite() {
 	name := "test-" + uuid.New().String()
-	opts := DefaultMongoDBOptions()
-	opts.DB = "amboy_test"
+	opts := defaultMongoDBTestOptions()
 	s.driverConstructor = func() (remoteQueueDriver, error) {
 		return newMongoDriver(name, opts)
 	}
@@ -69,8 +68,9 @@ func (s *SimpleRemoteOrderedSuite) SetupTest() {
 	s.Require().NoError(err)
 	s.canceler = canceler
 	s.NoError(s.driver.Open(ctx))
-	queue := newSimpleRemoteOrdered(2)
-	s.NoError(queue.SetDriver(s.driver))
+	queue, err := newSimpleRemoteOrdered(2)
+	s.Require().NoError(err)
+	s.Require().NoError(queue.SetDriver(s.driver))
 	s.queue = queue
 }
 

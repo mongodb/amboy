@@ -271,3 +271,9 @@ func (q *priorityLocalQueue) Start(ctx context.Context) error {
 
 	return nil
 }
+
+func (q *priorityLocalQueue) Close(ctx context.Context) {
+	if r := q.Runner(); r != nil {
+		r.Close(ctx)
+	}
+}

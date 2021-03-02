@@ -14,6 +14,7 @@ import (
 	"github.com/mongodb/amboy/registry"
 	"github.com/mongodb/grip"
 	"github.com/mongodb/grip/message"
+	"github.com/mongodb/grip/recovery"
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -188,12 +189,12 @@ func (d *mongoDriver) setupDB(ctx context.Context) error {
 
 func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 	primary := bsonx.Doc{}
+	retryableJobIDAndAttempt := bsonx.Doc{}
 
 	if d.opts.UseGroups {
-		primary = append(primary, bsonx.Elem{
-			Key:   "group",
-			Value: bsonx.Int32(1),
-		})
+		group := bsonx.Elem{Key: "group", Value: bsonx.Int32(1)}
+		primary = append(primary, group)
+		retryableJobIDAndAttempt = append(retryableJobIDAndAttempt, group)
 	}
 
 	primary = append(primary,
@@ -225,10 +226,21 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 		})
 	}
 
-	indexes := []mongo.IndexModel{
-		{
-			Keys: primary,
+	retryableJobIDAndAttempt = append(retryableJobIDAndAttempt,
+		bsonx.Elem{
+			Key:   "retry_info.base_job_id",
+			Value: bsonx.Int32(1),
 		},
+		bsonx.Elem{
+			Key:   "retry_info.current_attempt",
+			Value: bsonx.Int32(-1),
+		},
+	)
+
+	indexes := []mongo.IndexModel{
+		{Keys: primary},
+		{Keys: retryableJobIDAndAttempt},
+		// TODO (EVG-14163): this should take queue group isolation into account.
 		{
 			Keys: bsonx.Doc{
 				{
@@ -263,28 +275,16 @@ func (d *mongoDriver) reportingIndexes() []mongo.IndexModel {
 	completedCreated := bsonx.Doc{}
 	typeCompletedInProgModTs := bsonx.Doc{}
 	typeCompletedEnd := bsonx.Doc{}
+	retrying := bsonx.Doc{}
 
 	if d.opts.UseGroups {
-		completedInProgModTs = append(completedInProgModTs, bsonx.Elem{
-			Key:   "group",
-			Value: bsonx.Int32(1),
-		})
-		completedEnd = append(completedEnd, bsonx.Elem{
-			Key:   "group",
-			Value: bsonx.Int32(1),
-		})
-		completedCreated = append(completedCreated, bsonx.Elem{
-			Key:   "group",
-			Value: bsonx.Int32(1),
-		})
-		typeCompletedInProgModTs = append(typeCompletedInProgModTs, bsonx.Elem{
-			Key:   "group",
-			Value: bsonx.Int32(1),
-		})
-		typeCompletedEnd = append(typeCompletedEnd, bsonx.Elem{
-			Key:   "group",
-			Value: bsonx.Int32(1),
-		})
+		group := bsonx.Elem{Key: "group", Value: bsonx.Int32(1)}
+		completedInProgModTs = append(completedInProgModTs, group)
+		completedEnd = append(completedEnd, group)
+		completedCreated = append(completedCreated, group)
+		typeCompletedInProgModTs = append(typeCompletedInProgModTs, group)
+		typeCompletedEnd = append(typeCompletedEnd, group)
+		retrying = append(retrying, group)
 	}
 
 	completedInProgModTs = append(completedInProgModTs,
@@ -363,6 +363,30 @@ func (d *mongoDriver) reportingIndexes() []mongo.IndexModel {
 	)
 	indexes = append(indexes, mongo.IndexModel{Keys: typeCompletedEnd})
 
+	retrying = append(retrying,
+		bsonx.Elem{
+			Key:   "status.completed",
+			Value: bsonx.Int32(1),
+		},
+		bsonx.Elem{
+			Key:   "retry_info.retryable",
+			Value: bsonx.Int32(1),
+		},
+		bsonx.Elem{
+			Key:   "retry_info.needs_retry",
+			Value: bsonx.Int32(1),
+		},
+	)
+	indexes = append(indexes, mongo.IndexModel{
+		Keys: retrying,
+		// We have to shorten the index name because the index name length
+		// is limited to 127 bytes for MongoDB 4.0.
+		// Source: https://docs.mongodb.com/manual/reference/limits/#Index-Name-Length
+		// TODO: this only affects tests. Remove the custom index name once
+		// CI tests have upgraded to MongoDB 4.2+.
+		Options: options.Index().SetName("retrying_jobs"),
+	})
+
 	return indexes
 }
 
@@ -374,29 +398,60 @@ func (d *mongoDriver) Close() {
 
 func buildCompoundID(n, id string) string { return fmt.Sprintf("%s.%s", n, id) }
 
-func (d *mongoDriver) getIDFromName(name string) string {
+func deconstructCompoundID(id, prefix string) string {
+	return strings.TrimPrefix(id, prefix+".")
+}
+
+func (d *mongoDriver) getIDWithGroup(name string) string {
 	if d.opts.UseGroups {
-		return buildCompoundID(d.opts.GroupName, name)
+		name = buildCompoundID(d.opts.GroupName, name)
 	}
 
 	return name
 }
 
-func (d *mongoDriver) processNameForUsers(j *registry.JobInterchange) {
-	if !d.opts.UseGroups {
-		return
-	}
-
-	j.Name = j.Name[len(d.opts.GroupName)+1:]
+func (d *mongoDriver) addMetadata(j *registry.JobInterchange) {
+	d.addRetryToMetadata(j)
+	d.addGroupToMetadata(j)
 }
 
-func (d *mongoDriver) processJobForGroup(j *registry.JobInterchange) {
+func (d *mongoDriver) removeMetadata(j *registry.JobInterchange) {
+	d.removeGroupFromMetadata(j)
+	d.removeRetryFromMetadata(j)
+}
+
+func (d *mongoDriver) addGroupToMetadata(j *registry.JobInterchange) {
 	if !d.opts.UseGroups {
 		return
 	}
 
 	j.Group = d.opts.GroupName
 	j.Name = buildCompoundID(d.opts.GroupName, j.Name)
+}
+
+func (d *mongoDriver) removeGroupFromMetadata(j *registry.JobInterchange) {
+	if !d.opts.UseGroups {
+		return
+	}
+
+	j.Name = deconstructCompoundID(j.Name, d.opts.GroupName)
+}
+
+func (d *mongoDriver) addRetryToMetadata(j *registry.JobInterchange) {
+	if !j.RetryInfo.Retryable {
+		return
+	}
+
+	j.RetryInfo.BaseJobID = j.Name
+	j.Name = buildCompoundID(retryAttemptPrefix(j.RetryInfo.CurrentAttempt), j.Name)
+}
+
+func (d *mongoDriver) removeRetryFromMetadata(j *registry.JobInterchange) {
+	if !j.RetryInfo.Retryable {
+		return
+	}
+
+	j.Name = deconstructCompoundID(j.Name, retryAttemptPrefix(j.RetryInfo.CurrentAttempt))
 }
 
 func (d *mongoDriver) modifyQueryForGroup(q bson.M) {
@@ -410,7 +465,19 @@ func (d *mongoDriver) modifyQueryForGroup(q bson.M) {
 func (d *mongoDriver) Get(ctx context.Context, name string) (amboy.Job, error) {
 	j := &registry.JobInterchange{}
 
-	res := d.getCollection().FindOne(ctx, bson.M{"_id": d.getIDFromName(name)})
+	matchLatestRetry := bson.M{"retry_info.base_job_id": name}
+	d.modifyQueryForGroup(matchLatestRetry)
+
+	matchID := bson.M{
+		"$or": []bson.M{
+			{"_id": d.getIDWithGroup(name)},
+			matchLatestRetry,
+		},
+	}
+	byRetryAttempt := bson.M{
+		"retry_info.current_attempt": -1,
+	}
+	res := d.getCollection().FindOne(ctx, matchID, options.FindOne().SetSort(byRetryAttempt))
 	if err := res.Err(); err != nil {
 		return nil, errors.Wrapf(err, "GET problem fetching '%s'", name)
 	}
@@ -418,8 +485,6 @@ func (d *mongoDriver) Get(ctx context.Context, name string) (amboy.Job, error) {
 	if err := res.Decode(j); err != nil {
 		return nil, errors.Wrapf(err, "GET problem decoding '%s'", name)
 	}
-
-	d.processNameForUsers(j)
 
 	output, err := j.Resolve(d.opts.Format)
 	if err != nil {
@@ -430,20 +495,49 @@ func (d *mongoDriver) Get(ctx context.Context, name string) (amboy.Job, error) {
 	return output, nil
 }
 
+func (d *mongoDriver) GetAttempt(ctx context.Context, name string, attempt int) (amboy.Job, error) {
+	matchIDAndAttempt := bson.M{
+		"retry_info.base_job_id":     name,
+		"retry_info.current_attempt": attempt,
+	}
+	d.modifyQueryForGroup(matchIDAndAttempt)
+
+	res := d.getCollection().FindOne(ctx, matchIDAndAttempt)
+	if err := res.Err(); err != nil {
+		return nil, errors.Wrapf(err, "GET problem fetching '%s'", name)
+	}
+
+	ji := &registry.JobInterchange{}
+	if err := res.Decode(ji); err != nil {
+		return nil, errors.Wrapf(err, "GET problem decoding '%s'", name)
+	}
+
+	j, err := ji.Resolve(d.opts.Format)
+	if err != nil {
+		return nil, errors.Wrapf(err,
+			"GET problem converting '%s' to job object", name)
+	}
+
+	return j, nil
+}
+
 func (d *mongoDriver) Put(ctx context.Context, j amboy.Job) error {
-	job, err := registry.MakeJobInterchange(j, d.opts.Format)
+	ji, err := registry.MakeJobInterchange(j, d.opts.Format)
 	if err != nil {
 		return errors.Wrap(err, "problem converting job to interchange format")
 	}
 
 	if j.ShouldApplyScopesOnEnqueue() {
-		job.Scopes = j.Scopes()
+		ji.Scopes = j.Scopes()
 	}
 
-	d.processJobForGroup(job)
+	d.addMetadata(ji)
 
-	if _, err = d.getCollection().InsertOne(ctx, job); err != nil {
+	if _, err = d.getCollection().InsertOne(ctx, ji); err != nil {
 		if isMongoDupKey(err) {
+			if isMongoDupScope(err) {
+				return amboy.NewDuplicateJobScopeErrorf("job scopes '%s' conflict", j.Scopes())
+			}
 			return amboy.NewDuplicateJobErrorf("job '%s' already exists", j.ID())
 		}
 
@@ -481,45 +575,164 @@ func (d *mongoDriver) getAtomicQuery(jobName string, modCount int) bson.M {
 	}
 }
 
+var errMongoNoDocumentsMatched = errors.New("no documents matched")
+
+func isMongoNoDocumentsMatched(err error) bool {
+	return errors.Cause(err) == errMongoNoDocumentsMatched
+}
+
 func isMongoDupKey(err error) bool {
-	we, ok := errors.Cause(err).(mongo.WriteException)
-	if !ok {
-		return false
-	}
-	if we.WriteConcernError != nil {
-		wce := we.WriteConcernError
-		return wce.Code == 11000 || wce.Code == 11001 || wce.Code == 12582 || wce.Code == 16460 && strings.Contains(wce.Message, " E11000 ")
-	}
-	if we.WriteErrors != nil && len(we.WriteErrors) > 0 {
-		for _, wErr := range we.WriteErrors {
-			if wErr.Code == 11000 {
-				return true
-			}
+	dupKeyErrs := getMongoDupKeyErrors(err)
+	return dupKeyErrs.writeConcernError != nil || len(dupKeyErrs.writeErrors) != 0 || dupKeyErrs.commandError != nil
+}
+
+func isMongoDupScope(err error) bool {
+	dupKeyErrs := getMongoDupKeyErrors(err)
+	if wce := dupKeyErrs.writeConcernError; wce != nil {
+		if strings.Contains(wce.Message, " scopes_1 ") {
+			return true
 		}
 	}
+
+	for _, werr := range dupKeyErrs.writeErrors {
+		if strings.Contains(werr.Message, " scopes_1 ") {
+			return true
+		}
+	}
+
+	if ce := dupKeyErrs.commandError; ce != nil {
+		if strings.Contains(ce.Message, " scopes_1 ") {
+			return true
+		}
+	}
+
 	return false
 }
 
+type mongoDupKeyErrors struct {
+	writeConcernError *mongo.WriteConcernError
+	writeErrors       []mongo.WriteError
+	commandError      *mongo.CommandError
+}
+
+func getMongoDupKeyErrors(err error) mongoDupKeyErrors {
+	var dupKeyErrs mongoDupKeyErrors
+
+	if we, ok := errors.Cause(err).(mongo.WriteException); ok {
+		dupKeyErrs.writeConcernError = getMongoDupKeyWriteConcernError(we)
+		dupKeyErrs.writeErrors = getMongoDupKeyWriteErrors(we)
+	}
+
+	if ce, ok := errors.Cause(err).(mongo.CommandError); ok {
+		dupKeyErrs.commandError = getMongoDupKeyCommandError(ce)
+	}
+
+	return dupKeyErrs
+}
+
+// TODO: this logic is a copy-paste and could potentially be replaced by
+// upgrading the Go driver to a newer version:
+// (https://github.com/mongodb/mongo-go-driver/blob/213fb80b373f70dba4f9f516dc4c718abe41c76b/mongo/errors.go#L87-L96)
+func getMongoDupKeyWriteConcernError(err mongo.WriteException) *mongo.WriteConcernError {
+	wce := err.WriteConcernError
+	if wce == nil {
+		return nil
+	}
+
+	switch wce.Code {
+	case 11000, 11001, 12582:
+		return wce
+	case 16460:
+		if strings.Contains(wce.Message, " E11000 ") {
+			return wce
+		}
+		return nil
+	default:
+		return nil
+	}
+}
+
+func getMongoDupKeyWriteErrors(err mongo.WriteException) []mongo.WriteError {
+	if len(err.WriteErrors) == 0 {
+		return nil
+	}
+
+	var werrs []mongo.WriteError
+	for _, werr := range err.WriteErrors {
+		if werr.Code == 11000 {
+			werrs = append(werrs, werr)
+		}
+	}
+
+	return werrs
+}
+
+func getMongoDupKeyCommandError(err mongo.CommandError) *mongo.CommandError {
+	switch err.Code {
+	case 11000, 11001:
+		return &err
+	case 16460:
+		if strings.Contains(err.Message, " E11000 ") {
+			return &err
+		}
+		return nil
+	default:
+		return nil
+	}
+}
+
 func (d *mongoDriver) Save(ctx context.Context, j amboy.Job) error {
-	job, err := d.prepareInterchange(j)
+	ji, err := d.prepareInterchange(j)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	job.Scopes = j.Scopes()
+	ji.Scopes = j.Scopes()
 
-	return errors.WithStack(d.doUpdate(ctx, job))
+	return errors.WithStack(d.doUpdate(ctx, ji))
+}
+
+func (d *mongoDriver) CompleteAndPut(ctx context.Context, toComplete amboy.Job, toPut amboy.Job) error {
+	sess, err := d.client.StartSession()
+	if err != nil {
+		return errors.Wrap(err, "starting transaction session")
+	}
+	defer sess.EndSession(ctx)
+
+	atomicCompleteAndPut := func(sessCtx mongo.SessionContext) (interface{}, error) {
+		if err = d.Complete(sessCtx, toComplete); err != nil {
+			return nil, errors.Wrap(err, "completing old job")
+		}
+
+		if err = d.Put(sessCtx, toPut); err != nil {
+			return nil, errors.Wrap(err, "adding new job")
+		}
+
+		return nil, nil
+	}
+
+	if _, err = sess.WithTransaction(ctx, atomicCompleteAndPut); err != nil {
+		return errors.Wrap(err, "atomic complete and put")
+	}
+
+	return nil
 }
 
 func (d *mongoDriver) Complete(ctx context.Context, j amboy.Job) error {
-	job, err := d.prepareInterchange(j)
+	ji, err := d.prepareInterchange(j)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	job.Scopes = nil
+	// It is safe to drop the scopes now in all cases except for one - if the
+	// job still needs to retry and applies its scopes immediately to the retry
+	// job, we cannot let go of the scopes yet because they will need to be
+	// safely transferred to the retry job.
+	if !ji.RetryInfo.ShouldRetry() || !ji.ApplyScopesOnEnqueue {
+		ji.Scopes = nil
+	}
 
-	return errors.WithStack(d.doUpdate(ctx, job))
+	return errors.WithStack(d.doUpdate(ctx, ji))
 }
 
 func (d *mongoDriver) prepareInterchange(j amboy.Job) (*registry.JobInterchange, error) {
@@ -528,23 +741,24 @@ func (d *mongoDriver) prepareInterchange(j amboy.Job) (*registry.JobInterchange,
 	stat.ModificationTime = time.Now()
 	j.SetStatus(stat)
 
-	job, err := registry.MakeJobInterchange(j, d.opts.Format)
+	ji, err := registry.MakeJobInterchange(j, d.opts.Format)
 	if err != nil {
 		return nil, errors.Wrap(err, "problem converting job to interchange format")
 	}
-	return job, nil
+	return ji, nil
 }
 
-func (d *mongoDriver) doUpdate(ctx context.Context, job *registry.JobInterchange) error {
-	d.processJobForGroup(job)
-	query := d.getAtomicQuery(job.Name, job.Status.ModificationCount)
-	res, err := d.getCollection().ReplaceOne(ctx, query, job)
+func (d *mongoDriver) doUpdate(ctx context.Context, ji *registry.JobInterchange) error {
+	d.addMetadata(ji)
+
+	query := d.getAtomicQuery(ji.Name, ji.Status.ModificationCount)
+	res, err := d.getCollection().ReplaceOne(ctx, query, ji)
 	if err != nil {
-		return errors.Wrapf(err, "problem saving document %s: %+v", job.Name, res)
+		return errors.Wrapf(err, "problem saving document %s: %+v", ji.Name, res)
 	}
 
 	if res.MatchedCount == 0 {
-		return errors.Errorf("problem saving job [id=%s, matched=%d, modified=%d]", job.Name, res.MatchedCount, res.ModifiedCount)
+		return errors.Wrapf(errMongoNoDocumentsMatched, "problem saving job [id=%s, matched=%d, modified=%d]", ji.Name, res.MatchedCount, res.ModifiedCount)
 	}
 	return nil
 }
@@ -552,7 +766,17 @@ func (d *mongoDriver) doUpdate(ctx context.Context, job *registry.JobInterchange
 func (d *mongoDriver) Jobs(ctx context.Context) <-chan amboy.Job {
 	output := make(chan amboy.Job)
 	go func() {
-		defer close(output)
+		defer func() {
+			if err := recovery.HandlePanicWithError(recover(), nil, "getting jobs"); err != nil {
+				grip.Error(message.WrapError(err, message.Fields{
+					"message":   "failed while getting jobs from the DB",
+					"operation": "job iterator",
+					"service":   "amboy.queue.mdb",
+					"driver_id": d.ID(),
+				}))
+			}
+			close(output)
+		}()
 		q := bson.M{}
 		d.modifyQueryForGroup(q)
 
@@ -568,10 +792,9 @@ func (d *mongoDriver) Jobs(ctx context.Context) <-chan amboy.Job {
 			}))
 			return
 		}
-		var job amboy.Job
 		for iter.Next(ctx) {
-			j := &registry.JobInterchange{}
-			if err = iter.Decode(j); err != nil {
+			ji := &registry.JobInterchange{}
+			if err = iter.Decode(ji); err != nil {
 				grip.Warning(message.WrapError(err, message.Fields{
 					"id":        d.instanceID,
 					"service":   "amboy.queue.mdb",
@@ -584,9 +807,8 @@ func (d *mongoDriver) Jobs(ctx context.Context) <-chan amboy.Job {
 				continue
 			}
 
-			d.processNameForUsers(j)
-
-			job, err = j.Resolve(d.opts.Format)
+			var j amboy.Job
+			j, err = ji.Resolve(d.opts.Format)
 			if err != nil {
 				grip.Warning(message.WrapError(err, message.Fields{
 					"id":        d.instanceID,
@@ -599,7 +821,11 @@ func (d *mongoDriver) Jobs(ctx context.Context) <-chan amboy.Job {
 				continue
 			}
 
-			output <- job
+			select {
+			case <-ctx.Done():
+				return
+			case output <- j:
+			}
 		}
 
 		grip.Error(message.WrapError(iter.Err(), message.Fields{
@@ -608,10 +834,104 @@ func (d *mongoDriver) Jobs(ctx context.Context) <-chan amboy.Job {
 			"is_group":  d.opts.UseGroups,
 			"group":     d.opts.GroupName,
 			"operation": "job iterator",
-			"message":   "database interface error",
+			"message":   "database iterator error",
 		}))
 	}()
+
 	return output
+}
+
+func (d *mongoDriver) RetryableJobs(ctx context.Context, filter retryableJobFilter) <-chan amboy.Job {
+	jobs := make(chan amboy.Job)
+
+	go func() {
+		defer func() {
+			if err := recovery.HandlePanicWithError(recover(), nil, "getting retryable jobs"); err != nil {
+				grip.Error(message.WrapError(err, message.Fields{
+					"message":   "failed while getting retryable jobs from the DB",
+					"operation": "retryable job iterator",
+					"service":   "amboy.queue.mdb",
+					"driver_id": d.ID(),
+				}))
+			}
+			close(jobs)
+		}()
+
+		var q bson.M
+		switch filter {
+		case retryableJobAll:
+			q = bson.M{"retry_info.retryable": true}
+		case retryableJobAllRetrying:
+			q = d.getRetryingQuery(bson.M{})
+		case retryableJobActiveRetrying:
+			q = d.getRetryingQuery(bson.M{})
+			q["status.mod_ts"] = bson.M{"$gte": time.Now().Add(-d.LockTimeout())}
+		case retryableJobStaleRetrying:
+			q = d.getRetryingQuery(bson.M{})
+			q["status.mod_ts"] = bson.M{"$lte": time.Now().Add(-d.LockTimeout())}
+		default:
+			return
+		}
+		d.modifyQueryForGroup(q)
+
+		iter, err := d.getCollection().Find(ctx, q, options.Find().SetSort(bson.M{"status.mod_ts": -1}))
+		if err != nil {
+			grip.Warning(message.WrapError(err, message.Fields{
+				"id":        d.instanceID,
+				"service":   "amboy.queue.mdb",
+				"is_group":  d.opts.UseGroups,
+				"group":     d.opts.GroupName,
+				"operation": "retryable job iterator",
+				"message":   "problem with query",
+			}))
+			return
+		}
+		for iter.Next(ctx) {
+			ji := &registry.JobInterchange{}
+			if err = iter.Decode(ji); err != nil {
+				grip.Warning(message.WrapError(err, message.Fields{
+					"id":        d.instanceID,
+					"service":   "amboy.queue.mdb",
+					"is_group":  d.opts.UseGroups,
+					"group":     d.opts.GroupName,
+					"operation": "retryable job iterator",
+					"message":   "problem reading job from cursor",
+				}))
+				continue
+			}
+
+			var j amboy.Job
+			j, err = ji.Resolve(d.opts.Format)
+			if err != nil {
+				grip.Warning(message.WrapError(err, message.Fields{
+					"id":        d.instanceID,
+					"service":   "amboy.queue.mdb",
+					"operation": "retryable job iterator",
+					"is_group":  d.opts.UseGroups,
+					"group":     d.opts.GroupName,
+					"message":   "problem converting job object",
+				}))
+				continue
+			}
+
+			select {
+			case <-ctx.Done():
+				return
+			case jobs <- j:
+			}
+		}
+
+		grip.Error(message.WrapError(iter.Err(), message.Fields{
+			"id":        d.instanceID,
+			"service":   "amboy.queue.mdb",
+			"is_group":  d.opts.UseGroups,
+			"group":     d.opts.GroupName,
+			"operation": "retryable job iterator",
+			"message":   "database iterator error",
+		}))
+	}()
+
+	return jobs
 }
 
 func (d *mongoDriver) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
@@ -643,8 +963,8 @@ func (d *mongoDriver) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 		}
 
 		for iter.Next(ctx) {
-			j := &registry.JobInterchange{}
-			if err := iter.Decode(j); err != nil {
+			ji := &registry.JobInterchange{}
+			if err := iter.Decode(ji); err != nil {
 				grip.Warning(message.WrapError(err, message.Fields{
 					"id":        d.instanceID,
 					"service":   "amboy.queue.monto",
@@ -655,37 +975,31 @@ func (d *mongoDriver) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 				}))
 				continue
 			}
-			d.processNameForUsers(j)
-			j.Status.ID = j.Name
+
+			d.removeMetadata(ji)
+			ji.Status.ID = ji.Name
+
 			select {
 			case <-ctx.Done():
 				return
-			case output <- j.Status:
+			case output <- ji.Status:
 			}
 
 		}
-
 	}()
 
 	return output
 }
 
 func (d *mongoDriver) getNextQuery() bson.M {
-	d.mu.RLock()
 	lockTimeout := d.LockTimeout()
-	d.mu.RUnlock()
 	now := time.Now()
 	qd := bson.M{
 		"$or": []bson.M{
-			{
-				"status.completed": false,
-				"status.in_prog":   false,
-			},
-			{
-				"status.completed": false,
-				"status.in_prog":   true,
-				"status.mod_ts":    bson.M{"$lte": now.Add(-lockTimeout)},
-			},
+			d.getPendingQuery(bson.M{}),
+			d.getInProgQuery(
+				bson.M{"status.mod_ts": bson.M{"$lte": now.Add(-lockTimeout)}},
+			),
 		},
 	}
 
@@ -824,8 +1138,8 @@ type dispatchAttemptInfo struct {
 func (d *mongoDriver) tryDispatchJob(ctx context.Context, iter *mongo.Cursor, startAt time.Time) (amboy.Job, dispatchAttemptInfo) {
 	var dispatchInfo dispatchAttemptInfo
 	for iter.Next(ctx) {
-		j := &registry.JobInterchange{}
-		if err := iter.Decode(j); err != nil {
+		ji := &registry.JobInterchange{}
+		if err := iter.Decode(ji); err != nil {
 			grip.Warning(message.WrapError(err, message.Fields{
 				"id":            d.instanceID,
 				"service":       "amboy.queue.mdb",
@@ -839,7 +1153,7 @@ func (d *mongoDriver) tryDispatchJob(ctx context.Context, iter *mongo.Cursor, st
 			continue
 		}
 
-		job, err := j.Resolve(d.opts.Format)
+		j, err := ji.Resolve(d.opts.Format)
 		if err != nil {
 			grip.Warning(message.WrapError(err, message.Fields{
 				"id":            d.instanceID,
@@ -854,19 +1168,16 @@ func (d *mongoDriver) tryDispatchJob(ctx context.Context, iter *mongo.Cursor, st
 			continue
 		}
 
-		if job.TimeInfo().IsStale() {
-			// Delete stale jobs from the queue.
-			var res *mongo.DeleteResult
-
-			res, err = d.getCollection().DeleteOne(ctx, bson.M{"_id": j.Name})
+		if j.TimeInfo().IsStale() {
+			res, err := d.getCollection().DeleteOne(ctx, bson.M{"_id": ji.Name})
 			msg := message.Fields{
 				"id":            d.instanceID,
 				"service":       "amboy.queue.mdb",
 				"num_deleted":   res.DeletedCount,
 				"message":       "found stale job",
 				"operation":     "job staleness check",
-				"job_id":        job.ID(),
-				"job_type":      job.Type().Name,
+				"job_id":        j.ID(),
+				"job_type":      j.Type().Name,
 				"is_group":      d.opts.UseGroups,
 				"group":         d.opts.GroupName,
 				"duration_secs": time.Since(startAt).Seconds(),
@@ -876,26 +1187,26 @@ func (d *mongoDriver) tryDispatchJob(ctx context.Context, iter *mongo.Cursor, st
 			continue
 		}
 
-		if !isDispatchable(job.Status(), d.opts.LockTimeout) {
+		if !isDispatchable(j.Status(), d.opts.LockTimeout) {
 			dispatchInfo.skips++
 			continue
-		} else if d.scopesInUse(ctx, job.Scopes()) && !jobCanRestart(job.Status(), d.opts.LockTimeout) {
+		} else if d.scopesInUse(ctx, j.Scopes()) && !jobCanRestart(j.Status(), d.opts.LockTimeout) {
 			dispatchInfo.skips++
 			continue
 		}
 
-		if err = d.dispatcher.Dispatch(ctx, job); err != nil {
+		if err = d.dispatcher.Dispatch(ctx, j); err != nil {
 			dispatchInfo.misses++
 			grip.DebugWhen(
-				isDispatchable(job.Status(), d.opts.LockTimeout),
+				isDispatchable(j.Status(), d.opts.LockTimeout),
 				message.WrapError(err, message.Fields{
 					"id":            d.instanceID,
 					"service":       "amboy.queue.mdb",
 					"operation":     "dispatch job",
-					"job_id":        job.ID(),
-					"job_type":      job.Type().Name,
-					"scopes":        job.Scopes(),
-					"stat":          job.Status(),
+					"job_id":        j.ID(),
+					"job_type":      j.Type().Name,
+					"scopes":        j.Scopes(),
+					"stat":          j.Status(),
 					"is_group":      d.opts.UseGroups,
 					"group":         d.opts.GroupName,
 					"dup_key":       isMongoDupKey(err),
@@ -904,7 +1215,8 @@ func (d *mongoDriver) tryDispatchJob(ctx context.Context, iter *mongo.Cursor, st
 			)
 			continue
 		}
-		return job, dispatchInfo
+
+		return j, dispatchInfo
 	}
 
 	return nil, dispatchInfo
@@ -914,6 +1226,7 @@ func (d *mongoDriver) scopesInUse(ctx context.Context, scopes []string) bool {
 	if len(scopes) == 0 {
 		return false
 	}
+	// TODO (EVG-14163): this should take queue group isolation into account.
 	num, err := d.getCollection().CountDocuments(ctx, bson.M{
 		"status.in_prog": true,
 		"scopes":         bson.M{"$in": scopes}})
@@ -927,14 +1240,85 @@ func (d *mongoDriver) scopesInUse(ctx context.Context, scopes []string) bool {
 func (d *mongoDriver) Stats(ctx context.Context) amboy.QueueStats {
 	coll := d.getCollection()
 
-	var numJobs int64
-	var err error
-	if d.opts.UseGroups {
-		numJobs, err = coll.CountDocuments(ctx, bson.M{"group": d.opts.GroupName})
-	} else {
-		numJobs, err = coll.EstimatedDocumentCount(ctx)
+	statusFilter := bson.M{
+		"$or": []bson.M{
+			d.getPendingQuery(bson.M{}),
+			d.getInProgQuery(bson.M{}),
+			d.getRetryingQuery(bson.M{}),
+		},
+	}
+	d.modifyQueryForGroup(statusFilter)
+	matchStatus := bson.M{"$match": statusFilter}
+	groupStatuses := bson.M{
+		"$group": bson.M{
+			"_id": bson.M{
+				"completed":   "$status.completed",
+				"in_prog":     "$status.in_prog",
+				"needs_retry": "$retry_info.needs_retry",
+			},
+			"count": bson.M{"$sum": 1},
+		},
+	}
+	pipeline := []bson.M{matchStatus, groupStatuses}
+
+	c, err := coll.Aggregate(ctx, pipeline)
+	if err != nil {
+		grip.Warning(message.WrapError(err, message.Fields{
+			"id":         d.instanceID,
+			"service":    "amboy.queue.mdb",
+			"collection": coll.Name(),
+			"is_group":   d.opts.UseGroups,
+			"group":      d.opts.GroupName,
+			"operation":  "queue stats",
+			"message":    "could not count documents by status",
+		}))
+		return amboy.QueueStats{}
+	}
+	statusGroups := []struct {
+		ID struct {
+			Completed  bool `bson:"completed"`
+			InProg     bool `bson:"in_prog"`
+			NeedsRetry bool `bson:"needs_retry"`
+		} `bson:"_id"`
+		Count int `bson:"count"`
+	}{}
+	if err := c.All(ctx, &statusGroups); err != nil {
+		grip.Warning(message.WrapError(err, message.Fields{
+			"id":         d.instanceID,
+			"service":    "amboy.queue.mdb",
+			"collection": coll.Name(),
+			"is_group":   d.opts.UseGroups,
+			"group":      d.opts.GroupName,
+			"operation":  "queue stats",
+			"message":    "failed to decode counts by status",
+		}))
+		return amboy.QueueStats{}
 	}
 
+	var pending, inProg, retrying int
+	for _, group := range statusGroups {
+		if !group.ID.InProg && !group.ID.Completed {
+			pending += group.Count
+		}
+		if group.ID.InProg {
+			inProg += group.Count
+		}
+		if group.ID.Completed && group.ID.NeedsRetry {
+			retrying += group.Count
+		}
+	}
+
+	// The aggregation cannot also count all the documents in the collection
+	// without a collection scan, so query it separately. Because completed is
+	// calculated between two non-atomic queries, the statistics could be
+	// inconsistent (i.e. you could have an incorrect count of completed jobs).
+
+	var total int64
+	if d.opts.UseGroups {
+		total, err = coll.CountDocuments(ctx, bson.M{"group": d.opts.GroupName})
+	} else {
+		total, err = coll.EstimatedDocumentCount(ctx)
+	}
 	grip.Warning(message.WrapError(err, message.Fields{
 		"id":         d.instanceID,
 		"service":    "amboy.queue.mdb",
@@ -942,41 +1326,46 @@ func (d *mongoDriver) Stats(ctx context.Context) amboy.QueueStats {
 		"operation":  "queue stats",
 		"is_group":   d.opts.UseGroups,
 		"group":      d.opts.GroupName,
-		"message":    "problem counting all jobs",
+		"message":    "problem counting total jobs",
 	}))
 
-	pendingQuery := bson.M{"status.completed": false}
-	d.modifyQueryForGroup(pendingQuery)
-	pending, err := coll.CountDocuments(ctx, pendingQuery)
-	grip.Warning(message.WrapError(err, message.Fields{
-		"id":         d.instanceID,
-		"service":    "amboy.queue.mdb",
-		"collection": coll.Name(),
-		"operation":  "queue stats",
-		"is_group":   d.opts.UseGroups,
-		"group":      d.opts.GroupName,
-		"message":    "problem counting pending jobs",
-	}))
-
-	lockedQuery := bson.M{"status.completed": false, "status.in_prog": true}
-	d.modifyQueryForGroup(lockedQuery)
-	numLocked, err := coll.CountDocuments(ctx, lockedQuery)
-	grip.Warning(message.WrapError(err, message.Fields{
-		"id":         d.instanceID,
-		"service":    "amboy.queue.mdb",
-		"collection": coll.Name(),
-		"is_group":   d.opts.UseGroups,
-		"group":      d.opts.GroupName,
-		"operation":  "queue stats",
-		"message":    "problem counting locked jobs",
-	}))
+	completed := int(total) - pending - inProg
 
 	return amboy.QueueStats{
-		Total:     int(numJobs),
-		Pending:   int(pending),
-		Completed: int(numJobs - pending),
-		Running:   int(numLocked),
+		Total:     int(total),
+		Pending:   pending,
+		Running:   inProg,
+		Completed: completed,
+		Retrying:  retrying,
 	}
+}
+
+// getPendingQuery modifies the query to find jobs that have not started yet.
+func (d *mongoDriver) getPendingQuery(q bson.M) bson.M {
+	q["status.completed"] = false
+	q["status.in_prog"] = false
+	return q
+}
+
+// getInProgQuery modifies the query to find jobs that are in progress.
+func (d *mongoDriver) getInProgQuery(q bson.M) bson.M {
+	q["status.completed"] = false
+	q["status.in_prog"] = true
+	return q
+}
+
+// getCompletedQuery modifies the query to find jobs that are completed.
+func (d *mongoDriver) getCompletedQuery(q bson.M) bson.M {
+	q["status.completed"] = true
+	return q
+}
+
+// getRetryingQuery modifies the query to find jobs that are retrying.
+func (d *mongoDriver) getRetryingQuery(q bson.M) bson.M {
+	q = d.getCompletedQuery(q)
+	q["retry_info.retryable"] = true
+	q["retry_info.needs_retry"] = true
+	return q
 }
 
 func (d *mongoDriver) LockTimeout() time.Duration {

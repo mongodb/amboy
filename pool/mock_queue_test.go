@@ -12,12 +12,13 @@ import (
 )
 
 type QueueTester struct {
-	started     bool
-	pool        amboy.Runner
-	id          string
-	numComplete int
-	toProcess   chan amboy.Job
-	storage     map[string]amboy.Job
+	started      bool
+	pool         amboy.Runner
+	retryHandler amboy.RetryHandler
+	id           string
+	numComplete  int
+	toProcess    chan amboy.Job
+	storage      map[string]amboy.Job
 
 	mutex sync.RWMutex
 }
@@ -80,6 +81,10 @@ func (q *QueueTester) Info() amboy.QueueInfo {
 	q.mutex.RLock()
 	defer q.mutex.RUnlock()
 
+	return q.info()
+}
+
+func (q *QueueTester) info() amboy.QueueInfo {
 	return amboy.QueueInfo{
 		Started:     q.started,
 		LockTimeout: amboy.LockTimeout,
@@ -179,6 +184,8 @@ func (q *QueueTester) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 
 	return output
 }
+
+func (q *QueueTester) Close(context.Context) {}
 
 type jobThatPanics struct {
 	job.Base

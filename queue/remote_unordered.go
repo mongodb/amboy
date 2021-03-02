@@ -6,6 +6,7 @@ import (
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/pool"
 	"github.com/mongodb/grip"
+	"github.com/pkg/errors"
 )
 
 // RemoteUnordered are queues that use a Driver as backend for job
@@ -17,16 +18,18 @@ type remoteUnordered struct {
 
 // newRemoteUnordered returns a queue that has been initialized with a
 // local worker pool Runner instance of the specified size.
-func newRemoteUnordered(size int) remoteQueue {
+func newRemoteUnordered(size int) (remoteQueue, error) {
 	q := &remoteUnordered{
 		remoteBase: newRemoteBase(),
 	}
 
 	q.dispatcher = NewDispatcher(q)
-	grip.Error(q.SetRunner(pool.NewLocalWorkers(size, q)))
+	if err := q.SetRunner(pool.NewLocalWorkers(size, q)); err != nil {
+		return nil, errors.Wrap(err, "configuring runner")
+	}
 	grip.Infof("creating new remote job queue with %d workers", size)
 
-	return q
+	return q, nil
 }
 
 // Next returns a Job from the queue. Returns a nil Job object if the

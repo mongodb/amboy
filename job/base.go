@@ -8,7 +8,7 @@ that does *not* have a Run method, and can be embedded in your own job
 implementations to avoid implemented duplicated common
 functionality. The type also implements several methods which are not
 part of the Job interface for error handling (e.g. HasErrors), and methods for
-marking tasks complete and setting the ID (e.g. MarkComplete and SetID).
+marking tasks complete and setting the ID (e.g. MarkComplete).
 
 All job implementations should use this functionality, although there
 are some situations where jobs may want independent implementation of
@@ -96,8 +96,7 @@ func (b *Base) HasErrors() bool {
 	return len(b.status.Errors) > 0
 }
 
-// SetID makes it possible to change the ID of an amboy.Job. It is not
-// part of the amboy.Job interface.
+// SetID makes it possible to change the ID of an amboy.Job.
 func (b *Base) SetID(n string) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
@@ -132,6 +131,9 @@ func (b *Base) Lock(id string, lockTimeout time.Duration) error {
 	if b.status.InProgress && time.Since(b.status.ModificationTime) < lockTimeout && b.status.Owner != id {
 		return errors.Errorf("cannot take lock for '%s' because lock has been held for %s by %s",
 			id, time.Since(b.status.ModificationTime), b.status.Owner)
+	}
+	if b.status.Completed && b.retryInfo.NeedsRetry && time.Since(b.status.ModificationTime) < lockTimeout && b.status.Owner != id {
+		return errors.Errorf("cannot take retry lock for '%s' because lock has been held for %s by %s", id, time.Since(b.status.ModificationTime), b.status.Owner)
 	}
 	b.status.InProgress = true
 	b.status.Owner = id
@@ -270,6 +272,14 @@ func (b *Base) UpdateTimeInfo(i amboy.JobTimeInfo) {
 	}
 }
 
+// SetTimeInfo sets the value of time in the job, including unset fields.
+func (b *Base) SetTimeInfo(i amboy.JobTimeInfo) {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	b.timeInfo = i
+}
+
 // SetScopes overrides the jobs current scopes with those from the
 // argument. To unset scopes, pass nil to this method.
 func (b *Base) SetScopes(scopes []string) {
@@ -335,7 +345,22 @@ func (b *Base) UpdateRetryInfo(opts amboy.JobRetryOptions) {
 	if opts.NeedsRetry != nil {
 		b.retryInfo.NeedsRetry = *opts.NeedsRetry
 	}
-	if opts.CurrentTrial != nil {
-		b.retryInfo.CurrentTrial = *opts.CurrentTrial
+	if opts.CurrentAttempt != nil {
+		b.retryInfo.CurrentAttempt = *opts.CurrentAttempt
+	}
+	if opts.MaxAttempts != nil {
+		b.retryInfo.MaxAttempts = *opts.MaxAttempts
+	}
+	if opts.DispatchBy != nil {
+		b.retryInfo.DispatchBy = *opts.DispatchBy
+	}
+	if opts.WaitUntil != nil {
+		b.retryInfo.WaitUntil = *opts.WaitUntil
+	}
+	if opts.Start != nil {
+		b.retryInfo.Start = *opts.Start
+	}
+	if opts.End != nil {
+		b.retryInfo.End = *opts.End
 	}
 }

@@ -52,6 +52,9 @@ type Job interface {
 	// UpdateTimeInfo only modifies non-zero fields.
 	TimeInfo() JobTimeInfo
 	UpdateTimeInfo(JobTimeInfo)
+	// SetTimeInfo is like UpdateTimeInfo but overwrites all time info,
+	// including zero fields.
+	SetTimeInfo(JobTimeInfo)
 
 	// RetryInfo reports information about the job's retry behavior.
 	RetryInfo() JobRetryInfo
@@ -87,8 +90,14 @@ type Job interface {
 	Lock(owner string, lockTimeout time.Duration) error
 	Unlock(owner string, lockTimeout time.Duration)
 
-	// Scope provides the ability to provide more configurable
-	// exclusion a job can provide.
+	// Scopes provide the ability to configure mutual exclusion for a job in a
+	// queue. The Scopes method returns the current mutual exclusion locks for
+	// the job.
+	// SetScopes configures the mutually exclusive lock(s) that a job in a queue
+	// should acquire. When called, it does not actually take a lock; rather, it
+	// signals the intention to lock within the queue. This is typically called
+	// when first initializing the job before enqueueing it; it is invalid for
+	// end users to call SetScopes after the job has already dispatched.
 	Scopes() []string
 	SetScopes([]string)
 
@@ -109,7 +118,7 @@ type JobType struct {
 
 // JobStatusInfo contains information about the current status of a
 // job and is reported by the Status and set by the SetStatus methods
-// in the Job interface.e
+// in the Job interface.
 type JobStatusInfo struct {
 	ID                string    `bson:"id,omitempty" json:"id,omitempty" yaml:"id,omitempty"`
 	Owner             string    `bson:"owner" json:"owner" yaml:"owner"`
@@ -121,59 +130,108 @@ type JobStatusInfo struct {
 	Errors            []string  `bson:"errors,omitempty" json:"errors,omitempty" yaml:"errors,omitempty"`
 }
 
-// JobTimeInfo stores timing information for a job and is used by both
-// the Runner and Job implementations to track how long jobs take to
-// execute.
-//
-// Additionally, the Queue implementations __may__ use WaitUntil to
-// defer the execution of a job, until WaitUntil refers to a time in
-// the past.
-//
-// If the DispatchBy deadline is specified, and the queue
-// implementation supports it, the queue may drop the job if the
-// deadline is in the past when the job would be dispatched.
+// JobTimeInfo stores timing information for a job and is used by both the
+// Runner and Job implementations to track how long jobs take to execute.
 type JobTimeInfo struct {
-	Created    time.Time     `bson:"created,omitempty" json:"created,omitempty" yaml:"created,omitempty"`
-	Start      time.Time     `bson:"start,omitempty" json:"start,omitempty" yaml:"start,omitempty"`
-	End        time.Time     `bson:"end,omitempty" json:"end,omitempty" yaml:"end,omitempty"`
-	WaitUntil  time.Time     `bson:"wait_until" json:"wait_until,omitempty" yaml:"wait_until,omitempty"`
-	DispatchBy time.Time     `bson:"dispatch_by" json:"dispatch_by,omitempty" yaml:"dispatch_by,omitempty"`
-	MaxTime    time.Duration `bson:"max_time" json:"max_time,omitempty" yaml:"max_time,omitempty"`
+	Created time.Time `bson:"created,omitempty" json:"created,omitempty" yaml:"created,omitempty"`
+	Start   time.Time `bson:"start,omitempty" json:"start,omitempty" yaml:"start,omitempty"`
+	End     time.Time `bson:"end,omitempty" json:"end,omitempty" yaml:"end,omitempty"`
+	// WaitUntil defers execution of a job until a particular time has elapsed.
+	// Support for this feature in Queue implementations is optional.
+	WaitUntil time.Time `bson:"wait_until" json:"wait_until,omitempty" yaml:"wait_until,omitempty"`
+	// DispatchBy is a deadline before which the job must run. Support for this
+	// feature in Queue implementations is optional. Queues that support this
+	// feature may remove the job if the deadline has passed.
+	DispatchBy time.Time `bson:"dispatch_by" json:"dispatch_by,omitempty" yaml:"dispatch_by,omitempty"`
+	// MaxTime is the maximum time that the job is allowed to run. If the
+	// runtime exceeds this duration, the Queue should abort the job.
+	MaxTime time.Duration `bson:"max_time" json:"max_time,omitempty" yaml:"max_time,omitempty"`
 }
 
 // JobRetryInfo stores configuration and information for a job that can retry.
-// Support for retrying jobs is optional for Queue implementations.
+// Support for retrying jobs is only supported by RetryableQueues.
 type JobRetryInfo struct {
-	// Retryable indicates whether the job should use Amboy's built-in retry
-	// mechanism.
+	// Retryable indicates whether the job can use Amboy's built-in retry
+	// mechanism. This should typically be set when first initializing the job;
+	// it is invalid for end users to modify Retryable once the job has already
+	// been dispatched.
 	Retryable bool `bson:"retryable" json:"retryable,omitempty" yaml:"retryable,omitempty"`
 	// NeedsRetry indicates whether the job is supposed to retry when it is
 	// complete. This will only be considered if Retryable is true.
 	NeedsRetry bool `bson:"needs_retry" json:"needs_retry,omitempty" yaml:"needs_retry,omitempty"`
-	// CurrentTrial is the current attempt number. This is zero-indexed, so the
-	// first time the job attempts to run, its value is 0. Each subsequent retry
-	// increments this value.
-	CurrentTrial int `bson:"current_trial,omitempty" json:"current_trial,omitempty" yaml:"current_trial,omitempty"`
+	// BaseJobID is the job ID of the original job that was retried, ignoring
+	// any additional retry metadata.
+	BaseJobID string `bson:"base_job_id,omitempty" json:"base_job_id,omitempty" yaml:"base_job_id,omitempty"`
+	// CurrentAttempt is the current attempt number. This is zero-indexed
+	// (unless otherwise set on enqueue), so the first time the job attempts to
+	// run, its value is 0. Each subsequent retry increments this value.
+	CurrentAttempt int `bson:"current_attempt" json:"current_attempt,omitempty" yaml:"current_attempt,omitempty"`
+	// MaxAttempts is the maximum number of attempts for a job. This is
+	// 1-indexed since it is a count. For example, if this is set to 3, the job
+	// will be allowed to run 3 times at most. If unset, the default maximum
+	// attempts is 10.
+	MaxAttempts int `bson:"max_attempts,omitempty" json:"max_attempts,omitempty" yaml:"max_attempts,omitempty"`
+	// DispatchBy reflects the amount of time (relative to when the job is
+	// retried) that the retried job has to dispatch for execution. If this
+	// deadline elapses, the job will not run. This is analogous to
+	// (JobTimeInfo).DispatchBy.
+	DispatchBy time.Duration `bson:"dispatch_by,omitempty" json:"dispatch_by,omitempty" yaml:"dispatch_by,omitempty"`
+	// WaitUntil reflects the amount of time (relative to when the job is
+	// retried) that the retried job has to wait before it can be dispatched for
+	// execution. The job will not run until this waiting period elapses. This
+	// is analogous to (JobTimeInfo).WaitUntil.
+	WaitUntil time.Duration `bson:"wait_until,omitempty" json:"wait_until,omitempty" yaml:"wait_until,omitempty"`
+	// Start is the time that the job began retrying.
+	Start time.Time `bson:"start,omitempty" json:"start,omitempty" yaml:"start,omitempty"`
+	// End is the time that the job finished retrying.
+	End time.Time `bson:"end,omitempty" json:"end,omitempty" yaml:"end,omitempty"`
 }
 
 // Options returns a JobRetryInfo as its equivalent JobRetryOptions. In other
 // words, if the returned result is used with Job.UpdateRetryInfo(), the job
-// will have the same JobRetryInfo as this one.
-func (info *JobRetryInfo) Options() JobRetryOptions {
+// will be populated with the same information as this JobRetryInfo.
+func (i *JobRetryInfo) Options() JobRetryOptions {
 	return JobRetryOptions{
-		Retryable:    &info.Retryable,
-		NeedsRetry:   &info.NeedsRetry,
-		CurrentTrial: &info.CurrentTrial,
+		Retryable:      &i.Retryable,
+		NeedsRetry:     &i.NeedsRetry,
+		CurrentAttempt: &i.CurrentAttempt,
+		MaxAttempts:    &i.MaxAttempts,
+		DispatchBy:     &i.DispatchBy,
+		WaitUntil:      &i.WaitUntil,
+		Start:          &i.Start,
+		End:            &i.End,
 	}
+}
+
+// ShouldRetry returns whether or not the associated job is supposed to retry
+// upon completion.
+func (i JobRetryInfo) ShouldRetry() bool {
+	return i.Retryable && i.NeedsRetry
+}
+
+const defaultRetryableMaxAttempts = 10
+
+// GetMaxAttempts returns the maximum number of times a job is allowed to
+// attempt. It defaults the maximum attempts if it's unset.
+func (info *JobRetryInfo) GetMaxAttempts() int {
+	if info.MaxAttempts <= 0 {
+		return defaultRetryableMaxAttempts
+	}
+	return info.MaxAttempts
 }
 
 // JobRetryOptions represents configuration options for a job that can retry.
 // Their meaning corresponds to the fields in JobRetryInfo, but is more amenable
 // to optional input values.
 type JobRetryOptions struct {
-	Retryable    *bool `bson:"-" json:"-" yaml:"-"`
-	NeedsRetry   *bool `bson:"-" json:"-" yaml:"-"`
-	CurrentTrial *int  `bson:"-" json:"-" yaml:"-"`
+	Retryable      *bool          `bson:"-" json:"-" yaml:"-"`
+	NeedsRetry     *bool          `bson:"-" json:"-" yaml:"-"`
+	CurrentAttempt *int           `bson:"-" json:"-" yaml:"-"`
+	MaxAttempts    *int           `bson:"-" json:"-" yaml:"-"`
+	DispatchBy     *time.Duration `bson:"-" json:"-" yaml:"-"`
+	WaitUntil      *time.Duration `bson:"-" json:"-" yaml:"-"`
+	Start          *time.Time     `bson:"-" json:"-" yaml:"-"`
+	End            *time.Time     `bson:"-" json:"-" yaml:"-"`
 }
 
 // Duration is a convenience function to return a duration for a job.
@@ -240,7 +298,7 @@ type Queue interface {
 	// Saves the state of a current job to the underlying storage,
 	// generally in support of locking and incremental
 	// persistence. Should error if the job does not exist (use
-	// put,) or if the queue does not have ownership of the job.
+	// Put) or if the queue does not have ownership of the job.
 	Save(context.Context, Job) error
 
 	// Returns a channel that produces completed Job objects.
@@ -267,6 +325,9 @@ type Queue interface {
 	// Begins the execution of the job Queue, using the embedded
 	// Runner.
 	Start(context.Context) error
+
+	// Close cleans up all resources used by the queue.
+	Close(context.Context)
 }
 
 // QueueInfo describes runtime information associated with a Queue.
@@ -299,6 +360,99 @@ type QueueGroup interface {
 	Queues(context.Context) []string
 }
 
+// RetryableQueue is the same as a Queue but supports additional operations for
+// retryable jobs.
+type RetryableQueue interface {
+	// Queue is identical to the standard queue interface, except:
+	// For retryable jobs, Get will retrieve the latest attempt of a job by ID.
+	// Results will only return completed jobs that are not retrying.
+	Queue
+
+	// RetryHandler returns the handler for retrying a job in this queue.
+	RetryHandler() RetryHandler
+	// SetRetryHandler permits runtime substitution of RetryHandler
+	// implementations. Queue implementations are not expected to permit users
+	// to change RetryHandler implementations after starting the Queue.
+	SetRetryHandler(RetryHandler) error
+
+	// SetStaleRetryingMonitorInterval configures how frequently the
+	// RetryableQueue should be checked for jobs that are retrying but stale.
+	SetStaleRetryingMonitorInterval(time.Duration)
+
+	// GetAttempt returns the retryable job associated with the given attempt of
+	// the job and a bool indicating whether the job was found or not. This will
+	// only return retryable jobs.
+	GetAttempt(ctx context.Context, id string, attempt int) (Job, bool)
+
+	// CompleteRetryingAndPut marks an existing job toComplete in the queue (see
+	// CompleteRetrying) as finished retrying and inserts a new job toPut in the
+	// queue (see Put). Implementations must make this operation atomic.
+	CompleteRetryingAndPut(ctx context.Context, toComplete, toPut Job) error
+
+	// CompleteRetrying marks a job that is retrying as finished processing, so
+	// that it will no longer retry.
+	CompleteRetrying(ctx context.Context, j Job) error
+}
+
+// RetryHandler provides a means to retry jobs (see JobRetryOptions) within a
+// RetryableQueue.
+type RetryHandler interface {
+	// SetQueue provides a method to change the RetryableQueue where the job
+	// should be retried. Implementations may not be able to change their Queue
+	// association after starting.
+	SetQueue(RetryableQueue) error
+	// Start prepares the RetryHandler to begin processing jobs to retry.
+	Start(context.Context) error
+	// Started reports if the RetryHandler has started.
+	Started() bool
+	// Put adds a job that must be retried into the RetryHandler.
+	Put(context.Context, Job) error
+	// Close aborts all retry work in progress and waits for all work to finish.
+	Close(context.Context)
+}
+
+// RetryHandlerOptions configures the behavior of a RetryHandler.
+type RetryHandlerOptions struct {
+	// MaxRetryAttempts is the maximum number of times that the retry handler is
+	// allowed to attempt to retry a job before it gives up. This is referring
+	// to the retry handler's attempts to internally retry the job and is
+	// unrelated to the job's particular max attempt setting.
+	MaxRetryAttempts int
+	// MaxRetryAttempts is the maximum time that the retry handler is allowed to
+	// attempt to retry a job before it gives up.
+	MaxRetryTime time.Duration
+	// RetryBackoff is how long the retry handler will back off after a failed
+	// retry attempt.
+	RetryBackoff time.Duration
+	// NumWorkers is the maximum number of jobs that are allowed to retry in
+	// parallel.
+	NumWorkers int
+	// WorkerCheckInterval is the time interval retry workers will wait before
+	// attempting to pick up another job to retry.
+	WorkerCheckInterval time.Duration
+}
+
+// Validate checks that all retry handler options are valid.
+func (opts *RetryHandlerOptions) Validate() error {
+	catcher := grip.NewBasicCatcher()
+	catcher.NewWhen(opts.MaxRetryAttempts < 0, "cannot have negative max retry attempts")
+	catcher.NewWhen(opts.MaxRetryTime < 0, "cannot have negative max retry time")
+	catcher.NewWhen(opts.NumWorkers < 0, "cannot have negative worker thread count")
+	if catcher.HasErrors() {
+		return catcher.Resolve()
+	}
+	if opts.MaxRetryAttempts == 0 {
+		opts.MaxRetryAttempts = 10
+	}
+	if opts.MaxRetryTime == 0 {
+		opts.MaxRetryTime = time.Minute
+	}
+	if opts.NumWorkers == 0 {
+		opts.NumWorkers = 1
+	}
+	return nil
+}
+
 // Runner describes a simple worker interface for executing jobs in
 // the context of a Queue. Used by queue implementations to run
 // tasks. Generally Queue implementations will spawn a runner as part
@@ -319,7 +473,7 @@ type Runner interface {
 	// by the enclosing Queue object's Start() method.
 	Start(context.Context) error
 
-	// Termaintes all in progress work and waits for processes to
+	// Terminates all in progress work and waits for processes to
 	// return.
 	Close(context.Context)
 }

@@ -165,7 +165,10 @@ func (q *depGraphOrderedLocal) SetRunner(r amboy.Runner) error {
 func (q *depGraphOrderedLocal) Info() amboy.QueueInfo {
 	q.mutex.RLock()
 	defer q.mutex.RUnlock()
+	return q.info()
+}
 
+func (q *depGraphOrderedLocal) info() amboy.QueueInfo {
 	return amboy.QueueInfo{
 		Started:     q.started,
 		LockTimeout: amboy.LockTimeout,
@@ -427,4 +430,10 @@ func (q *depGraphOrderedLocal) Complete(ctx context.Context, j amboy.Job) {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 	q.tasks.completed[j.ID()] = true
+}
+
+func (q *depGraphOrderedLocal) Close(ctx context.Context) {
+	if r := q.Runner(); r != nil {
+		r.Close(ctx)
+	}
 }
