@@ -91,8 +91,9 @@ type Job interface {
 	Unlock(owner string, lockTimeout time.Duration)
 
 	// Scopes provide the ability to configure mutual exclusion for a job in a
-	// queue.
-	// SetScopes configure the mutually exclusive lock(s) that a job in a queue
+	// queue. The Scopes method returns the current mutual exclusion locks for
+	// the job.
+	// SetScopes configures the mutually exclusive lock(s) that a job in a queue
 	// should acquire. When called, it does not actually take a lock; rather, it
 	// signals the intention to lock within the queue. This is typically called
 	// when first initializing the job before enqueueing it; it is invalid for
