@@ -1,6 +1,6 @@
 package registry
 
-// This file has a mock implementation of a RetryableJob. Used in other tests.
+// This file has a mock implementation of an amboy.Job. Used in other tests.
 
 import (
 	"context"

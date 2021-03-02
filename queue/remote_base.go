@@ -102,7 +102,7 @@ func (q *remoteBase) Get(ctx context.Context, name string) (amboy.Job, bool) {
 	return job, true
 }
 
-func (q *remoteBase) GetAttempt(ctx context.Context, name string, attempt int) (amboy.RetryableJob, bool) {
+func (q *remoteBase) GetAttempt(ctx context.Context, name string, attempt int) (amboy.Job, bool) {
 	if q.driver == nil {
 		return nil, false
 	}
@@ -171,7 +171,7 @@ func (q *remoteBase) Save(ctx context.Context, j amboy.Job) error {
 	return q.driver.Save(ctx, j)
 }
 
-func (q *remoteBase) CompleteRetryingAndPut(ctx context.Context, toComplete, toPut amboy.RetryableJob) error {
+func (q *remoteBase) CompleteRetryingAndPut(ctx context.Context, toComplete, toPut amboy.Job) error {
 	q.prepareCompleteRetrying(toComplete)
 	if err := q.validateAndPreparePut(toPut); err != nil {
 		return errors.Wrap(err, "invalid job to put")
@@ -179,7 +179,7 @@ func (q *remoteBase) CompleteRetryingAndPut(ctx context.Context, toComplete, toP
 	return q.driver.CompleteAndPut(ctx, toComplete, toPut)
 }
 
-func (q *remoteBase) prepareCompleteRetrying(j amboy.RetryableJob) {
+func (q *remoteBase) prepareCompleteRetrying(j amboy.Job) {
 	j.UpdateRetryInfo(amboy.JobRetryOptions{
 		NeedsRetry: utility.FalsePtr(),
 		End:        utility.ToTimePtr(time.Now()),
@@ -268,7 +268,7 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
 	}
 }
 
-func (q *remoteBase) CompleteRetrying(ctx context.Context, j amboy.RetryableJob) error {
+func (q *remoteBase) CompleteRetrying(ctx context.Context, j amboy.Job) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -322,10 +322,7 @@ func (q *remoteBase) Results(ctx context.Context) <-chan amboy.Job {
 			if ctx.Err() != nil {
 				return
 			}
-			completed := j.Status().Completed
-			amboy.WithRetryableJob(j, func(rj amboy.RetryableJob) {
-				completed = completed && !rj.RetryInfo().NeedsRetry
-			})
+			completed := j.Status().Completed && !j.RetryInfo().ShouldRetry()
 			if completed {
 				select {
 				case <-ctx.Done():
@@ -532,7 +529,7 @@ func (q *remoteBase) monitorStaleRetryingJobs(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-timer.C:
-			for j := range q.driver.RetryableJobs(ctx, RetryableJobStaleRetrying) {
+			for j := range q.driver.RetryableJobs(ctx, retryableJobStaleRetrying) {
 				grip.Error(message.WrapError(q.retryHandler.Put(ctx, j), message.Fields{
 					"message":  "could not enqueue stale retrying job",
 					"service":  "amboy.queue.mdb",

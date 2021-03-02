@@ -6,7 +6,6 @@ import (
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/dependency"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
@@ -39,10 +38,6 @@ func TestJobInterchangeSuiteBSON(t *testing.T) {
 	s := new(JobInterchangeSuite)
 	s.format = amboy.BSON2
 	suite.Run(t, s)
-}
-
-func TestJobInterfaceSatisfaction(t *testing.T) {
-	assert.Implements(t, (*amboy.RetryableJob)(nil), NewTestJob(""))
 }
 
 func (s *JobInterchangeSuite) SetupTest() {

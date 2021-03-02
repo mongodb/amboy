@@ -49,10 +49,7 @@ func (s *QueueService) getJobStatusResponse(ctx context.Context, name string) (*
 		return resp, err
 	}
 
-	completed := j.Status().Completed
-	amboy.WithRetryableJob(j, func(rj amboy.RetryableJob) {
-		completed = completed && !rj.RetryInfo().NeedsRetry
-	})
+	completed := j.Status().Completed && (!j.RetryInfo().ShouldRetry())
 
 	resp.Exists = true
 	resp.Completed = completed

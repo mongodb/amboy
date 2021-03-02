@@ -52,6 +52,14 @@ type Job interface {
 	// UpdateTimeInfo only modifies non-zero fields.
 	TimeInfo() JobTimeInfo
 	UpdateTimeInfo(JobTimeInfo)
+	// SetTimeInfo is like UpdateTimeInfo but overwrites all time info,
+	// including zero fields.
+	SetTimeInfo(JobTimeInfo)
+
+	// RetryInfo reports information about the job's retry behavior.
+	RetryInfo() JobRetryInfo
+	// UpdateRetryInfo method modifies all set fields from the given options.
+	UpdateRetryInfo(JobRetryOptions)
 
 	// Provides access to the job's priority value, which some
 	// queues may use to order job dispatching. Most Jobs
@@ -63,6 +71,9 @@ type Job interface {
 	// AddError allows another actor to annotate the job with an
 	// error.
 	AddError(error)
+	// AddRetryableError annotates the job with an error and marks the job as
+	// needing to retry.
+	AddRetryableError(error)
 	// Error returns an error object if the task was an
 	// error. Typically if the job has not run, this is nil.
 	Error() error
@@ -90,25 +101,6 @@ type Job interface {
 	// configured so that exclusion occurs during job dispatch or enqueue.
 	ShouldApplyScopesOnEnqueue() bool
 	SetShouldApplyScopesOnEnqueue(bool)
-}
-
-// RetryableJob is the same as a Job but supports additional operations for
-// retrying (see RetryableQueue).
-type RetryableJob interface {
-	Job
-
-	// RetryInfo reports information about the job's retry behavior.
-	RetryInfo() JobRetryInfo
-	// UpdateRetryInfo method modifies all set fields from the given options.
-	UpdateRetryInfo(JobRetryOptions)
-
-	// AddRetryableError annotates the job with an error and marks the job as
-	// needing to retry.
-	AddRetryableError(error)
-
-	// SetTimeInfo is like UpdateTimeInfo but overwrites all time info,
-	// including zero fields.
-	SetTimeInfo(JobTimeInfo)
 }
 
 // JobType contains information about the type of a job, which queues
@@ -194,17 +186,23 @@ type JobRetryInfo struct {
 // Options returns a JobRetryInfo as its equivalent JobRetryOptions. In other
 // words, if the returned result is used with Job.UpdateRetryInfo(), the job
 // will be populated with the same information as this JobRetryInfo.
-func (info *JobRetryInfo) Options() JobRetryOptions {
+func (i *JobRetryInfo) Options() JobRetryOptions {
 	return JobRetryOptions{
-		Retryable:      &info.Retryable,
-		NeedsRetry:     &info.NeedsRetry,
-		CurrentAttempt: &info.CurrentAttempt,
-		MaxAttempts:    &info.MaxAttempts,
-		DispatchBy:     &info.DispatchBy,
-		WaitUntil:      &info.WaitUntil,
-		Start:          &info.Start,
-		End:            &info.End,
+		Retryable:      &i.Retryable,
+		NeedsRetry:     &i.NeedsRetry,
+		CurrentAttempt: &i.CurrentAttempt,
+		MaxAttempts:    &i.MaxAttempts,
+		DispatchBy:     &i.DispatchBy,
+		WaitUntil:      &i.WaitUntil,
+		Start:          &i.Start,
+		End:            &i.End,
 	}
+}
+
+// ShouldRetry returns whether or not the associated job is supposed to retry
+// upon completion.
+func (i JobRetryInfo) ShouldRetry() bool {
+	return i.Retryable && i.NeedsRetry
 }
 
 const defaultRetryableMaxAttempts = 10
@@ -377,21 +375,23 @@ type RetryableQueue interface {
 	// RetryableQueue should be checked for jobs that are retrying but stale.
 	SetStaleRetryingMonitorInterval(time.Duration)
 
-	// GetAttempt returns the job associated with the given attempt of the job
-	// and a bool indicating whether the job was found or not.
-	GetAttempt(ctx context.Context, id string, attempt int) (RetryableJob, bool)
+	// GetAttempt returns the retryable job associated with the given attempt of
+	// the job and a bool indicating whether the job was found or not. This will
+	// only return retryable jobs.
+	GetAttempt(ctx context.Context, id string, attempt int) (Job, bool)
 
 	// CompleteRetryingAndPut marks an existing job toComplete in the queue (see
 	// CompleteRetrying) as finished retrying and inserts a new job toPut in the
 	// queue (see Put). Implementations must make this operation atomic.
-	CompleteRetryingAndPut(ctx context.Context, toComplete, toPut RetryableJob) error
+	CompleteRetryingAndPut(ctx context.Context, toComplete, toPut Job) error
 
 	// CompleteRetrying marks a job that is retrying as finished processing, so
 	// that it will no longer retry.
-	CompleteRetrying(ctx context.Context, j RetryableJob) error
+	CompleteRetrying(ctx context.Context, j Job) error
 }
 
-// RetryHandler provides a means to retry RetryableJobs within a RetryableQueue.
+// RetryHandler provides a means to retry jobs (see JobRetryOptions) within a
+// RetryableQueue.
 type RetryHandler interface {
 	// SetQueue provides a method to change the RetryableQueue where the job
 	// should be retried. Implementations may not be able to change their Queue
@@ -402,7 +402,7 @@ type RetryHandler interface {
 	// Started reports if the RetryHandler has started.
 	Started() bool
 	// Put adds a job that must be retried into the RetryHandler.
-	Put(context.Context, RetryableJob) error
+	Put(context.Context, Job) error
 	// Close aborts all retry work in progress and waits for all work to finish.
 	Close(context.Context)
 }

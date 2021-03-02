@@ -44,11 +44,6 @@ func MakeJobInterchange(j amboy.Job, f amboy.Format) (*JobInterchange, error) {
 		return nil, err
 	}
 
-	var retryInfo amboy.JobRetryInfo
-	amboy.WithRetryableJob(j, func(rj amboy.RetryableJob) {
-		retryInfo = rj.RetryInfo()
-	})
-
 	output := &JobInterchange{
 		Name:                 j.ID(),
 		Type:                 typeInfo.Name,
@@ -57,7 +52,7 @@ func MakeJobInterchange(j amboy.Job, f amboy.Format) (*JobInterchange, error) {
 		Status:               j.Status(),
 		TimeInfo:             j.TimeInfo(),
 		ApplyScopesOnEnqueue: j.ShouldApplyScopesOnEnqueue(),
-		RetryInfo:            retryInfo,
+		RetryInfo:            j.RetryInfo(),
 		Job:                  data,
 		Dependency:           dep,
 	}
@@ -99,9 +94,7 @@ func (j *JobInterchange) Resolve(f amboy.Format) (amboy.Job, error) {
 	job.SetStatus(j.Status)
 	job.SetShouldApplyScopesOnEnqueue(j.ApplyScopesOnEnqueue)
 	job.UpdateTimeInfo(j.TimeInfo)
-	amboy.WithRetryableJob(job, func(rj amboy.RetryableJob) {
-		rj.UpdateRetryInfo(j.RetryInfo.Options())
-	})
+	job.UpdateRetryInfo(j.RetryInfo.Options())
 
 	return job, nil
 }

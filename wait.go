@@ -99,12 +99,8 @@ func WaitJob(ctx context.Context, j Job, q Queue) bool {
 			return false
 		}
 
-		rj, ok := j.(RetryableJob)
-		if ok && rj.RetryInfo().NeedsRetry {
-			continue
-		}
-
-		if j.Status().Completed {
+		completed := j.Status().Completed && j.RetryInfo().ShouldRetry()
+		if completed {
 			return true
 		}
 	}
@@ -131,13 +127,9 @@ func WaitJobInterval(ctx context.Context, j Job, q Queue, interval time.Duration
 				return false
 			}
 
-			rj, ok := j.(RetryableJob)
-			if ok && rj.RetryInfo().NeedsRetry {
-				timer.Reset(interval)
-				continue
-			}
+			completed := j.Status().Completed && !j.RetryInfo().ShouldRetry()
 
-			if j.Status().Completed {
+			if completed {
 				return true
 			}
 

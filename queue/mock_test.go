@@ -38,12 +38,12 @@ type mockRemoteQueue struct {
 	// Mockable methods
 	putJob                    func(ctx context.Context, q remoteQueue, j amboy.Job) error
 	getJob                    func(ctx context.Context, q remoteQueue, id string) (amboy.Job, bool)
-	getJobAttempt             func(ctx context.Context, q remoteQueue, id string, attempt int) (amboy.RetryableJob, bool)
+	getJobAttempt             func(ctx context.Context, q remoteQueue, id string, attempt int) (amboy.Job, bool)
 	saveJob                   func(ctx context.Context, q remoteQueue, j amboy.Job) error
-	completeRetryingAndPutJob func(ctx context.Context, q remoteQueue, toComplete, toPut amboy.RetryableJob) error
+	completeRetryingAndPutJob func(ctx context.Context, q remoteQueue, toComplete, toPut amboy.Job) error
 	nextJob                   func(ctx context.Context, q remoteQueue) amboy.Job
 	completeJob               func(ctx context.Context, q remoteQueue, j amboy.Job)
-	completeRetryingJob       func(ctx context.Context, q remoteQueue, j amboy.RetryableJob) error
+	completeRetryingJob       func(ctx context.Context, q remoteQueue, j amboy.Job) error
 	jobResults                func(ctx context.Context, q remoteQueue) <-chan amboy.Job
 	jobStats                  func(ctx context.Context, q remoteQueue) <-chan amboy.JobStatusInfo
 	queueStats                func(ctx context.Context, q remoteQueue) amboy.QueueStats
@@ -139,7 +139,7 @@ func (q *mockRemoteQueue) Get(ctx context.Context, id string) (amboy.Job, bool) 
 	return q.remoteQueue.Get(ctx, id)
 }
 
-func (q *mockRemoteQueue) GetAttempt(ctx context.Context, id string, attempt int) (amboy.RetryableJob, bool) {
+func (q *mockRemoteQueue) GetAttempt(ctx context.Context, id string, attempt int) (amboy.Job, bool) {
 	if q.getJobAttempt != nil {
 		return q.getJobAttempt(ctx, q.remoteQueue, id, attempt)
 	}
@@ -153,7 +153,7 @@ func (q *mockRemoteQueue) Save(ctx context.Context, j amboy.Job) error {
 	return q.remoteQueue.Save(ctx, j)
 }
 
-func (q *mockRemoteQueue) CompleteRetryingAndPut(ctx context.Context, toComplete, toPut amboy.RetryableJob) error {
+func (q *mockRemoteQueue) CompleteRetryingAndPut(ctx context.Context, toComplete, toPut amboy.Job) error {
 	if q.completeRetryingAndPutJob != nil {
 		return q.completeRetryingAndPutJob(ctx, q.remoteQueue, toComplete, toPut)
 	}
@@ -175,7 +175,7 @@ func (q *mockRemoteQueue) Complete(ctx context.Context, j amboy.Job) {
 	q.remoteQueue.Complete(ctx, j)
 }
 
-func (q *mockRemoteQueue) CompleteRetrying(ctx context.Context, j amboy.RetryableJob) error {
+func (q *mockRemoteQueue) CompleteRetrying(ctx context.Context, j amboy.Job) error {
 	if q.completeRetryingJob != nil {
 		return q.completeRetryingJob(ctx, q.remoteQueue, j)
 	}
@@ -225,8 +225,8 @@ func (q *mockRemoteQueue) Close(ctx context.Context) {
 	q.remoteQueue.Close(ctx)
 }
 
-// mockRetryableJob provides a mock implementation of an amboy.RetryableJob
-// whose runtime behavior is configurable.
+// mockRetryableJob provides a mock implementation of an amboy.Job that is
+// retryable by default and whose runtime behavior is configurable.
 type mockRetryableJob struct {
 	job.Base
 	ErrorToAdd          string                 `bson:"error_to_add" json:"error_to_add"`
@@ -280,10 +280,6 @@ func (j *mockRetryableJob) Run(ctx context.Context) {
 	if j.op != nil {
 		j.op(j)
 	}
-}
-
-func TestMockRetryableJob(t *testing.T) {
-	assert.Implements(t, (*amboy.RetryableJob)(nil), &mockRetryableJob{})
 }
 
 func TestMockRetryableQueue(t *testing.T) {
