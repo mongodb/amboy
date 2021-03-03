@@ -11,8 +11,8 @@ import (
 // additional locking semantics for queues that cannot push that into
 // their backing storage.
 type ScopeManager interface {
-	Acquire(string, []string) error
-	Release(string, []string) error
+	Acquire(owner string, scopes []string) error
+	Release(owner string, scopes []string) error
 }
 
 type scopeManagerImpl struct {
