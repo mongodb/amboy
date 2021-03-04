@@ -48,7 +48,7 @@ func MakeQueueSender(ctx context.Context, q amboy.Queue, sender send.Sender) sen
 // queue, and cancels the queue upon closing, without waiting for the
 // queue to empty.
 func NewQueueBackedSender(ctx context.Context, sender send.Sender, workers, capacity int) (send.Sender, error) {
-	q := queue.NewLocalLimitedSize(workers, capacity)
+	q := queue.NewShuffledLocal(workers, capacity)
 	s := newSender(ctx, q, sender)
 
 	s.ctx, s.canceler = context.WithCancel(s.ctx)

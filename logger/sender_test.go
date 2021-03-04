@@ -57,7 +57,7 @@ func (s *SenderSuite) SetupTest() {
 	s.senders["multi"], err = NewQueueMultiSender(ctx, 2, 128, s.mock)
 	s.Require().NoError(err)
 
-	s.queue = queue.NewLocalLimitedSize(4, 128)
+	s.queue = queue.NewShuffledLocal(4, 128)
 	s.NoError(s.queue.Start(ctx))
 	s.Require().True(s.queue.Info().Started)
 
@@ -142,7 +142,7 @@ func (s *SenderSuite) TestFlush() {
 		for i := 0; i < 10; i++ {
 			sender.Send(message.ConvertToComposer(level.Error, "message"))
 		}
-		s.Require().NoError(sender.Flush(context.TODO()), t)
+		s.Require().NoError(sender.Flush(context.Background()), t)
 		for i := 0; i < 10; i++ {
 			m, ok := s.mock.GetMessageSafe()
 			s.Require().True(ok, t)

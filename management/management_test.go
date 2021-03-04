@@ -10,11 +10,17 @@ import (
 	"github.com/mongodb/amboy/dependency"
 	"github.com/mongodb/amboy/job"
 	"github.com/mongodb/amboy/queue"
+	"github.com/mongodb/amboy/registry"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
+
+func init() {
+	job.RegisterDefaultJobs()
+	registry.AddJobType("test", func() amboy.Job { return makeTestJob() })
+}
 
 type ManagerSuite struct {
 	queue   amboy.Queue
@@ -397,6 +403,12 @@ func (s *ManagerSuite) TestCompleteJobsByPrefixValidFilter() {
 
 type testJob struct {
 	job.Base
+}
+
+func makeTestJob() *testJob {
+	j := &testJob{}
+	j.SetDependency(dependency.NewAlways())
+	return j
 }
 
 func newTestJob(id string) *testJob {

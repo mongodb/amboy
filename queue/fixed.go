@@ -82,7 +82,7 @@ func (q *limitedSizeLocal) getNameForAttempt(name string, attempt int) string {
 
 // Put adds a job to the queue, returning an error if the queue isn't opened, or
 // if a job of that name exists in the queue. If the queue is at capacity. Put()
-// will block until either there is capacity or the context is done.
+// will fail.
 func (q *limitedSizeLocal) Put(ctx context.Context, j amboy.Job) error {
 	if err := q.validateAndPreparePut(j); err != nil {
 		return errors.WithStack(err)
@@ -103,10 +103,10 @@ func (q *limitedSizeLocal) Put(ctx context.Context, j amboy.Job) error {
 		}
 	}
 
-	if err := q.putPending(ctx, j); err != nil {
+	if err := q.tryPutPending(j); err != nil {
 		catcher := grip.NewBasicCatcher()
-		catcher.Wrapf(err, "could not add job '%s'", j.ID())
-		catcher.Wrap(q.scopes.Release(name, j.Scopes()), "releasing job's acquired scopes")
+		catcher.Wrap(err, "adding new job")
+		catcher.Wrapf(q.scopes.Release(name, j.Scopes()), "releasing new job's acquired scopes")
 		return catcher.Resolve()
 	}
 
@@ -123,19 +123,21 @@ func (q *limitedSizeLocal) validateAndPreparePut(j amboy.Job) error {
 	return nil
 }
 
-func (q *limitedSizeLocal) putPending(ctx context.Context, j amboy.Job) error {
+func (q *limitedSizeLocal) tryPutPending(j amboy.Job) error {
 	jobCopy, err := q.copyJob(j)
 	if err != nil {
 		return errors.Wrap(err, "copying job")
 	}
-	name := q.getNameWithMetadata(j)
 
 	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case q.pending <- jobCopy:
+	case q.pending <- j:
+		name := q.getNameWithMetadata(j)
 		q.storage[name] = jobCopy
 		return nil
+	default:
+		// Since adding to the queue requires a mutex, don't wait for pending to
+		// receive the job when the queue is full.
+		return errors.Errorf("queue full, cannot add job")
 	}
 }
 
@@ -522,11 +524,11 @@ func (q *limitedSizeLocal) CompleteRetryingAndPut(ctx context.Context, toComplet
 		return errors.Wrap(err, "releasing scopes from completed job and acquiring scopes for new job")
 	}
 
-	if err := q.putPending(ctx, toPut); err != nil {
+	if err := q.tryPutPending(toPut); err != nil {
 		catcher := grip.NewBasicCatcher()
 		catcher.Wrap(err, "adding new job")
 		catcher.Wrapf(q.scopes.ReleaseAndAcquire(toPutName, toPut.Scopes(), toCompleteName, toComplete.Scopes()), "releasing scopes from new job and re-acquiring scopes of completed job")
-		return errors.Wrap(err, "adding new job")
+		return catcher.Resolve()
 	}
 
 	q.prepareComplete(toComplete)
