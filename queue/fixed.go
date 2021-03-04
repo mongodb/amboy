@@ -17,10 +17,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-// LocalLimitedSize implements the amboy.Queue interface, and unlike other
-// implementations, the size of the queue is limited for both incoming jobs and
-// completed jobs. This makes it possible to use these queues in situations as
-// parts of services and in longer-running contexts.
+// limitedSizeLocal implements the amboy.RetryableQueue interface, and unlike
+// other implementations, the size of the queue is limited for both incoming
+// jobs and completed jobs. This makes it possible to use these queues in
+// situations as parts of services and in longer-running contexts.
 //
 // Specify a job capacity when constructing the queue; in total, the queue will
 // store no more than 2x the specified capacity, and for completed jobs, will
@@ -164,7 +164,7 @@ func (q *limitedSizeLocal) copyJob(j amboy.Job) (amboy.Job, error) {
 	}
 	jobCopy, err := ji.Resolve(amboy.JSON)
 	if err != nil {
-		return nil, errors.Wrap(err, "")
+		return nil, errors.Wrap(err, "resolving job from interchange")
 	}
 	return jobCopy, nil
 }
@@ -187,7 +187,7 @@ func (q *limitedSizeLocal) Get(ctx context.Context, name string) (amboy.Job, boo
 	if !ok {
 		return nil, false
 	}
-	for attempt := 0; ; attempt++ {
+	for attempt := 1; attempt < j.RetryInfo().MaxAttempts; attempt++ {
 		nextRetryableName := q.getNameForAttempt(name, attempt)
 		nextAttempt, ok := q.getCopy(nextRetryableName)
 		if !ok {
