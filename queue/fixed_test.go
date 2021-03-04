@@ -32,7 +32,6 @@ func TestLimitedSizeQueueSuite(t *testing.T) {
 func (s *LimitedSizeQueueSuite) SetupSuite() {
 	s.numWorkers = 2
 	s.numCapacity = 100
-	s.require = s.Require()
 }
 
 func (s *LimitedSizeQueueSuite) SetupTest() {
@@ -40,20 +39,20 @@ func (s *LimitedSizeQueueSuite) SetupTest() {
 }
 
 func (s *LimitedSizeQueueSuite) TestBufferForPendingWorkEqualToCapacityForResults() {
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
 	s.False(s.queue.Info().Started)
 	s.queue.Runner().Close(ctx)
-	s.Nil(s.queue.pending)
-	s.Error(s.queue.Put(ctx, job.NewShellJob("sleep 10", "")))
+	s.False(s.queue.started)
+	s.NoError(s.queue.Put(ctx, job.NewShellJob("sleep 10", "")))
 
 	s.NoError(s.queue.Start(ctx))
-	s.require.True(s.queue.Info().Started)
-	for i := 0; i < 100*s.numCapacity*s.numWorkers; i++ {
+	s.Require().True(s.queue.Info().Started)
+	for i := 0; i < 100*s.numCapacity*s.numWorkers-1; i++ {
 		var outcome bool
 		err := s.queue.Put(ctx, job.NewShellJob("sleep 10", ""))
-		if i < s.numWorkers+s.numCapacity {
+		if i < s.numWorkers+s.numCapacity-1 {
 			outcome = s.NoError(err, "idx=%d stat=%+v", i, s.queue.Stats(ctx))
 		} else {
 			outcome = s.Error(err, "idx=%d", i)
@@ -73,7 +72,7 @@ func (s *LimitedSizeQueueSuite) TestBufferForPendingWorkEqualToCapacityForResult
 
 func (s *LimitedSizeQueueSuite) TestCallingStartMultipleTimesDoesNotImpactState() {
 	s.False(s.queue.Info().Started)
-	s.Nil(s.queue.pending)
+	s.False(s.queue.started)
 	ctx := context.Background()
 	s.NoError(s.queue.Start(ctx))
 
