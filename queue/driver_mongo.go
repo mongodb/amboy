@@ -1066,7 +1066,7 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 			qd = d.getNextQuery()
 			iter, err := d.getCollection().Find(ctx, qd, opts)
 			if err != nil {
-				grip.Debug(message.WrapError(err, message.Fields{
+				grip.Warning(message.WrapError(err, message.Fields{
 					"id":            d.instanceID,
 					"service":       "amboy.queue.mdb",
 					"operation":     "retrieving next job",

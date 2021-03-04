@@ -79,7 +79,7 @@ func executeJob(ctx context.Context, id string, j amboy.Job, q amboy.Queue) {
 	if err != nil {
 		grip.Error(r)
 	} else {
-		grip.Debug(r)
+		grip.Info(r)
 	}
 }
 
