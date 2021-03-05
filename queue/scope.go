@@ -95,6 +95,13 @@ func (s *scopeManagerImpl) getScopesToRelease(id string, scopes []string) ([]str
 }
 
 func (s *scopeManagerImpl) ReleaseAndAcquire(ownerToRelease string, scopesToRelease []string, ownerToAcquire string, scopesToAcquire []string) error {
+	if len(scopesToRelease) == 0 && len(scopesToAcquire) == 0 {
+		return nil
+	}
+
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
 	toRelease, err := s.getScopesToRelease(ownerToRelease, scopesToRelease)
 	if err != nil {
 		return errors.Wrap(err, "getting scopes to release")
@@ -103,11 +110,7 @@ func (s *scopeManagerImpl) ReleaseAndAcquire(ownerToRelease string, scopesToRele
 	var toAcquire []string
 	for _, sc := range scopesToAcquire {
 		holder, ok := s.scopes[sc]
-		if !ok {
-			toAcquire = append(toAcquire, sc)
-			continue
-		}
-		if holder == ownerToRelease {
+		if !ok || holder == ownerToRelease {
 			toAcquire = append(toAcquire, sc)
 			continue
 		}

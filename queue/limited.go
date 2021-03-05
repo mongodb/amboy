@@ -57,12 +57,11 @@ func (q *limitedSizeLocal) ID() string {
 	return q.id
 }
 
-// Put adds a job to the queue, It returns an error if the queue isn't opened, a
-// job of that name exists has been completed (and is stored in the results
-// storage) or is pending. If the queue is at capacity, it will block until it
-// can be added or the context is done; waiting for these conditions can cause
-// the other queue operations to also block, so it is not recommended to pass a
-// long-lived context to Put.
+// Put adds a job to the queue, It returns an error if the queue is not yet
+// opened or a job of the same name already exists in the queue. If the queue is
+// at capacity, it will block until it can be added or the context is done;
+// waiting for these conditions can cause the other queue operations to also
+// block, so it is not recommended to pass a long-lived context to Put.
 func (q *limitedSizeLocal) Put(ctx context.Context, j amboy.Job) error {
 	if !q.Info().Started {
 		return errors.Errorf("queue not open. could not add %s", j.ID())

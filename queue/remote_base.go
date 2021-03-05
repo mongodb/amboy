@@ -250,6 +250,8 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
 	}
 }
 
+// CompleteRetryingAndPut marks the job toComplete as finished retrying in the
+// queue and adds a new job toPut to the queue. These two operations are atomic.
 func (q *remoteBase) CompleteRetryingAndPut(ctx context.Context, toComplete, toPut amboy.Job) error {
 	q.prepareCompleteRetrying(toComplete)
 	if err := q.validateAndPreparePut(toPut); err != nil {
@@ -265,6 +267,7 @@ func (q *remoteBase) prepareCompleteRetrying(j amboy.Job) {
 	})
 }
 
+// CompleteRetrying marks the job as finished retrying in the queue.
 func (q *remoteBase) CompleteRetrying(ctx context.Context, j amboy.Job) error {
 	if ctx.Err() != nil {
 		return ctx.Err()

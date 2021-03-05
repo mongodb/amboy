@@ -82,9 +82,9 @@ func (q *limitedSizeSerializableLocal) getNameForAttempt(name string, attempt in
 	return buildCompoundID(retryAttemptPrefix(attempt), name)
 }
 
-// Put adds a job to the queue, returning an error if the queue isn't opened, or
-// if the job already exists in the queue. If the queue is at capacity. Put()
-// will fail.
+// Put adds a job to the queue, returning an error if the queue is not yet
+// opened, or if the job already exists in the queue. If the queue is at
+// capacity. Put() will fail.
 func (q *limitedSizeSerializableLocal) Put(ctx context.Context, j amboy.Job) error {
 	if err := q.validateAndPreparePut(j); err != nil {
 		return errors.WithStack(err)

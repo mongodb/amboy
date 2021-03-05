@@ -919,7 +919,6 @@ func TestRetryHandlerQueueIntegration(t *testing.T) {
 								assert.False(t, ok, "job should not have retried")
 							}
 						},
-						// "": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (amboy.RetryableQueue, amboy.RetryHandler, error)) {},
 					} {
 						t.Run(testName, func(t *testing.T) {
 							tctx, tcancel := context.WithTimeout(ctx, 30*time.Second)
