@@ -210,6 +210,10 @@ func (rh *BasicRetryHandler) waitForJob(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case j := <-rh.pending:
+			// Since we just reduced the pending jobs by one, we have to
+			// consider whether there might still jobs available to process in
+			// the overflow queue. If there's a job in the overflow queue, try
+			// to add it to the pending channel now.
 			rh.mu.Lock()
 			rh.tryReduceOverflow()
 			rh.mu.Unlock()

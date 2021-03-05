@@ -57,7 +57,7 @@ func (q *limitedSizeLocal) ID() string {
 	return q.id
 }
 
-// Put adds a job to the queue, It returns an error if the queue is not yet
+// Put adds a job to the queue. It returns an error if the queue is not yet
 // opened or a job of the same name already exists in the queue. If the queue is
 // at capacity, it will block until it can be added or the context is done;
 // waiting for these conditions can cause the other queue operations to also
