@@ -123,12 +123,24 @@ func DefaultQueueTestCases() []QueueTestCase {
 			},
 		},
 		{
+			Name:                    "LimitedSizeSerializable",
+			WaitUntilSupported:      true,
+			DispatchBeforeSupported: true,
+			MaxTimeSupported:        true,
+			ScopesSupported:         true,
+			RetrySupported:          true,
+			Constructor: func(ctx context.Context, _ string, size int) (amboy.Queue, TestCloser, error) {
+				q := NewLocalLimitedSizeSerializable(size, 1024*size)
+				return q, func(ctx context.Context) error { return nil }, nil
+			},
+		},
+		{
 			Name:             "Shuffled",
 			SingleWorker:     true,
 			MaxTimeSupported: true,
 			ScopesSupported:  true,
 			Constructor: func(ctx context.Context, _ string, size int) (amboy.Queue, TestCloser, error) {
-				return NewShuffledLocal(size, defaultLocalQueueCapcity), func(ctx context.Context) error { return nil }, nil
+				return NewLocalShuffled(size, defaultLocalQueueCapcity), func(ctx context.Context) error { return nil }, nil
 			},
 		},
 		{

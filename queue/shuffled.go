@@ -43,9 +43,9 @@ type shuffledLocal struct {
 	runner     amboy.Runner
 }
 
-// NewShuffledLocal provides a queue implementation that shuffles the
+// NewLocalShuffled provides a queue implementation that shuffles the
 // order of jobs, relative the insertion order.
-func NewShuffledLocal(workers, capacity int) amboy.Queue {
+func NewLocalShuffled(workers, capacity int) amboy.Queue {
 	q := &shuffledLocal{
 		scopes:   NewLocalScopeManager(),
 		capacity: capacity,

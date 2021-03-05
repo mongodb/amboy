@@ -28,18 +28,18 @@ type remoteQueue interface {
 }
 
 type remoteBase struct {
-	id                        string
-	started                   bool
-	driver                    remoteQueueDriver
-	dispatcher                Dispatcher
-	driverType                string
-	channel                   chan amboy.Job
-	blocked                   map[string]struct{}
-	dispatched                map[string]struct{}
-	runner                    amboy.Runner
-	retryHandler              amboy.RetryHandler
-	staleRetryMonitorInterval time.Duration
-	mutex                     sync.RWMutex
+	id                           string
+	started                      bool
+	driver                       remoteQueueDriver
+	dispatcher                   Dispatcher
+	driverType                   string
+	channel                      chan amboy.Job
+	blocked                      map[string]struct{}
+	dispatched                   map[string]struct{}
+	runner                       amboy.Runner
+	retryHandler                 amboy.RetryHandler
+	staleRetryingMonitorInterval time.Duration
+	mutex                        sync.RWMutex
 }
 
 func newRemoteBase() *remoteBase {
@@ -69,15 +69,12 @@ func (q *remoteBase) validateAndPreparePut(j amboy.Job) error {
 	if j.Type().Version < 0 {
 		return errors.New("cannot add jobs with versions less than 0")
 	}
-
 	j.UpdateTimeInfo(amboy.JobTimeInfo{
 		Created: time.Now(),
 	})
-
 	if err := j.TimeInfo().Validate(); err != nil {
 		return errors.Wrap(err, "invalid job time info")
 	}
-
 	return nil
 }
 
@@ -171,21 +168,6 @@ func (q *remoteBase) Save(ctx context.Context, j amboy.Job) error {
 	return q.driver.Save(ctx, j)
 }
 
-func (q *remoteBase) CompleteRetryingAndPut(ctx context.Context, toComplete, toPut amboy.Job) error {
-	q.prepareCompleteRetrying(toComplete)
-	if err := q.validateAndPreparePut(toPut); err != nil {
-		return errors.Wrap(err, "invalid job to put")
-	}
-	return q.driver.CompleteAndPut(ctx, toComplete, toPut)
-}
-
-func (q *remoteBase) prepareCompleteRetrying(j amboy.Job) {
-	j.UpdateRetryInfo(amboy.JobRetryOptions{
-		NeedsRetry: utility.FalsePtr(),
-		End:        utility.ToTimePtr(time.Now()),
-	})
-}
-
 // Complete marks the job complete in the queue.
 func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
 	if ctx.Err() != nil {
@@ -268,6 +250,24 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
 	}
 }
 
+// CompleteRetryingAndPut marks the job toComplete as finished retrying in the
+// queue and adds a new job toPut to the queue. These two operations are atomic.
+func (q *remoteBase) CompleteRetryingAndPut(ctx context.Context, toComplete, toPut amboy.Job) error {
+	q.prepareCompleteRetrying(toComplete)
+	if err := q.validateAndPreparePut(toPut); err != nil {
+		return errors.Wrap(err, "invalid job to put")
+	}
+	return q.driver.CompleteAndPut(ctx, toComplete, toPut)
+}
+
+func (q *remoteBase) prepareCompleteRetrying(j amboy.Job) {
+	j.UpdateRetryInfo(amboy.JobRetryOptions{
+		NeedsRetry: utility.FalsePtr(),
+		End:        utility.ToTimePtr(time.Now()),
+	})
+}
+
+// CompleteRetrying marks the job as finished retrying in the queue.
 func (q *remoteBase) CompleteRetrying(ctx context.Context, j amboy.Job) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -313,7 +313,8 @@ func (q *remoteBase) CompleteRetrying(ctx context.Context, j amboy.Job) error {
 	return errors.Wrapf(catcher.Resolve(), "giving up after attempt %d", maxAttempts)
 }
 
-// Results provides a generator that iterates all completed jobs.
+// Results provides a generator that iterates all completed jobs. Retrying jobs
+// are not returned until they finish retrying.
 func (q *remoteBase) Results(ctx context.Context) <-chan amboy.Job {
 	output := make(chan amboy.Job)
 	go func() {
@@ -383,19 +384,27 @@ func (q *remoteBase) RetryHandler() amboy.RetryHandler {
 func (q *remoteBase) SetRetryHandler(rh amboy.RetryHandler) error {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
+
 	if q.retryHandler != nil && q.retryHandler.Started() {
 		return errors.New("cannot change retry handler after it is already started")
 	}
+	if err := rh.SetQueue(q); err != nil {
+		return err
+	}
+
 	q.retryHandler = rh
 
-	return rh.SetQueue(q)
+	return nil
 }
 
 // SetStaleRetryingMonitorInterval configures how frequently the queue will
 // check for stale retrying jobs. If this is unspecified, the default is 1
 // second.
 func (q *remoteBase) SetStaleRetryingMonitorInterval(interval time.Duration) {
-	q.staleRetryMonitorInterval = interval
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
+	q.staleRetryingMonitorInterval = interval
 }
 
 // Driver provides access to the embedded driver instance which
@@ -519,8 +528,8 @@ func (q *remoteBase) monitorStaleRetryingJobs(ctx context.Context) {
 	}()
 
 	monitorInterval := defaultStaleRetryingMonitorInterval
-	if q.staleRetryMonitorInterval != 0 {
-		monitorInterval = q.staleRetryMonitorInterval
+	if q.staleRetryingMonitorInterval != 0 {
+		monitorInterval = q.staleRetryingMonitorInterval
 	}
 	timer := time.NewTimer(0)
 	defer timer.Stop()

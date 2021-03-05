@@ -18,13 +18,14 @@ import (
 // simple component that can be attached to an amboy.RetryableQueue to support
 // automatically retrying jobs.
 type BasicRetryHandler struct {
-	queue         amboy.RetryableQueue
-	opts          amboy.RetryHandlerOptions
-	pending       map[string]amboy.Job
-	started       bool
-	wg            sync.WaitGroup
-	mu            sync.RWMutex
-	cancelWorkers context.CancelFunc
+	queue           amboy.RetryableQueue
+	opts            amboy.RetryHandlerOptions
+	pending         chan amboy.Job
+	pendingOverflow []amboy.Job
+	started         bool
+	wg              sync.WaitGroup
+	mu              sync.RWMutex
+	cancelWorkers   context.CancelFunc
 }
 
 // NewBasicRetryHandler initializes and returns an BasicRetryHandler that can be
@@ -36,12 +37,23 @@ func NewBasicRetryHandler(q amboy.RetryableQueue, opts amboy.RetryHandlerOptions
 	if err := opts.Validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid options")
 	}
+	var pending chan amboy.Job
+	if opts.IsUnlimitedMaxCapacity() {
+		pending = make(chan amboy.Job, unlimitedRetryHandlerBufferCapacity)
+	} else {
+		pending = make(chan amboy.Job, opts.MaxCapacity)
+	}
 	return &BasicRetryHandler{
 		queue:   q,
 		opts:    opts,
-		pending: map[string]amboy.Job{},
+		pending: pending,
 	}, nil
 }
+
+// unlimitedRetryHandlerBufferCapacity is the buffer size for a retry handler
+// without capacity. Additional storage must be allocated to account for
+// overflow.
+const unlimitedRetryHandlerBufferCapacity = 4096
 
 // Start initiates processing of jobs that need to retry.
 func (rh *BasicRetryHandler) Start(ctx context.Context) error {
@@ -89,7 +101,9 @@ func (rh *BasicRetryHandler) SetQueue(q amboy.RetryableQueue) error {
 	return nil
 }
 
-// Put adds a new job to be retried.
+// Put adds a new job to be retried. If it is at maximum capacity, it will block
+// until either there is capacity or the context is done. If it has unlimited
+// capacity, it will be added without blocking.
 func (rh *BasicRetryHandler) Put(ctx context.Context, j amboy.Job) error {
 	if j == nil {
 		return errors.New("cannot retry a nil job")
@@ -98,25 +112,65 @@ func (rh *BasicRetryHandler) Put(ctx context.Context, j amboy.Job) error {
 		return ctx.Err()
 	}
 
+	if err := rh.put(ctx, j); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (rh *BasicRetryHandler) put(ctx context.Context, j amboy.Job) error {
 	rh.mu.Lock()
 	defer rh.mu.Unlock()
 
-	if _, ok := rh.pending[j.ID()]; ok {
+	// Prioritize pending jobs already in the overflow over the current job.
+	rh.tryReduceOverflow()
+
+	select {
+	case rh.pending <- j:
 		return nil
+	default:
+		if rh.opts.IsUnlimitedMaxCapacity() {
+			rh.pendingOverflow = append(rh.pendingOverflow, j)
+			grip.Debug(message.Fields{
+				"message":     "put job in retry handler's overflow queue",
+				"job_id":      j.ID(),
+				"job_attempt": j.RetryInfo().CurrentAttempt,
+				"num_pending": len(rh.pending) + len(rh.pendingOverflow),
+				"queue_id":    rh.queue.ID(),
+				"service":     "amboy.queue.retry",
+			})
+			return nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case rh.pending <- j:
+			grip.Debug(message.Fields{
+				"message":     "put job in retry handler's queue",
+				"job_id":      j.ID(),
+				"job_attempt": j.RetryInfo().CurrentAttempt,
+				"num_pending": len(rh.pending) + len(rh.pendingOverflow),
+				"queue_id":    rh.queue.ID(),
+				"service":     "amboy.queue.retry",
+			})
+			return nil
+		}
+	}
+}
+
+func (rh *BasicRetryHandler) tryReduceOverflow() {
+	if len(rh.pendingOverflow) == 0 {
+		return
 	}
 
-	grip.Debug(message.Fields{
-		"message":     "put job in retry handler",
-		"job_id":      j.ID(),
-		"job_attempt": j.RetryInfo().CurrentAttempt,
-		"num_pending": len(rh.pending),
-		"queue_id":    rh.queue.ID(),
-		"service":     "amboy.queue.retry",
-	})
-
-	rh.pending[j.ID()] = j
-
-	return nil
+	j := rh.pendingOverflow[0]
+	select {
+	case rh.pending <- j:
+		rh.pendingOverflow = rh.pendingOverflow[1:]
+	default:
+	}
 }
 
 // Close finishes processing the remaining retrying jobs and cleans up all
@@ -151,49 +205,48 @@ func (rh *BasicRetryHandler) waitForJob(ctx context.Context) {
 		rh.wg.Done()
 	}()
 
-	timer := time.NewTimer(0)
-	defer timer.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-timer.C:
-			var j amboy.Job
+		case j := <-rh.pending:
+			// Since we just reduced the pending jobs by one, we have to
+			// consider whether there might still jobs available to process in
+			// the overflow queue. If there's a job in the overflow queue, try
+			// to add it to the pending channel now.
+			rh.mu.Lock()
+			rh.tryReduceOverflow()
+			rh.mu.Unlock()
 
 			defer func() {
 				if err := recovery.HandlePanicWithError(recover(), nil, "handling job retry"); err != nil {
-					fields := message.Fields{
-						"message":  "job retry failed",
-						"service":  "amboy.queue.retry",
-						"queue_id": rh.queue.ID(),
-					}
-					if j != nil {
-						fields["job_id"] = j.ID()
-						fields["job_attempt"] = j.RetryInfo().CurrentAttempt
-					}
-					grip.Error(message.WrapError(err, fields))
-					if j != nil {
-						rh.mu.Lock()
-						rh.pending[j.ID()] = j
-						rh.mu.Unlock()
-					}
+					grip.Error(message.WrapError(err, message.Fields{
+						"message":     "job retry failed",
+						"job_id":      j.ID(),
+						"job_attempt": j.RetryInfo().CurrentAttempt,
+						"queue_id":    rh.queue.ID(),
+						"service":     "amboy.queue.retry",
+					}))
+					grip.Error(message.WrapError(rh.put(ctx, j), message.Fields{
+						"message":     "could not re-enqueue retrying job after panic",
+						"job_id":      j.ID(),
+						"job_attempt": j.RetryInfo().CurrentAttempt,
+						"queue_id":    rh.queue.ID(),
+						"service":     "amboy.queue.retry",
+					}))
 				}
 			}()
 
-			j = rh.nextJob()
-			if j == nil {
-				timer.Reset(rh.opts.WorkerCheckInterval)
-				continue
-			}
-
+			rh.mu.RLock()
 			grip.Debug(message.Fields{
 				"message":     "retrying job",
 				"job_id":      j.ID(),
 				"job_attempt": j.RetryInfo().CurrentAttempt,
-				"num_pending": len(rh.pending),
+				"num_pending": len(rh.pending) + len(rh.pendingOverflow),
 				"queue_id":    rh.queue.ID(),
 				"service":     "amboy.queue.retry",
 			})
+			rh.mu.RUnlock()
 			startAt := time.Now()
 
 			if err := rh.handleJob(ctx, j); err != nil && ctx.Err() == nil {
@@ -217,30 +270,19 @@ func (rh *BasicRetryHandler) waitForJob(ctx context.Context) {
 				}
 			}
 
+			rh.mu.RLock()
 			grip.Debug(message.Fields{
 				"message":     "finished retrying job",
 				"job_id":      j.ID(),
 				"job_attempt": j.RetryInfo().CurrentAttempt,
-				"num_pending": len(rh.pending),
+				"num_pending": len(rh.pending) + len(rh.pendingOverflow),
 				"queue_id":    rh.queue.ID(),
 				"duration":    time.Since(startAt),
 				"service":     "amboy.queue.retry",
 			})
-
-			timer.Reset(rh.opts.WorkerCheckInterval)
+			rh.mu.RUnlock()
 		}
 	}
-}
-
-func (rh *BasicRetryHandler) nextJob() amboy.Job {
-	rh.mu.RLock()
-	defer rh.mu.RUnlock()
-	for id, found := range rh.pending {
-		j := found
-		delete(rh.pending, id)
-		return j
-	}
-	return nil
 }
 
 func (rh *BasicRetryHandler) handleJob(ctx context.Context, j amboy.Job) error {

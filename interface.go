@@ -427,9 +427,11 @@ type RetryHandlerOptions struct {
 	// NumWorkers is the maximum number of jobs that are allowed to retry in
 	// parallel.
 	NumWorkers int
-	// WorkerCheckInterval is the time interval retry workers will wait before
-	// attempting to pick up another job to retry.
-	WorkerCheckInterval time.Duration
+	// MaxCapacity is the total number of jobs that the RetryHandler is allowed
+	// to hold in preparation to retry. If MaxCapacity is 0, it will be set to a
+	// default maximum capacity. If MaxCapacity is -1, it will have unlimited
+	// capacity.
+	MaxCapacity int
 }
 
 // Validate checks that all retry handler options are valid.
@@ -438,6 +440,7 @@ func (opts *RetryHandlerOptions) Validate() error {
 	catcher.NewWhen(opts.MaxRetryAttempts < 0, "cannot have negative max retry attempts")
 	catcher.NewWhen(opts.MaxRetryTime < 0, "cannot have negative max retry time")
 	catcher.NewWhen(opts.NumWorkers < 0, "cannot have negative worker thread count")
+	catcher.NewWhen(opts.MaxCapacity < -1, "cannot have negative max capacity, unless it is -1 for unlimited")
 	if catcher.HasErrors() {
 		return catcher.Resolve()
 	}
@@ -450,7 +453,16 @@ func (opts *RetryHandlerOptions) Validate() error {
 	if opts.NumWorkers == 0 {
 		opts.NumWorkers = 1
 	}
+	if opts.MaxCapacity == 0 {
+		opts.MaxCapacity = 4096
+	}
 	return nil
+}
+
+// IsUnlimitedMaxCapacity returns whether or not the options specify unlimited
+// capacity.
+func (opts *RetryHandlerOptions) IsUnlimitedMaxCapacity() bool {
+	return opts.MaxCapacity == -1
 }
 
 // Runner describes a simple worker interface for executing jobs in
