@@ -83,7 +83,7 @@ func (q *limitedSizeSerializableLocal) getNameForAttempt(name string, attempt in
 }
 
 // Put adds a job to the queue, returning an error if the queue is not yet
-// opened, or if the job already exists in the queue. If the queue is at
+// opened or if the job already exists in the queue. If the queue is at
 // capacity. Put() will fail.
 func (q *limitedSizeSerializableLocal) Put(ctx context.Context, j amboy.Job) error {
 	if err := q.validateAndPreparePut(j); err != nil {
@@ -372,17 +372,23 @@ func (q *limitedSizeSerializableLocal) RetryHandler() amboy.RetryHandler {
 func (q *limitedSizeSerializableLocal) SetRetryHandler(rh amboy.RetryHandler) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+
 	if q.retryHandler != nil && q.retryHandler.Started() {
 		return errors.New("cannot change retry handler after it is already started")
 	}
 	if err := rh.SetQueue(q); err != nil {
 		return err
 	}
+
 	q.retryHandler = rh
+
 	return nil
 }
 
 func (q *limitedSizeSerializableLocal) SetStaleRetryingMonitorInterval(interval time.Duration) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
 	q.staleRetryingMonitorInterval = interval
 }
 

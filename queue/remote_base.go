@@ -384,13 +384,16 @@ func (q *remoteBase) RetryHandler() amboy.RetryHandler {
 func (q *remoteBase) SetRetryHandler(rh amboy.RetryHandler) error {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
+
 	if q.retryHandler != nil && q.retryHandler.Started() {
 		return errors.New("cannot change retry handler after it is already started")
 	}
 	if err := rh.SetQueue(q); err != nil {
 		return err
 	}
+
 	q.retryHandler = rh
+
 	return nil
 }
 
@@ -398,6 +401,9 @@ func (q *remoteBase) SetRetryHandler(rh amboy.RetryHandler) error {
 // check for stale retrying jobs. If this is unspecified, the default is 1
 // second.
 func (q *remoteBase) SetStaleRetryingMonitorInterval(interval time.Duration) {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
 	q.staleRetryingMonitorInterval = interval
 }
 
