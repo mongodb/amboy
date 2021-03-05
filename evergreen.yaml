@@ -93,7 +93,8 @@ tasks:
   # a template that does not include test result parsing.
   - <<: *run-build
     name: build
-  - <<: *run-build
+
+  - <<: *run-go-test-suite
     tags: ["report"]
     name: lint
 
