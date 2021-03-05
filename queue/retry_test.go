@@ -479,8 +479,8 @@ func TestRetryHandlerQueueIntegration(t *testing.T) {
 					q, err := newSimpleRemoteOrdered(size)
 					return q, errors.WithStack(err)
 				},
-				"LocalFixed": func(size int) (amboy.RetryableQueue, error) {
-					q := NewLocalLimitedSize(size, 10)
+				"LocalLimitedSizeSerializable": func(size int) (amboy.RetryableQueue, error) {
+					q := NewLocalLimitedSizeSerializable(size, 10)
 					return q, nil
 				},
 			} {

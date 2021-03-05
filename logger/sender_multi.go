@@ -50,7 +50,7 @@ func MakeQueueMultiSender(ctx context.Context, q amboy.Queue, senders ...send.Se
 // method on this sender, the queue is canceled, which may leave some
 // pending messages unsent.
 func NewQueueMultiSender(ctx context.Context, workers, capacity int, senders ...send.Sender) (send.Sender, error) {
-	q := queue.NewShuffledLocal(workers, capacity)
+	q := queue.NewLocalLimitedSize(workers, capacity)
 	s := newMultiSender(ctx, q, senders)
 
 	s.ctx, s.canceler = context.WithCancel(s.ctx)
