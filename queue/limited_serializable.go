@@ -84,7 +84,7 @@ func (q *limitedSizeSerializableLocal) getNameForAttempt(name string, attempt in
 
 // Put adds a job to the queue, returning an error if the queue is not yet
 // opened or if the job already exists in the queue. If the queue is at
-// capacity. Put() will fail.
+// capacity, Put will fail.
 func (q *limitedSizeSerializableLocal) Put(ctx context.Context, j amboy.Job) error {
 	if err := q.validateAndPreparePut(j); err != nil {
 		return errors.WithStack(err)
