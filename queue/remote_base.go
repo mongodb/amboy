@@ -259,7 +259,6 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
 
 			return
 		}
-
 	}
 }
 
