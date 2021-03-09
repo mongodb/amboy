@@ -220,29 +220,24 @@ func (q *depGraphOrderedLocal) Results(ctx context.Context) <-chan amboy.Job {
 	return output
 }
 
-// JobStats returns job status documents for all jobs tracked by the
-// queue. This implementation returns status for jobs in a random order.
-func (q *depGraphOrderedLocal) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
-	output := make(chan amboy.JobStatusInfo)
+// JobInfo returns a channel that produces information for all jobs in the
+// queue. Job information is returned in no particular order.
+func (q *depGraphOrderedLocal) JobInfo(ctx context.Context) <-chan amboy.JobInfo {
+	infos := make(chan amboy.JobInfo)
 	go func() {
 		q.mutex.RLock()
 		defer q.mutex.RUnlock()
-		defer close(output)
-		for _, job := range q.tasks.m {
-			if ctx.Err() != nil {
-				return
-			}
-			s := job.Status()
-			s.ID = job.ID()
+		defer close(infos)
+		for _, j := range q.tasks.m {
 			select {
 			case <-ctx.Done():
 				return
-			case output <- s:
+			case infos <- amboy.NewJobInfo(j):
 			}
 
 		}
 	}()
-	return output
+	return infos
 }
 
 // Get takes a name and returns a completed job.

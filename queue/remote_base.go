@@ -336,8 +336,11 @@ func (q *remoteBase) Results(ctx context.Context) <-chan amboy.Job {
 	return output
 }
 
-func (q *remoteBase) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
-	return q.driver.JobStats(ctx)
+// JobInfo returns a channel that produces information about all jobs in the
+// queue. The order in which job information is produced depends on the backing
+// storage driver.
+func (q *remoteBase) JobInfo(ctx context.Context) <-chan amboy.JobInfo {
+	return q.driver.JobInfo(ctx)
 }
 
 // Stats returns a amboy.QueueStats object that reflects the progress

@@ -27,13 +27,13 @@ type Manager interface {
 // current jobs in a queue by status
 type StatusFilter string
 
-// nolint
+// Constants representing StatusFilters
 const (
 	InProgress StatusFilter = "in-progress"
-	Pending                 = "pending"
-	Stale                   = "stale"
-	Completed               = "completed"
-	All                     = "all"
+	Pending    StatusFilter = "pending"
+	Stale      StatusFilter = "stale"
+	Completed  StatusFilter = "completed"
+	All        StatusFilter = "all"
 )
 
 // Validate returns an error if a filter value is not valid.
@@ -50,11 +50,11 @@ func (t StatusFilter) Validate() error {
 // the reporting interface.
 type RuntimeFilter string
 
-// nolint
+// Constants representing RuntimeFilters.
 const (
 	Duration RuntimeFilter = "completed"
-	Latency                = "latency"
-	Running                = "running"
+	Latency  RuntimeFilter = "latency"
+	Running  RuntimeFilter = "running"
 )
 
 // Validate returns an error if a filter value is not valid.
@@ -71,11 +71,11 @@ func (t RuntimeFilter) Validate() error {
 // in error queries.
 type ErrorFilter string
 
-// nolint
+// Constants representing ErrorFilters.
 const (
 	UniqueErrors ErrorFilter = "unique-errors"
-	AllErrors                = "all-errors"
-	StatsOnly                = "stats-only"
+	AllErrors    ErrorFilter = "all-errors"
+	StatsOnly    ErrorFilter = "stats-only"
 )
 
 // Validate returns an error if a filter value is not valid.

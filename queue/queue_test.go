@@ -636,11 +636,11 @@ func UnorderedTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 	}
 
 	statCounter := 0
-	for stat := range q.JobStats(ctx) {
+	for info := range q.JobInfo(ctx) {
 		statCounter++
-		assert.True(t, stat.ID != "")
+		assert.NotEmpty(t, info.ID)
 	}
-	assert.Equal(t, numJobs, statCounter, fmt.Sprintf("want jobStats for every job"))
+	assert.Equal(t, numJobs, statCounter, fmt.Sprintf("want job info for every job"))
 
 	grip.Infof("completed results check for %d worker smoke test", size.Size)
 }
@@ -694,9 +694,9 @@ func OrderedTest(bctx context.Context, t *testing.T, test QueueTestCase, runner 
 	}
 
 	statCounter := 0
-	for stat := range q.JobStats(ctx) {
+	for info := range q.JobInfo(ctx) {
 		statCounter++
-		require.True(t, stat.ID != "")
+		require.NotEmpty(t, info.ID)
 	}
 	require.Equal(t, statCounter, numJobs)
 }

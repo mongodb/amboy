@@ -222,22 +222,23 @@ func (q *limitedSizeLocal) Results(ctx context.Context) <-chan amboy.Job {
 	return out
 }
 
-// JobStats returns an iterator for job status documents for all jobs
-// in the queue. For this queue implementation *queued* jobs are returned
-// first.
-func (q *limitedSizeLocal) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
+// JobInfo returns a channel for infomration on all jobs in the queue. Job
+// information is returned in no particular order.
+func (q *limitedSizeLocal) JobInfo(ctx context.Context) <-chan amboy.JobInfo {
 	q.mu.RLock()
 	defer q.mu.RUnlock()
 
-	out := make(chan amboy.JobStatusInfo, len(q.storage))
-	for name, job := range q.storage {
-		stat := job.Status()
-		stat.ID = name
-		out <- stat
+	infos := make(chan amboy.JobInfo, len(q.storage))
+	defer close(infos)
+	for _, j := range q.storage {
+		select {
+		case <-ctx.Done():
+			return infos
+		case infos <- amboy.NewJobInfo(j):
+		}
 	}
-	close(out)
 
-	return out
+	return infos
 }
 
 // Runner returns the Queue's embedded amboy.Runner instance.

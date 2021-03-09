@@ -99,9 +99,6 @@ func (q *sqsFIFOQueue) Put(ctx context.Context, j amboy.Job) error {
 	}
 
 	dedupID := strings.Replace(j.ID(), " ", "", -1) //remove all spaces
-	curStatus := j.Status()
-	curStatus.ID = dedupID
-	j.SetStatus(curStatus)
 	jobItem, err := registry.MakeJobInterchange(j, amboy.JSON)
 	if err != nil {
 		return errors.Wrap(err, "Error converting job in Put")
@@ -259,24 +256,23 @@ func (q *sqsFIFOQueue) Results(ctx context.Context) <-chan amboy.Job {
 	return results
 }
 
-// Returns a channel that produces the status objects for all
-// jobs in the queue, completed and otherwise.
-func (q *sqsFIFOQueue) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
-	allInfo := make(chan amboy.JobStatusInfo)
+// JobInfo returns a channel that produces information for all jobs in the
+// queue. Job information is returned in no particular order.
+func (q *sqsFIFOQueue) JobInfo(ctx context.Context) <-chan amboy.JobInfo {
+	infos := make(chan amboy.JobInfo)
 	go func() {
 		q.mutex.RLock()
 		defer q.mutex.RUnlock()
-		defer close(allInfo)
-		for _, job := range q.tasks.all {
+		defer close(infos)
+		for _, j := range q.tasks.all {
 			select {
 			case <-ctx.Done():
 				return
-			case allInfo <- job.Status():
+			case infos <- amboy.NewJobInfo(j):
 			}
-
 		}
 	}()
-	return allInfo
+	return infos
 }
 
 // Returns an object that contains statistics about the

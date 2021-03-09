@@ -266,13 +266,11 @@ func (q *shuffledLocal) Results(ctx context.Context) <-chan amboy.Job {
 	return output
 }
 
-// JobStats returns JobStatusInfo objects for all jobs tracked by the
-// queue. The operation returns jobs first that have been dispatched
-// (e.g. currently working,) then pending (queued for dispatch,) and
-// finally completed.
-func (q *shuffledLocal) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
-	out := make(chan amboy.JobStatusInfo)
-
+// JobInfo returns a channel that produces information for all jobs in the
+// queue. The operation returns jobs first that have been dispatched, then
+// pending, and finally completed.
+func (q *shuffledLocal) JobInfo(ctx context.Context) <-chan amboy.JobInfo {
+	infos := make(chan amboy.JobInfo)
 	q.operations <- func(
 		pending map[string]amboy.Job,
 		completed map[string]amboy.Job,
@@ -280,34 +278,30 @@ func (q *shuffledLocal) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo
 		toDelete *fixedStorage,
 	) {
 
-		defer close(out)
+		defer close(infos)
 		for _, j := range dispatched {
-			if ctx.Err() != nil {
+			select {
+			case <-ctx.Done():
 				return
+			case infos <- amboy.NewJobInfo(j):
 			}
-			stat := j.Status()
-			stat.ID = j.ID()
-			out <- stat
 		}
 		for _, j := range pending {
-			if ctx.Err() != nil {
+			select {
+			case <-ctx.Done():
 				return
+			case infos <- amboy.NewJobInfo(j):
 			}
-			stat := j.Status()
-			stat.ID = j.ID()
-			out <- stat
 		}
 		for _, j := range completed {
-			if ctx.Err() != nil {
+			select {
+			case <-ctx.Done():
 				return
+			case infos <- amboy.NewJobInfo(j):
 			}
-			stat := j.Status()
-			stat.ID = j.ID()
-			out <- stat
 		}
 	}
-
-	return out
+	return infos
 }
 
 // Stats returns a standard report on the number of pending, running,
