@@ -182,7 +182,7 @@ func (q *shuffledLocal) Save(ctx context.Context, j amboy.Job) error {
 			return
 		}
 
-		ret <- errors.Errorf("job '%s' does not exist", id)
+		ret <- amboy.NewJobNotFoundErrorf("job '%s' does not exist", id)
 	}
 
 	select {

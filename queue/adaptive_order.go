@@ -124,7 +124,7 @@ func (q *adaptiveLocalOrdering) Save(ctx context.Context, j amboy.Job) error {
 	op := func(ctx context.Context, items *adaptiveOrderItems, fixed *fixedStorage) {
 		defer close(out)
 		if _, ok := items.jobs[name]; !ok {
-			out <- errors.New("cannot save job that does not exist")
+			out <- amboy.NewJobNotFoundError("cannot save job that does not exist")
 			return
 		}
 

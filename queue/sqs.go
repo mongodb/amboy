@@ -136,7 +136,7 @@ func (q *sqsFIFOQueue) Save(ctx context.Context, j amboy.Job) error {
 	}
 
 	if _, ok := q.tasks.all[name]; !ok {
-		return errors.Errorf("cannot save '%s' because a job does not exist with that name", name)
+		return amboy.NewJobNotFoundErrorf("cannot save '%s' because a job does not exist with that name", name)
 	}
 
 	q.tasks.all[name] = j

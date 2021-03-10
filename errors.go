@@ -7,6 +7,43 @@ import (
 	"github.com/pkg/errors"
 )
 
+type JobNotFoundError struct {
+	msg string
+}
+
+func (e *JobNotFoundError) Error() string { return e.msg }
+
+// NewJobNotFoundError creates a new error indicating that a job could not be
+// found in the queue.
+func NewJobNotFoundError(msg string) error { return &JobNotFoundError{msg: msg} }
+
+// NewJobNotFoundErrorf creates a new error with a formatted message, indicating
+// that a job could not be found in the queue.
+func NewJobNotFoundErrorf(msg string, args ...interface{}) error {
+	return NewJobNotFoundError(fmt.Sprintf(msg, args...))
+}
+
+// MakeJobNotFoundError constructs an error from an existing one, indicating
+// that a job could not be found in the queue.
+func MakeJobNotFoundError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	return NewJobNotFoundError(err.Error())
+}
+
+// IsJobNotFound tests an error it is due tonot being able to find a job in the
+// queue.
+func IsJobNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	_, ok := errors.Cause(err).(*JobNotFoundError)
+	return ok
+}
+
 // EnqueueUniqueJob is a generic wrapper for adding jobs to queues (using the
 // Put() method), but that ignores duplicate job errors.
 func EnqueueUniqueJob(ctx context.Context, queue Queue, job Job) error {
@@ -25,19 +62,18 @@ type duplJobError struct {
 
 func (e *duplJobError) Error() string { return e.msg }
 
-// NewDuplicateJobError creates a new error object to represent a
-// duplicate job error, for use by queue implementations.
+// NewDuplicateJobError creates a new error to represent a duplicate job error,
+// for use by queue implementations.
 func NewDuplicateJobError(msg string) error { return &duplJobError{msg: msg} }
 
-// NewDuplicateJobErrorf creates a new error object to represent a
-// duplicate job error with a formatted message, for use by queue
-// implementations.
+// NewDuplicateJobErrorf creates a new error to represent a duplicate job error
+// with a formatted message, for use by queue implementations.
 func NewDuplicateJobErrorf(msg string, args ...interface{}) error {
 	return NewDuplicateJobError(fmt.Sprintf(msg, args...))
 }
 
-// MakeDuplicateJobError constructs a duplicate job error from an
-// existing error of any type, for use by queue implementations.
+// MakeDuplicateJobError constructs a duplicate job error from an existing error
+// of any type, for use by queue implementations.
 func MakeDuplicateJobError(err error) error {
 	if err == nil {
 		return nil
@@ -46,8 +82,7 @@ func MakeDuplicateJobError(err error) error {
 	return NewDuplicateJobError(err.Error())
 }
 
-// IsDuplicateJobError tests an error object to see if it is a
-// duplicate job error.
+// IsDuplicateJobError tests an error to see if it is a duplicate job error.
 func IsDuplicateJobError(err error) bool {
 	if err == nil {
 		return false

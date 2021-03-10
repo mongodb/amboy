@@ -213,7 +213,7 @@ const defaultRetryableMaxAttempts = 10
 
 // GetMaxAttempts returns the maximum number of times a job is allowed to
 // attempt. It defaults the maximum attempts if it's unset.
-func (info *JobRetryInfo) GetMaxAttempts() int {
+func (info JobRetryInfo) GetMaxAttempts() int {
 	if info.MaxAttempts <= 0 {
 		return defaultRetryableMaxAttempts
 	}
@@ -379,10 +379,15 @@ type RetryableQueue interface {
 	// RetryableQueue should be checked for jobs that are retrying but stale.
 	SetStaleRetryingMonitorInterval(time.Duration)
 
-	// GetAttempt returns the retryable job associated with the given attempt of
-	// the job and a bool indicating whether the job was found or not. This will
-	// only return retryable jobs.
-	GetAttempt(ctx context.Context, id string, attempt int) (Job, bool)
+	// GetAttempt returns the retryable job associated with the given ID and
+	// execution attempt. If it cannot find a matching job, it will return
+	// ErrJobNotFound. This will only return retryable jobs.
+	GetAttempt(ctx context.Context, id string, attempt int) (Job, error)
+
+	// GetAllAttempts returns all execution attempts of a retryable job
+	// associated with the given job ID. If it cannot find a matching job, it
+	// will return ErrJobNotFound.This will only return retryable jobs.
+	GetAllAttempts(ctx context.Context, id string) ([]Job, error)
 
 	// CompleteRetryingAndPut marks an existing job toComplete in the queue (see
 	// CompleteRetrying) as finished retrying and inserts a new job toPut in the
