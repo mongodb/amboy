@@ -381,7 +381,13 @@ func (g *remoteMongoQueueGroup) Prune(ctx context.Context) error {
 				count, err := c.CountDocuments(ctx, bson.M{
 					"status.completed": true,
 					"status.in_prog":   false,
-					"status.mod_ts":    bson.M{"$gte": time.Now().Add(-g.opts.TTL)},
+					"$or": []bson.M{
+						{"status.mod_ts": bson.M{"$gte": time.Now().Add(-g.opts.TTL)}},
+						{
+							"retry_info.retryable":   true,
+							"retry_info.needs_retry": true,
+						},
+					},
 				})
 				if err != nil {
 					catcher.Add(err)
