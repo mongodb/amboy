@@ -534,7 +534,7 @@ func (d *mongoDriver) GetAllAttempts(ctx context.Context, id string) ([]amboy.Jo
 	}
 	d.modifyQueryForGroup(matchID)
 
-	sortAttempt := bson.M{"retry_info.current_attempt": 1}
+	sortAttempt := bson.M{"retry_info.current_attempt": -1}
 
 	cursor, err := d.getCollection().Find(ctx, matchID, options.Find().SetSort(sortAttempt))
 	if err != nil {
@@ -549,13 +549,13 @@ func (d *mongoDriver) GetAllAttempts(ctx context.Context, id string) ([]amboy.Jo
 		return nil, amboy.NewJobNotFoundError("no such job found")
 	}
 
-	jobs := make([]amboy.Job, 0, len(jobInts))
-	for _, ji := range jobInts {
+	jobs := make([]amboy.Job, len(jobInts))
+	for i, ji := range jobInts {
 		j, err := ji.Resolve(d.opts.Format)
 		if err != nil {
 			return nil, errors.Wrap(err, "converting serialized job format to in-memory job")
 		}
-		jobs = append(jobs, j)
+		jobs[len(jobs)-i-1] = j
 	}
 
 	return jobs, nil

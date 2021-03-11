@@ -7,10 +7,14 @@ import (
 	"github.com/pkg/errors"
 )
 
+// JobNotFoundError represents an error indicating that a job could not be found
+// in a queue.
 type JobNotFoundError struct {
 	msg string
 }
 
+// Error returns the error message from the job not found error to provide more
+// context as to why the job was not found.
 func (e *JobNotFoundError) Error() string { return e.msg }
 
 // NewJobNotFoundError creates a new error indicating that a job could not be
@@ -33,8 +37,8 @@ func MakeJobNotFoundError(err error) error {
 	return NewJobNotFoundError(err.Error())
 }
 
-// IsJobNotFound tests an error it is due tonot being able to find a job in the
-// queue.
+// IsJobNotFound checks if an error was due to not being able to find the job
+// in the queue.
 func IsJobNotFoundError(err error) bool {
 	if err == nil {
 		return false
@@ -82,7 +86,8 @@ func MakeDuplicateJobError(err error) error {
 	return NewDuplicateJobError(err.Error())
 }
 
-// IsDuplicateJobError tests an error to see if it is a duplicate job error.
+// IsDuplicateJobError checks if an error is due to a duplicate job in the
+// queue.
 func IsDuplicateJobError(err error) bool {
 	if err == nil {
 		return false
@@ -123,8 +128,8 @@ func MakeDuplicateJobScopeError(err error) error {
 	return NewDuplicateJobScopeError(err.Error())
 }
 
-// IsDuplicateJobScopeError tests an error object to see if it is a duplicate
-// job scope error.
+// IsDuplicateJobScopeError checks if an error is due to a duplicate job scope
+// in the queue.
 func IsDuplicateJobScopeError(err error) bool {
 	if err == nil {
 		return false
