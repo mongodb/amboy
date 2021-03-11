@@ -495,30 +495,70 @@ func (d *mongoDriver) Get(ctx context.Context, name string) (amboy.Job, error) {
 	return output, nil
 }
 
-func (d *mongoDriver) GetAttempt(ctx context.Context, name string, attempt int) (amboy.Job, error) {
+// GetAttempt finds a retryable job matching the given job ID and execution
+// attempt. This returns an error if no matching job is found.
+func (d *mongoDriver) GetAttempt(ctx context.Context, id string, attempt int) (amboy.Job, error) {
 	matchIDAndAttempt := bson.M{
-		"retry_info.base_job_id":     name,
+		"retry_info.base_job_id":     id,
 		"retry_info.current_attempt": attempt,
 	}
 	d.modifyQueryForGroup(matchIDAndAttempt)
 
 	res := d.getCollection().FindOne(ctx, matchIDAndAttempt)
 	if err := res.Err(); err != nil {
-		return nil, errors.Wrapf(err, "GET problem fetching '%s'", name)
+		if err == mongo.ErrNoDocuments {
+			return nil, amboy.NewJobNotFoundError("no such job found")
+		}
+		return nil, errors.Wrap(err, "finding job attempt")
 	}
 
 	ji := &registry.JobInterchange{}
 	if err := res.Decode(ji); err != nil {
-		return nil, errors.Wrapf(err, "GET problem decoding '%s'", name)
+		return nil, errors.Wrap(err, "decoding job")
 	}
 
 	j, err := ji.Resolve(d.opts.Format)
 	if err != nil {
-		return nil, errors.Wrapf(err,
-			"GET problem converting '%s' to job object", name)
+		return nil, errors.Wrap(err, "converting serialized job format to in-memory job")
 	}
 
 	return j, nil
+}
+
+// GetAllAttempts finds all execution attempts of a retryable job for a given
+// job ID. This returns an error if no matching job is found. The returned jobs
+// are sorted by increasing attempt number.
+func (d *mongoDriver) GetAllAttempts(ctx context.Context, id string) ([]amboy.Job, error) {
+	matchID := bson.M{
+		"retry_info.base_job_id": id,
+	}
+	d.modifyQueryForGroup(matchID)
+
+	sortAttempt := bson.M{"retry_info.current_attempt": -1}
+
+	cursor, err := d.getCollection().Find(ctx, matchID, options.Find().SetSort(sortAttempt))
+	if err != nil {
+		return nil, errors.Wrap(err, "finding all attempts")
+	}
+
+	jobInts := []registry.JobInterchange{}
+	if err := cursor.All(ctx, &jobInts); err != nil {
+		return nil, errors.Wrap(err, "decoding job")
+	}
+	if len(jobInts) == 0 {
+		return nil, amboy.NewJobNotFoundError("no such job found")
+	}
+
+	jobs := make([]amboy.Job, len(jobInts))
+	for i, ji := range jobInts {
+		j, err := ji.Resolve(d.opts.Format)
+		if err != nil {
+			return nil, errors.Wrap(err, "converting serialized job format to in-memory job")
+		}
+		jobs[len(jobs)-i-1] = j
+	}
+
+	return jobs, nil
 }
 
 func (d *mongoDriver) Put(ctx context.Context, j amboy.Job) error {
@@ -576,10 +616,6 @@ func (d *mongoDriver) getAtomicQuery(jobName string, modCount int) bson.M {
 }
 
 var errMongoNoDocumentsMatched = errors.New("no documents matched")
-
-func isMongoNoDocumentsMatched(err error) bool {
-	return errors.Cause(err) == errMongoNoDocumentsMatched
-}
 
 func isMongoDupKey(err error) bool {
 	dupKeyErrs := getMongoDupKeyErrors(err)
@@ -758,8 +794,9 @@ func (d *mongoDriver) doUpdate(ctx context.Context, ji *registry.JobInterchange)
 	}
 
 	if res.MatchedCount == 0 {
-		return errors.Wrapf(errMongoNoDocumentsMatched, "problem saving job [id=%s, matched=%d, modified=%d]", ji.Name, res.MatchedCount, res.ModifiedCount)
+		return amboy.NewJobNotFoundErrorf("unmatched job [id=%s, matched=%d, modified=%d]", ji.Name, res.MatchedCount, res.ModifiedCount)
 	}
+
 	return nil
 }
 

@@ -48,3 +48,25 @@ func TestDuplicateError(t *testing.T) {
 		assert.True(t, IsDuplicateJobScopeError(err))
 	})
 }
+
+func TestJobNotFoundError(t *testing.T) {
+	t.Run("RegularErrorIsNotJobNotFound", func(t *testing.T) {
+		err := errors.New("err")
+		assert.False(t, IsJobNotFoundError(err))
+	})
+	t.Run("NilErrorIsNotDuplicate", func(t *testing.T) {
+		assert.False(t, IsJobNotFoundError(nil))
+	})
+	t.Run("NewJobNotFoundError", func(t *testing.T) {
+		err := NewJobNotFoundError("err")
+		assert.True(t, IsJobNotFoundError(err))
+	})
+	t.Run("NewJobNotFoundErrorf", func(t *testing.T) {
+		err := NewJobNotFoundErrorf("err %s", "err")
+		assert.True(t, IsJobNotFoundError(err))
+	})
+	t.Run("MakeJobNotFoundError", func(t *testing.T) {
+		err := MakeJobNotFoundError(errors.New("err"))
+		assert.True(t, IsJobNotFoundError(err))
+	})
+}

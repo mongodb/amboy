@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -130,17 +131,17 @@ func TestRetryHandlerImplementations(t *testing.T) {
 					})
 
 					var calledGetAttempt, calledSave, calledCompleteRetrying, calledCompleteRetryingAndPut atomic.Value
-					mq.getJobAttempt = func(context.Context, remoteQueue, string, int) (amboy.Job, bool) {
+					mq.getJobAttempt = func(context.Context, remoteQueue, string, int) (amboy.Job, error) {
 						calledGetAttempt.Store(true)
 						ji, err := registry.MakeJobInterchange(j, amboy.JSON)
 						if err != nil {
-							return nil, false
+							return nil, errors.WithStack(err)
 						}
 						j, err := ji.Resolve(amboy.JSON)
 						if err != nil {
-							return nil, false
+							return nil, errors.WithStack(err)
 						}
-						return j, true
+						return j, nil
 					}
 					mq.completeRetryingJob = func(context.Context, remoteQueue, amboy.Job) error {
 						calledCompleteRetrying.Store(true)
@@ -189,9 +190,9 @@ func TestRetryHandlerImplementations(t *testing.T) {
 					mq, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{})
 					require.NoError(t, err)
 					var calledMockQueue atomic.Value
-					mq.getJobAttempt = func(context.Context, remoteQueue, string, int) (amboy.Job, bool) {
+					mq.getJobAttempt = func(context.Context, remoteQueue, string, int) (amboy.Job, error) {
 						calledMockQueue.Store(true)
-						return nil, false
+						return nil, errors.New("mock fail")
 					}
 					mq.saveJob = func(context.Context, remoteQueue, amboy.Job) error {
 						calledMockQueue.Store(true)
@@ -216,9 +217,9 @@ func TestRetryHandlerImplementations(t *testing.T) {
 
 					j := newMockRetryableJob("id")
 					var getAttemptCalls, saveCalls, completeRetryingCalls, completeRetryingAndPutCalls int64
-					mq.getJobAttempt = func(context.Context, remoteQueue, string, int) (amboy.Job, bool) {
+					mq.getJobAttempt = func(context.Context, remoteQueue, string, int) (amboy.Job, error) {
 						_ = atomic.AddInt64(&getAttemptCalls, 1)
-						return j, true
+						return j, nil
 					}
 					mq.completeRetryingJob = func(context.Context, remoteQueue, amboy.Job) error {
 						_ = atomic.AddInt64(&completeRetryingCalls, 1)
@@ -253,9 +254,9 @@ func TestRetryHandlerImplementations(t *testing.T) {
 						MaxAttempts:    utility.ToIntPtr(10),
 					})
 					var getAttemptCalls, saveCalls, completeRetryingCalls, completeRetryingAndPutCalls int64
-					mq.getJobAttempt = func(context.Context, remoteQueue, string, int) (amboy.Job, bool) {
+					mq.getJobAttempt = func(context.Context, remoteQueue, string, int) (amboy.Job, error) {
 						_ = atomic.AddInt64(&getAttemptCalls, 1)
-						return j, true
+						return j, nil
 					}
 					mq.saveJob = func(context.Context, remoteQueue, amboy.Job) error {
 						_ = atomic.AddInt64(&saveCalls, 1)
@@ -299,9 +300,9 @@ func TestRetryHandlerImplementations(t *testing.T) {
 					})
 
 					var getAttemptCalls, saveCalls, completeRetryingCalls, completeRetryingAndPutCalls int64
-					mq.getJobAttempt = func(context.Context, remoteQueue, string, int) (amboy.Job, bool) {
+					mq.getJobAttempt = func(context.Context, remoteQueue, string, int) (amboy.Job, error) {
 						_ = atomic.AddInt64(&getAttemptCalls, 1)
-						return j, true
+						return j, nil
 					}
 					mq.completeRetryingJob = func(context.Context, remoteQueue, amboy.Job) error {
 						_ = atomic.AddInt64(&completeRetryingCalls, 1)
@@ -340,9 +341,9 @@ func TestRetryHandlerImplementations(t *testing.T) {
 					})
 
 					var getAttemptCalls, saveCalls, completeRetryingCalls, completeRetryingAndPutCalls int64
-					mq.getJobAttempt = func(context.Context, remoteQueue, string, int) (amboy.Job, bool) {
+					mq.getJobAttempt = func(context.Context, remoteQueue, string, int) (amboy.Job, error) {
 						_ = atomic.AddInt64(&getAttemptCalls, 1)
-						return j, true
+						return j, nil
 					}
 					mq.completeRetryingJob = func(context.Context, remoteQueue, amboy.Job) error {
 						_ = atomic.AddInt64(&completeRetryingCalls, 1)
@@ -385,9 +386,9 @@ func TestRetryHandlerImplementations(t *testing.T) {
 					})
 
 					var getAttemptCalls, saveCalls, completeRetryingCalls, completeRetryingAndPutCalls int64
-					mq.getJobAttempt = func(context.Context, remoteQueue, string, int) (amboy.Job, bool) {
+					mq.getJobAttempt = func(context.Context, remoteQueue, string, int) (amboy.Job, error) {
 						_ = atomic.AddInt64(&getAttemptCalls, 1)
-						return j, true
+						return j, nil
 					}
 					mq.completeRetryingJob = func(context.Context, remoteQueue, amboy.Job) error {
 						_ = atomic.AddInt64(&completeRetryingCalls, 1)
@@ -446,6 +447,253 @@ func TestRetryHandlerImplementations(t *testing.T) {
 	}
 }
 
+func defaultRetryableQueueTestCases(d remoteQueueDriver) map[string]func(size int) (amboy.RetryableQueue, error) {
+	return map[string]func(size int) (amboy.RetryableQueue, error){
+		"RemoteUnordered": func(size int) (amboy.RetryableQueue, error) {
+			q, err := newRemoteUnordered(size)
+			if err != nil {
+				return nil, errors.WithStack(err)
+			}
+			if err := q.SetDriver(d); err != nil {
+				return nil, errors.WithStack(err)
+			}
+			return q, nil
+		},
+		"RemoteOrdered": func(size int) (amboy.RetryableQueue, error) {
+			q, err := newSimpleRemoteOrdered(size)
+			if err != nil {
+				return nil, errors.WithStack(err)
+			}
+			if err := q.SetDriver(d); err != nil {
+				return nil, errors.WithStack(err)
+			}
+			return q, nil
+		},
+		"LocalLimitedSizeSerializable": func(size int) (amboy.RetryableQueue, error) {
+			q := NewLocalLimitedSizeSerializable(size, size)
+			return q, nil
+		},
+	}
+}
+
+// TestRetryableQueueImplementations tests functionality specific to the
+// amboy.RetryableQueue interface.
+func TestRetryableQueueImplementations(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	opts := defaultMongoDBTestOptions()
+
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(opts.URI))
+	require.NoError(t, err)
+
+	driver, err := openNewMongoDriver(ctx, newDriverID(), opts, client)
+	require.NoError(t, err)
+
+	require.NoError(t, driver.Open(ctx))
+	defer driver.Close()
+
+	mDriver, ok := driver.(*mongoDriver)
+	require.True(t, ok)
+
+	defer func() {
+		require.NoError(t, client.Disconnect(ctx))
+	}()
+
+	const queueSize = 16
+
+	for queueName, makeQueue := range defaultRetryableQueueTestCases(driver) {
+		t.Run(queueName, func(t *testing.T) {
+			for testName, testCase := range map[string]func(ctx context.Context, t *testing.T, q amboy.RetryableQueue){
+				"GetAttemptReturnsMatchingJob": func(ctx context.Context, t *testing.T, q amboy.RetryableQueue) {
+					const (
+						numJobs     = 3
+						numAttempts = 5
+					)
+					jobs := map[string]amboy.Job{}
+					for jobNum := 0; jobNum < numJobs; jobNum++ {
+						for attempt := 0; attempt < numAttempts; attempt++ {
+							j := newMockRetryableJob(strconv.Itoa(jobNum))
+							j.UpdateRetryInfo(amboy.JobRetryOptions{
+								CurrentAttempt: utility.ToIntPtr(attempt),
+							})
+							jobs[j.ID()+strconv.Itoa(attempt)] = j
+							require.NoError(t, q.Put(ctx, j))
+						}
+					}
+
+					for _, j := range jobs {
+						found, err := q.GetAttempt(ctx, j.ID(), j.RetryInfo().CurrentAttempt)
+						require.NoError(t, err)
+						assert.Equal(t, j.RetryInfo(), found.RetryInfo())
+					}
+				},
+				"GetAttemptFailsWithNonexistentJobID": func(ctx context.Context, t *testing.T, q amboy.RetryableQueue) {
+					found, err := q.GetAttempt(ctx, "nonexistent", 0)
+					assert.Error(t, err)
+					assert.Zero(t, found)
+				},
+				"GetAttemptFailsWithNonexistentJobAttempt": func(ctx context.Context, t *testing.T, q amboy.RetryableQueue) {
+					j := newMockRetryableJob("id")
+					require.NoError(t, q.Put(ctx, j))
+					found, err := q.GetAttempt(ctx, j.ID(), 1)
+					assert.Error(t, err)
+					assert.Zero(t, found)
+				},
+				"GetAttemptFailsWithoutRetryableJob": func(ctx context.Context, t *testing.T, q amboy.RetryableQueue) {
+					j := newMockJob()
+					require.NoError(t, q.Put(ctx, j))
+					found, err := q.GetAttempt(ctx, j.ID(), 0)
+					assert.Error(t, err)
+					assert.Zero(t, found)
+				},
+				"GetAllAttemptReturnsMatchingJobAttemptSequence": func(ctx context.Context, t *testing.T, q amboy.RetryableQueue) {
+					const (
+						numJobs     = 3
+						numAttempts = 5
+					)
+					jobs := map[string][]amboy.Job{}
+					for jobNum := 0; jobNum < numJobs; jobNum++ {
+						for attempt := 0; attempt < numAttempts; attempt++ {
+							j := newMockRetryableJob(strconv.Itoa(jobNum))
+							j.UpdateRetryInfo(amboy.JobRetryOptions{
+								CurrentAttempt: utility.ToIntPtr(attempt),
+								MaxAttempts:    utility.ToIntPtr(numAttempts),
+							})
+							jobs[j.ID()] = append(jobs[j.ID()], j)
+							require.NoError(t, q.Put(ctx, j))
+						}
+					}
+
+					for id := range jobs {
+						found, err := q.GetAllAttempts(ctx, id)
+						require.NoError(t, err)
+						require.Len(t, found, len(jobs[id]))
+						for i := range jobs[id] {
+							assert.Equal(t, found[i].RetryInfo(), jobs[id][i].RetryInfo())
+							assert.Equal(t, found[i].ID(), jobs[id][i].ID())
+						}
+					}
+				},
+				"GetAllAttemptsFailsWithNonexistentJobID": func(ctx context.Context, t *testing.T, q amboy.RetryableQueue) {
+					found, err := q.GetAttempt(ctx, "nonexistent", 0)
+					assert.Error(t, err)
+					assert.Zero(t, found)
+				},
+				"GetAllAttemptsFailsWithoutRetryableJob": func(ctx context.Context, t *testing.T, q amboy.RetryableQueue) {
+					j := newMockJob()
+					require.NoError(t, q.Put(ctx, j))
+					found, err := q.GetAllAttempts(ctx, j.ID())
+					assert.Error(t, err)
+					assert.Zero(t, found)
+				},
+				"CompleteRetryingSucceeds": func(ctx context.Context, t *testing.T, q amboy.RetryableQueue) {
+					j := newMockRetryableJob("id")
+					j.UpdateRetryInfo(amboy.JobRetryOptions{
+						Start:      utility.ToTimePtr(time.Now()),
+						NeedsRetry: utility.TruePtr(),
+					})
+					require.NoError(t, q.Put(ctx, j))
+
+					require.NoError(t, q.CompleteRetrying(ctx, j))
+
+					assert.False(t, j.RetryInfo().NeedsRetry)
+					assert.NotZero(t, j.RetryInfo().End)
+					found, err := q.GetAttempt(ctx, j.ID(), 0)
+					require.NoError(t, err)
+					assert.Equal(t, bsonJobRetryInfo(j.RetryInfo()), bsonJobRetryInfo(found.RetryInfo()))
+				},
+				"CompleteRetryingAndPutSucceeds": func(ctx context.Context, t *testing.T, q amboy.RetryableQueue) {
+					j0 := newMockRetryableJob("id0")
+					j0.UpdateRetryInfo(amboy.JobRetryOptions{
+						MaxAttempts: utility.ToIntPtr(10),
+					})
+					j1 := newMockRetryableJob("id1")
+					j1.UpdateRetryInfo(amboy.JobRetryOptions{
+						MaxAttempts: utility.ToIntPtr(20),
+					})
+
+					require.NoError(t, q.Put(ctx, j0))
+					require.NoError(t, q.CompleteRetryingAndPut(ctx, j0, j1))
+
+					found0, err := q.GetAttempt(ctx, j0.ID(), 0)
+					require.NoError(t, err)
+					assert.Equal(t, bsonJobRetryInfo(j0.RetryInfo()), bsonJobRetryInfo(found0.RetryInfo()))
+
+					found1, err := q.GetAttempt(ctx, j1.ID(), 0)
+					require.NoError(t, err)
+					assert.Equal(t, bsonJobRetryInfo(j1.RetryInfo()), bsonJobRetryInfo(found1.RetryInfo()))
+				},
+				"CompleteRetryingFailsWithoutJobInQueue": func(ctx context.Context, t *testing.T, q amboy.RetryableQueue) {
+					j := newMockRetryableJob("id")
+					require.Error(t, q.CompleteRetrying(ctx, j))
+					found, err := q.GetAttempt(ctx, j.ID(), 0)
+					assert.True(t, amboy.IsJobNotFoundError(err))
+					assert.Zero(t, found)
+				},
+				"CompleteRetryingAndPutFailsWithoutJobToCompleteInQueue": func(ctx context.Context, t *testing.T, q amboy.RetryableQueue) {
+					j0 := newMockRetryableJob("id0")
+					j1 := newMockRetryableJob("id1")
+
+					require.Error(t, q.CompleteRetryingAndPut(ctx, j0, j1))
+
+					found0, err := q.GetAttempt(ctx, j0.ID(), 0)
+					assert.True(t, amboy.IsJobNotFoundError(err))
+					assert.Zero(t, found0)
+
+					found1, err := q.GetAttempt(ctx, j1.ID(), 0)
+					assert.True(t, amboy.IsJobNotFoundError(err))
+					assert.Zero(t, found1)
+				},
+				"CompleteRetryingAndPutFailsWithJobToPutAlreadyInQueue": func(ctx context.Context, t *testing.T, q amboy.RetryableQueue) {
+					j0 := newMockRetryableJob("id0")
+					j1 := newMockRetryableJob("id1")
+
+					require.NoError(t, q.Put(ctx, j0))
+					require.NoError(t, q.Put(ctx, j1))
+					now := time.Now()
+					ti := amboy.JobTimeInfo{
+						Start: now,
+						End:   now,
+					}
+					j0.SetTimeInfo(ti)
+					j1.SetTimeInfo(ti)
+
+					require.Error(t, q.CompleteRetryingAndPut(ctx, j0, j1))
+
+					found0, err := q.GetAttempt(ctx, j0.ID(), 0)
+					require.NoError(t, err)
+					assert.Zero(t, found0.TimeInfo().Start)
+					assert.Zero(t, found0.TimeInfo().End)
+
+					found1, err := q.GetAttempt(ctx, j1.ID(), 0)
+					require.NoError(t, err)
+					assert.Zero(t, found1.TimeInfo().Start)
+					assert.Zero(t, found1.TimeInfo().End)
+				},
+			} {
+				t.Run(testName, func(t *testing.T) {
+					tctx, tcancel := context.WithTimeout(ctx, 30*time.Second)
+					defer tcancel()
+
+					require.NoError(t, mDriver.getCollection().Database().Drop(tctx))
+					defer func() {
+						require.NoError(t, mDriver.getCollection().Database().Drop(tctx))
+					}()
+
+					const size = 128
+					q, err := makeQueue(size)
+					require.NoError(t, err)
+
+					testCase(tctx, t, q)
+				})
+			}
+		})
+	}
+}
+
+// TestRetryHandlerQueueIntegration tests the functionality provided by an
+// amboy.RetryableQueue and an amboy.RetryHandler for retryable jobs.
 func TestRetryHandlerQueueIntegration(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -470,20 +718,7 @@ func TestRetryHandlerQueueIntegration(t *testing.T) {
 		},
 	} {
 		t.Run(rhName, func(t *testing.T) {
-			for queueName, makeQueue := range map[string]func(size int) (amboy.RetryableQueue, error){
-				"RemoteUnordered": func(size int) (amboy.RetryableQueue, error) {
-					q, err := newRemoteUnordered(size)
-					return q, errors.WithStack(err)
-				},
-				"RemoteOrdered": func(size int) (amboy.RetryableQueue, error) {
-					q, err := newSimpleRemoteOrdered(size)
-					return q, errors.WithStack(err)
-				},
-				"LocalLimitedSizeSerializable": func(size int) (amboy.RetryableQueue, error) {
-					q := NewLocalLimitedSizeSerializable(size, 10)
-					return q, nil
-				},
-			} {
+			for queueName, makeQueue := range defaultRetryableQueueTestCases(driver) {
 				t.Run(queueName, func(t *testing.T) {
 					for testName, testCase := range map[string]func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (amboy.RetryableQueue, amboy.RetryHandler, error)){
 						"RetryingSucceedsAndQueueHasExpectedState": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (amboy.RetryableQueue, amboy.RetryHandler, error)) {
@@ -525,7 +760,7 @@ func TestRetryHandlerQueueIntegration(t *testing.T) {
 									case <-ctx.Done():
 										return
 									default:
-										if _, ok := q.GetAttempt(ctx, j.ID(), 1); ok {
+										if _, err := q.GetAttempt(ctx, j.ID(), 1); err == nil {
 											return
 										}
 									}
@@ -536,8 +771,8 @@ func TestRetryHandlerQueueIntegration(t *testing.T) {
 							case <-ctx.Done():
 								require.FailNow(t, "context is done before job could retry")
 							case <-jobRetried:
-								oldJob, ok := q.GetAttempt(ctx, j.ID(), 0)
-								require.True(t, ok, "old job should still exist")
+								oldJob, err := q.GetAttempt(ctx, j.ID(), 0)
+								require.NoError(t, err, "old job should still exist in the queue")
 
 								oldRetryInfo := oldJob.RetryInfo()
 								assert.True(t, oldRetryInfo.Retryable)
@@ -548,8 +783,8 @@ func TestRetryHandlerQueueIntegration(t *testing.T) {
 								assert.Equal(t, bsonJobStatusInfo(j.Status()), bsonJobStatusInfo(oldJob.Status()))
 								assert.Equal(t, bsonJobTimeInfo(j.TimeInfo()), bsonJobTimeInfo(oldJob.TimeInfo()))
 
-								newJob, ok := q.GetAttempt(ctx, j.ID(), 1)
-								require.True(t, ok, "new job should have been enqueued")
+								newJob, err := q.GetAttempt(ctx, j.ID(), 1)
+								require.NoError(t, err, "new job should have been enqueued")
 
 								newRetryInfo := newJob.RetryInfo()
 								assert.True(t, newRetryInfo.Retryable)
@@ -620,7 +855,7 @@ func TestRetryHandlerQueueIntegration(t *testing.T) {
 									case <-ctx.Done():
 										return
 									default:
-										if _, ok := q.GetAttempt(ctx, j.ID(), 1); ok {
+										if _, err := q.GetAttempt(ctx, j.ID(), 1); err == nil {
 											return
 										}
 									}
@@ -631,8 +866,8 @@ func TestRetryHandlerQueueIntegration(t *testing.T) {
 							case <-ctx.Done():
 								require.FailNow(t, "context is done before job could retry")
 							case <-jobRetried:
-								oldJob, ok := q.GetAttempt(ctx, j.ID(), 0)
-								require.True(t, ok, "old job should still exist")
+								oldJob, err := q.GetAttempt(ctx, j.ID(), 0)
+								require.NoError(t, err, "old job should still exist in the queue")
 
 								oldRetryInfo := oldJob.RetryInfo()
 								assert.True(t, oldRetryInfo.Retryable)
@@ -644,8 +879,8 @@ func TestRetryHandlerQueueIntegration(t *testing.T) {
 								assert.Equal(t, bsonJobStatusInfo(j.Status()), bsonJobStatusInfo(oldJob.Status()))
 								assert.Equal(t, bsonJobTimeInfo(j.TimeInfo()), bsonJobTimeInfo(oldJob.TimeInfo()))
 
-								newJob, ok := q.GetAttempt(ctx, j.ID(), 1)
-								require.True(t, ok, "new job should have been enqueued")
+								newJob, err := q.GetAttempt(ctx, j.ID(), 1)
+								require.NoError(t, err, "new job should have been enqueued")
 
 								newRetryInfo := newJob.RetryInfo()
 								assert.True(t, newRetryInfo.Retryable)
@@ -716,7 +951,7 @@ func TestRetryHandlerQueueIntegration(t *testing.T) {
 									case <-ctx.Done():
 										return
 									default:
-										if _, ok := q.GetAttempt(ctx, j.ID(), 1); ok {
+										if _, err := q.GetAttempt(ctx, j.ID(), 1); err == nil {
 											return
 										}
 									}
@@ -727,8 +962,8 @@ func TestRetryHandlerQueueIntegration(t *testing.T) {
 							case <-ctx.Done():
 								require.FailNow(t, "context is done before job could retry")
 							case <-jobRetried:
-								oldJob, ok := q.GetAttempt(ctx, j.ID(), 0)
-								require.True(t, ok, "old job should still exist")
+								oldJob, err := q.GetAttempt(ctx, j.ID(), 0)
+								require.NoError(t, err, "old job should still exist in the queue")
 								assert.False(t, oldJob.RetryInfo().NeedsRetry)
 								assert.Zero(t, oldJob.RetryInfo().CurrentAttempt)
 								assert.NotZero(t, oldJob.RetryInfo().Start)
@@ -736,8 +971,8 @@ func TestRetryHandlerQueueIntegration(t *testing.T) {
 								assert.Equal(t, bsonJobStatusInfo(j.Status()), bsonJobStatusInfo(oldJob.Status()))
 								assert.Equal(t, bsonJobTimeInfo(j.TimeInfo()), bsonJobTimeInfo(oldJob.TimeInfo()))
 
-								newJob, ok := q.GetAttempt(ctx, j.ID(), 1)
-								require.True(t, ok, "new job should have been enqueued")
+								newJob, err := q.GetAttempt(ctx, j.ID(), 1)
+								require.NoError(t, err, "new job should have been enqueued")
 
 								assert.True(t, newJob.RetryInfo().Retryable)
 								assert.False(t, newJob.RetryInfo().NeedsRetry)
@@ -845,7 +1080,7 @@ func TestRetryHandlerQueueIntegration(t *testing.T) {
 									case <-ctx.Done():
 										return
 									default:
-										if j, ok := q.GetAttempt(ctx, j.ID(), 0); ok && !j.RetryInfo().End.IsZero() {
+										if j, err := q.GetAttempt(ctx, j.ID(), 0); err == nil && !j.RetryInfo().End.IsZero() {
 											return
 										}
 									}
@@ -859,8 +1094,8 @@ func TestRetryHandlerQueueIntegration(t *testing.T) {
 								require.FailNow(t, "context is done before job could retry")
 							case <-retryProcessed:
 								assert.Equal(t, 2, q.Stats(ctx).Total)
-								storedJob, ok := q.GetAttempt(ctx, j.ID(), 1)
-								require.True(t, ok)
+								storedJob, err := q.GetAttempt(ctx, j.ID(), 1)
+								require.NoError(t, err, "new job should be enqueued")
 								assert.Equal(t, bsonJobTimeInfo(retryJob.TimeInfo()), bsonJobTimeInfo(storedJob.TimeInfo()))
 								assert.Equal(t, bsonJobStatusInfo(retryJob.Status()), bsonJobStatusInfo(storedJob.Status()))
 								assert.Equal(t, retryJob.RetryInfo(), retryJob.RetryInfo())
@@ -897,7 +1132,7 @@ func TestRetryHandlerQueueIntegration(t *testing.T) {
 									case <-ctx.Done():
 										return
 									default:
-										if j, ok := q.GetAttempt(ctx, j.ID(), 0); ok && !j.RetryInfo().End.IsZero() {
+										if j, err := q.GetAttempt(ctx, j.ID(), 0); err == nil && !j.RetryInfo().End.IsZero() {
 											return
 										}
 									}
@@ -911,12 +1146,12 @@ func TestRetryHandlerQueueIntegration(t *testing.T) {
 								require.FailNow(t, "context is done before job could retry")
 							case <-retryProcessed:
 								assert.Equal(t, 1, q.Stats(ctx).Total)
-								storedJob, ok := q.GetAttempt(ctx, j.ID(), 0)
-								require.True(t, ok)
+								storedJob, err := q.GetAttempt(ctx, j.ID(), 0)
+								require.NoError(t, err, "job should still exist in the queue")
 								assert.False(t, storedJob.RetryInfo().NeedsRetry)
 
-								_, ok = q.GetAttempt(ctx, j.ID(), 1)
-								assert.False(t, ok, "job should not have retried")
+								_, err = q.GetAttempt(ctx, j.ID(), 1)
+								assert.True(t, amboy.IsJobNotFoundError(err), "job should not have retried")
 							}
 						},
 					} {

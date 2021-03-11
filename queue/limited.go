@@ -109,7 +109,7 @@ func (q *limitedSizeLocal) Save(ctx context.Context, j amboy.Job) error {
 	defer q.mu.Unlock()
 
 	if _, ok := q.storage[name]; !ok {
-		return errors.Errorf("cannot save '%s', which is not tracked", name)
+		return amboy.NewJobNotFoundErrorf("cannot save '%s', which is not tracked", name)
 	}
 
 	if err := q.scopes.Acquire(name, j.Scopes()); err != nil {

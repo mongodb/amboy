@@ -138,7 +138,7 @@ func (q *depGraphOrderedLocal) Save(ctx context.Context, j amboy.Job) error {
 	}
 
 	if _, ok := q.tasks.m[name]; !ok {
-		return errors.Errorf("cannot add %s because job does not exist", name)
+		return amboy.NewJobNotFoundErrorf("cannot add %s because job does not exist", name)
 	}
 
 	q.tasks.m[name] = j

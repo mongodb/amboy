@@ -59,6 +59,9 @@ func (q *remoteBase) ID() string {
 // same job to a queue more than once, but this depends on the
 // implementation of the underlying driver.
 func (q *remoteBase) Put(ctx context.Context, j amboy.Job) error {
+	if q.driver == nil {
+		return errors.New("driver is not set")
+	}
 	if err := q.validateAndPreparePut(j); err != nil {
 		return err
 	}
@@ -99,23 +102,30 @@ func (q *remoteBase) Get(ctx context.Context, name string) (amboy.Job, bool) {
 	return job, true
 }
 
-func (q *remoteBase) GetAttempt(ctx context.Context, name string, attempt int) (amboy.Job, bool) {
+func (q *remoteBase) GetAttempt(ctx context.Context, id string, attempt int) (amboy.Job, error) {
 	if q.driver == nil {
-		return nil, false
+		return nil, errors.New("driver is not set")
 	}
 
-	j, err := q.driver.GetAttempt(ctx, name, attempt)
+	j, err := q.driver.GetAttempt(ctx, id, attempt)
 	if err != nil {
-		grip.Debug(message.WrapError(err, message.Fields{
-			"driver":  q.driver.ID(),
-			"type":    q.driverType,
-			"name":    name,
-			"attempt": attempt,
-		}))
-		return nil, false
+		return nil, err
 	}
 
-	return j, true
+	return j, nil
+}
+
+func (q *remoteBase) GetAllAttempts(ctx context.Context, id string) ([]amboy.Job, error) {
+	if q.driver == nil {
+		return nil, errors.New("driver is not set")
+	}
+
+	jobs, err := q.driver.GetAllAttempts(ctx, id)
+	if err != nil {
+		return nil, errors.Wrap(err, "")
+	}
+
+	return jobs, nil
 }
 
 func (q *remoteBase) jobServer(ctx context.Context) {
@@ -165,6 +175,9 @@ func (q *remoteBase) info() amboy.QueueInfo {
 }
 
 func (q *remoteBase) Save(ctx context.Context, j amboy.Job) error {
+	if q.driver == nil {
+		return errors.New("driver is not set")
+	}
 	return q.driver.Save(ctx, j)
 }
 
@@ -222,7 +235,7 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
 						"retry_count": count,
 						"message":     "after 10 retries, aborting marking job complete",
 					}))
-				} else if isMongoDupKey(err) || isMongoNoDocumentsMatched(err) {
+				} else if isMongoDupKey(err) || amboy.IsJobNotFoundError(err) {
 					grip.Warning(message.WrapError(err, message.Fields{
 						"job_id":      id,
 						"driver_type": q.driverType,
@@ -253,6 +266,10 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
 // CompleteRetryingAndPut marks the job toComplete as finished retrying in the
 // queue and adds a new job toPut to the queue. These two operations are atomic.
 func (q *remoteBase) CompleteRetryingAndPut(ctx context.Context, toComplete, toPut amboy.Job) error {
+	if q.driver == nil {
+		return errors.New("driver is not set")
+	}
+
 	q.prepareCompleteRetrying(toComplete)
 	if err := q.validateAndPreparePut(toPut); err != nil {
 		return errors.Wrap(err, "invalid job to put")
@@ -269,48 +286,12 @@ func (q *remoteBase) prepareCompleteRetrying(j amboy.Job) {
 
 // CompleteRetrying marks the job as finished retrying in the queue.
 func (q *remoteBase) CompleteRetrying(ctx context.Context, j amboy.Job) error {
-	if ctx.Err() != nil {
-		return ctx.Err()
+	if q.driver == nil {
+		return errors.New("driver is not set")
 	}
 
-	const retryInterval = time.Second
-	timer := time.NewTimer(0)
-	defer timer.Stop()
-
-	const maxAttempts = 10
-	catcher := grip.NewBasicCatcher()
-
-	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		select {
-		case <-ctx.Done():
-			catcher.Add(ctx.Err())
-			return errors.Wrapf(catcher.Resolve(), "giving up after attempt %d", attempt)
-		case <-timer.C:
-			q.prepareCompleteRetrying(j)
-
-			if err := q.driver.Complete(ctx, j); err != nil {
-				catcher.Wrapf(err, "attempt %d", attempt)
-				if isMongoDupKey(err) || isMongoNoDocumentsMatched(err) {
-					j.AddError(catcher.Resolve())
-					return errors.Wrapf(catcher.Resolve(), "giving up after attempt %d", attempt)
-				}
-				grip.Debug(message.WrapError(err, message.Fields{
-					"message":  "failed to mark retrying job as completed",
-					"attempt":  attempt,
-					"job_id":   j.ID(),
-					"queue_id": q.ID(),
-					"service":  "amboy.queue.mdb",
-				}))
-
-				timer.Reset(retryInterval)
-				continue
-			}
-
-			return nil
-		}
-	}
-
-	return errors.Wrapf(catcher.Resolve(), "giving up after attempt %d", maxAttempts)
+	q.prepareCompleteRetrying(j)
+	return q.driver.Complete(ctx, j)
 }
 
 // Results provides a generator that iterates all completed jobs. Retrying jobs

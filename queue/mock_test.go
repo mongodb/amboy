@@ -38,7 +38,8 @@ type mockRemoteQueue struct {
 	// Mockable methods
 	putJob                    func(ctx context.Context, q remoteQueue, j amboy.Job) error
 	getJob                    func(ctx context.Context, q remoteQueue, id string) (amboy.Job, bool)
-	getJobAttempt             func(ctx context.Context, q remoteQueue, id string, attempt int) (amboy.Job, bool)
+	getJobAttempt             func(ctx context.Context, q remoteQueue, id string, attempt int) (amboy.Job, error)
+	getAllJobAttempts         func(ctx context.Context, q remoteQueue, id string) ([]amboy.Job, error)
 	saveJob                   func(ctx context.Context, q remoteQueue, j amboy.Job) error
 	completeRetryingAndPutJob func(ctx context.Context, q remoteQueue, toComplete, toPut amboy.Job) error
 	nextJob                   func(ctx context.Context, q remoteQueue) amboy.Job
@@ -139,11 +140,18 @@ func (q *mockRemoteQueue) Get(ctx context.Context, id string) (amboy.Job, bool) 
 	return q.remoteQueue.Get(ctx, id)
 }
 
-func (q *mockRemoteQueue) GetAttempt(ctx context.Context, id string, attempt int) (amboy.Job, bool) {
+func (q *mockRemoteQueue) GetAttempt(ctx context.Context, id string, attempt int) (amboy.Job, error) {
 	if q.getJobAttempt != nil {
 		return q.getJobAttempt(ctx, q.remoteQueue, id, attempt)
 	}
 	return q.remoteQueue.GetAttempt(ctx, id, attempt)
+}
+
+func (q *mockRemoteQueue) GetAllAttempts(ctx context.Context, id string) ([]amboy.Job, error) {
+	if q.getJobAttempt != nil {
+		return q.getAllJobAttempts(ctx, q.remoteQueue, id)
+	}
+	return q.remoteQueue.GetAllAttempts(ctx, id)
 }
 
 func (q *mockRemoteQueue) Save(ctx context.Context, j amboy.Job) error {

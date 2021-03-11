@@ -29,8 +29,7 @@ func TestQueueGroup(t *testing.T) {
 	bctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	const mdburl = "mongodb://localhost:27017"
-	client, cerr := mongo.NewClient(options.Client().ApplyURI(mdburl).SetConnectTimeout(2 * time.Second))
+	client, cerr := mongo.NewClient(options.Client().ApplyURI(defaultMongoDBURI).SetConnectTimeout(2 * time.Second))
 	require.NoError(t, cerr)
 	require.NoError(t, client.Connect(bctx))
 	defer func() { require.NoError(t, client.Disconnect(bctx)) }()
@@ -251,7 +250,7 @@ func TestQueueGroup(t *testing.T) {
 					mopts := MongoDBOptions{
 						WaitInterval: time.Millisecond,
 						DB:           "amboy_group_test",
-						URI:          "mongodb://localhost:27017",
+						URI:          defaultMongoDBURI,
 					}
 
 					closer := func(cctx context.Context) error {
@@ -284,7 +283,7 @@ func TestQueueGroup(t *testing.T) {
 				Constructor: func(ctx context.Context, ttl time.Duration) (amboy.QueueGroup, queueGroupCloser, error) {
 					mopts := MongoDBOptions{
 						DB:           "amboy_group_test",
-						URI:          "mongodb://localhost:27017",
+						URI:          defaultMongoDBURI,
 						WaitInterval: time.Millisecond,
 					}
 
@@ -603,7 +602,7 @@ func TestQueueGroup(t *testing.T) {
 			mopts := MongoDBOptions{
 				DB:           "amboy_group_test",
 				WaitInterval: time.Millisecond,
-				URI:          "mongodb://localhost:27017",
+				URI:          defaultMongoDBURI,
 			}
 
 			for i := 0; i < 10; i++ {

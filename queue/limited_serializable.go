@@ -149,7 +149,7 @@ func (q *limitedSizeSerializableLocal) Save(ctx context.Context, j amboy.Job) er
 	defer q.mu.Unlock()
 
 	if !q.jobStored(name) {
-		return errors.Errorf("cannot save '%s', which is not tracked", name)
+		return amboy.NewJobNotFoundError("job not found in queue storage")
 	}
 
 	if err := q.scopes.Acquire(name, j.Scopes()); err != nil {
@@ -191,7 +191,7 @@ func (q *limitedSizeSerializableLocal) Get(ctx context.Context, name string) (am
 	if !ok {
 		return nil, false
 	}
-	for attempt := 1; attempt < j.RetryInfo().MaxAttempts; attempt++ {
+	for attempt := 1; attempt < j.RetryInfo().GetMaxAttempts(); attempt++ {
 		nextRetryableName := q.getNameForAttempt(name, attempt)
 		nextAttempt, ok := q.getCopy(nextRetryableName)
 		if !ok {
@@ -203,17 +203,46 @@ func (q *limitedSizeSerializableLocal) Get(ctx context.Context, name string) (am
 	return j, true
 }
 
-func (q *limitedSizeSerializableLocal) GetAttempt(ctx context.Context, id string, attempt int) (amboy.Job, bool) {
+// GetAttempt returns the retryable job matching the given job ID and execution
+// attempt. If no such job is found, it will return an amboy.JobNotFoundError.
+func (q *limitedSizeSerializableLocal) GetAttempt(ctx context.Context, id string, attempt int) (amboy.Job, error) {
 	q.mu.RLock()
 	defer q.mu.RUnlock()
 
 	name := q.getNameForAttempt(id, attempt)
 	j, ok := q.getCopy(name)
 	if !ok {
-		return nil, false
+		return nil, amboy.NewJobNotFoundError("no such job found")
 	}
 
-	return j, ok
+	return j, nil
+}
+
+// GetAllAttempts returns all execution attempts of a retryable job matching the
+// given job ID. If no such job is found, it will return an
+// amboy.JobNotFoundError.
+func (q *limitedSizeSerializableLocal) GetAllAttempts(ctx context.Context, id string) ([]amboy.Job, error) {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+
+	// Search incrementally until we cannot find a higher attempt.
+	name := q.getNameForAttempt(id, 0)
+	j, ok := q.getCopy(name)
+	if !ok {
+		return nil, amboy.NewJobNotFoundError("no such job found")
+	}
+	jobs := []amboy.Job{j}
+	for attempt := 1; attempt < j.RetryInfo().GetMaxAttempts(); attempt++ {
+		name := q.getNameForAttempt(id, attempt)
+		nextAttempt, ok := q.getCopy(name)
+		if !ok {
+			break
+		}
+		j = nextAttempt
+		jobs = append(jobs, nextAttempt)
+	}
+
+	return jobs, nil
 }
 
 // Next returns the next pending job, and is used by amboy.Runner
@@ -482,7 +511,7 @@ func (q *limitedSizeSerializableLocal) CompleteRetrying(ctx context.Context, j a
 
 	name := q.getNameWithMetadata(j)
 	if !q.jobStored(name) {
-		return nil
+		return amboy.NewJobNotFoundError("no such job exists")
 	}
 
 	if err := q.complete(ctx, j); err != nil {

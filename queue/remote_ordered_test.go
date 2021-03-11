@@ -45,7 +45,7 @@ func (s *SimpleRemoteOrderedSuite) SetupSuite() {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://localhost:27017").SetConnectTimeout(time.Second))
+		client, err := mongo.NewClient(options.Client().ApplyURI(defaultMongoDBURI).SetConnectTimeout(time.Second))
 		if err != nil {
 			return err
 		}

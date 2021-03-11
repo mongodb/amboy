@@ -464,6 +464,32 @@ func (s *DriverSuite) TestCompleteAndPutJobsFailsWithDuplicateJobScopesAppliedOn
 	s.True(amboy.IsDuplicateJobScopeError(err), "error: %v", err)
 }
 
+func (s *DriverSuite) TestCompleteMarksJobCompleted() {
+	j := job.NewShellJob("echo foo", "")
+	now := time.Now()
+	j.SetStatus(amboy.JobStatusInfo{
+		InProgress:       true,
+		ModificationTime: now,
+		Owner:            s.driver.ID(),
+	})
+	s.Require().NoError(s.driver.Put(s.ctx, j))
+	s.Require().NoError(s.driver.Complete(s.ctx, j))
+	s.NotEqual(utility.BSONTime(now), utility.BSONTime(j.Status().ModificationTime))
+	s.Zero(j.Status().ModificationCount)
+}
+
+func (s *DriverSuite) TestCompleteFailsWhenModCountDiffers() {
+	j := job.NewShellJob("echo foo", "")
+	j.SetStatus(amboy.JobStatusInfo{
+		ModificationTime: time.Now(),
+	})
+	s.Require().NoError(s.driver.Put(s.ctx, j))
+	stat := j.Status()
+	stat.ModificationCount += 10
+	j.SetStatus(stat)
+	s.True(amboy.IsJobNotFoundError(s.driver.Complete(s.ctx, j)))
+}
+
 func (s *DriverSuite) TestReloadRefreshesJobFromMemory() {
 	j := job.NewShellJob("echo foo", "")
 

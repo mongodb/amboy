@@ -29,3 +29,10 @@ func bsonJobStatusInfo(i amboy.JobStatusInfo) amboy.JobStatusInfo {
 	i.ModificationTime = utility.BSONTime(i.ModificationTime)
 	return i
 }
+
+// bsonJobRetryInfo converts all amboy.JobRetryInfo time fields into BSON time.
+func bsonJobRetryInfo(i amboy.JobRetryInfo) amboy.JobRetryInfo {
+	i.Start = utility.BSONTime(i.Start)
+	i.End = utility.BSONTime(i.End)
+	return i
+}

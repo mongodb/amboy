@@ -260,7 +260,7 @@ func (rh *BasicRetryHandler) waitForJob(ctx context.Context) {
 
 				// Since the job could not retry successfully, do not let the
 				// job retry again.
-				if err := rh.queue.CompleteRetrying(ctx, j); err != nil {
+				if err := rh.completeRetrying(ctx, j); err != nil {
 					grip.Warning(message.WrapError(err, message.Fields{
 						"message":  "failed to mark job retry as processed",
 						"job_id":   j.ID(),
@@ -283,6 +283,47 @@ func (rh *BasicRetryHandler) waitForJob(ctx context.Context) {
 			rh.mu.RUnlock()
 		}
 	}
+}
+
+// completeRetrying attempts to mark the job as finished retrying multiple
+// times.
+func (rh *BasicRetryHandler) completeRetrying(ctx context.Context, j amboy.Job) error {
+	const retryInterval = time.Second
+	timer := time.NewTimer(0)
+	defer timer.Stop()
+
+	const maxAttempts = 10
+	catcher := grip.NewBasicCatcher()
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		select {
+		case <-ctx.Done():
+			catcher.Add(ctx.Err())
+			return errors.Wrapf(catcher.Resolve(), "giving up after attempt %d", attempt)
+		case <-timer.C:
+			if err := rh.queue.CompleteRetrying(ctx, j); err != nil {
+				if amboy.IsJobNotFoundError(err) {
+					j.AddError(catcher.Resolve())
+					return errors.Wrapf(catcher.Resolve(), "giving up after attempt %d", attempt)
+				}
+
+				grip.Debug(message.WrapError(err, message.Fields{
+					"message":  "failed to mark retrying job as completed",
+					"attempt":  attempt,
+					"job_id":   j.ID(),
+					"queue_id": rh.queue.ID(),
+					"service":  "amboy.queue.mdb",
+				}))
+
+				timer.Reset(retryInterval)
+				continue
+			}
+
+			return nil
+		}
+	}
+
+	return errors.Wrapf(catcher.Resolve(), "giving up after attempt %d", maxAttempts)
 }
 
 func (rh *BasicRetryHandler) handleJob(ctx context.Context, j amboy.Job) error {
@@ -344,9 +385,9 @@ func (rh *BasicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Job) (ca
 	canRetry, err := func() (bool, error) {
 		// Load the most up-to-date copy in case the cached in-memory job is
 		// outdated.
-		newJob, ok := rh.queue.GetAttempt(ctx, j.ID(), originalInfo.CurrentAttempt)
-		if !ok {
-			return true, errors.New("could not find job")
+		newJob, err := rh.queue.GetAttempt(ctx, j.ID(), originalInfo.CurrentAttempt)
+		if err != nil {
+			return true, errors.Wrap(err, "getting job attempt")
 		}
 
 		newInfo := newJob.RetryInfo()
@@ -377,7 +418,7 @@ func (rh *BasicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Job) (ca
 		rh.prepareNewRetryJob(newJob)
 
 		err = rh.queue.CompleteRetryingAndPut(ctx, j, newJob)
-		if amboy.IsDuplicateJobError(err) || isMongoNoDocumentsMatched(err) {
+		if amboy.IsDuplicateJobError(err) || amboy.IsJobNotFoundError(err) {
 			return false, err
 		} else if err != nil {
 			return true, errors.Wrap(err, "enqueueing retry job")

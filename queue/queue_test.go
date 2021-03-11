@@ -1250,13 +1250,13 @@ func RetryableTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 				assert.Equal(t, 2, rq.Stats(ctx).Total)
 				assert.Equal(t, 2, rq.Stats(ctx).Completed)
 
-				rj0, ok := rq.GetAttempt(ctx, j.ID(), 0)
-				require.True(t, ok)
+				rj0, err := rq.GetAttempt(ctx, j.ID(), 0)
+				require.NoError(t, err)
 				assert.True(t, rj0.RetryInfo().Retryable)
 				assert.False(t, rj0.RetryInfo().NeedsRetry)
 
-				rj1, ok := rq.GetAttempt(ctx, j.ID(), 1)
-				require.True(t, ok)
+				rj1, err := rq.GetAttempt(ctx, j.ID(), 1)
+				require.NoError(t, err)
 				assert.True(t, rj1.RetryInfo().Retryable)
 				assert.False(t, rj1.RetryInfo().NeedsRetry)
 			}

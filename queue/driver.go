@@ -21,6 +21,9 @@ type remoteQueueDriver interface {
 	// GetAttempt returns a retryable job by job ID and attempt number. If used
 	// to find a non-retryable job, this should return nil job and an error.
 	GetAttempt(ctx context.Context, id string, attempt int) (amboy.Job, error)
+	// GetAllAttempts returns all attempts of a retryable job by job ID. If used
+	// to find a non-retryable job, this should return no jobs and an error.
+	GetAllAttempts(ctx context.Context, id string) ([]amboy.Job, error)
 	// Put inserts a new job in the backing storage.
 	Put(context.Context, amboy.Job) error
 	// Save updates an existing job in the backing storage. Implementations may
@@ -86,12 +89,15 @@ type MongoDBOptions struct {
 	LockTimeout time.Duration
 }
 
+// defaultMongoDBURI is the default URI to connect to a MongoDB instance.
+const defaultMongoDBURI = "mongodb://localhost:27017"
+
 // DefaultMongoDBOptions constructs a new options object with default
 // values: connecting to a MongoDB instance on localhost, using the
 // "amboy" database, and *not* using priority ordering of jobs.
 func DefaultMongoDBOptions() MongoDBOptions {
 	return MongoDBOptions{
-		URI:                      "mongodb://localhost:27017",
+		URI:                      defaultMongoDBURI,
 		DB:                       "amboy",
 		Priority:                 false,
 		UseGroups:                false,
