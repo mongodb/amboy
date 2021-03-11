@@ -222,7 +222,7 @@ func (q *limitedSizeLocal) Results(ctx context.Context) <-chan amboy.Job {
 	return out
 }
 
-// JobInfo returns a channel for infomration on all jobs in the queue. Job
+// JobInfo returns a channel for information on all jobs in the queue. Job
 // information is returned in no particular order.
 func (q *limitedSizeLocal) JobInfo(ctx context.Context) <-chan amboy.JobInfo {
 	q.mu.RLock()
