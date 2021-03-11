@@ -19,17 +19,17 @@ func (e *JobNotFoundError) Error() string { return e.msg }
 
 // NewJobNotFoundError creates a new error indicating that a job could not be
 // found in the queue.
-func NewJobNotFoundError(msg string) error { return &JobNotFoundError{msg: msg} }
+func NewJobNotFoundError(msg string) *JobNotFoundError { return &JobNotFoundError{msg: msg} }
 
 // NewJobNotFoundErrorf creates a new error with a formatted message, indicating
 // that a job could not be found in the queue.
-func NewJobNotFoundErrorf(msg string, args ...interface{}) error {
+func NewJobNotFoundErrorf(msg string, args ...interface{}) *JobNotFoundError {
 	return NewJobNotFoundError(fmt.Sprintf(msg, args...))
 }
 
 // MakeJobNotFoundError constructs an error from an existing one, indicating
 // that a job could not be found in the queue.
-func MakeJobNotFoundError(err error) error {
+func MakeJobNotFoundError(err error) *JobNotFoundError {
 	if err == nil {
 		return nil
 	}
