@@ -298,7 +298,7 @@ checkResults:
 	s.Equal(created, observed+numLocked, "%+v", qStat)
 }
 
-func (s *RemoteUnorderedSuite) TestJobStatsIterator() {
+func (s *RemoteUnorderedSuite) TestJobInfo() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	s.Require().NoError(s.queue.SetDriver(s.driver))
@@ -314,8 +314,8 @@ func (s *RemoteUnorderedSuite) TestJobStatsIterator() {
 	}
 
 	counter := 0
-	for stat := range s.queue.JobStats(ctx) {
-		_, ok := names[stat.ID]
+	for info := range s.queue.JobInfo(ctx) {
+		_, ok := names[info.ID]
 		s.True(ok)
 		counter++
 	}

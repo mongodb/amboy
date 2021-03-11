@@ -189,33 +189,30 @@ func (q *adaptiveLocalOrdering) Results(ctx context.Context) <-chan amboy.Job {
 	}
 }
 
-func (q *adaptiveLocalOrdering) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
-	ret := make(chan chan amboy.JobStatusInfo)
+// JobInfo returns a channel that produces job information for all jobs in the
+// queue. Job information is returned in no particular order.
+func (q *adaptiveLocalOrdering) JobInfo(ctx context.Context) <-chan amboy.JobInfo {
+	infos := make(chan amboy.JobInfo)
 	op := func(opctx context.Context, items *adaptiveOrderItems, fixed *fixedStorage) {
-		out := make(chan amboy.JobStatusInfo, len(items.jobs))
-		defer close(out)
-		defer close(ret)
+		defer close(infos)
 
 		for _, j := range items.jobs {
-			if ctx.Err() != nil || opctx.Err() != nil {
+			select {
+			case <-opctx.Done():
 				return
+			case <-ctx.Done():
+				return
+			case infos <- amboy.NewJobInfo(j):
 			}
-
-			stat := j.Status()
-			stat.ID = j.ID()
-			out <- stat
 		}
-		ret <- out
 	}
 
 	select {
 	case <-ctx.Done():
-		out := make(chan amboy.JobStatusInfo)
-		close(out)
-		return out
+		close(infos)
 	case q.operations <- op:
-		return <-ret
 	}
+	return infos
 }
 
 func (q *adaptiveLocalOrdering) Stats(ctx context.Context) amboy.QueueStats {

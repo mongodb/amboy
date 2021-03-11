@@ -156,29 +156,25 @@ func (q *priorityLocalQueue) Results(ctx context.Context) <-chan amboy.Job {
 	return output
 }
 
-// JobStats returns a job status for every job stored in the
-// queue. Does not include currently in progress tasks.
-func (q *priorityLocalQueue) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
-	out := make(chan amboy.JobStatusInfo)
+// JobInfo returns a channel that produces information for all jobs in the
+// queue, excluding in progress jobs. Job information is returned in no
+// particular order.
+func (q *priorityLocalQueue) JobInfo(ctx context.Context) <-chan amboy.JobInfo {
+	infos := make(chan amboy.JobInfo)
 
 	go func() {
-		defer close(out)
-		for job := range q.storage.Contents() {
-			if ctx.Err() != nil {
-				return
-			}
-			stat := job.Status()
-			stat.ID = job.ID()
+		defer close(infos)
+		for j := range q.storage.Contents() {
 			select {
 			case <-ctx.Done():
 				return
-			case out <- stat:
+			case infos <- amboy.NewJobInfo(j):
 			}
 
 		}
 	}()
 
-	return out
+	return infos
 }
 
 // Runner returns the embedded runner instance, which provides and

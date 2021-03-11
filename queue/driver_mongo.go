@@ -934,10 +934,12 @@ func (d *mongoDriver) RetryableJobs(ctx context.Context, filter retryableJobFilt
 	return jobs
 }
 
-func (d *mongoDriver) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
-	output := make(chan amboy.JobStatusInfo)
+// JobInfo returns a channel that produces information about all jobs stored in
+// the DB. Job information is returned in order of decreasing modification time.
+func (d *mongoDriver) JobInfo(ctx context.Context) <-chan amboy.JobInfo {
+	infos := make(chan amboy.JobInfo)
 	go func() {
-		defer close(output)
+		defer close(infos)
 		q := bson.M{}
 		d.modifyQueryForGroup(q)
 
@@ -946,15 +948,17 @@ func (d *mongoDriver) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 			&options.FindOptions{
 				Sort: bson.M{"status.mod_ts": -1},
 				Projection: bson.M{
-					"_id":    1,
-					"status": 1,
+					"_id":        1,
+					"status":     1,
+					"retry_info": 1,
+					"time_info":  1,
 				},
 			})
 		if err != nil {
 			grip.Warning(message.WrapError(err, message.Fields{
 				"id":        d.instanceID,
 				"service":   "amboy.queue.mdb",
-				"operation": "job status iterator",
+				"operation": "job info iterator",
 				"message":   "problem with query",
 				"is_group":  d.opts.UseGroups,
 				"group":     d.opts.GroupName,
@@ -967,8 +971,8 @@ func (d *mongoDriver) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 			if err := iter.Decode(ji); err != nil {
 				grip.Warning(message.WrapError(err, message.Fields{
 					"id":        d.instanceID,
-					"service":   "amboy.queue.monto",
-					"operation": "job status iterator",
+					"service":   "amboy.queue.mongo",
+					"operation": "job info iterator",
 					"message":   "problem converting job obj",
 					"is_group":  d.opts.UseGroups,
 					"group":     d.opts.GroupName,
@@ -977,18 +981,27 @@ func (d *mongoDriver) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
 			}
 
 			d.removeMetadata(ji)
-			ji.Status.ID = ji.Name
+			info := amboy.JobInfo{
+				ID:     ji.Name,
+				Status: ji.Status,
+				Time:   ji.TimeInfo,
+				Retry:  ji.RetryInfo,
+				Type: amboy.JobType{
+					Name:    ji.Type,
+					Version: ji.Version,
+				},
+			}
 
 			select {
 			case <-ctx.Done():
 				return
-			case output <- ji.Status:
+			case infos <- info:
 			}
 
 		}
 	}()
 
-	return output
+	return infos
 }
 
 func (d *mongoDriver) getNextQuery() bson.M {

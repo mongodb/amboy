@@ -120,7 +120,6 @@ type JobType struct {
 // job and is reported by the Status and set by the SetStatus methods
 // in the Job interface.
 type JobStatusInfo struct {
-	ID                string    `bson:"id,omitempty" json:"id,omitempty" yaml:"id,omitempty"`
 	Owner             string    `bson:"owner" json:"owner" yaml:"owner"`
 	Completed         bool      `bson:"completed" json:"completed" yaml:"completed"`
 	InProgress        bool      `bson:"in_prog" json:"in_progress" yaml:"in_progress"`
@@ -264,6 +263,26 @@ func (j JobTimeInfo) Validate() error {
 	return catcher.Resolve()
 }
 
+// JobInfo provides a view of information for a Job.
+type JobInfo struct {
+	ID     string
+	Type   JobType
+	Status JobStatusInfo
+	Time   JobTimeInfo
+	Retry  JobRetryInfo
+}
+
+// NewJobInfo creates a JobInfo from a Job.
+func NewJobInfo(j Job) JobInfo {
+	return JobInfo{
+		ID:     j.ID(),
+		Status: j.Status(),
+		Time:   j.TimeInfo(),
+		Retry:  j.RetryInfo(),
+		Type:   j.Type(),
+	}
+}
+
 // Queue describes a very simple Job queue interface that allows users
 // to define Job objects, add them to a worker queue and execute tasks
 // from that queue. Queue implementations may run locally or as part
@@ -271,62 +290,56 @@ func (j JobTimeInfo) Validate() error {
 // Queue instances, which can support different job dispatching and
 // organization properties.
 type Queue interface {
-	// Used to add a job to the queue. Should only error if the
-	// Queue cannot accept jobs if the job already exists in a
-	// queue.
-	Put(context.Context, Job) error
-
-	// Returns a unique identifier for the instance of the queue.
+	// ID returns a unique identifier for the instance of the queue.
 	ID() string
 
-	// Given a job id, get that job. The second return value is a
-	// Boolean, which indicates if the named job had been
-	// registered by a Queue.
+	// Put adds a job to the queue.
+	Put(context.Context, Job) error
+
+	// Get finds a Job by ID. The boolean return value indicates if the Job was
+	// found or not.
 	Get(context.Context, string) (Job, bool)
 
-	// Returns the next job in the queue. These calls are
-	// blocking, but may be interrupted with a canceled context.
+	// Next returns the next available Job to run in the Queue.
 	Next(context.Context) Job
 
 	// Info returns information related to management of the Queue.
 	Info() QueueInfo
 
-	// Used to mark a Job complete and remove it from the pending
-	// work of the queue.
+	// Complete marks a Job as completed executing.
 	Complete(context.Context, Job)
 
-	// Saves the state of a current job to the underlying storage,
-	// generally in support of locking and incremental
-	// persistence. Should error if the job does not exist (use
-	// Put) or if the queue does not have ownership of the job.
+	// Save persists the state of a current Job to the underlying storage,
+	// generally in support of locking and incremental persistence.
+	// Implementations should error if the job does not exist in the Queue or if
+	// the Job state within the Queue has been modified to invalidate the
+	// in-memory ownership of the Job.
 	Save(context.Context, Job) error
 
-	// Returns a channel that produces completed Job objects.
+	// Results returns a channel that produces completed Job objects.
 	Results(context.Context) <-chan Job
 
-	// Returns a channel that produces the status objects for all
-	// jobs in the queue, completed and otherwise.
-	JobStats(context.Context) <-chan JobStatusInfo
+	// JobInfo returns a channel that produces the information for all Jobs in
+	// the Queue.
+	JobInfo(context.Context) <-chan JobInfo
 
-	// Returns an object that contains statistics about the
-	// current state of the Queue.
+	// Stats returns statistics about the current state of the Queue.
 	Stats(context.Context) QueueStats
 
-	// Getter for the Runner implementation embedded in the Queue
-	// instance.
+	// Runner returns the Runner implementation that is running Jobs for the
+	// Queue.
 	Runner() Runner
 
-	// Setter for the Runner implementation embedded in the Queue
-	// instance. Permits runtime substitution of interfaces, but
-	// implementations are not expected to permit users to change
-	// runner implementations after starting the Queue.
+	// SetRunner sets the Runner that is running Jobs for the Queue. This
+	// permits runtime substitution of Runner implementations. However, Queue
+	// implementations are not expected to permit users to change Runner
+	// implementations after starting the Queue.
 	SetRunner(Runner) error
 
-	// Begins the execution of the job Queue, using the embedded
-	// Runner.
+	// Start begins the execution of Jobs in the Queue.
 	Start(context.Context) error
 
-	// Close cleans up all resources used by the queue.
+	// Close cleans up all resources used by the Queue.
 	Close(context.Context)
 }
 

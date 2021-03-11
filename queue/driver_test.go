@@ -794,7 +794,7 @@ func (s *DriverSuite) TestRetryableJobsReturnsStaleRetryingJobs() {
 	s.Empty(foundUnexpected, "found unexpected IDs %s", foundUnexpected)
 }
 
-func (s *DriverSuite) TestJobStatsMethodReturnsAllJobs() {
+func (s *DriverSuite) TestJobInfoMethodReturnsAllJobs() {
 	names := make(map[string]struct{})
 
 	for i := 0; i < 30; i++ {
@@ -808,8 +808,8 @@ func (s *DriverSuite) TestJobStatsMethodReturnsAllJobs() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	counter := 0
-	for stat := range s.driver.JobStats(ctx) {
-		_, ok := names[stat.ID]
+	for info := range s.driver.JobInfo(ctx) {
+		_, ok := names[info.ID]
 		s.True(ok)
 		counter++
 	}

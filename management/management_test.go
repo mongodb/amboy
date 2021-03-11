@@ -291,16 +291,16 @@ func (s *ManagerSuite) TestCompleteJob() {
 
 	s.Require().NoError(s.manager.CompleteJob(s.ctx, "complete"))
 	jobCount := 0
-	for jobStats := range s.queue.JobStats(s.ctx) {
-		if jobStats.ID == "complete" {
-			s.True(jobStats.Completed)
+	for info := range s.queue.JobInfo(s.ctx) {
+		if info.ID == "complete" {
+			s.True(info.Status.Completed)
 			_, ok := s.manager.(*dbQueueManager)
 			if ok {
-				s.Equal(3, jobStats.ModificationCount)
+				s.Equal(3, info.Status.ModificationCount)
 			}
 		} else {
-			s.False(jobStats.Completed)
-			s.Equal(0, jobStats.ModificationCount)
+			s.False(info.Status.Completed)
+			s.Equal(0, info.Status.ModificationCount)
 		}
 		jobCount++
 	}
@@ -322,11 +322,11 @@ func (s *ManagerSuite) TestCompleteJobsValidFilter() {
 
 	s.Require().NoError(s.manager.CompleteJobs(s.ctx, Pending))
 	jobCount := 0
-	for jobStats := range s.queue.JobStats(s.ctx) {
-		s.True(jobStats.Completed)
+	for info := range s.queue.JobInfo(s.ctx) {
+		s.True(info.Status.Completed)
 		_, ok := s.manager.(*dbQueueManager)
 		if ok {
-			s.Equal(3, jobStats.ModificationCount)
+			s.Equal(3, info.Status.ModificationCount)
 		}
 		jobCount++
 	}
@@ -348,16 +348,16 @@ func (s *ManagerSuite) TestCompleteJobsByTypeValidFilter() {
 
 	s.Require().NoError(s.manager.CompleteJobsByType(s.ctx, Pending, "test"))
 	jobCount := 0
-	for jobStats := range s.queue.JobStats(s.ctx) {
-		if jobStats.ID == "0" || jobStats.ID == "1" {
-			s.True(jobStats.Completed)
+	for info := range s.queue.JobInfo(s.ctx) {
+		if info.ID == "0" || info.ID == "1" {
+			s.True(info.Status.Completed)
 			_, ok := s.manager.(*dbQueueManager)
 			if ok {
-				s.Equal(3, jobStats.ModificationCount)
+				s.Equal(3, info.Status.ModificationCount)
 			}
 		} else {
-			s.False(jobStats.Completed)
-			s.Equal(0, jobStats.ModificationCount)
+			s.False(info.Status.Completed)
+			s.Equal(0, info.Status.ModificationCount)
 		}
 		jobCount++
 	}
@@ -379,16 +379,16 @@ func (s *ManagerSuite) TestCompleteJobsByPrefixValidFilter() {
 
 	s.Require().NoError(s.manager.CompleteJobsByPrefix(s.ctx, Pending, "pre"))
 	jobCount := 0
-	for jobStats := range s.queue.JobStats(s.ctx) {
-		if jobStats.ID == "pre-one" || jobStats.ID == "pre-two" {
-			s.True(jobStats.Completed)
+	for info := range s.queue.JobInfo(s.ctx) {
+		if info.ID == "pre-one" || info.ID == "pre-two" {
+			s.True(info.Status.Completed)
 			_, ok := s.manager.(*dbQueueManager)
 			if ok {
-				s.Equal(3, jobStats.ModificationCount)
+				s.Equal(3, info.Status.ModificationCount)
 			}
 		} else {
-			s.False(jobStats.Completed)
-			s.Equal(0, jobStats.ModificationCount)
+			s.False(info.Status.Completed)
+			s.Equal(0, info.Status.ModificationCount)
 		}
 		jobCount++
 	}

@@ -167,22 +167,25 @@ func (q *QueueTester) Results(ctx context.Context) <-chan amboy.Job {
 	return output
 }
 
-func (q *QueueTester) JobStats(ctx context.Context) <-chan amboy.JobStatusInfo {
-	output := make(chan amboy.JobStatusInfo)
+func (q *QueueTester) JobInfo(ctx context.Context) <-chan amboy.JobInfo {
+	infos := make(chan amboy.JobInfo)
+
 	go func() {
-		defer close(output)
-		for _, job := range q.storage {
+		defer close(infos)
+		for _, j := range q.storage {
 			if ctx.Err() != nil {
 				return
 
 			}
-			status := job.Status()
-			status.ID = job.ID()
-			output <- status
+			select {
+			case <-ctx.Done():
+				return
+			case infos <- amboy.NewJobInfo(j):
+			}
 		}
 	}()
 
-	return output
+	return infos
 }
 
 func (q *QueueTester) Close(context.Context) {}
