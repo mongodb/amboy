@@ -135,15 +135,15 @@ func (m *queueManager) JobIDsByState(ctx context.Context, jobType string, f Stat
 		uniqueIDs[info.ID] = struct{}{}
 	}
 
-	ids := make([]string, 0, len(uniqueIDs))
+	ids := make([]GroupedID, 0, len(uniqueIDs))
 	for id := range uniqueIDs {
-		ids = append(ids, id)
+		ids = append(ids, GroupedID{ID: id})
 	}
 
 	return &JobReportIDs{
-		Filter: f,
-		Type:   jobType,
-		IDs:    ids,
+		Filter:     f,
+		Type:       jobType,
+		GroupedIDs: ids,
 	}, nil
 }
 
@@ -317,21 +317,21 @@ func (m *queueManager) RecentJobErrors(ctx context.Context, jobType string, wind
 // getJob resolves a job's information into the job that supplied the
 // information.
 func (m *queueManager) getJob(ctx context.Context, info amboy.JobInfo) (amboy.Job, error) {
-	var j amboy.Job
-	var err error
-	isRetryable := amboy.WithRetryableQueue(m.queue, func(rq amboy.RetryableQueue) {
-		// kim: TODO: needs EVG-14245 for returning error
-		j, err = rq.GetAttempt(ctx, info.ID, info.Retry.CurrentAttempt)
-	})
+	if info.Retry.Retryable {
+		var j amboy.Job
+		var err error
+		isRetryable := amboy.WithRetryableQueue(m.queue, func(rq amboy.RetryableQueue) {
+			j, err = rq.GetAttempt(ctx, info.ID, info.Retry.CurrentAttempt)
+		})
 
-	// If the queue is retryable, return the result immediately. Otherwise, if
-	// it's not a retryable queue, then a retryable job is treated no
-	// differently from a non-retryable job (i.e. it's not retried).
-	if isRetryable {
-		return j, err
+		// If the queue is retryable, return the result immediately. Otherwise,
+		// if it's not a retryable queue, then a retryable job is treated no
+		// differently from a non-retryable job (i.e. it's not retried).
+		if isRetryable {
+			return j, err
+		}
 	}
 
-	return j, err
 	j, ok := m.queue.Get(ctx, info.ID)
 	if !ok {
 		return j, errors.New("could not find job")
@@ -370,7 +370,7 @@ func (m *queueManager) CompleteJobsByType(ctx context.Context, f StatusFilter, j
 
 		j, err := m.getJob(ctx, info)
 		if err != nil {
-			catcher.Wrapf(err, "could not get job '%s' from info", info.ID)
+			catcher.Wrapf(err, "job '%s'", info.ID)
 			continue
 		}
 

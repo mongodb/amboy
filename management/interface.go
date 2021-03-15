@@ -18,7 +18,8 @@ type Manager interface {
 	// runtime status.
 	RecentTiming(context.Context, time.Duration, RuntimeFilter) (*JobRuntimeReport, error)
 	// JobIDsByState returns a report of job IDs filtered by a job type and
-	// status filter.
+	// status filter. The returned job IDs can be either logical job IDs or
+	// internally-stored job IDs.
 	JobIDsByState(context.Context, string, StatusFilter) (*JobReportIDs, error)
 	// RecentErrors returns a report of job errors within the given duration
 	// window matching the error filter.

@@ -3,6 +3,7 @@ package management
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/mongodb/amboy/queue"
@@ -24,11 +25,17 @@ type dbQueueManager struct {
 // queue managers, and accommodates both group-backed queues and conventional
 // queues.
 type DBQueueManagerOptions struct {
-	Name        string
-	Group       string
+	// Name is the prefix of the DB namespace to use.
+	Name string
+	// Group is the name of the queue group if SingleGroup is true.
+	Group string
+	// SingleGroup indicates that the queue is managing a single queue group.
 	SingleGroup bool
-	ByGroups    bool
-	Options     queue.MongoDBOptions
+	// ByGroups indicates that the queue is managing multiple queues in a queue
+	// group. Only a subset of operations are supported if ByGroups is
+	// specified.
+	ByGroups bool
+	Options  queue.MongoDBOptions
 }
 
 func (o *DBQueueManagerOptions) hasGroups() bool { return o.SingleGroup || o.ByGroups }
@@ -176,14 +183,10 @@ func (db *dbQueueManager) aggregateErrors(ctx context.Context, stages ...bson.M)
 	return out, nil
 }
 
-func (db *dbQueueManager) findJobs(ctx context.Context, match bson.M) ([]string, error) {
+func (db *dbQueueManager) findJobs(ctx context.Context, match bson.M) ([]GroupedID, error) {
 	group := bson.M{
 		"_id":  nil,
-		"jobs": bson.M{"$push": "$_id"},
-	}
-
-	if db.opts.ByGroups {
-		group["_id"] = "$group"
+		"jobs": bson.M{"$push": bson.M{"_id": "$_id", "group": "$group"}},
 	}
 
 	stages := []bson.M{
@@ -191,8 +194,8 @@ func (db *dbQueueManager) findJobs(ctx context.Context, match bson.M) ([]string,
 		{"$group": group},
 	}
 
-	out := []struct {
-		Jobs []string `bson:"jobs"`
+	out := struct {
+		Jobs []GroupedID `bson:"jobs"`
 	}{}
 
 	cursor, err := db.collection.Aggregate(ctx, stages, options.Aggregate().SetAllowDiskUse(true))
@@ -206,14 +209,7 @@ func (db *dbQueueManager) findJobs(ctx context.Context, match bson.M) ([]string,
 		}
 	}
 
-	switch len(out) {
-	case 0:
-		return []string{}, nil
-	case 1:
-		return out[0].Jobs, nil
-	default:
-		return nil, errors.Errorf("job results malformed with %d results", len(out))
-	}
+	return out.Jobs, nil
 }
 
 func (db *dbQueueManager) JobStatus(ctx context.Context, f StatusFilter) (*JobStatusReport, error) {
@@ -349,6 +345,8 @@ func (db *dbQueueManager) RecentTiming(ctx context.Context, window time.Duration
 	}, nil
 }
 
+// JobIDsByState returns job IDs filtered by job type and status filter. The
+// returned job IDs are the internally-stored job IDs.
 func (db *dbQueueManager) JobIDsByState(ctx context.Context, jobType string, f StatusFilter) (*JobReportIDs, error) {
 	if err := f.Validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid status filter")
@@ -370,9 +368,9 @@ func (db *dbQueueManager) JobIDsByState(ctx context.Context, jobType string, f S
 	}
 
 	return &JobReportIDs{
-		Filter: f,
-		Type:   jobType,
-		IDs:    ids,
+		Filter:     f,
+		Type:       jobType,
+		GroupedIDs: ids,
 	}, nil
 }
 
@@ -387,7 +385,7 @@ func (db *dbQueueManager) getStatusQuery(q bson.M, f StatusFilter) bson.M {
 	case Stale:
 		q["status.in_prog"] = true
 		q["status.completed"] = false
-		q["status.mod_ts"] = bson.M{"$gt": time.Now().Add(-db.opts.Options.LockTimeout)}
+		q["status.mod_ts"] = bson.M{"$lte": time.Now().Add(-db.opts.Options.LockTimeout)}
 	case Completed:
 		q["status.in_prog"] = false
 		q["status.completed"] = true
@@ -613,17 +611,30 @@ func (db *dbQueueManager) completeJobs(ctx context.Context, query bson.M, f Stat
 
 // CompleteJob marks a job complete by ID. The ID matches internally-stored job
 // IDs rather than the logical job ID.
-func (db *dbQueueManager) CompleteJob(ctx context.Context, name string) error {
+func (db *dbQueueManager) CompleteJob(ctx context.Context, id string) error {
+	matchID := bson.M{}
+	matchRetryableJobID := bson.M{"retry_info.base_job_id": id}
 	if db.opts.Group != "" {
-		name = fmt.Sprintf("%s.%s", db.opts.Group, name)
-	}
-	query := bson.M{
-		"_id":              name,
-		"status.completed": false,
+		matchID["_id"] = db.opts.Group + id
+		matchID["group"] = db.opts.Group
+		matchRetryableJobID["group"] = db.opts.Group
+	} else {
+		matchID["_id"] = id
 	}
 
-	_, err := db.collection.UpdateOne(ctx, query, db.getUpdateStatement())
-	return errors.Wrapf(err, "problem marking job with name '%s' complete", name)
+	query := bson.M{
+		"$or": []bson.M{matchID, matchRetryableJobID},
+	}
+
+	res, err := db.collection.UpdateMany(ctx, query, db.getUpdateStatement())
+	if err != nil {
+		return errors.Wrap(err, "marking job complete")
+	}
+	if res.MatchedCount == 0 {
+		return errors.New("no job matched")
+	}
+
+	return nil
 }
 
 // CompleteJobs marks all jobs complete that match the status filter.
@@ -643,4 +654,10 @@ func (db *dbQueueManager) CompleteJobsByType(ctx context.Context, f StatusFilter
 // Patterns match on internally-stored job IDs rather than logical job IDs.
 func (db *dbQueueManager) CompleteJobsByPattern(ctx context.Context, f StatusFilter, pattern string) error {
 	return db.completeJobs(ctx, bson.M{"_id": bson.M{"$regex": pattern}}, f)
+}
+
+func (*dbQueueManager) buildCompoundID(n, id string) string { return fmt.Sprintf("%s.%s", n, id) }
+
+func (*dbQueueManager) deconstructCompoundID(id, prefix string) string {
+	return strings.TrimPrefix(id, prefix+".")
 }
