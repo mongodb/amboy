@@ -336,7 +336,7 @@ func TestManagerImplementations(t *testing.T) {
 				},
 				"JobStatusSucceedsWithEmptyResult": func(ctx context.Context, t *testing.T, mgr Manager, q amboy.Queue) {
 					for _, f := range ValidStatusFilters() {
-						r, err := mgr.JobStatus(ctx, StatusFilter(f))
+						r, err := mgr.JobStatus(ctx, f)
 						assert.NoError(t, err)
 						assert.NotZero(t, r)
 					}
@@ -477,7 +477,7 @@ func TestManagerImplementations(t *testing.T) {
 				},
 				"CompleteJobsByTypeSucceedsWithoutMatches": func(ctx context.Context, t *testing.T, mgr Manager, q amboy.Queue) {
 					for _, f := range ValidStatusFilters() {
-						assert.NoError(t, mgr.CompleteJobsByType(ctx, StatusFilter(f), "type"))
+						assert.NoError(t, mgr.CompleteJobsByType(ctx, f, "type"))
 					}
 				},
 				"CompleteJobByPatternSucceeds": func(ctx context.Context, t *testing.T, mgr Manager, q amboy.Queue) {
