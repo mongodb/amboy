@@ -370,7 +370,7 @@ func (m *queueManager) CompleteJobsByType(ctx context.Context, f StatusFilter, j
 
 		j, err := m.getJob(ctx, info)
 		if err != nil {
-			catcher.Wrapf(err, "job '%s'", info.ID)
+			catcher.Wrapf(err, "getting job '%s' from info", info.ID)
 			continue
 		}
 
@@ -405,7 +405,7 @@ func (m *queueManager) CompleteJobs(ctx context.Context, f StatusFilter) error {
 
 		j, err := m.getJob(ctx, info)
 		if err != nil {
-			catcher.Wrapf(err, "could not get job '%s' from info", info.ID)
+			catcher.Wrapf(err, "getting job '%s' from info", info.ID)
 			continue
 		}
 

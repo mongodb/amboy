@@ -139,7 +139,7 @@ func managementReportJobIDs(opts *ServiceOptions) cli.Command {
 			return opts.withManagementClient(ctx, c, func(client management.Manager) error {
 
 				t := tabby.New()
-				t.AddHeader("Job Type", "ID", "Group")
+				t.AddHeader("Job Type", "Group", "ID")
 
 				for _, jt := range jobTypes {
 					report, err := client.JobIDsByState(ctx, jt, filter)
