@@ -26,7 +26,7 @@ type dbQueueManager struct {
 type DBQueueManagerOptions struct {
 	// Name is the prefix of the DB namespace to use.
 	Name string
-	// Group is the name of the queue group if SingleGroup is true.
+	// Group is the name of the queue group if managing a single group.
 	Group string
 	// SingleGroup indicates that the queue is managing a single queue group.
 	SingleGroup bool
