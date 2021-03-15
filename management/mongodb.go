@@ -3,7 +3,6 @@ package management
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/mongodb/amboy/queue"
@@ -615,7 +614,7 @@ func (db *dbQueueManager) CompleteJob(ctx context.Context, id string) error {
 	matchID := bson.M{}
 	matchRetryableJobID := bson.M{"retry_info.base_job_id": id}
 	if db.opts.Group != "" {
-		matchID["_id"] = db.opts.Group + id
+		matchID["_id"] = db.buildCompoundID(db.opts.Group, id)
 		matchID["group"] = db.opts.Group
 		matchRetryableJobID["group"] = db.opts.Group
 	} else {
@@ -656,8 +655,6 @@ func (db *dbQueueManager) CompleteJobsByPattern(ctx context.Context, f StatusFil
 	return db.completeJobs(ctx, bson.M{"_id": bson.M{"$regex": pattern}}, f)
 }
 
-func (*dbQueueManager) buildCompoundID(n, id string) string { return fmt.Sprintf("%s.%s", n, id) }
-
-func (*dbQueueManager) deconstructCompoundID(id, prefix string) string {
-	return strings.TrimPrefix(id, prefix+".")
+func (*dbQueueManager) buildCompoundID(prefix, id string) string {
+	return fmt.Sprintf("%s.%s", prefix, id)
 }

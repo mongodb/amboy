@@ -244,6 +244,51 @@ func TestManagerImplementations(t *testing.T) {
 		},
 	} {
 		t.Run(managerName, func(t *testing.T) {
+			t.Run("CompleteJobSucceedsWithFilter", func(t *testing.T) {
+				for _, f := range ValidStatusFilters() {
+					t.Run("Filter="+string(f), func(t *testing.T) {
+						q, err := managerCase.makeQueue(ctx)
+						require.NoError(t, err)
+						mgr, err := managerCase.makeManager(ctx, q)
+						require.NoError(t, err)
+
+						defer func() {
+							assert.NoError(t, managerCase.teardown(ctx))
+						}()
+
+						fjs := getFilteredJobs()
+						for _, fj := range fjs {
+							require.NoError(t, q.Put(ctx, fj.job))
+						}
+
+						require.NoError(t, mgr.CompleteJobs(ctx, f))
+
+						matched, unmatched := partitionByFilter(fjs, f)
+						var numJobs int
+						for info := range q.JobInfo(ctx) {
+							for _, fj := range matched {
+								if fj.job.ID() == info.ID {
+									assert.True(t, info.Status.Completed, "job '%s should be complete'", info.ID)
+									assert.NotZero(t, info.Status.ModificationCount, "job '%s' should be complete", info.ID)
+								}
+							}
+							for _, fj := range unmatched {
+								if fj.job.ID() == info.ID {
+									if matchesFilter(fj, Completed) {
+										assert.True(t, info.Status.Completed, "job '%s' should be complete", info.ID)
+										continue
+									}
+									assert.False(t, info.Status.Completed, "job '%s' should not be complete", info.ID)
+									assert.Zero(t, info.Status.ModificationCount, info.ID)
+								}
+							}
+							numJobs++
+						}
+						assert.Equal(t, len(fjs), numJobs)
+					})
+				}
+			})
+
 			for testName, testCase := range map[string]func(ctx context.Context, t *testing.T, mgr Manager, q amboy.Queue){
 				"JobIDsByStateSucceeds": func(ctx context.Context, t *testing.T, mgr Manager, q amboy.Queue) {
 					fjs := getFilteredJobs()
@@ -469,53 +514,8 @@ func TestManagerImplementations(t *testing.T) {
 				},
 			} {
 				t.Run(testName, func(t *testing.T) {
-					tctx, tcancel := context.WithTimeout(ctx, 30*time.Second)
+					tctx, tcancel := context.WithTimeout(ctx, 10*time.Second)
 					defer tcancel()
-
-					t.Run("CompleteJobSucceeds", func(t *testing.T) {
-						for _, f := range ValidStatusFilters() {
-							t.Run("Filter="+string(f), func(t *testing.T) {
-								q, err := managerCase.makeQueue(ctx)
-								require.NoError(t, err)
-								mgr, err := managerCase.makeManager(ctx, q)
-								require.NoError(t, err)
-
-								defer func() {
-									assert.NoError(t, managerCase.teardown(ctx))
-								}()
-
-								fjs := getFilteredJobs()
-								for _, fj := range fjs {
-									require.NoError(t, q.Put(ctx, fj.job))
-								}
-
-								require.NoError(t, mgr.CompleteJobs(ctx, f))
-
-								matched, unmatched := partitionByFilter(fjs, f)
-								var numJobs int
-								for info := range q.JobInfo(ctx) {
-									for _, fj := range matched {
-										if fj.job.ID() == info.ID {
-											assert.True(t, info.Status.Completed, "job '%s should be complete'", info.ID)
-											assert.NotZero(t, info.Status.ModificationCount, "job '%s' should be complete", info.ID)
-										}
-									}
-									for _, fj := range unmatched {
-										if fj.job.ID() == info.ID {
-											if matchesFilter(fj, Completed) {
-												assert.True(t, info.Status.Completed, "job '%s' should be complete", info.ID)
-												continue
-											}
-											assert.False(t, info.Status.Completed, "job '%s' should not be complete", info.ID)
-											assert.Zero(t, info.Status.ModificationCount, info.ID)
-										}
-									}
-									numJobs++
-								}
-								assert.Equal(t, len(fjs), numJobs)
-							})
-						}
-					})
 
 					q, err := managerCase.makeQueue(tctx)
 					require.NoError(t, err)
