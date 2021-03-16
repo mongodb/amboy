@@ -989,6 +989,8 @@ func (d *mongoDriver) JobInfo(ctx context.Context) <-chan amboy.JobInfo {
 					"status":     1,
 					"retry_info": 1,
 					"time_info":  1,
+					"type":       1,
+					"version":    1,
 				},
 			})
 		if err != nil {
@@ -1008,7 +1010,7 @@ func (d *mongoDriver) JobInfo(ctx context.Context) <-chan amboy.JobInfo {
 			if err := iter.Decode(ji); err != nil {
 				grip.Warning(message.WrapError(err, message.Fields{
 					"id":        d.instanceID,
-					"service":   "amboy.queue.mongo",
+					"service":   "amboy.queue.mdb",
 					"operation": "job info iterator",
 					"message":   "problem converting job obj",
 					"is_group":  d.opts.UseGroups,

@@ -2,10 +2,11 @@ package management
 
 import (
 	"context"
-	"strings"
+	"regexp"
 	"time"
 
 	"github.com/mongodb/amboy"
+	"github.com/mongodb/grip"
 	"github.com/pkg/errors"
 )
 
@@ -28,7 +29,7 @@ func NewQueueManager(q amboy.Queue) Manager {
 
 func (m *queueManager) JobStatus(ctx context.Context, f StatusFilter) (*JobStatusReport, error) {
 	if err := f.Validate(); err != nil {
-		return nil, errors.WithStack(err)
+		return nil, errors.Wrap(err, "invalid filter")
 	}
 
 	counters := map[string]int{}
@@ -48,7 +49,7 @@ func (m *queueManager) JobStatus(ctx context.Context, f StatusFilter) (*JobStatu
 		})
 	}
 
-	out.Filter = string(f)
+	out.Filter = f
 
 	return &out, nil
 }
@@ -57,7 +58,7 @@ func (m *queueManager) RecentTiming(ctx context.Context, window time.Duration, f
 	var err error
 
 	if err = f.Validate(); err != nil {
-		return nil, errors.WithStack(err)
+		return nil, errors.Wrap(err, "invalid filter")
 	}
 
 	if window <= time.Second {
@@ -67,7 +68,6 @@ func (m *queueManager) RecentTiming(ctx context.Context, window time.Duration, f
 	counters := map[string][]time.Duration{}
 
 	for info := range m.queue.JobInfo(ctx) {
-
 		switch f {
 		case Running:
 			if !info.Status.InProgress {
@@ -110,7 +110,7 @@ func (m *queueManager) RecentTiming(ctx context.Context, window time.Duration, f
 	}
 
 	return &JobRuntimeReport{
-		Filter: string(f),
+		Filter: f,
 		Period: window,
 		Stats:  runtimes,
 	}, nil
@@ -119,16 +119,12 @@ func (m *queueManager) RecentTiming(ctx context.Context, window time.Duration, f
 func (m *queueManager) JobIDsByState(ctx context.Context, jobType string, f StatusFilter) (*JobReportIDs, error) {
 	var err error
 	if err = f.Validate(); err != nil {
-		return nil, errors.WithStack(err)
+		return nil, errors.Wrap(err, "invalid filter")
 	}
 
-	// It might be the case that we should use something with
-	// set-ish properties if queues return the same job more than
-	// once, and it poses a problem.
-	var ids []string
-
+	uniqueIDs := map[string]struct{}{}
 	for info := range m.queue.JobInfo(ctx) {
-		if jobType != "" && info.Type.Name != jobType {
+		if info.Type.Name != jobType {
 			continue
 		}
 
@@ -136,13 +132,18 @@ func (m *queueManager) JobIDsByState(ctx context.Context, jobType string, f Stat
 			continue
 		}
 
-		ids = append(ids, info.ID)
+		uniqueIDs[info.ID] = struct{}{}
+	}
+
+	ids := make([]GroupedID, 0, len(uniqueIDs))
+	for id := range uniqueIDs {
+		ids = append(ids, GroupedID{ID: id})
 	}
 
 	return &JobReportIDs{
-		Filter: string(f),
-		Type:   jobType,
-		IDs:    ids,
+		Filter:     f,
+		Type:       jobType,
+		GroupedIDs: ids,
 	}, nil
 }
 
@@ -158,6 +159,8 @@ func (m *queueManager) matchesStatusFilter(info amboy.JobInfo, f StatusFilter) b
 		return info.Status.InProgress && time.Since(info.Status.ModificationTime) > m.queue.Info().LockTimeout
 	case Completed:
 		return info.Status.Completed
+	case Retrying:
+		return info.Status.Completed && info.Retry.NeedsRetry
 	case All:
 		return true
 	default:
@@ -168,7 +171,7 @@ func (m *queueManager) matchesStatusFilter(info amboy.JobInfo, f StatusFilter) b
 func (m *queueManager) RecentErrors(ctx context.Context, window time.Duration, f ErrorFilter) (*JobErrorsReport, error) {
 	var err error
 	if err = f.Validate(); err != nil {
-		return nil, errors.WithStack(err)
+		return nil, errors.Wrap(err, "invalid filter")
 
 	}
 	if window <= time.Second {
@@ -242,7 +245,7 @@ func (m *queueManager) RecentErrors(ctx context.Context, window time.Duration, f
 func (m *queueManager) RecentJobErrors(ctx context.Context, jobType string, window time.Duration, f ErrorFilter) (*JobErrorsReport, error) {
 	var err error
 	if err = f.Validate(); err != nil {
-		return nil, errors.WithStack(err)
+		return nil, errors.Wrap(err, "invalid filter")
 
 	}
 	if window <= time.Second {
@@ -309,34 +312,54 @@ func (m *queueManager) RecentJobErrors(ctx context.Context, jobType string, wind
 		FilteredByType: true,
 		Data:           reports,
 	}, nil
+}
+
+// getJob resolves a job's information into the job that supplied the
+// information.
+func (m *queueManager) getJob(ctx context.Context, info amboy.JobInfo) (amboy.Job, error) {
+	if info.Retry.Retryable {
+		var j amboy.Job
+		var err error
+		isRetryable := amboy.WithRetryableQueue(m.queue, func(rq amboy.RetryableQueue) {
+			j, err = rq.GetAttempt(ctx, info.ID, info.Retry.CurrentAttempt)
+		})
+
+		// If the queue is retryable, return the result immediately. Otherwise,
+		// if it's not a retryable queue, then a retryable job is treated no
+		// differently from a non-retryable job (i.e. it's not retried).
+		if isRetryable {
+			return j, err
+		}
+	}
+
+	j, ok := m.queue.Get(ctx, info.ID)
+	if !ok {
+		return j, errors.New("could not find job")
+	}
+	return j, nil
 
 }
 
+// CompleteJob marks a job complete by ID. The ID matches the logical job ID
+// rather than the internally-stored job ID.
 func (m *queueManager) CompleteJob(ctx context.Context, id string) error {
 	j, ok := m.queue.Get(ctx, id)
 	if !ok {
-		return errors.Errorf("cannot find job with ID '%s'", id)
+		return errors.Errorf("cannot recover job with ID '%s'", id)
 	}
 
-	m.queue.Complete(ctx, j)
-
-	return nil
+	return m.completeJob(ctx, j)
 }
 
+// CompleteJobsByType marks all jobs complete that match the status filter and
+// job type.
 func (m *queueManager) CompleteJobsByType(ctx context.Context, f StatusFilter, jobType string) error {
 	if err := f.Validate(); err != nil {
-		return errors.WithStack(err)
+		return errors.Wrap(err, "invalid filter")
 	}
 
-	if f == Completed {
-		return errors.New("invalid specification of completed job type")
-	}
-
+	catcher := grip.NewBasicCatcher()
 	for info := range m.queue.JobInfo(ctx) {
-		if info.Status.Completed {
-			continue
-		}
-
 		if info.Type.Name != jobType {
 			continue
 		}
@@ -345,59 +368,70 @@ func (m *queueManager) CompleteJobsByType(ctx context.Context, f StatusFilter, j
 			continue
 		}
 
-		j, ok := m.queue.Get(ctx, info.ID)
-		if !ok {
+		j, err := m.getJob(ctx, info)
+		if err != nil {
+			catcher.Wrapf(err, "getting job '%s' from info", info.ID)
 			continue
 		}
 
-		m.queue.Complete(ctx, j)
+		catcher.Wrapf(m.completeJob(ctx, j), "marking job '%s' complete", j.ID())
 	}
 
-	return nil
+	return catcher.Resolve()
 }
 
+func (m *queueManager) completeJob(ctx context.Context, j amboy.Job) error {
+	m.queue.Complete(ctx, j)
+
+	var err error
+	amboy.WithRetryableQueue(m.queue, func(rq amboy.RetryableQueue) {
+		err = rq.CompleteRetrying(ctx, j)
+	})
+
+	return errors.Wrap(err, "marking retryable job as complete")
+}
+
+// CompleteJobs marks all jobs complete that match the status filter.
 func (m *queueManager) CompleteJobs(ctx context.Context, f StatusFilter) error {
 	if err := f.Validate(); err != nil {
-		return errors.WithStack(err)
-	}
-	if f == Completed {
-		return errors.New("invalid specification of completed job type")
+		return errors.Wrap(err, "invalid filter")
 	}
 
+	catcher := grip.NewBasicCatcher()
 	for info := range m.queue.JobInfo(ctx) {
-		if info.Status.Completed {
-			continue
-		}
-
 		if !m.matchesStatusFilter(info, f) {
 			continue
 		}
 
-		j, ok := m.queue.Get(ctx, info.ID)
-		if !ok {
+		j, err := m.getJob(ctx, info)
+		if err != nil {
+			catcher.Wrapf(err, "getting job '%s' from info", info.ID)
 			continue
 		}
 
-		m.queue.Complete(ctx, j)
+		catcher.Wrapf(m.completeJob(ctx, j), "marking job '%s' complete", j.ID())
 	}
 
-	return nil
+	return catcher.Resolve()
 }
 
-func (m *queueManager) CompleteJobsByPrefix(ctx context.Context, f StatusFilter, prefix string) error {
+// CompleteJobsByPattern marks all jobs complete that match the status filter
+// and pattern. Patterns should be in Perl compatible regular expression syntax
+// (https://golang.org/pkg/regexp) and match logical job IDs rather than
+// internally-stored job IDs.
+func (m *queueManager) CompleteJobsByPattern(ctx context.Context, f StatusFilter, pattern string) error {
 	if err := f.Validate(); err != nil {
-		return errors.WithStack(err)
-	}
-	if f == Completed {
-		return errors.New("invalid specification of completed job type")
+		return errors.Wrap(err, "invalid filter")
 	}
 
+	regex, err := regexp.Compile(pattern)
+	if err != nil {
+		return errors.Wrap(err, "invalid regexp")
+	}
+
+	catcher := grip.NewBasicCatcher()
 	for info := range m.queue.JobInfo(ctx) {
-		if info.Status.Completed {
-			continue
-		}
-
-		if !strings.HasPrefix(info.ID, prefix) {
+		if !regex.MatchString(info.ID) {
 			continue
 		}
 
@@ -405,13 +439,14 @@ func (m *queueManager) CompleteJobsByPrefix(ctx context.Context, f StatusFilter,
 			continue
 		}
 
-		j, ok := m.queue.Get(ctx, info.ID)
-		if !ok {
+		j, err := m.getJob(ctx, info)
+		if err != nil {
+			catcher.Wrapf(err, "could not get job '%s' from info", info.ID)
 			continue
 		}
 
-		m.queue.Complete(ctx, j)
+		catcher.Wrapf(m.completeJob(ctx, j), "marking job '%s' complete", j.ID())
 	}
 
-	return nil
+	return catcher.Resolve()
 }
