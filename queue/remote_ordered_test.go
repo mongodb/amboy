@@ -85,7 +85,7 @@ func (s *SimpleRemoteOrderedSuite) TearDownTest() {
 
 func (s *SimpleRemoteOrderedSuite) TestQueueSkipsCompletedJobs() {
 	j := job.NewShellJob("echo hello", "")
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	j.MarkComplete()
 	s.True(j.Status().Completed)
@@ -103,7 +103,7 @@ func (s *SimpleRemoteOrderedSuite) TestQueueSkipsCompletedJobs() {
 
 func (s *SimpleRemoteOrderedSuite) TestQueueSkipsUnresolvedJobs() {
 	j := job.NewShellJob("echo hello", "")
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	s.False(j.Status().Completed)
 	mockDep := dependency.NewMock()
@@ -124,7 +124,7 @@ func (s *SimpleRemoteOrderedSuite) TestQueueSkipsUnresolvedJobs() {
 
 func (s *SimpleRemoteOrderedSuite) TestQueueSkipsBlockedJobsWithNoEdges() {
 	j := job.NewShellJob("echo hello", "")
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	s.False(j.Status().Completed)
 	mockDep := dependency.NewMock()
@@ -136,7 +136,7 @@ func (s *SimpleRemoteOrderedSuite) TestQueueSkipsBlockedJobsWithNoEdges() {
 	s.NoError(s.queue.Start(ctx))
 	s.NoError(s.queue.Put(ctx, j))
 
-	amboy.Wait(ctx, s.queue)
+	s.Require().True(amboy.Wait(ctx, s.queue))
 
 	stat := s.queue.Stats(ctx)
 
@@ -146,7 +146,7 @@ func (s *SimpleRemoteOrderedSuite) TestQueueSkipsBlockedJobsWithNoEdges() {
 
 func (s *SimpleRemoteOrderedSuite) TestQueueSkipsBlockedJobsWithManyEdges() {
 	j := job.NewShellJob("echo hello", "")
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	s.False(j.Status().Completed)
 	mockDep := dependency.NewMock()
@@ -171,7 +171,7 @@ func (s *SimpleRemoteOrderedSuite) TestQueueSkipsBlockedJobsWithManyEdges() {
 
 func (s *SimpleRemoteOrderedSuite) TestQueueSkipsBlockedJobsWithOneEdge() {
 	j := job.NewShellJob("echo hello", "")
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	s.False(j.Status().Completed)
 	mockDep := dependency.NewMock()

@@ -804,7 +804,6 @@ func TestRetryHandlerQueueIntegration(t *testing.T) {
 
 								newTimeInfo := newJob.TimeInfo()
 								assert.NotZero(t, newTimeInfo.Created)
-								assert.NotEqual(t, j.TimeInfo().Created, newTimeInfo.Created)
 								assert.Zero(t, newTimeInfo.Start)
 								assert.Zero(t, newTimeInfo.End)
 								assert.Equal(t, j.TimeInfo().DispatchBy, utility.BSONTime(newTimeInfo.DispatchBy))
@@ -900,7 +899,6 @@ func TestRetryHandlerQueueIntegration(t *testing.T) {
 
 								newTimeInfo := newJob.TimeInfo()
 								assert.NotZero(t, newTimeInfo.Created)
-								assert.NotEqual(t, j.TimeInfo().Created, newTimeInfo.Created)
 								assert.Zero(t, newTimeInfo.Start)
 								assert.Zero(t, newTimeInfo.End)
 								assert.Equal(t, scopes, newJob.Scopes())
@@ -984,7 +982,6 @@ func TestRetryHandlerQueueIntegration(t *testing.T) {
 								assert.Equal(t, j.RetryInfo().WaitUntil, newJob.RetryInfo().WaitUntil)
 
 								assert.NotZero(t, newJob.TimeInfo().Created)
-								assert.NotEqual(t, j.TimeInfo().Created, newJob.TimeInfo().Created)
 								assert.Zero(t, newJob.TimeInfo().Start)
 								assert.Zero(t, newJob.TimeInfo().End)
 								assert.NotEqual(t, j.TimeInfo().DispatchBy, utility.BSONTime(newJob.TimeInfo().DispatchBy))
