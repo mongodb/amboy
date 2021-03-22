@@ -28,6 +28,10 @@ export GOROOT := $(goroot)
 # Ensure the build directory exists, since most targets require it.
 $(shell mkdir -p $(buildDir))
 
+
+.DEFAULT_GOAL := compile
+
+
 # start lint setup targets
 lintDeps := $(buildDir)/run-linter $(buildDir)/golangci-lint
 $(buildDir)/golangci-lint:
@@ -44,14 +48,6 @@ $(buildDir)/run-benchmarks:cmd/run-benchmarks/run-benchmarks.go
 	$(gobin) build -o $@ $<
 # end benchmark setup targets
 
-
-######################################################################
-##
-## Everything below this point is generic, and does not contain
-## project specific configuration. (with one noted case in the "build"
-## target for library-only projects)
-##
-######################################################################
 
 _compilePackages := $(subst $(name),,$(subst -,/,$(foreach target,$(packages),./$(target))))
 coverageOutput := $(foreach target,$(packages),$(buildDir)/output.$(target).coverage)
@@ -73,8 +69,7 @@ coverage: $(coverageOutput)
 coverage-html: $(coverageHtmlOutput)
 compile $(buildDir):
 	$(gobin) build $(_compilePackages)
-compile-base:
-	$(gobin) build  ./
+phony += compile $(buildDir)
 # convenience targets for runing tests and coverage tasks on a
 # specific package.
 test-%:$(buildDir)/output.%.test
@@ -185,7 +180,7 @@ phony += vendor-clean
 
 # clean and other utility targets
 clean:
-	rm -rf $(lintDeps) $(buildDir)/output.*
+	rm -rf $(buildDir)
 phony += clean
 # end dependency targets
 
