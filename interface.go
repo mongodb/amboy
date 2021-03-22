@@ -307,7 +307,7 @@ type Queue interface {
 	Info() QueueInfo
 
 	// Complete marks a Job as completed executing.
-	Complete(context.Context, Job)
+	Complete(context.Context, Job) error
 
 	// Save persists the state of a current Job to the underlying storage,
 	// generally in support of locking and incremental persistence.
@@ -520,5 +520,5 @@ type AbortableRunner interface {
 	IsRunning(string) bool
 	RunningJobs() []string
 	Abort(context.Context, string) error
-	AbortAll(context.Context)
+	AbortAll(context.Context) error
 }

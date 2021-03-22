@@ -24,7 +24,6 @@ import (
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/pool"
 	"github.com/mongodb/grip"
-	"github.com/mongodb/grip/message"
 	"github.com/mongodb/grip/recovery"
 	"github.com/pkg/errors"
 )
@@ -400,11 +399,12 @@ func (q *shuffledLocal) Next(ctx context.Context) amboy.Job {
 // Complete marks a job as complete in the internal representation. If
 // the context is canceled after calling Complete but before it
 // executes, no change occurs.
-func (q *shuffledLocal) Complete(ctx context.Context, j amboy.Job) {
+func (q *shuffledLocal) Complete(ctx context.Context, j amboy.Job) error {
 	if ctx.Err() != nil {
-		return
+		return ctx.Err()
 	}
 
+	opResult := make(chan error)
 	q.dispatcher.Complete(ctx, j)
 	op := func(
 		pending map[string]amboy.Job,
@@ -412,6 +412,7 @@ func (q *shuffledLocal) Complete(ctx context.Context, j amboy.Job) {
 		dispatched map[string]amboy.Job,
 		toDelete *fixedStorage,
 	) {
+		defer close(opResult)
 		id := j.ID()
 
 		completed[id] = j
@@ -424,19 +425,26 @@ func (q *shuffledLocal) Complete(ctx context.Context, j amboy.Job) {
 			}
 		}
 
-		grip.Warning(message.WrapError(
-			q.scopes.Release(j.ID(), j.Scopes()),
-			message.Fields{
-				"id":     j.ID(),
-				"scopes": j.Scopes(),
-				"queue":  q.ID(),
-				"op":     "releasing scope lock during completion",
-			}))
+		if err := q.scopes.Release(j.ID(), j.Scopes()); err != nil {
+			select {
+			case <-ctx.Done():
+				return
+			case opResult <- err:
+				return
+			}
+		}
 	}
 
 	select {
 	case <-ctx.Done():
+		return ctx.Err()
 	case q.operations <- op:
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case err := <-opResult:
+			return errors.WithStack(err)
+		}
 	}
 }
 

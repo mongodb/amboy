@@ -33,7 +33,13 @@ func executeJob(ctx context.Context, id string, j amboy.Job, q amboy.Queue) {
 		jobCtx = ctx
 	}
 	j.Run(jobCtx)
-	q.Complete(ctx, j)
+	if err := q.Complete(ctx, j); err != nil {
+		grip.Error(message.WrapError(err, message.Fields{
+			"message":  "could not mark job as complete",
+			"job_id":   j.ID(),
+			"queue_id": q.ID(),
+		}))
+	}
 
 	amboy.WithRetryableQueue(q, func(rq amboy.RetryableQueue) {
 		if !j.RetryInfo().ShouldRetry() {

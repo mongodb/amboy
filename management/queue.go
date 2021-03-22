@@ -381,7 +381,9 @@ func (m *queueManager) CompleteJobsByType(ctx context.Context, f StatusFilter, j
 }
 
 func (m *queueManager) completeJob(ctx context.Context, j amboy.Job) error {
-	m.queue.Complete(ctx, j)
+	if err := m.queue.Complete(ctx, j); err != nil {
+		return errors.Wrap(err, "completing job")
+	}
 
 	var err error
 	amboy.WithRetryableQueue(m.queue, func(rq amboy.RetryableQueue) {

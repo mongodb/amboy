@@ -204,9 +204,9 @@ func (q *remoteBase) Save(ctx context.Context, j amboy.Job) error {
 }
 
 // Complete marks the job complete in the queue.
-func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
+func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) error {
 	if ctx.Err() != nil {
-		return
+		return ctx.Err()
 	}
 
 	q.dispatcher.Complete(ctx, j)
@@ -219,12 +219,14 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
 	id := j.ID()
 	count := 0
 
+	catcher := grip.NewBasicCatcher()
 	var err error
 	for {
 		count++
 		select {
 		case <-ctx.Done():
-			return
+			catcher.Add(ctx.Err())
+			return catcher.Resolve()
 		case <-timer.C:
 			stat := j.Status()
 			stat.Completed = true
@@ -272,6 +274,7 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
 				}
 			}
 
+			catcher.Wrapf(err, "attempt %d", count)
 			j.AddError(err)
 
 			q.mutex.Lock()
@@ -279,7 +282,11 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) {
 			delete(q.blocked, id)
 			delete(q.dispatched, id)
 
-			return
+			if err != nil {
+				return catcher.Resolve()
+			}
+
+			return nil
 		}
 	}
 }

@@ -216,24 +216,18 @@ func (q *priorityLocalQueue) Stats(ctx context.Context) amboy.QueueStats {
 
 // Complete marks a job complete. The operation is asynchronous in
 // this implementation.
-func (q *priorityLocalQueue) Complete(ctx context.Context, j amboy.Job) {
+func (q *priorityLocalQueue) Complete(ctx context.Context, j amboy.Job) error {
 	if ctx.Err() != nil {
-		return
+		return ctx.Err()
 	}
 	id := j.ID()
-	grip.Debugf("marking job (%s) as complete", id)
 	q.counters.Lock()
 	defer q.counters.Unlock()
 	q.fixed.Push(id)
 
-	grip.Warning(message.WrapError(
-		q.scopes.Release(j.ID(), j.Scopes()),
-		message.Fields{
-			"id":     j.ID(),
-			"scopes": j.Scopes(),
-			"queue":  q.ID(),
-			"op":     "releasing scope lock during completion",
-		}))
+	if err := q.scopes.Release(j.ID(), j.Scopes()); err != nil {
+		return errors.Wrapf(err, "releasing scopes '%s'", j.Scopes())
+	}
 	q.dispatcher.Complete(ctx, j)
 
 	if num := q.fixed.Oversize(); num > 0 {
@@ -243,6 +237,8 @@ func (q *priorityLocalQueue) Complete(ctx context.Context, j amboy.Job) {
 	}
 
 	q.counters.completed++
+
+	return nil
 }
 
 // Start begins the work of the queue. It is a noop, without error, to

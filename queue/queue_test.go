@@ -568,7 +568,7 @@ func TestQueueSmoke(t *testing.T) {
 								require.True(t, ok)
 
 								require.NoError(t, j.Error())
-								q.Complete(ctx, j)
+								require.NoError(t, q.Complete(ctx, j))
 								require.NoError(t, j.Error())
 							})
 						})
