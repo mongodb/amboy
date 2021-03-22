@@ -68,7 +68,7 @@ func (s *SimpleRemoteOrderedSuite) SetupTest() {
 	s.Require().NoError(err)
 	s.canceler = canceler
 	s.NoError(s.driver.Open(ctx))
-	queue, err := newSimpleRemoteOrdered(2)
+	queue, err := newRemoteSimpleOrdered(2)
 	s.Require().NoError(err)
 	s.Require().NoError(queue.SetDriver(s.driver))
 	s.queue = queue

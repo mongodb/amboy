@@ -17,6 +17,51 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+func TestRetryableQueueOptions(t *testing.T) {
+	t.Run("Validate", func(t *testing.T) {
+		t.Run("SucceedsWithZeroOptions", func(t *testing.T) {
+			opts := RetryableQueueOptions{}
+			assert.NoError(t, opts.Validate())
+		})
+		t.Run("FailsWithNegativeStaleRetryingMonitorInterval", func(t *testing.T) {
+			opts := RetryableQueueOptions{StaleRetryingMonitorInterval: -time.Second}
+			assert.Error(t, opts.Validate())
+		})
+		t.Run("DefaultsStaleRetryingMonitorInterval", func(t *testing.T) {
+			opts := RetryableQueueOptions{StaleRetryingMonitorInterval: 0}
+			require.NoError(t, opts.Validate())
+			assert.Equal(t, defaultStaleRetryingMonitorInterval, opts.StaleRetryingMonitorInterval)
+		})
+		t.Run("DefaultsDisabled", func(t *testing.T) {
+			opts := RetryableQueueOptions{Disabled: nil}
+			require.NoError(t, opts.Validate())
+			assert.NotZero(t, opts.Disabled)
+			assert.NotZero(t, opts.RetryHandler.Disabled)
+		})
+		t.Run("RetryHandlerDisabledIsOverwrittenByDisabled", func(t *testing.T) {
+			alwaysTrue := func() bool { return true }
+			opts := RetryableQueueOptions{
+				RetryHandler: amboy.RetryHandlerOptions{
+					Disabled: alwaysTrue,
+				},
+			}
+			require.NoError(t, opts.Validate())
+			require.NotZero(t, opts.Disabled)
+			assert.False(t, opts.Disabled())
+			require.NotZero(t, opts.RetryHandler.Disabled)
+			assert.False(t, opts.RetryHandler.Disabled())
+		})
+		t.Run("FailsWithInvalidRetryHandlerOptions", func(t *testing.T) {
+			opts := RetryableQueueOptions{
+				RetryHandler: amboy.RetryHandlerOptions{
+					MaxRetryAttempts: -1,
+				},
+			}
+			assert.Error(t, opts.Validate())
+		})
+	})
+}
+
 func TestNewBasicRetryHandler(t *testing.T) {
 	q, err := newRemoteUnordered(1)
 	require.NoError(t, err)
@@ -421,19 +466,26 @@ func TestRetryHandlerImplementations(t *testing.T) {
 					tctx, tcancel := context.WithTimeout(ctx, 10*time.Second)
 					defer tcancel()
 
-					q, err := newRemoteUnordered(10)
-					require.NoError(t, err)
-
 					makeQueueAndRetryHandler := func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error) {
+						q, err := newRemoteUnorderedWithOptions(remoteOptions{
+							numWorkers: 10,
+							retryable:  RetryableQueueOptions{RetryHandler: opts},
+						})
+						require.NoError(t, err)
+
 						mqOpts := mockRemoteQueueOptions{
 							queue:          q,
 							makeDispatcher: NewDispatcher,
-							makeRetryHandler: func(q amboy.RetryableQueue) (amboy.RetryHandler, error) {
-								return makeRetryHandler(q, opts)
-							},
 						}
 						mq, err := newMockRemoteQueue(mqOpts)
 						if err != nil {
+							return nil, nil, errors.WithStack(err)
+						}
+						rh, err := makeRetryHandler(mq, opts)
+						if err != nil {
+							return nil, nil, errors.WithStack(err)
+						}
+						if err := mq.SetRetryHandler(rh); err != nil {
 							return nil, nil, errors.WithStack(err)
 						}
 
@@ -460,7 +512,7 @@ func defaultRetryableQueueTestCases(d remoteQueueDriver) map[string]func(size in
 			return q, nil
 		},
 		"RemoteOrdered": func(size int) (amboy.RetryableQueue, error) {
-			q, err := newSimpleRemoteOrdered(size)
+			q, err := newRemoteSimpleOrdered(size)
 			if err != nil {
 				return nil, errors.WithStack(err)
 			}
@@ -470,8 +522,7 @@ func defaultRetryableQueueTestCases(d remoteQueueDriver) map[string]func(size in
 			return q, nil
 		},
 		"LocalLimitedSizeSerializable": func(size int) (amboy.RetryableQueue, error) {
-			q := NewLocalLimitedSizeSerializable(size, size)
-			return q, nil
+			return NewLocalLimitedSizeSerializable(size, size)
 		},
 	}
 }

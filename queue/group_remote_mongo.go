@@ -47,12 +47,7 @@ type MongoDBQueueGroupOptions struct {
 	// to each queue, based on the queue ID passed to it.
 	WorkerPoolSize func(string) int
 
-	// RetryHandler configure how retryable jobs are handled.
-	RetryHandler amboy.RetryHandlerOptions
-
-	// StaleRetryingCheckFrequency is how often queues periodically check for
-	// stale retrying jobs.
-	StaleRetryingCheckFrequency time.Duration
+	Retryable RetryableQueueOptions
 
 	// PruneFrequency is how often Prune runs by default.
 	PruneFrequency time.Duration
@@ -77,12 +72,16 @@ func (opts *MongoDBQueueGroupOptions) constructor(ctx context.Context, name stri
 
 	var q remoteQueue
 	var err error
+	qOpts := remoteOptions{
+		numWorkers: workers,
+		retryable:  opts.Retryable,
+	}
 	if opts.Ordered {
-		if q, err = newSimpleRemoteOrdered(workers); err != nil {
+		if q, err = newRemoteSimpleOrderedWithOptions(qOpts); err != nil {
 			return nil, errors.Wrap(err, "initializing ordered queue")
 		}
 	} else {
-		if q, err = newRemoteUnordered(workers); err != nil {
+		if q, err = newRemoteUnorderedWithOptions(qOpts); err != nil {
 			return nil, errors.Wrap(err, "initializing unordered queue")
 		}
 	}
@@ -94,47 +93,19 @@ func (opts *MongoDBQueueGroupOptions) constructor(ctx context.Context, name stri
 		}
 	}
 
-	rh, err := NewBasicRetryHandler(q, opts.RetryHandler)
-	if err != nil {
-		return nil, errors.Wrap(err, "initializing retry handler")
-	}
-	if err = q.SetRetryHandler(rh); err != nil {
-		return nil, errors.Wrap(err, "configuring queue with retry handler")
-	}
-	if opts.StaleRetryingCheckFrequency != 0 {
-		q.SetStaleRetryingMonitorInterval(opts.StaleRetryingCheckFrequency)
-	}
-
 	return q, nil
 }
 
 func (opts MongoDBQueueGroupOptions) validate() error {
 	catcher := grip.NewBasicCatcher()
-	if opts.TTL < 0 {
-		catcher.New("ttl must be greater than or equal to 0")
-	}
-	if opts.TTL > 0 && opts.TTL < time.Second {
-		catcher.New("ttl cannot be less than 1 second, unless it is 0")
-	}
-	if opts.PruneFrequency < 0 {
-		catcher.New("prune frequency must be greater than or equal to 0")
-	}
-	if opts.PruneFrequency > 0 && opts.TTL < time.Second {
-		catcher.New("prune frequency cannot be less than 1 second, unless it is 0")
-	}
-	if (opts.TTL == 0 && opts.PruneFrequency != 0) || (opts.TTL != 0 && opts.PruneFrequency == 0) {
-		catcher.New("ttl and prune frequency must both be 0 or both be not 0")
-	}
-	if opts.Prefix == "" {
-		catcher.New("prefix must be set")
-	}
-	if opts.DefaultWorkers == 0 && opts.WorkerPoolSize == nil {
-		catcher.New("must specify either a default worker pool size or a WorkerPoolSize function")
-	}
-	catcher.NewWhen(opts.StaleRetryingCheckFrequency < 0, "stale retrying check frequency cannot be negative")
-	if opts.StaleRetryingCheckFrequency == 0 {
-		opts.StaleRetryingCheckFrequency = defaultStaleRetryingMonitorInterval
-	}
+	catcher.NewWhen(opts.TTL < 0, "ttl must be greater than or equal to 0")
+	catcher.NewWhen(opts.TTL > 0 && opts.TTL < time.Second, "ttl cannot be less than 1 second, unless it is 0")
+	catcher.NewWhen(opts.PruneFrequency < 0, "prune frequency must be greater than or equal to 0")
+	catcher.NewWhen(opts.PruneFrequency > 0 && opts.TTL < time.Second, "prune frequency cannot be less than 1 second, unless it is 0")
+	catcher.NewWhen((opts.TTL == 0 && opts.PruneFrequency != 0) || (opts.TTL != 0 && opts.PruneFrequency == 0), "ttl and prune frequency must both be 0 or both be not 0")
+	catcher.NewWhen(opts.Prefix == "", "prefix must be set")
+	catcher.NewWhen(opts.DefaultWorkers == 0 && opts.WorkerPoolSize == nil, "must specify either a default worker pool size or a WorkerPoolSize function")
+	catcher.Wrap(opts.Retryable.Validate(), "invalid retryable queue options")
 	return catcher.Resolve()
 }
 

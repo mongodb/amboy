@@ -466,15 +466,13 @@ func (s *DriverSuite) TestCompleteAndPutJobsFailsWithDuplicateJobScopesAppliedOn
 
 func (s *DriverSuite) TestCompleteMarksJobCompleted() {
 	j := job.NewShellJob("echo foo", "")
-	now := time.Now()
 	j.SetStatus(amboy.JobStatusInfo{
-		InProgress:       true,
-		ModificationTime: now,
-		Owner:            s.driver.ID(),
+		InProgress: true,
+		Owner:      s.driver.ID(),
 	})
 	s.Require().NoError(s.driver.Put(s.ctx, j))
 	s.Require().NoError(s.driver.Complete(s.ctx, j))
-	s.NotEqual(utility.BSONTime(now), utility.BSONTime(j.Status().ModificationTime))
+	s.NotZero(utility.BSONTime(j.Status().ModificationTime))
 	s.Zero(j.Status().ModificationCount)
 }
 
