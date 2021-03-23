@@ -17,6 +17,51 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+func TestRetryableQueueOptions(t *testing.T) {
+	t.Run("Validate", func(t *testing.T) {
+		t.Run("SucceedsWithZeroOptions", func(t *testing.T) {
+			opts := RetryableQueueOptions{}
+			assert.NoError(t, opts.Validate())
+		})
+		t.Run("FailsWithNegativeStaleRetryingMonitorInterval", func(t *testing.T) {
+			opts := RetryableQueueOptions{StaleRetryingMonitorInterval: -time.Second}
+			assert.Error(t, opts.Validate())
+		})
+		t.Run("DefaultsStaleRetryingMonitorInterval", func(t *testing.T) {
+			opts := RetryableQueueOptions{StaleRetryingMonitorInterval: 0}
+			require.NoError(t, opts.Validate())
+			assert.Equal(t, defaultStaleRetryingMonitorInterval, opts.StaleRetryingMonitorInterval)
+		})
+		t.Run("DefaultsDisabled", func(t *testing.T) {
+			opts := RetryableQueueOptions{Disabled: nil}
+			require.NoError(t, opts.Validate())
+			assert.NotZero(t, opts.Disabled)
+			assert.NotZero(t, opts.RetryHandler.Disabled)
+		})
+		t.Run("RetryHandlerDisabledIsOverwrittenByDisabled", func(t *testing.T) {
+			alwaysTrue := func() bool { return true }
+			opts := RetryableQueueOptions{
+				RetryHandler: amboy.RetryHandlerOptions{
+					Disabled: alwaysTrue,
+				},
+			}
+			require.NoError(t, opts.Validate())
+			require.NotZero(t, opts.Disabled)
+			assert.False(t, opts.Disabled())
+			require.NotZero(t, opts.RetryHandler.Disabled)
+			assert.False(t, opts.RetryHandler.Disabled())
+		})
+		t.Run("FailsWithInvalidRetryHandlerOptions", func(t *testing.T) {
+			opts := RetryableQueueOptions{
+				RetryHandler: amboy.RetryHandlerOptions{
+					MaxRetryAttempts: -1,
+				},
+			}
+			assert.Error(t, opts.Validate())
+		})
+	})
+}
+
 func TestNewBasicRetryHandler(t *testing.T) {
 	q, err := newRemoteUnordered(1)
 	require.NoError(t, err)
@@ -119,7 +164,7 @@ func TestRetryHandlerImplementations(t *testing.T) {
 					require.NoError(t, rh.Start(ctx))
 					assert.True(t, rh.Started())
 				},
-				"MockPutReenqueuesJobWithExpectedState": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
+				"PutReenqueuesJobWithExpectedState": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
 					mq, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{})
 					require.NoError(t, err)
 
@@ -262,8 +307,11 @@ func TestRetryHandlerImplementations(t *testing.T) {
 						_ = atomic.AddInt64(&saveCalls, 1)
 						return nil
 					}
-					mq.completeRetryingJob = func(context.Context, remoteQueue, amboy.Job) error {
+					mq.completeRetryingJob = func(_ context.Context, _ remoteQueue, j amboy.Job) error {
 						_ = atomic.AddInt64(&completeRetryingCalls, 1)
+						j.UpdateRetryInfo(amboy.JobRetryOptions{
+							End: utility.ToTimePtr(time.Now()),
+						})
 						return nil
 					}
 					mq.completeRetryingAndPutJob = func(context.Context, remoteQueue, amboy.Job, amboy.Job) error {
@@ -274,11 +322,90 @@ func TestRetryHandlerImplementations(t *testing.T) {
 					require.NoError(t, rh.Start(ctx))
 					require.NoError(t, rh.Put(ctx, j))
 
-					time.Sleep(100 * time.Millisecond)
+					jobProcessed := make(chan struct{})
+					go func() {
+						defer close(jobProcessed)
+						for {
+							select {
+							case <-ctx.Done():
+								return
+							default:
+								if !j.RetryInfo().End.IsZero() {
+									return
+								}
+							}
+						}
+					}()
 
-					assert.NotZero(t, atomic.LoadInt64(&getAttemptCalls))
-					assert.Zero(t, atomic.LoadInt64(&completeRetryingAndPutCalls))
-					assert.NotZero(t, atomic.LoadInt64(&completeRetryingCalls))
+					select {
+					case <-ctx.Done():
+						require.FailNow(t, "context is done before job could be processed")
+					case <-jobProcessed:
+						assert.NotZero(t, j.RetryInfo().End)
+						assert.NotZero(t, atomic.LoadInt64(&getAttemptCalls))
+						assert.Zero(t, atomic.LoadInt64(&completeRetryingAndPutCalls))
+						assert.NotZero(t, atomic.LoadInt64(&completeRetryingCalls))
+					}
+				},
+				"PutSucceedsButJobDoesNotRetryIfRetryHandlerIsDisabled": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
+					mq, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{
+						Disabled: func() bool { return true },
+					})
+					require.NoError(t, err)
+
+					j := newMockRetryableJob("id")
+					j.UpdateRetryInfo(amboy.JobRetryOptions{
+						CurrentAttempt: utility.ToIntPtr(9),
+						MaxAttempts:    utility.ToIntPtr(10),
+					})
+					var getAttemptCalls, saveCalls, completeRetryingCalls, completeRetryingAndPutCalls int64
+					mq.getJobAttempt = func(context.Context, remoteQueue, string, int) (amboy.Job, error) {
+						_ = atomic.AddInt64(&getAttemptCalls, 1)
+						return j, nil
+					}
+					mq.saveJob = func(context.Context, remoteQueue, amboy.Job) error {
+						_ = atomic.AddInt64(&saveCalls, 1)
+						return nil
+					}
+					mq.completeRetryingJob = func(_ context.Context, _ remoteQueue, j amboy.Job) error {
+						_ = atomic.AddInt64(&completeRetryingCalls, 1)
+						j.UpdateRetryInfo(amboy.JobRetryOptions{
+							End: utility.ToTimePtr(time.Now()),
+						})
+						return nil
+					}
+					mq.completeRetryingAndPutJob = func(context.Context, remoteQueue, amboy.Job, amboy.Job) error {
+						_ = atomic.AddInt64(&completeRetryingAndPutCalls, 1)
+						return errors.New("fail")
+					}
+
+					require.NoError(t, rh.Start(ctx))
+					require.NoError(t, rh.Put(ctx, j))
+
+					jobProcessed := make(chan struct{})
+					go func() {
+						defer close(jobProcessed)
+						for {
+							select {
+							case <-ctx.Done():
+								return
+							default:
+								if !j.RetryInfo().End.IsZero() {
+									return
+								}
+							}
+						}
+					}()
+
+					select {
+					case <-ctx.Done():
+						require.FailNow(t, "context is done before job could be processed")
+					case <-jobProcessed:
+						assert.NotZero(t, j.RetryInfo().End)
+						assert.Zero(t, atomic.LoadInt64(&getAttemptCalls))
+						assert.Zero(t, atomic.LoadInt64(&completeRetryingAndPutCalls))
+						assert.NotZero(t, atomic.LoadInt64(&completeRetryingCalls))
+					}
 				},
 				"PutFailsWithNilJob": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
 					_, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{})
@@ -421,19 +548,26 @@ func TestRetryHandlerImplementations(t *testing.T) {
 					tctx, tcancel := context.WithTimeout(ctx, 10*time.Second)
 					defer tcancel()
 
-					q, err := newRemoteUnordered(10)
-					require.NoError(t, err)
-
 					makeQueueAndRetryHandler := func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error) {
+						q, err := newRemoteUnorderedWithOptions(remoteOptions{
+							numWorkers: 10,
+							retryable:  RetryableQueueOptions{RetryHandler: opts},
+						})
+						require.NoError(t, err)
+
 						mqOpts := mockRemoteQueueOptions{
 							queue:          q,
 							makeDispatcher: NewDispatcher,
-							makeRetryHandler: func(q amboy.RetryableQueue) (amboy.RetryHandler, error) {
-								return makeRetryHandler(q, opts)
-							},
 						}
 						mq, err := newMockRemoteQueue(mqOpts)
 						if err != nil {
+							return nil, nil, errors.WithStack(err)
+						}
+						rh, err := makeRetryHandler(mq, opts)
+						if err != nil {
+							return nil, nil, errors.WithStack(err)
+						}
+						if err := mq.SetRetryHandler(rh); err != nil {
 							return nil, nil, errors.WithStack(err)
 						}
 
@@ -460,7 +594,7 @@ func defaultRetryableQueueTestCases(d remoteQueueDriver) map[string]func(size in
 			return q, nil
 		},
 		"RemoteOrdered": func(size int) (amboy.RetryableQueue, error) {
-			q, err := newSimpleRemoteOrdered(size)
+			q, err := newRemoteSimpleOrdered(size)
 			if err != nil {
 				return nil, errors.WithStack(err)
 			}
@@ -470,8 +604,7 @@ func defaultRetryableQueueTestCases(d remoteQueueDriver) map[string]func(size in
 			return q, nil
 		},
 		"LocalLimitedSizeSerializable": func(size int) (amboy.RetryableQueue, error) {
-			q := NewLocalLimitedSizeSerializable(size, size)
-			return q, nil
+			return NewLocalLimitedSizeSerializable(size, size)
 		},
 	}
 }

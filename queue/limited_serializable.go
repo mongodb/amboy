@@ -27,16 +27,15 @@ import (
 // store no more than 2x the specified capacity. For completed jobs, will store
 // no more than the specified capacity.
 type limitedSizeSerializableLocal struct {
-	pending                      chan amboy.Job
-	started                      bool
-	toDelete                     []string
-	capacity                     int
-	storage                      map[string]amboy.Job
-	scopes                       ScopeManager
-	dispatcher                   Dispatcher
-	retryHandler                 amboy.RetryHandler
-	staleRetryingMonitorInterval time.Duration
-	lifetimeCtx                  context.Context
+	pending      chan amboy.Job
+	started      bool
+	toDelete     []string
+	storage      map[string]amboy.Job
+	scopes       ScopeManager
+	dispatcher   Dispatcher
+	retryHandler amboy.RetryHandler
+	opts         LocalLimitedSizeSerializableOptions
+	lifetimeCtx  context.Context
 
 	retryingCount int
 	deletedCount  int
@@ -46,20 +45,55 @@ type limitedSizeSerializableLocal struct {
 	mu            sync.RWMutex
 }
 
+// LocalLimitedSizeSerializableOptions provides options to configure and
+// initialize a limited-size local amboy.RetryableQueue.
+type LocalLimitedSizeSerializableOptions struct {
+	NumWorkers int
+	Capacity   int
+	Retryable  RetryableQueueOptions
+}
+
+// Validate checks that the options are valid.
+func (opts *LocalLimitedSizeSerializableOptions) Validate() error {
+	catcher := grip.NewBasicCatcher()
+	catcher.NewWhen(opts.NumWorkers <= 0, "number of workers must be a positive number")
+	catcher.NewWhen(opts.Capacity <= 0, "capacity be a positive number")
+	catcher.Wrap(opts.Retryable.Validate(), "invalid retryable queue options")
+	return catcher.Resolve()
+}
+
 // NewLocalLimitedSizeSerializable constructs a local limited-size retryable
 // queue instance with the specified number of workers and maximum capacity.
-func NewLocalLimitedSizeSerializable(workers, capacity int) amboy.RetryableQueue {
+func NewLocalLimitedSizeSerializable(workers, capacity int) (amboy.RetryableQueue, error) {
+	return NewLocalLimitedSizeSerializableWithOptions(LocalLimitedSizeSerializableOptions{
+		NumWorkers: workers,
+		Capacity:   capacity,
+	})
+}
+
+// NewLocalLimitedSizeSerializableWithOptions constructs a local limited-size
+// retryable queue instance with the given options.
+func NewLocalLimitedSizeSerializableWithOptions(opts LocalLimitedSizeSerializableOptions) (amboy.RetryableQueue, error) {
+	if err := opts.Validate(); err != nil {
+		return nil, errors.Wrap(err, "invalid options")
+	}
 	q := &limitedSizeSerializableLocal{
-		capacity: capacity,
+		opts:     opts,
 		storage:  make(map[string]amboy.Job),
 		scopes:   NewLocalScopeManager(),
 		id:       fmt.Sprintf("queue.local.unordered.fixed.serializable.%s", uuid.New().String()),
-		pending:  make(chan amboy.Job, capacity),
-		toDelete: make([]string, 0, capacity),
+		pending:  make(chan amboy.Job, opts.Capacity),
+		toDelete: make([]string, 0, opts.Capacity),
 	}
+	rh, err := NewBasicRetryHandler(q, opts.Retryable.RetryHandler)
+	if err != nil {
+		return nil, errors.Wrap(err, "initializing retry handler")
+	}
+	q.retryHandler = rh
 	q.dispatcher = NewDispatcher(q)
-	q.runner = pool.NewLocalWorkers(workers, q)
-	return q
+	q.runner = pool.NewLocalWorkers(opts.NumWorkers, q)
+
+	return q, nil
 }
 
 // ID returns the ID of this queue instance.
@@ -251,7 +285,7 @@ func (q *limitedSizeSerializableLocal) GetAllAttempts(ctx context.Context, id st
 func (q *limitedSizeSerializableLocal) Next(ctx context.Context) amboy.Job {
 	misses := 0
 	for {
-		if misses > q.capacity {
+		if misses > q.opts.Capacity {
 			return nil
 		}
 
@@ -373,8 +407,8 @@ func (q *limitedSizeSerializableLocal) Runner() amboy.Runner {
 	return q.runner
 }
 
-// SetRunner allows callers to, if the queue has not started, inject a
-// different runner implementation.
+// SetRunner allows callers to inject a different runner implementation if the
+// queue has not yet started.
 func (q *limitedSizeSerializableLocal) SetRunner(r amboy.Runner) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -388,6 +422,7 @@ func (q *limitedSizeSerializableLocal) SetRunner(r amboy.Runner) error {
 	return nil
 }
 
+// RetryHandler returns the queue's retry handler.
 func (q *limitedSizeSerializableLocal) RetryHandler() amboy.RetryHandler {
 	q.mu.RLock()
 	defer q.mu.RUnlock()
@@ -395,6 +430,9 @@ func (q *limitedSizeSerializableLocal) RetryHandler() amboy.RetryHandler {
 	return q.retryHandler
 }
 
+// SetRetryHandler allows callers to inject alternative amboy.RetryHandler
+// instances if the queue has not yet started or if the queue is started but
+// does not already have a retry handler.
 func (q *limitedSizeSerializableLocal) SetRetryHandler(rh amboy.RetryHandler) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -409,13 +447,6 @@ func (q *limitedSizeSerializableLocal) SetRetryHandler(rh amboy.RetryHandler) er
 	q.retryHandler = rh
 
 	return nil
-}
-
-func (q *limitedSizeSerializableLocal) SetStaleRetryingMonitorInterval(interval time.Duration) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-
-	q.staleRetryingMonitorInterval = interval
 }
 
 // Stats returns information about the current state of jobs in the
@@ -492,7 +523,7 @@ func (q *limitedSizeSerializableLocal) prepareComplete(j amboy.Job) {
 }
 
 func (q *limitedSizeSerializableLocal) prepareToDelete(j amboy.Job) {
-	if len(q.toDelete) != 0 && len(q.toDelete) == q.capacity-1 {
+	if len(q.toDelete) != 0 && len(q.toDelete) == q.opts.Capacity-1 {
 		delete(q.storage, q.toDelete[0])
 		q.toDelete = q.toDelete[1:]
 		q.deletedCount++
@@ -659,8 +690,8 @@ func (q *limitedSizeSerializableLocal) monitorStaleRetryingJobs(ctx context.Cont
 	}()
 
 	monitorInterval := defaultStaleRetryingMonitorInterval
-	if q.staleRetryingMonitorInterval != 0 {
-		monitorInterval = q.staleRetryingMonitorInterval
+	if interval := q.opts.Retryable.StaleRetryingMonitorInterval; interval != 0 {
+		monitorInterval = interval
 	}
 	timer := time.NewTimer(0)
 	defer timer.Stop()
@@ -669,6 +700,10 @@ func (q *limitedSizeSerializableLocal) monitorStaleRetryingJobs(ctx context.Cont
 		case <-ctx.Done():
 			return
 		case <-timer.C:
+			if q.opts.Retryable.Disabled() {
+				timer.Reset(monitorInterval)
+				continue
+			}
 			q.handleStaleRetryingJobs(ctx)
 			timer.Reset(monitorInterval)
 		}
@@ -679,6 +714,9 @@ func (q *limitedSizeSerializableLocal) handleStaleRetryingJobs(ctx context.Conte
 	q.mu.RLock()
 	defer q.mu.RUnlock()
 	for _, j := range q.storage {
+		if q.opts.Retryable.Disabled() {
+			return
+		}
 		if !j.RetryInfo().ShouldRetry() {
 			continue
 		}

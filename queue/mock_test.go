@@ -85,14 +85,11 @@ func newMockRemoteQueue(opts mockRemoteQueueOptions) (*mockRemoteQueue, error) {
 		}
 	}
 
-	if opts.makeRetryHandler != nil {
-		rh, err := opts.makeRetryHandler(mq)
-		if err != nil {
-			return nil, errors.Wrap(err, "initializing retry handler")
+	if opts.queue.RetryHandler() != nil {
+		if err := opts.queue.RetryHandler().SetQueue(mq); err != nil {
+			return nil, errors.Wrap(err, "attaching mock queue to retry handler")
 		}
-		if err := mq.SetRetryHandler(rh); err != nil {
-			return nil, errors.Wrap(err, "constructing queue with retry handler")
-		}
+		mq.retryHandler = opts.queue.RetryHandler()
 	}
 
 	return mq, nil
@@ -120,10 +117,6 @@ func (q *mockRemoteQueue) RetryHandler() amboy.RetryHandler {
 func (q *mockRemoteQueue) SetRetryHandler(rh amboy.RetryHandler) error {
 	q.retryHandler = rh
 	return rh.SetQueue(q)
-}
-
-func (q *mockRemoteQueue) SetStaleRetryingMonitorInterval(interval time.Duration) {
-	q.remoteQueue.SetStaleRetryingMonitorInterval(interval)
 }
 
 func (q *mockRemoteQueue) Put(ctx context.Context, j amboy.Job) error {

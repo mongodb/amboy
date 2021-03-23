@@ -235,7 +235,7 @@ func TestManagerImplementations(t *testing.T) {
 		// },
 		"Queue-Backed": {
 			makeQueue: func(ctx context.Context) (amboy.Queue, error) {
-				return queue.NewLocalLimitedSizeSerializable(2, queueSize), nil
+				return queue.NewLocalLimitedSizeSerializable(2, queueSize)
 			},
 			makeManager: func(ctx context.Context, q amboy.Queue) (Manager, error) {
 				return NewQueueManager(q), nil

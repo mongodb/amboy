@@ -130,8 +130,8 @@ func DefaultQueueTestCases() []QueueTestCase {
 			ScopesSupported:         true,
 			RetrySupported:          true,
 			Constructor: func(ctx context.Context, _ string, size int) (amboy.Queue, TestCloser, error) {
-				q := NewLocalLimitedSizeSerializable(size, 1024*size)
-				return q, func(ctx context.Context) error { return nil }, nil
+				q, err := NewLocalLimitedSizeSerializable(size, 1024*size)
+				return q, func(ctx context.Context) error { return nil }, err
 			},
 		},
 		{
@@ -1245,7 +1245,7 @@ func RetryableTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 
 			select {
 			case <-ctx.Done():
-				require.FailNow(t, ctx.Err().Error())
+				require.FailNow(t, "context was done before stale retrying job could be handled")
 			case <-jobsDone:
 				assert.Equal(t, 2, rq.Stats(ctx).Total)
 				assert.Equal(t, 2, rq.Stats(ctx).Completed)
@@ -1277,13 +1277,9 @@ func RetryableTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 
 			require.NoError(t, runner.SetPool(rq, size.Size))
 
-			rh, err := NewBasicRetryHandler(rq, amboy.RetryHandlerOptions{})
-			require.NoError(t, err)
-			require.NoError(t, rq.SetRetryHandler(rh))
-
 			require.NoError(t, rq.Start(ctx))
 
-			testCase(ctx, t, rh, rq)
+			testCase(ctx, t, rq.RetryHandler(), rq)
 		})
 	}
 
