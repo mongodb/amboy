@@ -22,7 +22,8 @@ func newRemoteUnordered(size int) (remoteQueue, error) {
 	return newRemoteUnorderedWithOptions(remoteOptions{numWorkers: size})
 }
 
-// newRemoteUnorderedWithOptions
+// newRemoteUnorderedWithOptions returns a queue that has been initialized with
+// a configured runner and the given options.
 func newRemoteUnorderedWithOptions(opts remoteOptions) (remoteQueue, error) {
 	b, err := newRemoteBaseWithOptions(opts)
 	if err != nil {
