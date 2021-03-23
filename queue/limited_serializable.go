@@ -430,8 +430,9 @@ func (q *limitedSizeSerializableLocal) RetryHandler() amboy.RetryHandler {
 	return q.retryHandler
 }
 
-// SetRetryHandler allows callers to inject a different retry handler
-// implementation if the queue has not yet started.
+// SetRetryHandler allows callers to inject alternative amboy.RetryHandler
+// instances if the queue has not yet started or if the queue is started but
+// does not already have a retry handler.
 func (q *limitedSizeSerializableLocal) SetRetryHandler(rh amboy.RetryHandler) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()

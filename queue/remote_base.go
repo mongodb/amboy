@@ -385,7 +385,8 @@ func (q *remoteBase) RetryHandler() amboy.RetryHandler {
 }
 
 // SetRetryHandler allows callers to inject alternative amboy.RetryHandler
-// instances. If this is unset, the queue will not support retrying jobs.
+// instances if the queue has not yet started or if the queue is started but
+// does not already have a retry handler.
 func (q *remoteBase) SetRetryHandler(rh amboy.RetryHandler) error {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
