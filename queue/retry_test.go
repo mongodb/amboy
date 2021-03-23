@@ -164,7 +164,7 @@ func TestRetryHandlerImplementations(t *testing.T) {
 					require.NoError(t, rh.Start(ctx))
 					assert.True(t, rh.Started())
 				},
-				"MockPutReenqueuesJobWithExpectedState": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
+				"PutReenqueuesJobWithExpectedState": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
 					mq, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{})
 					require.NoError(t, err)
 
@@ -307,8 +307,11 @@ func TestRetryHandlerImplementations(t *testing.T) {
 						_ = atomic.AddInt64(&saveCalls, 1)
 						return nil
 					}
-					mq.completeRetryingJob = func(context.Context, remoteQueue, amboy.Job) error {
+					mq.completeRetryingJob = func(_ context.Context, _ remoteQueue, j amboy.Job) error {
 						_ = atomic.AddInt64(&completeRetryingCalls, 1)
+						j.UpdateRetryInfo(amboy.JobRetryOptions{
+							End: utility.ToTimePtr(time.Now()),
+						})
 						return nil
 					}
 					mq.completeRetryingAndPutJob = func(context.Context, remoteQueue, amboy.Job, amboy.Job) error {
@@ -319,11 +322,90 @@ func TestRetryHandlerImplementations(t *testing.T) {
 					require.NoError(t, rh.Start(ctx))
 					require.NoError(t, rh.Put(ctx, j))
 
-					time.Sleep(100 * time.Millisecond)
+					jobProcessed := make(chan struct{})
+					go func() {
+						defer close(jobProcessed)
+						for {
+							select {
+							case <-ctx.Done():
+								return
+							default:
+								if !j.RetryInfo().End.IsZero() {
+									return
+								}
+							}
+						}
+					}()
 
-					assert.NotZero(t, atomic.LoadInt64(&getAttemptCalls))
-					assert.Zero(t, atomic.LoadInt64(&completeRetryingAndPutCalls))
-					assert.NotZero(t, atomic.LoadInt64(&completeRetryingCalls))
+					select {
+					case <-ctx.Done():
+						require.FailNow(t, "context is done before job could be processed")
+					case <-jobProcessed:
+						assert.NotZero(t, j.RetryInfo().End)
+						assert.NotZero(t, atomic.LoadInt64(&getAttemptCalls))
+						assert.Zero(t, atomic.LoadInt64(&completeRetryingAndPutCalls))
+						assert.NotZero(t, atomic.LoadInt64(&completeRetryingCalls))
+					}
+				},
+				"PutSucceedsButJobDoesNotRetryIfRetryHandlerIsDisabled": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
+					mq, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{
+						Disabled: func() bool { return true },
+					})
+					require.NoError(t, err)
+
+					j := newMockRetryableJob("id")
+					j.UpdateRetryInfo(amboy.JobRetryOptions{
+						CurrentAttempt: utility.ToIntPtr(9),
+						MaxAttempts:    utility.ToIntPtr(10),
+					})
+					var getAttemptCalls, saveCalls, completeRetryingCalls, completeRetryingAndPutCalls int64
+					mq.getJobAttempt = func(context.Context, remoteQueue, string, int) (amboy.Job, error) {
+						_ = atomic.AddInt64(&getAttemptCalls, 1)
+						return j, nil
+					}
+					mq.saveJob = func(context.Context, remoteQueue, amboy.Job) error {
+						_ = atomic.AddInt64(&saveCalls, 1)
+						return nil
+					}
+					mq.completeRetryingJob = func(_ context.Context, _ remoteQueue, j amboy.Job) error {
+						_ = atomic.AddInt64(&completeRetryingCalls, 1)
+						j.UpdateRetryInfo(amboy.JobRetryOptions{
+							End: utility.ToTimePtr(time.Now()),
+						})
+						return nil
+					}
+					mq.completeRetryingAndPutJob = func(context.Context, remoteQueue, amboy.Job, amboy.Job) error {
+						_ = atomic.AddInt64(&completeRetryingAndPutCalls, 1)
+						return errors.New("fail")
+					}
+
+					require.NoError(t, rh.Start(ctx))
+					require.NoError(t, rh.Put(ctx, j))
+
+					jobProcessed := make(chan struct{})
+					go func() {
+						defer close(jobProcessed)
+						for {
+							select {
+							case <-ctx.Done():
+								return
+							default:
+								if !j.RetryInfo().End.IsZero() {
+									return
+								}
+							}
+						}
+					}()
+
+					select {
+					case <-ctx.Done():
+						require.FailNow(t, "context is done before job could be processed")
+					case <-jobProcessed:
+						assert.NotZero(t, j.RetryInfo().End)
+						assert.Zero(t, atomic.LoadInt64(&getAttemptCalls))
+						assert.Zero(t, atomic.LoadInt64(&completeRetryingAndPutCalls))
+						assert.NotZero(t, atomic.LoadInt64(&completeRetryingCalls))
+					}
 				},
 				"PutFailsWithNilJob": func(ctx context.Context, t *testing.T, makeQueueAndRetryHandler func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error)) {
 					_, rh, err := makeQueueAndRetryHandler(amboy.RetryHandlerOptions{})
