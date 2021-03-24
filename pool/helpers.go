@@ -33,7 +33,13 @@ func executeJob(ctx context.Context, id string, j amboy.Job, q amboy.Queue) {
 		jobCtx = ctx
 	}
 	j.Run(jobCtx)
-	q.Complete(ctx, j)
+	if err := q.Complete(ctx, j); err != nil {
+		grip.Error(message.WrapError(err, message.Fields{
+			"message":  "could not mark job complete",
+			"job_id":   j.ID(),
+			"queue_id": q.ID(),
+		}))
+	}
 
 	amboy.WithRetryableQueue(q, func(rq amboy.RetryableQueue) {
 		if !j.RetryInfo().ShouldRetry() {
@@ -102,7 +108,15 @@ func worker(bctx context.Context, id string, q amboy.Queue, wg *sync.WaitGroup, 
 		if err != nil {
 			if job != nil {
 				job.AddError(err)
-				q.Complete(bctx, job)
+				if err := q.Complete(ctx, job); err != nil {
+					grip.Error(message.WrapError(err, message.Fields{
+						"message":     "could not mark job complete",
+						"job_id":      job.ID(),
+						"queue_id":    q.ID(),
+						"panic_error": err,
+					}))
+					job.AddError(err)
+				}
 			}
 			// start a replacement worker.
 			go worker(bctx, id, q, wg, mu)

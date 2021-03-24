@@ -466,9 +466,9 @@ func (q *limitedSizeSerializableLocal) Stats(ctx context.Context) amboy.QueueSta
 }
 
 // Complete marks a job complete in the queue.
-func (q *limitedSizeSerializableLocal) Complete(ctx context.Context, j amboy.Job) {
+func (q *limitedSizeSerializableLocal) Complete(ctx context.Context, j amboy.Job) error {
 	if ctx.Err() != nil {
-		return
+		return ctx.Err()
 	}
 
 	q.dispatcher.Complete(ctx, j)
@@ -478,18 +478,16 @@ func (q *limitedSizeSerializableLocal) Complete(ctx context.Context, j amboy.Job
 
 	name := q.getNameWithMetadata(j)
 	if !q.jobStored(name) {
-		return
+		return errors.Errorf("job not owned by queue")
 	}
 
 	if err := q.complete(ctx, j); err != nil {
-		grip.Error(message.Fields{
-			"message":  "could not complete job",
-			"job_id":   j.ID(),
-			"queue_id": q.ID(),
-		})
+		return errors.WithStack(err)
 	}
 
 	q.saveCopy(j)
+
+	return nil
 }
 
 func (q *limitedSizeSerializableLocal) complete(ctx context.Context, j amboy.Job) error {
@@ -497,7 +495,7 @@ func (q *limitedSizeSerializableLocal) complete(ctx context.Context, j amboy.Job
 
 	if !j.RetryInfo().ShouldRetry() || !j.ShouldApplyScopesOnEnqueue() {
 		if err := q.scopes.Release(name, j.Scopes()); err != nil {
-			return errors.Wrapf(err, "releasing scopes '%s' during completion", j.Scopes())
+			return errors.Wrapf(err, "releasing scopes '%s'", j.Scopes())
 		}
 	}
 

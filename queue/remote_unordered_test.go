@@ -15,10 +15,6 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-func init() {
-	job.RegisterDefaultJobs()
-}
-
 type RemoteUnorderedSuite struct {
 	queue             *remoteUnordered
 	driver            remoteQueueDriver

@@ -280,9 +280,9 @@ func (q *limitedSizeLocal) Stats(ctx context.Context) amboy.QueueStats {
 }
 
 // Complete marks a job complete in the queue.
-func (q *limitedSizeLocal) Complete(ctx context.Context, j amboy.Job) {
+func (q *limitedSizeLocal) Complete(ctx context.Context, j amboy.Job) error {
 	if ctx.Err() != nil {
-		return
+		return ctx.Err()
 	}
 	q.dispatcher.Complete(ctx, j)
 
@@ -302,16 +302,16 @@ func (q *limitedSizeLocal) Complete(ctx context.Context, j amboy.Job) {
 		q.deletedCount++
 	}
 
-	grip.Alert(message.WrapError(
-		q.scopes.Release(j.ID(), j.Scopes()),
-		message.Fields{
-			"id":     j.ID(),
-			"scopes": j.Scopes(),
-			"queue":  q.ID(),
-			"op":     "releasing scope lock during completion",
-		}))
+	if err := q.scopes.Release(j.ID(), j.Scopes()); err != nil {
+		return errors.Wrapf(err, "releasing scopes '%s'", j.Scopes())
+	}
 
-	q.toDelete <- j.ID()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case q.toDelete <- j.ID():
+		return nil
+	}
 }
 
 // Start starts the runner and initializes the pending task

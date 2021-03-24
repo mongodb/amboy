@@ -43,7 +43,7 @@ type mockRemoteQueue struct {
 	saveJob                   func(ctx context.Context, q remoteQueue, j amboy.Job) error
 	completeRetryingAndPutJob func(ctx context.Context, q remoteQueue, toComplete, toPut amboy.Job) error
 	nextJob                   func(ctx context.Context, q remoteQueue) amboy.Job
-	completeJob               func(ctx context.Context, q remoteQueue, j amboy.Job)
+	completeJob               func(ctx context.Context, q remoteQueue, j amboy.Job) error
 	completeRetryingJob       func(ctx context.Context, q remoteQueue, j amboy.Job) error
 	jobResults                func(ctx context.Context, q remoteQueue) <-chan amboy.Job
 	jobInfo                   func(ctx context.Context, q remoteQueue) <-chan amboy.JobInfo
@@ -168,12 +168,11 @@ func (q *mockRemoteQueue) Next(ctx context.Context) amboy.Job {
 	return q.remoteQueue.Next(ctx)
 }
 
-func (q *mockRemoteQueue) Complete(ctx context.Context, j amboy.Job) {
+func (q *mockRemoteQueue) Complete(ctx context.Context, j amboy.Job) error {
 	if q.completeJob != nil {
-		q.completeJob(ctx, q.remoteQueue, j)
-		return
+		return q.completeJob(ctx, q.remoteQueue, j)
 	}
-	q.remoteQueue.Complete(ctx, j)
+	return q.remoteQueue.Complete(ctx, j)
 }
 
 func (q *mockRemoteQueue) CompleteRetrying(ctx context.Context, j amboy.Job) error {
