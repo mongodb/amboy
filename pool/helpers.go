@@ -108,7 +108,15 @@ func worker(bctx context.Context, id string, q amboy.Queue, wg *sync.WaitGroup, 
 		if err != nil {
 			if job != nil {
 				job.AddError(err)
-				q.Complete(bctx, job)
+				if err := q.Complete(ctx, job); err != nil {
+					grip.Error(message.WrapError(err, message.Fields{
+						"message":     "could not mark job as complete",
+						"job_id":      job.ID(),
+						"queue_id":    q.ID(),
+						"panic_error": err,
+					}))
+					job.AddError(err)
+				}
 			}
 			// start a replacement worker.
 			go worker(bctx, id, q, wg, mu)
