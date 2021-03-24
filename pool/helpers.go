@@ -39,6 +39,11 @@ func executeJob(ctx context.Context, id string, j amboy.Job, q amboy.Queue) {
 			"job_id":   j.ID(),
 			"queue_id": q.ID(),
 		}))
+		// If the job cannot not marked as complete in the queue, set the end
+		// time so that the calculated job execution statistics are valid.
+		j.UpdateTimeInfo(amboy.JobTimeInfo{
+			End: time.Now(),
+		})
 	}
 
 	amboy.WithRetryableQueue(q, func(rq amboy.RetryableQueue) {
