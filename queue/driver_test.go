@@ -96,7 +96,6 @@ func TestDriverSuiteWithMongoDBInstance(t *testing.T) {
 
 func (s *DriverSuite) SetupSuite() {
 	s.ctx, s.cancel = context.WithCancel(context.Background())
-	job.RegisterDefaultJobs()
 }
 
 func (s *DriverSuite) SetupTest() {
