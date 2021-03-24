@@ -313,7 +313,7 @@ func (b *Base) SetShouldApplyScopesOnEnqueue(val bool) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
-	b.applyScopesOnEnqueue = true
+	b.applyScopesOnEnqueue = val
 }
 
 // ShouldApplyShouldScopesOnEnqueue returns whether the job's scopes are applied on
