@@ -76,6 +76,10 @@ func (d *dispatcherImpl) Dispatch(ctx context.Context, job amboy.Job) error {
 	}
 	job.UpdateTimeInfo(ti)
 
+	status := job.Status()
+	status.InProgress = true
+	job.SetStatus(status)
+
 	info := dispatcherInfo{
 		job: job,
 	}
@@ -145,6 +149,10 @@ func pingJobLock(ctx context.Context, pingCtx context.Context, q amboy.Queue, j 
 		case <-pingCtx.Done():
 			return
 		case <-ticker.C:
+			status := j.Status()
+			status.InProgress = true
+			j.SetStatus(status)
+
 			if err := j.Lock(q.ID(), q.Info().LockTimeout); err != nil {
 				j.AddError(errors.Wrapf(err, "problem pinging job lock on cycle #%d", iters))
 				grip.Debug(message.WrapError(err, message.Fields{

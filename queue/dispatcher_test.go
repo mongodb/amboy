@@ -52,6 +52,10 @@ func (d *mockDispatcher) Dispatch(ctx context.Context, j amboy.Job) error {
 	}
 	j.UpdateTimeInfo(ti)
 
+	status := j.Status()
+	status.InProgress = true
+	j.SetStatus(status)
+
 	if d.initialLock != nil {
 		if err := d.initialLock(j); err != nil {
 			return errors.Wrap(err, "taking initial lock on job")

@@ -245,6 +245,9 @@ func (s *RemoteUnorderedSuite) TestNextMethodSkipsLockedJobs() {
 
 		if i%3 == 0 {
 			numLocked++
+			j.SetStatus(amboy.JobStatusInfo{
+				InProgress: true,
+			})
 			err := j.Lock(s.driver.ID(), amboy.LockTimeout)
 			s.NoError(err)
 
