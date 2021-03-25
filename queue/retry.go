@@ -437,8 +437,8 @@ func (rh *BasicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Job) (ca
 		if !newInfo.ShouldRetry() {
 			return false, errors.New("job in the queue indicates the job does not need to retry anymore")
 		}
-		if originalInfo.CurrentAttempt+1 > newInfo.GetMaxAttempts() {
-			return false, errors.New("job has exceeded its maximum attempt limit")
+		if originalInfo.CurrentAttempt+1 >= newInfo.GetMaxAttempts() {
+			return false, errors.New("job has reached its maximum attempt limit")
 		}
 
 		lockTimeout := rh.queue.Info().LockTimeout
