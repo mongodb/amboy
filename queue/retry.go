@@ -315,7 +315,7 @@ func (rh *BasicRetryHandler) waitForJob(ctx context.Context) {
 				"job_attempt": j.RetryInfo().CurrentAttempt,
 				"num_pending": len(rh.pending) + len(rh.pendingOverflow),
 				"queue_id":    rh.queue.ID(),
-				"duration":    time.Since(startAt),
+				"duration":    time.Since(startAt).String(),
 				"service":     "amboy.queue.retry",
 			})
 			rh.mu.RUnlock()
@@ -375,7 +375,7 @@ func (rh *BasicRetryHandler) handleJob(ctx context.Context, j amboy.Job) error {
 	})
 	for i := 1; i <= rh.opts.MaxRetryAttempts; i++ {
 		if rh.opts.Disabled() {
-			catcher.Errorf("giving up after %s (%d attempts) due to retries being disabled", startAt.String(), i-1)
+			catcher.Errorf("giving up after %s (%d attempts) due to retries being disabled", time.Since(startAt).String(), i-1)
 			return catcher.Resolve()
 		}
 
