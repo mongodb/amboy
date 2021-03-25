@@ -222,10 +222,10 @@ buildvariants:
   - name: windows
     display_name: Windows
     run_on:
+      - windows-64-vs2019-large
+      - windows-64-vs2019-small
       - windows-64-vs2017-large
       - windows-64-vs2017-small
-      - windows-64-vs2015-large
-      - windows-64-vs2015-small
     expansions:
       GO_BIN_PATH: /cygdrive/c/golang/go1.13/bin/go
       GOROOT: C:/golang/go1.13
