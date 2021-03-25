@@ -233,10 +233,8 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) error {
 			stat.InProgress = false
 			j.SetStatus(stat)
 
-			ti := j.TimeInfo()
 			j.UpdateTimeInfo(amboy.JobTimeInfo{
-				Start: ti.Start,
-				End:   time.Now(),
+				End: time.Now(),
 			})
 
 			err = q.driver.Complete(ctx, j)
