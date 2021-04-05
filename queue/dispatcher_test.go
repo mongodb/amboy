@@ -69,22 +69,31 @@ func (d *mockDispatcher) Dispatch(ctx context.Context, j amboy.Job) error {
 		}
 	}
 
-	pingCtx, stopPing := context.WithCancel(ctx)
+	pingCtx, pingCancel := context.WithCancel(ctx)
+	pingCompleted := make(chan struct{})
 	if d.lockPing != nil {
 		go func() {
+			defer close(pingCompleted)
 			defer recovery.LogStackTraceAndContinue("mock background job lock ping", j.ID())
-			d.lockPing(ctx, j)
+			d.lockPing(pingCtx, j)
 		}()
 	} else {
 		go func() {
+			defer close(pingCompleted)
 			defer recovery.LogStackTraceAndContinue("mock background job lock ping", j.ID())
-			pingJobLock(ctx, pingCtx, d.queue, j, func() {})
+			grip.Debug(message.WrapError(pingJobLock(pingCtx, d.queue, j), message.Fields{
+				"message":  "could not ping job lock",
+				"job_id":   j.ID(),
+				"queue_id": d.queue.ID(),
+			}))
 		}()
 	}
 
 	d.dispatched[j.ID()] = dispatcherInfo{
-		job:      j,
-		stopPing: stopPing,
+		job:           j,
+		pingCtx:       pingCtx,
+		pingCancel:    pingCancel,
+		pingCompleted: pingCompleted,
 	}
 
 	return nil
@@ -94,21 +103,27 @@ func (d *mockDispatcher) Release(ctx context.Context, j amboy.Job) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	grip.Debug(message.WrapError(d.release(j), message.Fields{
+	grip.Debug(message.WrapError(d.release(ctx, j), message.Fields{
 		"service":  "mock dispatcher",
 		"queue_id": d.queue.ID(),
 		"job_id":   j.ID(),
 	}))
 }
 
-func (d *mockDispatcher) release(j amboy.Job) error {
+func (d *mockDispatcher) release(ctx context.Context, j amboy.Job) error {
 	info, ok := d.dispatched[j.ID()]
 	if !ok {
 		return errors.New("attempting to release an unowned job")
 	}
 
-	info.stopPing()
 	delete(d.dispatched, j.ID())
+
+	info.pingCancel()
+
+	select {
+	case <-ctx.Done():
+	case <-info.pingCompleted:
+	}
 
 	return nil
 }
@@ -117,7 +132,7 @@ func (d *mockDispatcher) Complete(ctx context.Context, j amboy.Job) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	if err := d.release(j); err != nil {
+	if err := d.release(ctx, j); err != nil {
 		grip.Debug(message.WrapError(err, message.Fields{
 			"service":  "mock dispatcher",
 			"queue_id": d.queue.ID(),
@@ -206,6 +221,28 @@ func TestDispatcherImplementations(t *testing.T) {
 					newStatus := j.Status()
 					assert.Equal(t, oldStatus.ModificationTime, newStatus.ModificationTime)
 					assert.Equal(t, oldStatus.ModificationCount, newStatus.ModificationCount)
+					assert.True(t, newStatus.InProgress)
+				},
+				"DuplicateJobDispatchFails": func(ctx context.Context, t *testing.T, d Dispatcher, mq *mockRemoteQueue) {
+					lockTimeout := 10 * time.Millisecond
+					mq.queueInfo = setLockTimeout(lockTimeout)
+
+					j := newMockJob()
+					require.NoError(t, mq.Put(ctx, j))
+					require.NoError(t, d.Dispatch(ctx, j))
+					require.Error(t, d.Dispatch(ctx, j))
+					defer d.Release(ctx, j)
+
+					oldStatus := j.Status()
+					assert.NotZero(t, oldStatus.ModificationCount)
+					assert.NotZero(t, oldStatus.ModificationTime)
+					assert.True(t, oldStatus.InProgress)
+
+					time.Sleep(lockTimeout)
+
+					newStatus := j.Status()
+					assert.True(t, oldStatus.ModificationTime.Before(newStatus.ModificationTime))
+					assert.True(t, oldStatus.ModificationCount < newStatus.ModificationCount)
 					assert.True(t, newStatus.InProgress)
 				},
 				"ReleaseStopsLockPinger": func(ctx context.Context, t *testing.T, d Dispatcher, mq *mockRemoteQueue) {
