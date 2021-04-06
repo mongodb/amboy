@@ -277,7 +277,7 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 		},
 		{
 			Keys:    scopes,
-			Options: options.Index().SetSparse(true).SetUnique(true),
+			Options: options.Index().SetUnique(true).SetPartialFilterExpression(bson.M{"scopes": bson.M{"$exists": true}}),
 		},
 	}
 
