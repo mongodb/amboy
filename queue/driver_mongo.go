@@ -468,19 +468,10 @@ func (d *mongoDriver) modifyQueryForGroup(q bson.M) {
 func (d *mongoDriver) Get(ctx context.Context, name string) (amboy.Job, error) {
 	j := &registry.JobInterchange{}
 
-	matchLatestRetry := bson.M{"retry_info.base_job_id": name}
-	d.modifyQueryForGroup(matchLatestRetry)
-
-	matchID := bson.M{
-		"$or": []bson.M{
-			{"_id": d.getIDWithGroup(name)},
-			matchLatestRetry,
-		},
-	}
 	byRetryAttempt := bson.M{
 		"retry_info.current_attempt": -1,
 	}
-	res := d.getCollection().FindOne(ctx, matchID, options.FindOne().SetSort(byRetryAttempt))
+	res := d.getCollection().FindOne(ctx, d.getIDQuery(name), options.FindOne().SetSort(byRetryAttempt))
 	if err := res.Err(); err != nil {
 		return nil, errors.Wrapf(err, "GET problem fetching '%s'", name)
 	}
@@ -496,6 +487,22 @@ func (d *mongoDriver) Get(ctx context.Context, name string) (amboy.Job, error) {
 	}
 
 	return output, nil
+}
+
+// getIDQuery matches a job ID against either a retryable job or a non-retryable
+// job.
+func (d *mongoDriver) getIDQuery(id string) bson.M {
+	matchID := bson.M{"_id": d.getIDWithGroup(id)}
+
+	matchRetryable := bson.M{"retry_info.base_job_id": id}
+	d.modifyQueryForGroup(matchRetryable)
+
+	return bson.M{
+		"$or": []bson.M{
+			matchID,
+			matchRetryable,
+		},
+	}
 }
 
 // GetAttempt finds a retryable job matching the given job ID and execution
@@ -577,10 +584,10 @@ func (d *mongoDriver) Put(ctx context.Context, j amboy.Job) error {
 	d.addMetadata(ji)
 
 	if _, err = d.getCollection().InsertOne(ctx, ji); err != nil {
+		if d.isMongoDupScope(err) {
+			return amboy.NewDuplicateJobScopeErrorf("job scopes '%s' conflict", j.Scopes())
+		}
 		if isMongoDupKey(err) {
-			if d.isMongoDupScope(err) {
-				return amboy.NewDuplicateJobScopeErrorf("job scopes '%s' conflict", j.Scopes())
-			}
 			return amboy.NewDuplicateJobErrorf("job '%s' already exists", j.ID())
 		}
 
@@ -799,6 +806,9 @@ func (d *mongoDriver) doUpdate(ctx context.Context, ji *registry.JobInterchange)
 	query := d.getAtomicQuery(ji.Name, ji.Status.ModificationCount)
 	res, err := d.getCollection().ReplaceOne(ctx, query, ji)
 	if err != nil {
+		if d.isMongoDupScope(err) {
+			return amboy.NewDuplicateJobScopeErrorf("job scopes '%s' conflict", ji.Scopes)
+		}
 		return errors.Wrapf(err, "problem saving document %s: %+v", ji.Name, res)
 	}
 
@@ -1248,18 +1258,18 @@ func (d *mongoDriver) tryDispatchJob(ctx context.Context, iter *mongo.Cursor, st
 			continue
 		}
 
-		if !isDispatchable(j.Status(), d.opts.LockTimeout) {
+		lockTimeout := d.LockTimeout()
+		if !isDispatchable(j.Status(), lockTimeout) {
 			dispatchInfo.skips++
 			continue
-		} else if d.scopesInUse(ctx, j.Scopes()) && !isStaleJob(j.Status(), d.opts.LockTimeout) {
+		} else if d.isOtherJobHoldingScopes(ctx, j) {
 			dispatchInfo.skips++
 			continue
 		}
 
 		if err = d.dispatcher.Dispatch(ctx, j); err != nil {
 			dispatchInfo.misses++
-			grip.DebugWhen(
-				isDispatchable(j.Status(), d.opts.LockTimeout),
+			grip.DebugWhen(isDispatchable(j.Status(), lockTimeout) && !d.isMongoDupScope(err),
 				message.WrapError(err, message.Fields{
 					"id":            d.instanceID,
 					"service":       "amboy.queue.mdb",
@@ -1283,20 +1293,22 @@ func (d *mongoDriver) tryDispatchJob(ctx context.Context, iter *mongo.Cursor, st
 	return nil, dispatchInfo
 }
 
-func (d *mongoDriver) scopesInUse(ctx context.Context, scopes []string) bool {
-	if len(scopes) == 0 {
+// isOtherJobHoldingScopes checks whether or not a different job is already
+// holding the scopes required for this job.
+func (d *mongoDriver) isOtherJobHoldingScopes(ctx context.Context, j amboy.Job) bool {
+	if len(j.Scopes()) == 0 {
 		return false
 	}
+
 	query := bson.M{
-		"status.in_prog": true,
-		"scopes":         bson.M{"$in": scopes},
+		"scopes": bson.M{"$in": j.Scopes()},
+		"$not":   d.getIDQuery(j.ID()),
 	}
 	d.modifyQueryForGroup(query)
 	num, err := d.getCollection().CountDocuments(ctx, query)
 	if err != nil {
 		return false
 	}
-
 	return num > 0
 }
 
