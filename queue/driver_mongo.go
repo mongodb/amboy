@@ -191,12 +191,14 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 	primary := bsonx.Doc{}
 	retrying := bsonx.Doc{}
 	retryableJobIDAndAttempt := bsonx.Doc{}
+	scopes := bsonx.Doc{}
 
 	if d.opts.UseGroups {
 		group := bsonx.Elem{Key: "group", Value: bsonx.Int32(1)}
 		primary = append(primary, group)
 		retryableJobIDAndAttempt = append(retryableJobIDAndAttempt, group)
 		retrying = append(retrying, group)
+		scopes = append(scopes, group)
 	}
 
 	primary = append(primary,
@@ -256,6 +258,10 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 			Value: bsonx.Int32(-1),
 		},
 	)
+	scopes = append(scopes, bsonx.Elem{
+		Key:   "scopes",
+		Value: bsonx.Int32(1),
+	})
 
 	indexes := []mongo.IndexModel{
 		{Keys: primary},
@@ -269,14 +275,8 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 			// CI tests have upgraded to MongoDB 4.2+.
 			Options: options.Index().SetName("retrying_jobs"),
 		},
-		// TODO (EVG-14163): this should take queue group isolation into account.
 		{
-			Keys: bsonx.Doc{
-				{
-					Key:   "scopes",
-					Value: bsonx.Int32(1),
-				},
-			},
+			Keys:    scopes,
 			Options: options.Index().SetSparse(true).SetUnique(true),
 		},
 	}
@@ -1245,7 +1245,7 @@ func (d *mongoDriver) tryDispatchJob(ctx context.Context, iter *mongo.Cursor, st
 		if !isDispatchable(j.Status(), d.opts.LockTimeout) {
 			dispatchInfo.skips++
 			continue
-		} else if d.scopesInUse(ctx, j.Scopes()) && !jobCanRestart(j.Status(), d.opts.LockTimeout) {
+		} else if d.scopesInUse(ctx, j.Scopes()) && !isStaleJob(j.Status(), d.opts.LockTimeout) {
 			dispatchInfo.skips++
 			continue
 		}
@@ -1281,10 +1281,12 @@ func (d *mongoDriver) scopesInUse(ctx context.Context, scopes []string) bool {
 	if len(scopes) == 0 {
 		return false
 	}
-	// TODO (EVG-14163): this should take queue group isolation into account.
-	num, err := d.getCollection().CountDocuments(ctx, bson.M{
+	query := bson.M{
 		"status.in_prog": true,
-		"scopes":         bson.M{"$in": scopes}})
+		"scopes":         bson.M{"$in": scopes},
+	}
+	d.modifyQueryForGroup(query)
+	num, err := d.getCollection().CountDocuments(ctx, query)
 	if err != nil {
 		return false
 	}
