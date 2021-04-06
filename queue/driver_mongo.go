@@ -578,7 +578,7 @@ func (d *mongoDriver) Put(ctx context.Context, j amboy.Job) error {
 
 	if _, err = d.getCollection().InsertOne(ctx, ji); err != nil {
 		if isMongoDupKey(err) {
-			if isMongoDupScope(err) {
+			if d.isMongoDupScope(err) {
 				return amboy.NewDuplicateJobScopeErrorf("job scopes '%s' conflict", j.Scopes())
 			}
 			return amboy.NewDuplicateJobErrorf("job '%s' already exists", j.ID())
@@ -625,22 +625,28 @@ func isMongoDupKey(err error) bool {
 	return dupKeyErrs.writeConcernError != nil || len(dupKeyErrs.writeErrors) != 0 || dupKeyErrs.commandError != nil
 }
 
-func isMongoDupScope(err error) bool {
+func (d *mongoDriver) isMongoDupScope(err error) bool {
 	dupKeyErrs := getMongoDupKeyErrors(err)
+	var index string
+	if d.opts.UseGroups {
+		index = " group_1_scopes_1 "
+	} else {
+		index = " scopes_1 "
+	}
 	if wce := dupKeyErrs.writeConcernError; wce != nil {
-		if strings.Contains(wce.Message, " scopes_1 ") {
+		if strings.Contains(wce.Message, index) {
 			return true
 		}
 	}
 
 	for _, werr := range dupKeyErrs.writeErrors {
-		if strings.Contains(werr.Message, " scopes_1 ") {
+		if strings.Contains(werr.Message, index) {
 			return true
 		}
 	}
 
 	if ce := dupKeyErrs.commandError; ce != nil {
-		if strings.Contains(ce.Message, " scopes_1 ") {
+		if strings.Contains(ce.Message, index) {
 			return true
 		}
 	}
