@@ -219,6 +219,16 @@ func (info JobRetryInfo) GetMaxAttempts() int {
 	return info.MaxAttempts
 }
 
+// GetRemainingAttempts returns the number of times this job is still allow to
+// attempt, excluding the current attempt.
+func (info JobRetryInfo) GetRemainingAttempts() int {
+	remainder := info.GetMaxAttempts() - info.CurrentAttempt - 1
+	if remainder < 0 {
+		return 0
+	}
+	return remainder
+}
+
 // JobRetryOptions represents configuration options for a job that can retry.
 // Their meaning corresponds to the fields in JobRetryInfo, but is more amenable
 // to optional input values.
