@@ -12,7 +12,7 @@ import (
 // the Queue interface itself.
 type Manager interface {
 	// JobStatus returns a report of job statistics filtered by status.
-	JobStatus(context.Context, StatusFilter) (*JobStatusReport, error)
+	JobStatus(context.Context, StatusFilter) ([]JobTypeCount, error)
 	// JobIDsByState returns a report of job IDs filtered by a job type and
 	// status filter. Depending on the implementation, the returned job IDs can
 	// be either logical job IDs or internally-stored job IDs.
@@ -63,7 +63,7 @@ func (t StatusFilter) Validate() error {
 	case InProgress, Pending, Stale, Completed, Retrying, All:
 		return nil
 	default:
-		return errors.Errorf("%s is not a valid counter filter type", t)
+		return errors.Errorf("%s is not a valid status filter type", t)
 	}
 }
 

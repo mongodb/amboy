@@ -317,30 +317,30 @@ func TestManagerImplementations(t *testing.T) {
 				},
 				"JobIDsByStateSucceedsWithEmptyResult": func(ctx context.Context, t *testing.T, mgr Manager, q amboy.Queue) {
 					for _, f := range ValidStatusFilters() {
-						r, err := mgr.JobStatus(ctx, f)
+						counts, err := mgr.JobIDsByState(ctx, "foo", f)
 						assert.NoError(t, err)
-						assert.NotZero(t, r)
+						assert.Empty(t, counts)
 					}
 				},
 				"JobIDsByStateFailsWithInvalidFilter": func(ctx context.Context, t *testing.T, mgr Manager, q amboy.Queue) {
 					for _, f := range getInvalidFilters() {
 						r, err := mgr.JobIDsByState(ctx, "foo", StatusFilter(f))
 						assert.Error(t, err)
-						assert.Zero(t, r)
+						assert.Empty(t, r)
 					}
 				},
 				"JobStatusSucceedsWithEmptyResult": func(ctx context.Context, t *testing.T, mgr Manager, q amboy.Queue) {
 					for _, f := range ValidStatusFilters() {
-						r, err := mgr.JobStatus(ctx, f)
+						counts, err := mgr.JobStatus(ctx, f)
 						assert.NoError(t, err)
-						assert.NotZero(t, r)
+						assert.Empty(t, counts)
 					}
 				},
 				"JobStatusFailsWithInvalidFilter": func(ctx context.Context, t *testing.T, mgr Manager, q amboy.Queue) {
 					for _, f := range getInvalidFilters() {
-						r, err := mgr.JobStatus(ctx, StatusFilter(f))
+						counts, err := mgr.JobStatus(ctx, StatusFilter(f))
 						assert.Error(t, err)
-						assert.Zero(t, r)
+						assert.Empty(t, counts)
 					}
 				},
 				"CompleteJobSucceeds": func(ctx context.Context, t *testing.T, mgr Manager, q amboy.Queue) {

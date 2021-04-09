@@ -50,15 +50,15 @@ func managementReportJobStatus(opts *ServiceOptions) cli.Command {
 			}
 
 			return opts.withManagementClient(ctx, c, func(client management.Manager) error {
-				report, err := client.JobStatus(ctx, filter)
+				counts, err := client.JobStatus(ctx, filter)
 				if err != nil {
 					return errors.WithStack(err)
 				}
 
 				t := tabby.New()
 				t.AddHeader("Job Type", "Count", "Group")
-				for _, r := range report.Stats {
-					t.AddLine(r.ID, r.Count, r.Group)
+				for _, c := range counts {
+					t.AddLine(c.Type, c.Count, c.Group)
 				}
 				t.Print()
 

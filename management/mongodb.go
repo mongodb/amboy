@@ -107,22 +107,30 @@ func MakeDBQueueManager(ctx context.Context, opts DBQueueManagerOptions, client 
 	return db, nil
 }
 
-func (m *dbQueueManager) aggregateCounters(ctx context.Context, stages ...bson.M) ([]JobCounters, error) {
+func (m *dbQueueManager) aggregateCounters(ctx context.Context, stages ...bson.M) ([]JobTypeCount, error) {
 	cursor, err := m.collection.Aggregate(ctx, stages, options.Aggregate().SetAllowDiskUse(true))
 	if err != nil {
 		return nil, errors.Wrap(err, "problem running aggregation")
 	}
 
 	catcher := grip.NewBasicCatcher()
-	out := []JobCounters{}
+	var out []JobTypeCount
 	for cursor.Next(ctx) {
-		val := JobCounters{}
-		err = cursor.Decode(&val)
+		res := struct {
+			Type  string `bson:"_id"`
+			Group string `bson:"group,omitempty"`
+			Count int    `bson:"count"`
+		}{}
+		err = cursor.Decode(&res)
 		if err != nil {
 			catcher.Add(err)
 			continue
 		}
-		out = append(out, val)
+		out = append(out, JobTypeCount{
+			Type:  res.Type,
+			Group: res.Group,
+			Count: res.Count,
+		})
 	}
 	catcher.Add(cursor.Err())
 	if catcher.HasErrors() {
@@ -161,7 +169,7 @@ func (m *dbQueueManager) findJobIDs(ctx context.Context, match bson.M) ([]Groupe
 	return out.Jobs, nil
 }
 
-func (m *dbQueueManager) JobStatus(ctx context.Context, f StatusFilter) (*JobStatusReport, error) {
+func (m *dbQueueManager) JobStatus(ctx context.Context, f StatusFilter) ([]JobTypeCount, error) {
 	if err := f.Validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid status filter")
 	}
@@ -195,15 +203,11 @@ func (m *dbQueueManager) JobStatus(ctx context.Context, f StatusFilter) (*JobSta
 	}
 
 	counters, err := m.aggregateCounters(ctx, stages...)
-
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
-	return &JobStatusReport{
-		Filter: f,
-		Stats:  counters,
-	}, nil
+	return counters, nil
 }
 
 // JobIDsByState returns job IDs filtered by job type and status filter. The
@@ -223,7 +227,12 @@ func (m *dbQueueManager) JobIDsByState(ctx context.Context, jobType string, f St
 		query["group"] = m.opts.Group
 	}
 
-	return m.findJobIDs(ctx, query)
+	groupedIDs, err := m.findJobIDs(ctx, query)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	return groupedIDs, nil
 }
 
 func (m *dbQueueManager) getStatusQuery(q bson.M, f StatusFilter) bson.M {

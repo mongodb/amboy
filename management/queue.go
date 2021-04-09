@@ -27,7 +27,7 @@ func NewQueueManager(q amboy.Queue) Manager {
 	}
 }
 
-func (m *queueManager) JobStatus(ctx context.Context, f StatusFilter) (*JobStatusReport, error) {
+func (m *queueManager) JobStatus(ctx context.Context, f StatusFilter) ([]JobTypeCount, error) {
 	if err := f.Validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid filter")
 	}
@@ -40,18 +40,15 @@ func (m *queueManager) JobStatus(ctx context.Context, f StatusFilter) (*JobStatu
 		counters[info.Type.Name]++
 	}
 
-	out := JobStatusReport{}
-
+	var out []JobTypeCount
 	for jt, num := range counters {
-		out.Stats = append(out.Stats, JobCounters{
-			ID:    jt,
+		out = append(out, JobTypeCount{
+			Type:  jt,
 			Count: num,
 		})
 	}
 
-	out.Filter = f
-
-	return &out, nil
+	return out, nil
 }
 
 func (m *queueManager) JobIDsByState(ctx context.Context, jobType string, f StatusFilter) ([]GroupedID, error) {
@@ -73,7 +70,7 @@ func (m *queueManager) JobIDsByState(ctx context.Context, jobType string, f Stat
 		uniqueIDs[info.ID] = struct{}{}
 	}
 
-	ids := make([]GroupedID, 0, len(uniqueIDs))
+	var ids []GroupedID
 	for id := range uniqueIDs {
 		ids = append(ids, GroupedID{ID: id})
 	}
