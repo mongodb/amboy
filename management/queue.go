@@ -54,7 +54,7 @@ func (m *queueManager) JobStatus(ctx context.Context, f StatusFilter) (*JobStatu
 	return &out, nil
 }
 
-func (m *queueManager) JobIDsByState(ctx context.Context, jobType string, f StatusFilter) (*JobReportIDs, error) {
+func (m *queueManager) JobIDsByState(ctx context.Context, jobType string, f StatusFilter) ([]GroupedID, error) {
 	var err error
 	if err = f.Validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid filter")
@@ -78,9 +78,7 @@ func (m *queueManager) JobIDsByState(ctx context.Context, jobType string, f Stat
 		ids = append(ids, GroupedID{ID: id})
 	}
 
-	return &JobReportIDs{
-		GroupedIDs: ids,
-	}, nil
+	return ids, nil
 }
 
 // matchesStatusFilter returns whether or not a job's information matches the

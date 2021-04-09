@@ -37,7 +37,7 @@ func managementReportJobStatus(opts *ServiceOptions) cli.Command {
 			cli.StringFlag{
 				Name:  statusFilterFlagName,
 				Value: "in-progress",
-				Usage: "specify the process filter, can be 'all', 'completed', 'in-progress', 'pending', or 'stale'",
+				Usage: "specify the job status filter. Valid values: 'pending', 'in-progress', 'stale', 'completed', 'retrying', 'stale-retrying', 'all'",
 			},
 		),
 		Action: func(c *cli.Context) error {
@@ -75,7 +75,7 @@ func managementReportJobIDs(opts *ServiceOptions) cli.Command {
 			cli.StringFlag{
 				Name:  "filter",
 				Value: "in-progress",
-				Usage: "specify the process filter, can be 'all', 'in-progress', 'completed', 'pending', or 'stale'",
+				Usage: "specify the job status filter. Valid values: 'pending', 'in-progress', 'stale', 'completed', 'retrying', 'stale-retrying', 'all'",
 			},
 		),
 		Action: func(c *cli.Context) error {
@@ -95,12 +95,12 @@ func managementReportJobIDs(opts *ServiceOptions) cli.Command {
 				t.AddHeader("Job Type", "Group", "ID")
 
 				for _, jt := range jobTypes {
-					report, err := client.JobIDsByState(ctx, jt, filter)
+					groupedIDs, err := client.JobIDsByState(ctx, jt, filter)
 					if err != nil {
 						return errors.WithStack(err)
 					}
-					for _, j := range report.GroupedIDs {
-						t.AddLine(jt, j.Group, j.ID)
+					for _, gid := range groupedIDs {
+						t.AddLine(jt, gid.Group, gid.ID)
 					}
 				}
 				t.Print()

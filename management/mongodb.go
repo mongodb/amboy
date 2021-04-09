@@ -132,7 +132,7 @@ func (m *dbQueueManager) aggregateCounters(ctx context.Context, stages ...bson.M
 	return out, nil
 }
 
-func (m *dbQueueManager) findJobs(ctx context.Context, match bson.M) ([]GroupedID, error) {
+func (m *dbQueueManager) findJobIDs(ctx context.Context, match bson.M) ([]GroupedID, error) {
 	group := bson.M{
 		"_id":  nil,
 		"jobs": bson.M{"$push": bson.M{"_id": "$_id", "group": "$group"}},
@@ -208,7 +208,7 @@ func (m *dbQueueManager) JobStatus(ctx context.Context, f StatusFilter) (*JobSta
 
 // JobIDsByState returns job IDs filtered by job type and status filter. The
 // returned job IDs are the internally-stored job IDs.
-func (m *dbQueueManager) JobIDsByState(ctx context.Context, jobType string, f StatusFilter) (*JobReportIDs, error) {
+func (m *dbQueueManager) JobIDsByState(ctx context.Context, jobType string, f StatusFilter) ([]GroupedID, error) {
 	if err := f.Validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid status filter")
 	}
@@ -223,14 +223,7 @@ func (m *dbQueueManager) JobIDsByState(ctx context.Context, jobType string, f St
 		query["group"] = m.opts.Group
 	}
 
-	ids, err := m.findJobs(ctx, query)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	return &JobReportIDs{
-		GroupedIDs: ids,
-	}, nil
+	return m.findJobIDs(ctx, query)
 }
 
 func (m *dbQueueManager) getStatusQuery(q bson.M, f StatusFilter) bson.M {

@@ -14,13 +14,8 @@ type JobCounters struct {
 	Group string `bson:"group,omitempty" json:"group,omitempty" yaml:"group,omitempty"`
 }
 
-// JobReportIDs contains the IDs of all jobs of a specific type.
-type JobReportIDs struct {
-	GroupedIDs []GroupedID `bson:"grouped_ids" json:"grouped_ids" yaml:"grouped_ids"`
-}
-
-// type JobReportIDs = []GroupedID
-
+// GroupedID represents a job's ID and the group that the job belongs to, if
+// it's in a queue group.
 type GroupedID struct {
 	ID    string `bson:"_id" bson:"_id" yaml:"_id"`
 	Group string `bson:"group,omitempty" json:"group,omitempty" yaml:"group,omitempty"`

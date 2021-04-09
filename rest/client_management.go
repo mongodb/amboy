@@ -75,10 +75,10 @@ func (c *managementClient) JobStatus(ctx context.Context, filter management.Stat
 // JobIDsByState returns a list of job IDs for each job type, for all jobs
 // matching the filter. Filter value are defined as constants in the management
 // package.
-func (c *managementClient) JobIDsByState(ctx context.Context, jobType string, filter management.StatusFilter) (*management.JobReportIDs, error) {
-	out := &management.JobReportIDs{}
+func (c *managementClient) JobIDsByState(ctx context.Context, jobType string, filter management.StatusFilter) ([]management.GroupedID, error) {
+	out := []management.GroupedID{}
 
-	if err := c.doRequest(ctx, fmt.Sprintf("/status/%s/%s", string(filter), jobType), out); err != nil {
+	if err := c.doRequest(ctx, fmt.Sprintf("/status/%s/%s", string(filter), jobType), &out); err != nil {
 		return nil, errors.Wrap(err, "problem with request")
 	}
 

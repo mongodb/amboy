@@ -14,9 +14,9 @@ type Manager interface {
 	// JobStatus returns a report of job statistics filtered by status.
 	JobStatus(context.Context, StatusFilter) (*JobStatusReport, error)
 	// JobIDsByState returns a report of job IDs filtered by a job type and
-	// status filter. The returned job IDs can be either logical job IDs or
-	// internally-stored job IDs.
-	JobIDsByState(context.Context, string, StatusFilter) (*JobReportIDs, error)
+	// status filter. Depending on the implementation, the returned job IDs can
+	// be either logical job IDs or internally-stored job IDs.
+	JobIDsByState(context.Context, string, StatusFilter) ([]GroupedID, error)
 
 	// For all CompleteJob* methods, implementations should mark jobs as
 	// completed. Furthermore, for implementations managing retryable queues,
@@ -48,8 +48,8 @@ type StatusFilter string
 
 // Constants representing valid StatusFilters.
 const (
-	InProgress    StatusFilter = "in-progress"
 	Pending       StatusFilter = "pending"
+	InProgress    StatusFilter = "in-progress"
 	Stale         StatusFilter = "stale"
 	Completed     StatusFilter = "completed"
 	Retrying      StatusFilter = "retrying"

@@ -294,13 +294,13 @@ func TestManagerImplementations(t *testing.T) {
 					}
 
 					for _, f := range ValidStatusFilters() {
-						r, err := mgr.JobIDsByState(ctx, testJobName, f)
+						groupedIDs, err := mgr.JobIDsByState(ctx, testJobName, f)
 						require.NoError(t, err)
 
 						matched, unmatched := partitionByFilter(fjs, f)
 						for _, fj := range matched {
 							var foundJobID bool
-							for _, gid := range r.GroupedIDs {
+							for _, gid := range groupedIDs {
 								if strings.Contains(gid.ID, fj.job.ID()) {
 									foundJobID = true
 									break
@@ -309,7 +309,7 @@ func TestManagerImplementations(t *testing.T) {
 							assert.True(t, foundJobID)
 						}
 						for _, fj := range unmatched {
-							for _, gid := range r.GroupedIDs {
+							for _, gid := range groupedIDs {
 								assert.NotContains(t, gid.ID, fj.job.ID())
 							}
 						}
