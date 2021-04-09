@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"time"
 
 	"github.com/evergreen-ci/gimlet"
 	"github.com/mongodb/amboy/management"
@@ -73,22 +72,6 @@ func (c *managementClient) JobStatus(ctx context.Context, filter management.Stat
 	return out, nil
 }
 
-// RecentTiming returns timing data latency or duration of job run time for
-// in the window defined by the duration value. You must specify a timing
-// filter (e.g. Latency or Duration) with a constant defined in the management
-// package.
-func (c *managementClient) RecentTiming(ctx context.Context, dur time.Duration, filter management.RuntimeFilter) (*management.JobRuntimeReport, error) {
-	out := &management.JobRuntimeReport{}
-
-	path := fmt.Sprintf("/timing/%s/%d", string(filter), int64(dur.Seconds()))
-
-	if err := c.doRequest(ctx, path, out); err != nil {
-		return nil, errors.Wrap(err, "problem with request")
-	}
-
-	return out, nil
-}
-
 // JobIDsByState returns a list of job IDs for each job type, for all jobs
 // matching the filter. Filter value are defined as constants in the management
 // package.
@@ -96,34 +79,6 @@ func (c *managementClient) JobIDsByState(ctx context.Context, jobType string, fi
 	out := &management.JobReportIDs{}
 
 	if err := c.doRequest(ctx, fmt.Sprintf("/status/%s/%s", string(filter), jobType), out); err != nil {
-		return nil, errors.Wrap(err, "problem with request")
-	}
-
-	return out, nil
-}
-
-// RecentErrors returns an error report for jobs that have completed in the
-// window that have had errors. Use the filter to de-duplicate errors.
-// ErrorFilter values are defined as constants in the management package.
-func (c *managementClient) RecentErrors(ctx context.Context, dur time.Duration, filter management.ErrorFilter) (*management.JobErrorsReport, error) {
-	out := &management.JobErrorsReport{}
-
-	path := fmt.Sprintf("/errors/%s/%d", string(filter), int64(dur.Seconds()))
-	if err := c.doRequest(ctx, path, out); err != nil {
-		return nil, errors.Wrap(err, "problem with request")
-	}
-
-	return out, nil
-}
-
-// RecentJobErrors returns an error report for jobs of a specific type that
-// have encountered errors that have completed within the specified window. The
-// ErrorFilter values are defined as constants in the management package.
-func (c *managementClient) RecentJobErrors(ctx context.Context, jobType string, dur time.Duration, filter management.ErrorFilter) (*management.JobErrorsReport, error) {
-	out := &management.JobErrorsReport{}
-
-	path := fmt.Sprintf("/errors/%s/%s/%d", string(filter), jobType, int64(dur.Seconds()))
-	if err := c.doRequest(ctx, path, out); err != nil {
 		return nil, errors.Wrap(err, "problem with request")
 	}
 
