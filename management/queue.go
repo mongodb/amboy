@@ -96,7 +96,9 @@ func (m *queueManager) matchesStatusFilter(info amboy.JobInfo, f StatusFilter) b
 	case Completed:
 		return info.Status.Completed
 	case Retrying:
-		return info.Status.Completed && info.Retry.NeedsRetry
+		return info.Status.Completed && info.Retry.Retryable && info.Retry.NeedsRetry
+	case StaleRetrying:
+		return info.Status.Completed && info.Retry.Retryable && info.Retry.NeedsRetry && time.Since(info.Status.ModificationTime) > m.queue.Info().LockTimeout
 	case All:
 		return true
 	default:

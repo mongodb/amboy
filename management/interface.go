@@ -48,12 +48,13 @@ type StatusFilter string
 
 // Constants representing valid StatusFilters.
 const (
-	InProgress StatusFilter = "in-progress"
-	Pending    StatusFilter = "pending"
-	Stale      StatusFilter = "stale"
-	Completed  StatusFilter = "completed"
-	Retrying   StatusFilter = "retrying"
-	All        StatusFilter = "all"
+	InProgress    StatusFilter = "in-progress"
+	Pending       StatusFilter = "pending"
+	Stale         StatusFilter = "stale"
+	Completed     StatusFilter = "completed"
+	Retrying      StatusFilter = "retrying"
+	StaleRetrying StatusFilter = "stale-retrying"
+	All           StatusFilter = "all"
 )
 
 // Validate returns an error if a filter value is not valid.
