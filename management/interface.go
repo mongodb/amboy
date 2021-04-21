@@ -11,7 +11,8 @@ import (
 // the running jobs in an amboy queue and gives users broader capabilities than
 // the Queue interface itself.
 type Manager interface {
-	// JobStatus returns a report of job statistics filtered by status.
+	// JobStatus returns statistics of the number of jobs of each job type
+	// matching the status.
 	JobStatus(context.Context, StatusFilter) ([]JobTypeCount, error)
 	// JobIDsByState returns a report of job IDs filtered by a job type and
 	// status filter. Depending on the implementation, the returned job IDs can
