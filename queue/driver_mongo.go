@@ -1317,6 +1317,135 @@ func (d *mongoDriver) isOtherJobHoldingScopes(ctx context.Context, j amboy.Job) 
 func (d *mongoDriver) Stats(ctx context.Context) amboy.QueueStats {
 	coll := d.getCollection()
 
+	var stats driverQueueStats
+	if d.opts.UseGroups {
+		stats = d.getGroupStats(ctx)
+	} else {
+		stats = d.getStats(ctx)
+	}
+
+	var total int64
+	var err error
+	if d.opts.UseGroups {
+		total, err = coll.CountDocuments(ctx, bson.M{"group": d.opts.GroupName})
+	} else {
+		total, err = coll.EstimatedDocumentCount(ctx)
+	}
+	grip.Warning(message.WrapError(err, message.Fields{
+		"id":         d.instanceID,
+		"service":    "amboy.queue.mdb",
+		"collection": coll.Name(),
+		"operation":  "queue stats",
+		"is_group":   d.opts.UseGroups,
+		"group":      d.opts.GroupName,
+		"message":    "problem counting total jobs",
+	}))
+
+	completed := int(total) - stats.pending - stats.inProgress
+
+	// Since the stats are collected non-atomically, these statistics could be
+	// inconsistent (e.g. you could have an incorrect count of completed jobs)
+	// and should only be used as a rough estimate.
+
+	return amboy.QueueStats{
+		Total:     int(total),
+		Pending:   stats.pending,
+		Running:   stats.inProgress,
+		Completed: completed,
+		Retrying:  stats.retrying,
+	}
+}
+
+type driverQueueStats struct {
+	pending    int
+	inProgress int
+	retrying   int
+}
+
+func (d *mongoDriver) getStats(ctx context.Context) driverQueueStats {
+	coll := d.getCollection()
+
+	statusFilter := bson.M{
+		"$or": []bson.M{
+			d.getPendingQuery(bson.M{}),
+			d.getInProgQuery(bson.M{}),
+			d.getRetryingQuery(bson.M{}),
+		},
+	}
+	d.modifyQueryForGroup(statusFilter)
+	matchStatus := bson.M{"$match": statusFilter}
+	groupStatuses := bson.M{
+		"$group": bson.M{
+			"_id": bson.M{
+				"completed":   "$status.completed",
+				"in_prog":     "$status.in_prog",
+				"needs_retry": "$retry_info.needs_retry",
+			},
+			"count": bson.M{"$sum": 1},
+		},
+	}
+	pipeline := []bson.M{matchStatus, groupStatuses}
+
+	c, err := coll.Aggregate(ctx, pipeline)
+	if err != nil {
+		grip.Warning(message.WrapError(err, message.Fields{
+			"id":         d.instanceID,
+			"service":    "amboy.queue.mdb",
+			"collection": coll.Name(),
+			"is_group":   d.opts.UseGroups,
+			"group":      d.opts.GroupName,
+			"operation":  "queue stats",
+			"message":    "could not count documents by status",
+		}))
+		return driverQueueStats{}
+	}
+	statusGroups := []struct {
+		ID struct {
+			Completed  bool `bson:"completed"`
+			InProg     bool `bson:"in_prog"`
+			NeedsRetry bool `bson:"needs_retry"`
+		} `bson:"_id"`
+		Count int `bson:"count"`
+	}{}
+	if err := c.All(ctx, &statusGroups); err != nil {
+		grip.Warning(message.WrapError(err, message.Fields{
+			"id":         d.instanceID,
+			"service":    "amboy.queue.mdb",
+			"collection": coll.Name(),
+			"is_group":   d.opts.UseGroups,
+			"group":      d.opts.GroupName,
+			"operation":  "queue stats",
+			"message":    "failed to decode counts by status",
+		}))
+		return driverQueueStats{}
+	}
+
+	var pending, inProg, retrying int
+	for _, group := range statusGroups {
+		if !group.ID.InProg && !group.ID.Completed {
+			pending += group.Count
+		}
+		if group.ID.InProg {
+			inProg += group.Count
+		}
+		if group.ID.Completed && group.ID.NeedsRetry {
+			retrying += group.Count
+		}
+	}
+
+	return driverQueueStats{
+		pending:    pending,
+		inProgress: inProg,
+		retrying:   retrying,
+	}
+}
+
+// If we're using queue groups, issue each query separately. The discrepancy
+// between the regular MongoDB queue and the MongoDB queue group is that the
+// server fails to use separate indexes for each clause in $or (EVG-14558).
+func (d *mongoDriver) getGroupStats(ctx context.Context) driverQueueStats {
+	coll := d.getCollection()
+
 	pending, err := coll.CountDocuments(ctx, d.modifyQueryForGroup(d.getPendingQuery(bson.M{})))
 	grip.Warning(message.WrapError(err, message.Fields{
 		"id":         d.instanceID,
@@ -1348,34 +1477,10 @@ func (d *mongoDriver) Stats(ctx context.Context) amboy.QueueStats {
 		"message":    "could not count retrying jobs",
 	}))
 
-	var total int64
-	if d.opts.UseGroups {
-		total, err = coll.CountDocuments(ctx, bson.M{"group": d.opts.GroupName})
-	} else {
-		total, err = coll.EstimatedDocumentCount(ctx)
-	}
-	grip.Warning(message.WrapError(err, message.Fields{
-		"id":         d.instanceID,
-		"service":    "amboy.queue.mdb",
-		"collection": coll.Name(),
-		"operation":  "queue stats",
-		"is_group":   d.opts.UseGroups,
-		"group":      d.opts.GroupName,
-		"message":    "problem counting total jobs",
-	}))
-
-	completed := int(total - pending - inProg)
-
-	// Since each query is issued separately, these statistically could be
-	// inconsistent (e.g. you could have an incorrect count of completed jobs)
-	// and should only be used as a guesstimate.
-
-	return amboy.QueueStats{
-		Total:     int(total),
-		Pending:   int(pending),
-		Running:   int(inProg),
-		Completed: completed,
-		Retrying:  int(retrying),
+	return driverQueueStats{
+		pending:    int(pending),
+		inProgress: int(inProg),
+		retrying:   int(retrying),
 	}
 }
 
