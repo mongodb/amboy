@@ -1362,6 +1362,7 @@ type driverQueueStats struct {
 	retrying   int
 }
 
+// getStats returns the job statistics for a remote MongoDB queue.
 func (d *mongoDriver) getStats(ctx context.Context) driverQueueStats {
 	coll := d.getCollection()
 
@@ -1440,6 +1441,7 @@ func (d *mongoDriver) getStats(ctx context.Context) driverQueueStats {
 	}
 }
 
+// getGroupStats returns the job statistics for a queue group.
 // If we're using queue groups, issue each query separately. The discrepancy
 // between the regular MongoDB queue and the MongoDB queue group is that the
 // server fails to use separate indexes for each clause in $or (EVG-14558).
