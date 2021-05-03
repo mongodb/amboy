@@ -1247,9 +1247,6 @@ func RetryableTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 			case <-ctx.Done():
 				require.FailNow(t, "context was done before stale retrying job could be handled")
 			case <-jobsDone:
-				assert.Equal(t, 2, rq.Stats(ctx).Total)
-				assert.Equal(t, 2, rq.Stats(ctx).Completed)
-
 				rj0, err := rq.GetAttempt(ctx, j.ID(), 0)
 				require.NoError(t, err)
 				assert.True(t, rj0.RetryInfo().Retryable)

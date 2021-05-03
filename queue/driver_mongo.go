@@ -457,12 +457,14 @@ func (d *mongoDriver) removeRetryFromMetadata(j *registry.JobInterchange) {
 	j.Name = deconstructCompoundID(j.Name, retryAttemptPrefix(j.RetryInfo.CurrentAttempt))
 }
 
-func (d *mongoDriver) modifyQueryForGroup(q bson.M) {
+func (d *mongoDriver) modifyQueryForGroup(q bson.M) bson.M {
 	if !d.opts.UseGroups {
-		return
+		return q
 	}
 
 	q["group"] = d.opts.GroupName
+
+	return q
 }
 
 func (d *mongoDriver) Get(ctx context.Context, name string) (amboy.Job, error) {
@@ -1315,78 +1317,36 @@ func (d *mongoDriver) isOtherJobHoldingScopes(ctx context.Context, j amboy.Job) 
 func (d *mongoDriver) Stats(ctx context.Context) amboy.QueueStats {
 	coll := d.getCollection()
 
-	statusFilter := bson.M{
-		"$or": []bson.M{
-			d.getPendingQuery(bson.M{}),
-			d.getInProgQuery(bson.M{}),
-			d.getRetryingQuery(bson.M{}),
-		},
-	}
-	d.modifyQueryForGroup(statusFilter)
-	matchStatus := bson.M{"$match": statusFilter}
-	groupStatuses := bson.M{
-		"$group": bson.M{
-			"_id": bson.M{
-				"completed":   "$status.completed",
-				"in_prog":     "$status.in_prog",
-				"needs_retry": "$retry_info.needs_retry",
-			},
-			"count": bson.M{"$sum": 1},
-		},
-	}
-	pipeline := []bson.M{matchStatus, groupStatuses}
-
-	c, err := coll.Aggregate(ctx, pipeline)
-	if err != nil {
-		grip.Warning(message.WrapError(err, message.Fields{
-			"id":         d.instanceID,
-			"service":    "amboy.queue.mdb",
-			"collection": coll.Name(),
-			"is_group":   d.opts.UseGroups,
-			"group":      d.opts.GroupName,
-			"operation":  "queue stats",
-			"message":    "could not count documents by status",
-		}))
-		return amboy.QueueStats{}
-	}
-	statusGroups := []struct {
-		ID struct {
-			Completed  bool `bson:"completed"`
-			InProg     bool `bson:"in_prog"`
-			NeedsRetry bool `bson:"needs_retry"`
-		} `bson:"_id"`
-		Count int `bson:"count"`
-	}{}
-	if err := c.All(ctx, &statusGroups); err != nil {
-		grip.Warning(message.WrapError(err, message.Fields{
-			"id":         d.instanceID,
-			"service":    "amboy.queue.mdb",
-			"collection": coll.Name(),
-			"is_group":   d.opts.UseGroups,
-			"group":      d.opts.GroupName,
-			"operation":  "queue stats",
-			"message":    "failed to decode counts by status",
-		}))
-		return amboy.QueueStats{}
-	}
-
-	var pending, inProg, retrying int
-	for _, group := range statusGroups {
-		if !group.ID.InProg && !group.ID.Completed {
-			pending += group.Count
-		}
-		if group.ID.InProg {
-			inProg += group.Count
-		}
-		if group.ID.Completed && group.ID.NeedsRetry {
-			retrying += group.Count
-		}
-	}
-
-	// The aggregation cannot also count all the documents in the collection
-	// without a collection scan, so query it separately. Because completed is
-	// calculated between two non-atomic queries, the statistics could be
-	// inconsistent (i.e. you could have an incorrect count of completed jobs).
+	pending, err := coll.CountDocuments(ctx, d.modifyQueryForGroup(d.getPendingQuery(bson.M{})))
+	grip.Warning(message.WrapError(err, message.Fields{
+		"id":         d.instanceID,
+		"service":    "amboy.queue.mdb",
+		"collection": coll.Name(),
+		"operation":  "queue stats",
+		"is_group":   d.opts.UseGroups,
+		"group":      d.opts.GroupName,
+		"message":    "could not count pending jobs",
+	}))
+	inProg, err := coll.CountDocuments(ctx, d.modifyQueryForGroup(d.getInProgQuery(bson.M{})))
+	grip.Warning(message.WrapError(err, message.Fields{
+		"id":         d.instanceID,
+		"service":    "amboy.queue.mdb",
+		"collection": coll.Name(),
+		"operation":  "queue stats",
+		"is_group":   d.opts.UseGroups,
+		"group":      d.opts.GroupName,
+		"message":    "could not count in progress jobs",
+	}))
+	retrying, err := coll.CountDocuments(ctx, d.modifyQueryForGroup(d.getRetryingQuery(bson.M{})))
+	grip.Warning(message.WrapError(err, message.Fields{
+		"id":         d.instanceID,
+		"service":    "amboy.queue.mdb",
+		"collection": coll.Name(),
+		"operation":  "queue stats",
+		"is_group":   d.opts.UseGroups,
+		"group":      d.opts.GroupName,
+		"message":    "could not count retrying jobs",
+	}))
 
 	var total int64
 	if d.opts.UseGroups {
@@ -1404,14 +1364,18 @@ func (d *mongoDriver) Stats(ctx context.Context) amboy.QueueStats {
 		"message":    "problem counting total jobs",
 	}))
 
-	completed := int(total) - pending - inProg
+	completed := int(total - pending - inProg)
+
+	// Since each query is issued separately, these statistically could be
+	// inconsistent (e.g. you could have an incorrect count of completed jobs)
+	// and should only be used as a guesstimate.
 
 	return amboy.QueueStats{
 		Total:     int(total),
-		Pending:   pending,
-		Running:   inProg,
+		Pending:   int(pending),
+		Running:   int(inProg),
 		Completed: completed,
-		Retrying:  retrying,
+		Retrying:  int(retrying),
 	}
 }
 

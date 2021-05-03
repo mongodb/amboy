@@ -521,19 +521,21 @@ func (s *DriverSuite) TestStatsCallReportsCompletedJobs() {
 
 	s.Equal(0, s.driver.Stats(s.ctx).Total)
 	s.NoError(s.driver.Put(s.ctx, j))
-	s.Equal(1, s.driver.Stats(s.ctx).Total)
-	s.Equal(0, s.driver.Stats(s.ctx).Completed)
-	s.Equal(1, s.driver.Stats(s.ctx).Pending)
-	s.Equal(0, s.driver.Stats(s.ctx).Blocked)
-	s.Equal(0, s.driver.Stats(s.ctx).Running)
+	stats := s.driver.Stats(s.ctx)
+	s.Equal(1, stats.Total)
+	s.Equal(0, stats.Completed)
+	s.Equal(1, stats.Pending)
+	s.Equal(0, stats.Blocked)
+	s.Equal(0, stats.Running)
 
 	j.MarkComplete()
 	s.NoError(s.driver.Save(s.ctx, j))
-	s.Equal(1, s.driver.Stats(s.ctx).Total)
-	s.Equal(1, s.driver.Stats(s.ctx).Completed)
-	s.Equal(0, s.driver.Stats(s.ctx).Pending)
-	s.Equal(0, s.driver.Stats(s.ctx).Blocked)
-	s.Equal(0, s.driver.Stats(s.ctx).Running)
+	stats = s.driver.Stats(s.ctx)
+	s.Equal(1, stats.Total)
+	s.Equal(1, stats.Completed)
+	s.Equal(0, stats.Pending)
+	s.Equal(0, stats.Blocked)
+	s.Equal(0, stats.Running)
 }
 
 func (s *DriverSuite) TestStatsCountsAreAccurate() {
@@ -603,10 +605,11 @@ func (s *DriverSuite) TestNextMethodDoesNotReturnLastJob() {
 	s.Require().NoError(j.Lock("taken", amboy.LockTimeout))
 
 	s.NoError(s.driver.Put(s.ctx, j))
-	s.Equal(1, s.driver.Stats(s.ctx).Total)
-	s.Equal(0, s.driver.Stats(s.ctx).Blocked)
-	s.Equal(1, s.driver.Stats(s.ctx).Running)
-	s.Equal(0, s.driver.Stats(s.ctx).Completed)
+	stats := s.driver.Stats(s.ctx)
+	s.Equal(1, stats.Total)
+	s.Equal(0, stats.Blocked)
+	s.Equal(1, stats.Running)
+	s.Equal(0, stats.Completed)
 
 	s.Nil(s.driver.Next(ctx), fmt.Sprintf("%T", s.driver))
 }
