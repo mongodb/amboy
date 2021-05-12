@@ -815,7 +815,20 @@ func (d *mongoDriver) prepareInterchange(j amboy.Job) (*registry.JobInterchange,
 func (d *mongoDriver) doUpdate(ctx context.Context, ji *registry.JobInterchange) error {
 	d.addMetadata(ji)
 
-	query := d.getAtomicQuery(ji.Name, ji.Status.ModificationCount)
+	if ji.Status.InProgress && ji.Status.Completed {
+		err := errors.New("job was found both in progress and complete")
+		grip.Error(message.WrapError(err, (message.Fields{
+			"message":     "programmer error: a job should not be saved as both in progress and complete - manually changing in progress to false",
+			"jira_ticket": "EVG-14605",
+			"job_id":      ji.Name,
+			"service":     "amboy.queue.mdb",
+			"driver_id":   d.ID(),
+		})))
+		ji.Status.InProgress = false
+	}
+
+	query := d.getAtomicQuery(ji.Name, ji.Status)
+
 	res, err := d.getCollection().ReplaceOne(ctx, query, ji)
 	if err != nil {
 		if d.isMongoDupScope(err) {
