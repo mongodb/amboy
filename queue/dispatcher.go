@@ -26,6 +26,9 @@ type Dispatcher interface {
 	// Complete relinquishes the worker's exclusive ownership of the job. It may
 	// optionally update metadata indicating that the job is finished.
 	Complete(context.Context, amboy.Job)
+	// TODO (EVG-14617): add Close method to stop the dispatcher from further
+	// dispatches. It can be called when the queue closes to stop further
+	// dispatching from occurring and giving up on all actively-dispatched jobs.
 }
 
 type dispatcherImpl struct {

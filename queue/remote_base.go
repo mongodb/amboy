@@ -471,6 +471,9 @@ func (q *remoteBase) Start(ctx context.Context) error {
 }
 
 func (q *remoteBase) Close(ctx context.Context) {
+	// TODO (EVG-14617): close the queue dispatcher and the driver _before_
+	// closing the runners (makes it less likely to dispatch more jobs that will
+	// just get cancelled).
 	if r := q.Runner(); r != nil {
 		r.Close(ctx)
 	}
