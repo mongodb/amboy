@@ -487,7 +487,11 @@ func (q *remoteBase) Close(ctx context.Context) {
 		}))
 	}
 	if q.driver != nil {
-		q.driver.Close()
+		grip.Warning(message.WrapError(q.driver.Close(ctx), message.Fields{
+			"message":  "driver closed with errors",
+			"service":  "amboy.queue.mdb",
+			"queue_id": q.ID(),
+		}))
 	}
 	if r := q.Runner(); r != nil {
 		r.Close(ctx)

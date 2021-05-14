@@ -175,6 +175,15 @@ func TestDispatcherImplementations(t *testing.T) {
 	opts := defaultMongoDBTestOptions()
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(opts.URI))
 	require.NoError(t, err)
+	defer func() {
+		assert.NoError(t, client.Disconnect(ctx))
+	}()
+
+	driver, err := openNewMongoDriver(ctx, newDriverID(), opts, client)
+	require.NoError(t, err)
+	defer func() {
+		assert.NoError(t, driver.Close(ctx))
+	}()
 
 	for dispatcherName, makeDispatcher := range map[string]func(q amboy.Queue) Dispatcher{
 		"Basic": NewDispatcher,
@@ -325,17 +334,9 @@ func TestDispatcherImplementations(t *testing.T) {
 					q, err := newRemoteUnordered(size)
 					require.NoError(t, err)
 
-					driver, err := openNewMongoDriver(tctx, newDriverID(), opts, client)
-					require.NoError(t, err)
-
-					require.NoError(t, driver.Open(tctx))
-					defer driver.Close()
-
-					mDriver, ok := driver.(*mongoDriver)
-					require.True(t, ok)
-					require.NoError(t, mDriver.getCollection().Database().Drop(tctx))
+					require.NoError(t, driver.getCollection().Database().Drop(tctx))
 					defer func() {
-						assert.NoError(t, mDriver.getCollection().Database().Drop(tctx))
+						assert.NoError(t, driver.getCollection().Database().Drop(tctx))
 					}()
 
 					opts := mockRemoteQueueOptions{

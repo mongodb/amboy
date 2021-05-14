@@ -195,8 +195,11 @@ func (g *remoteMongoQueueGroupSingle) Get(ctx context.Context, id string) (amboy
 	}
 
 	if err = g.cache.Set(id, queue, g.opts.TTL); err != nil {
-		// safe to throw away the partially constructed
-		// here, because another won and we  haven't started the workers.
+		// If another thread already created and set the queue in the cache in
+		// between the cache check above and now, it should be safe to throw
+		// away the queue that was just constructed since it hasn't started yet.
+		queue.Close(ctx)
+
 		if q := g.cache.Get(id); q != nil {
 			return q, nil
 		}
@@ -218,7 +221,8 @@ func (g *remoteMongoQueueGroupSingle) Put(ctx context.Context, name string, queu
 func (g *remoteMongoQueueGroupSingle) Len() int { return g.cache.Len() }
 
 func (g *remoteMongoQueueGroupSingle) Queues(ctx context.Context) []string {
-	queues, _ := g.getQueues(ctx) // nolint
+	queues, err := g.getQueues(ctx)
+	grip.Warning(message.WrapError(err, "problem getting active queues in queue group"))
 	return queues
 }
 

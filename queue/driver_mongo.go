@@ -24,18 +24,19 @@ import (
 
 type mongoDriver struct {
 	client     *mongo.Client
+	ownsClient bool
 	name       string
 	opts       MongoDBOptions
 	instanceID string
 	mu         sync.RWMutex
-	canceler   context.CancelFunc
+	cancel     context.CancelFunc
 	dispatcher Dispatcher
 }
 
 // NewMongoDriver constructs a MongoDB backed queue driver
 // implementation using the go.mongodb.org/mongo-driver as the
 // database interface.
-func newMongoDriver(name string, opts MongoDBOptions) (remoteQueueDriver, error) {
+func newMongoDriver(name string, opts MongoDBOptions) (*mongoDriver, error) {
 	host, _ := os.Hostname() // nolint
 
 	if err := opts.Validate(); err != nil {
@@ -49,20 +50,16 @@ func newMongoDriver(name string, opts MongoDBOptions) (remoteQueueDriver, error)
 	}, nil
 }
 
-// openNewMongoDriver constructs and opens a new MongoDB driver instance
-// using the specified client. It is equivalent to calling
-// NewMongoDriver() and calling driver.Open().
-func openNewMongoDriver(ctx context.Context, name string, opts MongoDBOptions, client *mongo.Client) (remoteQueueDriver, error) {
+// openNewMongoDriver constructs and opens a new MongoDB driver instance using
+// the specified client. The returned driver does not take ownership of the
+// lifetime of the client.
+func openNewMongoDriver(ctx context.Context, name string, opts MongoDBOptions, client *mongo.Client) (*mongoDriver, error) {
 	d, err := newMongoDriver(name, opts)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create driver")
 	}
-	md, ok := d.(*mongoDriver)
-	if !ok {
-		return nil, errors.New("amboy programmer error: incorrect constructor")
-	}
 
-	if err := md.start(ctx, client); err != nil {
+	if err := d.start(ctx, client); err != nil {
 		return nil, errors.Wrap(err, "problem starting driver")
 	}
 
@@ -72,12 +69,13 @@ func openNewMongoDriver(ctx context.Context, name string, opts MongoDBOptions, c
 // newMongoGroupDriver is similar to newMongoDriver, except it prefixes job ids
 // with a prefix and adds the group field to the documents in the database which
 // makes it possible to manage distinct queues with a single MongoDB collection.
-func newMongoGroupDriver(name string, opts MongoDBOptions, group string) (remoteQueueDriver, error) {
+func newMongoGroupDriver(name string, opts MongoDBOptions, group string) (*mongoDriver, error) {
 	host, _ := os.Hostname() // nolint
 
 	if err := opts.Validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid mongo driver options")
 	}
+
 	opts.UseGroups = true
 	opts.GroupName = group
 
@@ -89,22 +87,18 @@ func newMongoGroupDriver(name string, opts MongoDBOptions, group string) (remote
 }
 
 // OpenNewMongoGroupDriver constructs and opens a new MongoDB driver instance
-// using the specified client. It is equivalent to calling
-// NewMongoGroupDriver() and calling driver.Open().
-func openNewMongoGroupDriver(ctx context.Context, name string, opts MongoDBOptions, group string, client *mongo.Client) (remoteQueueDriver, error) {
+// using the specified client. The returned driver does not take ownership of
+// the lifetime of the client.
+func openNewMongoGroupDriver(ctx context.Context, name string, opts MongoDBOptions, group string, client *mongo.Client) (*mongoDriver, error) {
 	d, err := newMongoGroupDriver(name, opts, group)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create driver")
-	}
-	md, ok := d.(*mongoDriver)
-	if !ok {
-		return nil, errors.New("programmer error: incorrect constructor")
 	}
 
 	opts.UseGroups = true
 	opts.GroupName = group
 
-	if err := md.start(ctx, client); err != nil {
+	if err := d.start(ctx, client); err != nil {
 		return nil, errors.Wrap(err, "starting driver")
 	}
 
@@ -118,9 +112,11 @@ func (d *mongoDriver) ID() string {
 	return d.instanceID
 }
 
+// Open opens a new owned connection for the driver. If a connection has already
+// been previously established for the driver, this is a no-op.
 func (d *mongoDriver) Open(ctx context.Context) error {
 	d.mu.RLock()
-	if d.canceler != nil {
+	if d.cancel != nil {
 		d.mu.RUnlock()
 		return nil
 	}
@@ -130,6 +126,7 @@ func (d *mongoDriver) Open(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrapf(err, "opening connection to mongodb at '%s", d.opts.URI)
 	}
+	d.ownsClient = true
 
 	return errors.Wrap(d.start(ctx, client), "starting driver")
 }
@@ -138,9 +135,10 @@ func (d *mongoDriver) start(ctx context.Context, client *mongo.Client) error {
 	if client == nil {
 		return errors.New("cannot start the mongo driver without a client")
 	}
+
 	d.mu.Lock()
 	dCtx, cancel := context.WithCancel(ctx)
-	d.canceler = cancel
+	d.cancel = cancel
 
 	d.client = client
 	d.mu.Unlock()
@@ -398,13 +396,21 @@ func (d *mongoDriver) reportingIndexes() []mongo.IndexModel {
 	return indexes
 }
 
-func (d *mongoDriver) Close() {
+// Close closes the resources for the driver. If it initialized a new client, it
+// is disconnected.
+func (d *mongoDriver) Close(ctx context.Context) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if d.canceler != nil {
-		d.canceler()
-		d.canceler = nil
+	if d.cancel != nil {
+		d.cancel()
+		d.cancel = nil
 	}
+
+	if d.ownsClient {
+		return d.client.Disconnect(ctx)
+	}
+
+	return nil
 }
 
 func buildCompoundID(n, id string) string { return fmt.Sprintf("%s.%s", n, id) }
