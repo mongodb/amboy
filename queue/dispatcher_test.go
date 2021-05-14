@@ -26,6 +26,7 @@ type mockDispatcher struct {
 	shouldFailDispatch func(amboy.Job) bool
 	initialLock        func(amboy.Job) error
 	lockPing           func(context.Context, amboy.Job)
+	closed             bool
 }
 
 func newMockDispatcher(q amboy.Queue) *mockDispatcher {
@@ -103,20 +104,20 @@ func (d *mockDispatcher) Release(ctx context.Context, j amboy.Job) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	grip.Debug(message.WrapError(d.release(ctx, j), message.Fields{
+	grip.Debug(message.WrapError(d.release(ctx, j.ID()), message.Fields{
 		"service":  "mock dispatcher",
 		"queue_id": d.queue.ID(),
 		"job_id":   j.ID(),
 	}))
 }
 
-func (d *mockDispatcher) release(ctx context.Context, j amboy.Job) error {
-	info, ok := d.dispatched[j.ID()]
+func (d *mockDispatcher) release(ctx context.Context, jobID string) error {
+	info, ok := d.dispatched[jobID]
 	if !ok {
 		return errors.New("attempting to release an unowned job")
 	}
 
-	delete(d.dispatched, j.ID())
+	delete(d.dispatched, jobID)
 
 	info.pingCancel()
 
@@ -132,7 +133,7 @@ func (d *mockDispatcher) Complete(ctx context.Context, j amboy.Job) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	if err := d.release(ctx, j); err != nil {
+	if err := d.release(ctx, j.ID()); err != nil {
 		grip.Debug(message.WrapError(err, message.Fields{
 			"service":  "mock dispatcher",
 			"queue_id": d.queue.ID(),
@@ -144,6 +145,19 @@ func (d *mockDispatcher) Complete(ctx context.Context, j amboy.Job) {
 	ti := j.TimeInfo()
 	ti.End = time.Now()
 	j.UpdateTimeInfo(ti)
+}
+
+func (d *mockDispatcher) Close(ctx context.Context) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	for jobID := range d.dispatched {
+		d.release(ctx, jobID)
+	}
+
+	d.closed = true
+
+	return nil
 }
 
 func TestDispatcherImplementations(t *testing.T) {

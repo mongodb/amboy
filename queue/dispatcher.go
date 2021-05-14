@@ -26,15 +26,17 @@ type Dispatcher interface {
 	// Complete relinquishes the worker's exclusive ownership of the job. It may
 	// optionally update metadata indicating that the job is finished.
 	Complete(context.Context, amboy.Job)
-	// TODO (EVG-14617): add Close method to stop the dispatcher from further
-	// dispatches. It can be called when the queue closes to stop further
-	// dispatching from occurring and giving up on all actively-dispatched jobs.
+	// Close cleans up all resources used by the Dispatcher and releases all
+	// actively-dispatched jobs. Jobs should not be dispatchable after this is
+	// called.
+	Close(context.Context) error
 }
 
 type dispatcherImpl struct {
-	queue amboy.Queue
-	mutex sync.Mutex
-	cache map[string]dispatcherInfo
+	queue  amboy.Queue
+	mutex  sync.Mutex
+	cache  map[string]dispatcherInfo
+	closed bool
 }
 
 // NewDispatcher constructs a default dispatching implementation.
@@ -64,7 +66,11 @@ func (d *dispatcherImpl) Dispatch(ctx context.Context, j amboy.Job) error {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
 
-	if info, ok := d.popInfo(j); ok {
+	if d.closed {
+		return errors.New("dispatcher is closed")
+	}
+
+	if info, ok := d.popInfo(j.ID()); ok {
 		grip.Debug(message.Fields{
 			"message":  "re-dispatching job that has already been dispatched",
 			"queue_id": d.queue.ID(),
@@ -139,7 +145,7 @@ func (d *dispatcherImpl) Dispatch(ctx context.Context, j amboy.Job) error {
 
 func (d *dispatcherImpl) Release(ctx context.Context, j amboy.Job) {
 	d.mutex.Lock()
-	info, ok := d.popInfo(j)
+	info, ok := d.popInfo(j.ID())
 	if !ok {
 		d.mutex.Unlock()
 		return
@@ -158,15 +164,15 @@ func (d *dispatcherImpl) Release(ctx context.Context, j amboy.Job) {
 // popInfo retrieves and removes information related to the dispatch of a job,
 // returning the removed information to the caller and whether or not the
 // information was found.
-func (d *dispatcherImpl) popInfo(j amboy.Job) (dispatcherInfo, bool) {
-	info, ok := d.cache[j.ID()]
-	delete(d.cache, j.ID())
+func (d *dispatcherImpl) popInfo(jobID string) (dispatcherInfo, bool) {
+	info, ok := d.cache[jobID]
+	delete(d.cache, jobID)
 	return info, ok
 }
 
 func (d *dispatcherImpl) Complete(ctx context.Context, j amboy.Job) {
 	d.mutex.Lock()
-	info, ok := d.popInfo(j)
+	info, ok := d.popInfo(j.ID())
 	if !ok {
 		d.mutex.Unlock()
 		return
@@ -188,6 +194,31 @@ func (d *dispatcherImpl) Complete(ctx context.Context, j amboy.Job) {
 		"queue_id": d.queue.ID(),
 		"service":  "amboy.queue.dispatcher",
 	}))
+}
+
+// Close releases all jobs currently locked by the dispatcher and waits for
+// all ping threads to exit.
+func (d *dispatcherImpl) Close(ctx context.Context) error {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+
+	for jobID := range d.cache {
+		info, ok := d.popInfo(jobID)
+		if !ok {
+			continue
+		}
+		grip.Warning(message.WrapError(d.waitForPing(ctx, info), message.Fields{
+			"message":  "could not wait for job ping to complete",
+			"op":       "release",
+			"job_id":   jobID,
+			"queue_id": d.queue.ID(),
+			"service":  "amboy.queue.dispatcher",
+		}))
+	}
+
+	d.closed = true
+
+	return nil
 }
 
 // waitForPing cancels the dispatcher ping for a job and waits for the pinger to

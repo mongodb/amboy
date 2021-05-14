@@ -120,9 +120,12 @@ func (d *mongoDriver) ID() string {
 }
 
 func (d *mongoDriver) Open(ctx context.Context) error {
+	d.mu.RLock()
 	if d.canceler != nil {
+		d.mu.RUnlock()
 		return nil
 	}
+	d.mu.RUnlock()
 
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(d.opts.URI))
 	if err != nil {
@@ -133,10 +136,10 @@ func (d *mongoDriver) Open(ctx context.Context) error {
 }
 
 func (d *mongoDriver) start(ctx context.Context, client *mongo.Client) error {
+	d.mu.Lock()
 	dCtx, cancel := context.WithCancel(ctx)
 	d.canceler = cancel
 
-	d.mu.Lock()
 	d.client = client
 	d.mu.Unlock()
 
@@ -394,8 +397,11 @@ func (d *mongoDriver) reportingIndexes() []mongo.IndexModel {
 }
 
 func (d *mongoDriver) Close() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	if d.canceler != nil {
 		d.canceler()
+		d.canceler = nil
 	}
 }
 
