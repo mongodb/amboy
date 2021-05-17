@@ -202,23 +202,18 @@ func (d *dispatcherImpl) Close(ctx context.Context) error {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
 
+	catcher := grip.NewBasicCatcher()
 	for jobID := range d.cache {
 		info, ok := d.popInfo(jobID)
 		if !ok {
 			continue
 		}
-		grip.Warning(message.WrapError(d.waitForPing(ctx, info), message.Fields{
-			"message":  "could not wait for job ping to complete",
-			"op":       "release",
-			"job_id":   jobID,
-			"queue_id": d.queue.ID(),
-			"service":  "amboy.queue.dispatcher",
-		}))
+		catcher.Wrapf(d.waitForPing(ctx, info), "waiting for job ping to complete for job '%s'", jobID)
 	}
 
 	d.closed = true
 
-	return nil
+	return catcher.Resolve()
 }
 
 // waitForPing cancels the dispatcher ping for a job and waits for the pinger to

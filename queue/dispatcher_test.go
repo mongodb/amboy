@@ -151,8 +151,9 @@ func (d *mockDispatcher) Close(ctx context.Context) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
+	catcher := grip.NewBasicCatcher()
 	for jobID := range d.dispatched {
-		d.release(ctx, jobID)
+		catcher.Wrapf(d.release(ctx, jobID), "releasing job '%s'", jobID)
 	}
 
 	d.closed = true
