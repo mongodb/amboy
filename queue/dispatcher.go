@@ -202,6 +202,12 @@ func (d *dispatcherImpl) Close(ctx context.Context) error {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
 
+	if d.closed {
+		return nil
+	}
+
+	d.closed = true
+
 	catcher := grip.NewBasicCatcher()
 	for jobID := range d.cache {
 		info, ok := d.popInfo(jobID)
@@ -210,8 +216,6 @@ func (d *dispatcherImpl) Close(ctx context.Context) error {
 		}
 		catcher.Wrapf(d.waitForPing(ctx, info), "waiting for job ping to complete for job '%s'", jobID)
 	}
-
-	d.closed = true
 
 	return catcher.Resolve()
 }

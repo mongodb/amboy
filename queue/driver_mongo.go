@@ -30,6 +30,7 @@ type mongoDriver struct {
 	instanceID string
 	mu         sync.RWMutex
 	cancel     context.CancelFunc
+	closed     bool
 	dispatcher Dispatcher
 }
 
@@ -59,7 +60,7 @@ func openNewMongoDriver(ctx context.Context, name string, opts MongoDBOptions, c
 		return nil, errors.Wrap(err, "could not create driver")
 	}
 
-	if err := d.start(ctx, client); err != nil {
+	if err := d.start(ctx, clientStartOptions{client: client}); err != nil {
 		return nil, errors.Wrap(err, "problem starting driver")
 	}
 
@@ -86,7 +87,7 @@ func newMongoGroupDriver(name string, opts MongoDBOptions, group string) (*mongo
 	}, nil
 }
 
-// OpenNewMongoGroupDriver constructs and opens a new MongoDB driver instance
+// openNewMongoGroupDriver constructs and opens a new MongoDB driver instance
 // using the specified client. The returned driver does not take ownership of
 // the lifetime of the client.
 func openNewMongoGroupDriver(ctx context.Context, name string, opts MongoDBOptions, group string, client *mongo.Client) (*mongoDriver, error) {
@@ -98,7 +99,7 @@ func openNewMongoGroupDriver(ctx context.Context, name string, opts MongoDBOptio
 	opts.UseGroups = true
 	opts.GroupName = group
 
-	if err := d.start(ctx, client); err != nil {
+	if err := d.start(ctx, clientStartOptions{client: client}); err != nil {
 		return nil, errors.Wrap(err, "starting driver")
 	}
 
@@ -126,13 +127,20 @@ func (d *mongoDriver) Open(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrapf(err, "opening connection to mongodb at '%s", d.opts.URI)
 	}
-	d.ownsClient = true
 
-	return errors.Wrap(d.start(ctx, client), "starting driver")
+	return errors.Wrap(d.start(ctx, clientStartOptions{
+		client:     client,
+		ownsClient: true,
+	}), "starting driver")
 }
 
-func (d *mongoDriver) start(ctx context.Context, client *mongo.Client) error {
-	if client == nil {
+type clientStartOptions struct {
+	client     *mongo.Client
+	ownsClient bool
+}
+
+func (d *mongoDriver) start(ctx context.Context, opts clientStartOptions) error {
+	if opts.client == nil {
 		return errors.New("cannot start the mongo driver without a client")
 	}
 
@@ -140,7 +148,8 @@ func (d *mongoDriver) start(ctx context.Context, client *mongo.Client) error {
 	dCtx, cancel := context.WithCancel(ctx)
 	d.cancel = cancel
 
-	d.client = client
+	d.client = opts.client
+	d.ownsClient = opts.ownsClient
 	d.mu.Unlock()
 
 	startAt := time.Now()
@@ -401,9 +410,17 @@ func (d *mongoDriver) reportingIndexes() []mongo.IndexModel {
 func (d *mongoDriver) Close(ctx context.Context) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+
+	if d.closed {
+		return nil
+	}
+
+	d.closed = true
+
 	if d.cancel != nil {
 		d.cancel()
 		d.cancel = nil
+
 	}
 
 	if d.ownsClient {
