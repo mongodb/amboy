@@ -1117,6 +1117,7 @@ func (d *mongoDriver) JobInfo(ctx context.Context) <-chan amboy.JobInfo {
 	return infos
 }
 
+// getNextQuery returns the query for the next available jobs.
 func (d *mongoDriver) getNextQuery() bson.M {
 	lockTimeout := d.LockTimeout()
 	now := time.Now()
@@ -1147,9 +1148,44 @@ func (d *mongoDriver) getNextQuery() bson.M {
 	return qd
 }
 
+func (d *mongoDriver) getWaitUntilQuery(t time.Time) bson.M {
+	return bson.M{
+		"$or": []bson.M{
+			{"time_info.wait_until": bson.M{"$exists": false}},
+			{"time_info.wait_until": bson.M{"$lte": t}},
+		},
+	}
+}
+
+func (d *mongoDriver) getDispatchByQuery(t time.Time) bson.M {
+	return bson.M{
+		"$or": []bson.M{
+			{"time_info.dispatch_by": bson.M{"$exists": false}},
+			{"time_info.dispatch_by": bson.M{"$gt": t}},
+		},
+	}
+}
+
+// getNextSampledPipeline returns an aggregation pipeline to query for the next
+// available jobs, with a maximum limit (sampleSize) on the number of jobs
+// considered and returned. Jobs are returned in shuffled random order, and the
+// same job may be returned multiple times.
+func (d *mongoDriver) getNextSampledPipeline(sampleSize int) []bson.M {
+	match := bson.M{"$match": d.getNextQuery()}
+	// $limit is necessary for performance reasons. $sample scans all input
+	// documents to randomly select documents to return. Therefore, without a
+	// limit on the number of jobs to consider, the cost of $sample will become
+	// more expensive with the number of jobs that it must consider.
+	// Source:
+	// https://docs.mongodb.com/manual/reference/operator/aggregation/sample/#behavior
+	limit := bson.M{"$limit": sampleSize}
+	sample := bson.M{"$sample": bson.M{"size": sampleSize}}
+
+	return []bson.M{match, limit, sample}
+}
+
 func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 	var (
-		qd             bson.M
 		job            amboy.Job
 		misses         int
 		dispatchMisses int
@@ -1189,19 +1225,42 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 			return nil
 		case <-timer.C:
 			misses++
-			qd = d.getNextQuery()
-			iter, err := d.getCollection().Find(ctx, qd, opts)
-			if err != nil {
-				grip.Warning(message.WrapError(err, message.Fields{
-					"message":       "problem finding next jobs",
-					"driver_id":     d.instanceID,
-					"service":       "amboy.queue.mdb",
-					"operation":     "retrieving next job",
-					"is_group":      d.opts.UseGroups,
-					"group":         d.opts.GroupName,
-					"duration_secs": time.Since(startAt).Seconds(),
-				}))
-				return nil
+
+			var (
+				iter *mongo.Cursor
+				err  error
+			)
+			if d.opts.Priority {
+				q := d.getNextQuery()
+				iter, err = d.getCollection().Find(ctx, q, opts)
+				if err != nil {
+					grip.Warning(message.WrapError(err, message.Fields{
+						"message":       "problem finding next jobs",
+						"driver_id":     d.instanceID,
+						"service":       "amboy.queue.mdb",
+						"operation":     "retrieving next job",
+						"is_group":      d.opts.UseGroups,
+						"group":         d.opts.GroupName,
+						"duration_secs": time.Since(startAt).Seconds(),
+					}))
+					return nil
+				}
+			} else {
+				const sampleSize = 200
+				p := d.getNextSampledPipeline(sampleSize)
+				iter, err = d.getCollection().Aggregate(ctx, p)
+				if err != nil {
+					grip.Warning(message.WrapError(err, message.Fields{
+						"message":       "problem finding sample of next jobs",
+						"driver_id":     d.instanceID,
+						"service":       "amboy.queue.mdb",
+						"operation":     "retrieving next job (from sample)",
+						"is_group":      d.opts.UseGroups,
+						"group":         d.opts.GroupName,
+						"duration_secs": time.Since(startAt).Seconds(),
+					}))
+					return nil
+				}
 			}
 
 			job, dispatchInfo := d.tryDispatchJob(ctx, iter, startAt)
