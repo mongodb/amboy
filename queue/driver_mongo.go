@@ -1231,7 +1231,23 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 				iter *mongo.Cursor
 				err  error
 			)
-			if d.opts.Priority {
+
+			if d.opts.SampleSize > 0 && !d.opts.Priority {
+				p := d.getNextSampledPipeline(d.opts.SampleSize)
+				iter, err = d.getCollection().Aggregate(ctx, p)
+				if err != nil {
+					grip.Warning(message.WrapError(err, message.Fields{
+						"message":       "problem finding sample of next jobs",
+						"driver_id":     d.instanceID,
+						"service":       "amboy.queue.mdb",
+						"operation":     "retrieving next job (from sample)",
+						"is_group":      d.opts.UseGroups,
+						"group":         d.opts.GroupName,
+						"duration_secs": time.Since(startAt).Seconds(),
+					}))
+					return nil
+				}
+			} else {
 				q := d.getNextQuery()
 				iter, err = d.getCollection().Find(ctx, q, opts)
 				if err != nil {
@@ -1240,22 +1256,6 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 						"driver_id":     d.instanceID,
 						"service":       "amboy.queue.mdb",
 						"operation":     "retrieving next job",
-						"is_group":      d.opts.UseGroups,
-						"group":         d.opts.GroupName,
-						"duration_secs": time.Since(startAt).Seconds(),
-					}))
-					return nil
-				}
-			} else {
-				const sampleSize = 200
-				p := d.getNextSampledPipeline(sampleSize)
-				iter, err = d.getCollection().Aggregate(ctx, p)
-				if err != nil {
-					grip.Warning(message.WrapError(err, message.Fields{
-						"message":       "problem finding sample of next jobs",
-						"driver_id":     d.instanceID,
-						"service":       "amboy.queue.mdb",
-						"operation":     "retrieving next job (from sample)",
 						"is_group":      d.opts.UseGroups,
 						"group":         d.opts.GroupName,
 						"duration_secs": time.Since(startAt).Seconds(),
