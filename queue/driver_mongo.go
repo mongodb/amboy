@@ -1185,6 +1185,23 @@ func (d *mongoDriver) getNextSampledPipeline(sampleSize int) []bson.M {
 	return []bson.M{match, limit, sample}
 }
 
+func (d *mongoDriver) getNextCursor(ctx context.Context) (*mongo.Cursor, error) {
+	if d.opts.SampleSize > 0 && !d.opts.Priority {
+		p := d.getNextSampledPipeline(d.opts.SampleSize)
+		iter, err := d.getCollection().Aggregate(ctx, p)
+		return iter, errors.Wrap(err, "sampling next jobs")
+	}
+
+	opts := options.Find()
+	if d.opts.Priority {
+		opts.SetSort(bson.M{"priority": -1})
+	}
+
+	q := d.getNextQuery()
+	iter, err := d.getCollection().Find(ctx, q, opts)
+	return iter, errors.Wrap(err, "getting next jobs")
+}
+
 func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 	var (
 		job            amboy.Job
@@ -1212,11 +1229,6 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 			})
 	}()
 
-	opts := options.Find()
-	if d.opts.Priority {
-		opts.SetSort(bson.M{"priority": -1})
-	}
-
 	timer := time.NewTimer(0)
 	defer timer.Stop()
 
@@ -1227,41 +1239,18 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 		case <-timer.C:
 			misses++
 
-			var (
-				iter *mongo.Cursor
-				err  error
-			)
-
-			if d.opts.SampleSize > 0 && !d.opts.Priority {
-				p := d.getNextSampledPipeline(d.opts.SampleSize)
-				iter, err = d.getCollection().Aggregate(ctx, p)
-				if err != nil {
-					grip.Warning(message.WrapError(err, message.Fields{
-						"message":       "problem finding sample of next jobs",
-						"driver_id":     d.instanceID,
-						"service":       "amboy.queue.mdb",
-						"operation":     "retrieving next job (from sample)",
-						"is_group":      d.opts.UseGroups,
-						"group":         d.opts.GroupName,
-						"duration_secs": time.Since(startAt).Seconds(),
-					}))
-					return nil
-				}
-			} else {
-				q := d.getNextQuery()
-				iter, err = d.getCollection().Find(ctx, q, opts)
-				if err != nil {
-					grip.Warning(message.WrapError(err, message.Fields{
-						"message":       "problem finding next jobs",
-						"driver_id":     d.instanceID,
-						"service":       "amboy.queue.mdb",
-						"operation":     "retrieving next job",
-						"is_group":      d.opts.UseGroups,
-						"group":         d.opts.GroupName,
-						"duration_secs": time.Since(startAt).Seconds(),
-					}))
-					return nil
-				}
+			iter, err := d.getNextCursor(ctx)
+			if err != nil {
+				grip.Warning(message.WrapError(err, message.Fields{
+					"message":       "problem finding next job",
+					"driver_id":     d.instanceID,
+					"service":       "amboy.queue.mdb",
+					"operation":     "retrieving next job",
+					"is_group":      d.opts.UseGroups,
+					"group":         d.opts.GroupName,
+					"duration_secs": time.Since(startAt).Seconds(),
+				}))
+				return nil
 			}
 
 			job, dispatchInfo := d.tryDispatchJob(ctx, iter, startAt)
