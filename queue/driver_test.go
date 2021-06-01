@@ -580,21 +580,6 @@ func (s *DriverSuite) TestStatsCountsAreAccurate() {
 	s.Equal(numEnqueued+numRunning+numCompleted+numRetrying, stats.Total)
 }
 
-func (s *DriverSuite) TestNextMethodReturnsPendingJob() {
-	ctx, cancel := context.WithTimeout(s.ctx, 100*time.Millisecond)
-	defer cancel()
-
-	j := job.NewShellJob("echo foo", "")
-
-	s.Require().NoError(s.driver.Put(ctx, j))
-	stats := s.driver.Stats(ctx)
-	s.Require().Equal(1, stats.Total)
-
-	nextJob := s.driver.Next(ctx)
-	s.Require().NotNil(nextJob)
-	s.Equal(nextJob.ID(), j.ID())
-}
-
 func (s *DriverSuite) TestNextMethodDoesNotReturnLastJob() {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
