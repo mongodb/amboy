@@ -124,6 +124,7 @@ func (opts *MongoDBOptions) Validate() error {
 	catcher.NewWhen(opts.URI == "", "must specify connection URI")
 	catcher.NewWhen(opts.DB == "", "must specify database")
 	catcher.NewWhen(opts.SampleSize < 0, "sample rate cannot be negative")
+	catcher.NewWhen(opts.Priority && opts.SampleSize > 0, "cannot sample next jobs when ordering them by priority")
 	catcher.NewWhen(opts.LockTimeout < 0, "lock timeout cannot be negative")
 	if opts.LockTimeout == 0 {
 		opts.LockTimeout = amboy.LockTimeout
