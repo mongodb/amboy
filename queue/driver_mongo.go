@@ -1242,7 +1242,7 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 			iter, err := d.getNextCursor(ctx)
 			if err != nil {
 				grip.Warning(message.WrapError(err, message.Fields{
-					"message":       "problem finding next job",
+					"message":       "problem finding jobs ready to dispatch",
 					"driver_id":     d.instanceID,
 					"service":       "amboy.queue.mdb",
 					"operation":     "retrieving next job",
