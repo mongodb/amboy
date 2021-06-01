@@ -1133,38 +1133,19 @@ func (d *mongoDriver) getNextQuery() bson.M {
 	d.modifyQueryForGroup(qd)
 
 	timeLimits := bson.M{}
-	if d.opts.CheckWaitUntil && d.opts.CheckDispatchBy {
-		timeLimits["$and"] = []bson.M{
-			d.getWaitUntilQuery(now),
-			d.getDispatchByQuery(now),
+	if d.opts.CheckWaitUntil {
+		timeLimits["time_info.wait_until"] = bson.M{"$lte": now}
+	}
+	if d.opts.CheckDispatchBy {
+		timeLimits["$or"] = []bson.M{
+			{"time_info.dispatch_by": bson.M{"$gt": now}},
+			{"time_info.dispatch_by": time.Time{}},
 		}
-	} else if d.opts.CheckWaitUntil {
-		timeLimits = d.getWaitUntilQuery(now)
-	} else if d.opts.CheckDispatchBy {
-		timeLimits = d.getDispatchByQuery(now)
 	}
 	if len(timeLimits) > 0 {
 		qd = bson.M{"$and": []bson.M{qd, timeLimits}}
 	}
 	return qd
-}
-
-func (d *mongoDriver) getWaitUntilQuery(t time.Time) bson.M {
-	return bson.M{
-		"$or": []bson.M{
-			{"time_info.wait_until": bson.M{"$exists": false}},
-			{"time_info.wait_until": bson.M{"$lte": t}},
-		},
-	}
-}
-
-func (d *mongoDriver) getDispatchByQuery(t time.Time) bson.M {
-	return bson.M{
-		"$or": []bson.M{
-			{"time_info.dispatch_by": bson.M{"$exists": false}},
-			{"time_info.dispatch_by": bson.M{"$gt": t}},
-		},
-	}
 }
 
 // getNextSampledPipeline returns an aggregation pipeline to query for the next
