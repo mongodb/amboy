@@ -831,7 +831,6 @@ func (d *mongoDriver) Complete(ctx context.Context, j amboy.Job) error {
 
 func (d *mongoDriver) prepareInterchange(j amboy.Job) (*registry.JobInterchange, error) {
 	stat := j.Status()
-	stat.ErrorCount = len(stat.Errors)
 	stat.ModificationTime = time.Now()
 	j.SetStatus(stat)
 
