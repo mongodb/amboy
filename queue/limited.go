@@ -84,10 +84,6 @@ func (q *limitedSizeLocal) Put(ctx context.Context, j amboy.Job) error {
 		q.mu.Unlock()
 		return amboy.NewDuplicateJobErrorf("cannot dispatch '%s', already complete", name)
 	}
-	if _, ok := q.pendingStorage[name]; ok {
-		q.mu.Unlock()
-		return amboy.NewDuplicateJobErrorf("attempting to enqueue duplicate job '%s'", name)
-	}
 	if j.ShouldApplyScopesOnEnqueue() {
 		if err := q.scopes.Acquire(name, j.Scopes()); err != nil {
 			q.mu.Unlock()
@@ -95,17 +91,18 @@ func (q *limitedSizeLocal) Put(ctx context.Context, j amboy.Job) error {
 		}
 	}
 	q.pendingStorage[name] = j
+	q.storage[name] = j
 	q.mu.Unlock()
 
 	select {
 	case <-ctx.Done():
 		q.mu.Lock()
+		delete(q.storage, name)
 		delete(q.pendingStorage, name)
 		q.mu.Unlock()
 		return errors.Wrapf(ctx.Err(), "queue full, cannot add %s", name)
 	case q.channel <- j:
 		q.mu.Lock()
-		q.storage[name] = j
 		delete(q.pendingStorage, name)
 		q.mu.Unlock()
 		return nil
@@ -284,7 +281,7 @@ func (q *limitedSizeLocal) Stats(ctx context.Context) amboy.QueueStats {
 	defer q.mu.RUnlock()
 
 	s := amboy.QueueStats{
-		Total:     len(q.storage) + q.staleCount,
+		Total:     len(q.storage) - len(q.pendingStorage) + q.staleCount,
 		Completed: len(q.toDelete) + q.deletedCount,
 		Pending:   len(q.channel),
 	}
