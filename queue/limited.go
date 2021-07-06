@@ -97,8 +97,8 @@ func (q *limitedSizeLocal) Put(ctx context.Context, j amboy.Job) error {
 	select {
 	case <-ctx.Done():
 		q.mu.Lock()
-		delete(q.storage, name)
 		delete(q.pendingStorage, name)
+		delete(q.storage, name)
 		q.mu.Unlock()
 		return errors.Wrapf(ctx.Err(), "queue full, cannot add %s", name)
 	case q.channel <- j:
@@ -238,9 +238,15 @@ func (q *limitedSizeLocal) JobInfo(ctx context.Context) <-chan amboy.JobInfo {
 	q.mu.RLock()
 	defer q.mu.RUnlock()
 
-	infos := make(chan amboy.JobInfo, len(q.storage))
+	infos := make(chan amboy.JobInfo, len(q.storage)-len(q.pendingStorage))
 	defer close(infos)
 	for _, j := range q.storage {
+		if _, ok := q.pendingStorage[j.ID()]; ok {
+			// The job is still pending in Put, so we should not
+			// include it as part of the queue.
+			continue
+		}
+
 		select {
 		case <-ctx.Done():
 			return infos
