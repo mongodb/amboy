@@ -192,4 +192,4 @@ Issues
 
 Please file all issues in the `EVG project
 <https://jira.mongodb.org/browse/EVG>`_ in the `MongoDB Jira
-<https://jira.mongodb.org/>`_ instance.
+<https://jira.mongodb.org/>`_ instance. 
