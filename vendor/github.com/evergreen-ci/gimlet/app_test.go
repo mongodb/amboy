@@ -96,11 +96,11 @@ func (s *AppSuite) TestResolveEncountersErrorsWithAnInvalidRoot() {
 	n, err2 := s.app.getNegroni()
 	s.Nil(n)
 	s.Error(err2)
-	s.Equal(err1, err2)
+	s.Equal(err1.Error(), err2.Error())
 
 	// also to run
 	err2 = s.app.Run(context.TODO())
-	s.Equal(err1, err2)
+	s.Equal(err1.Error(), err2.Error())
 }
 
 func (s *AppSuite) TestSetPortToExistingValueIsANoOp() {
@@ -198,6 +198,17 @@ func (s *AppSuite) TestAppRun() {
 	defer cancel()
 	s.NoError(s.app.Resolve())
 	s.NoError(s.app.Run(ctx))
+}
+
+func (s *AppSuite) TestAppRunWithError() {
+	s.Len(s.app.routes, 0)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	s.app.port = -10
+	s.app.address = ":;;;:::::"
+	wait, err := s.app.BackgroundRun(ctx)
+	s.Error(err)
+	s.Nil(wait)
 }
 
 func (s *AppSuite) TestWrapperAccessors() {

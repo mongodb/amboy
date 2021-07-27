@@ -236,3 +236,103 @@ func (ra *restrictedAccessHandler) ServeHTTP(rw http.ResponseWriter, r *http.Req
 
 	rw.WriteHeader(http.StatusUnauthorized)
 }
+
+type requiresPermissionHandler struct {
+	opts RequiresPermissionMiddlewareOpts
+}
+
+type FindResourceFunc func(*http.Request) ([]string, int, error)
+
+// RequiresPermissionMiddlewareOpts defines what permissions the middleware shoud check and how. The ResourceFunc parameter
+// can be used to specify custom behavior to extract a valid resource name from request variables
+type RequiresPermissionMiddlewareOpts struct {
+	RM             RoleManager
+	PermissionKey  string
+	ResourceType   string
+	RequiredLevel  int
+	ResourceLevels []string
+	DefaultRoles   []Role
+	ResourceFunc   FindResourceFunc
+}
+
+// RequiresPermission allows a route to specify that access to a given resource in the route requires a certain permission
+// at a certain level. The resource ID must be defined somewhere in the URL as mux.Vars. The specific URL params to check
+// need to be sent in the last parameter of this function, in order of most to least specific
+func RequiresPermission(opts RequiresPermissionMiddlewareOpts) Middleware {
+	return &requiresPermissionHandler{
+		opts: opts,
+	}
+}
+
+func (rp *requiresPermissionHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+	vars := GetVars(r)
+	var resources []string
+	var status int
+	var err error
+	if rp.opts.ResourceFunc != nil {
+		resources, status, err = rp.opts.ResourceFunc(r)
+		if err != nil {
+			http.Error(rw, err.Error(), status)
+			return
+		}
+	} else {
+		for _, level := range rp.opts.ResourceLevels {
+			if resourceVal, exists := vars[level]; exists {
+				resources = []string{resourceVal}
+				break
+			}
+		}
+	}
+
+	if len(resources) == 0 {
+		http.Error(rw, "no resources found", http.StatusNotFound)
+		return
+	}
+	if ok := rp.checkPermissions(rw, r.Context(), resources); !ok {
+		return
+	}
+
+	next(rw, r)
+}
+
+func (rp *requiresPermissionHandler) checkPermissions(rw http.ResponseWriter, ctx context.Context, resources []string) bool {
+	user := GetUser(ctx)
+	opts := PermissionOpts{
+		ResourceType:  rp.opts.ResourceType,
+		Permission:    rp.opts.PermissionKey,
+		RequiredLevel: rp.opts.RequiredLevel,
+	}
+	if user == nil {
+		for _, item := range resources {
+			opts.Resource = item
+			if rp.opts.DefaultRoles != nil {
+				if !HasPermission(rp.opts.RM, opts, rp.opts.DefaultRoles) {
+					http.Error(rw, "not authorized for this action", http.StatusUnauthorized)
+					return false
+				}
+				return true
+			}
+			http.Error(rw, "no user found", http.StatusUnauthorized)
+			return false
+		}
+		return true
+	}
+
+	authenticator := GetAuthenticator(ctx)
+	if authenticator == nil {
+		http.Error(rw, "unable to determine an authenticator", http.StatusInternalServerError)
+		return false
+	}
+	if !authenticator.CheckAuthenticated(user) {
+		http.Error(rw, "not authenticated", http.StatusUnauthorized)
+		return false
+	}
+	for _, item := range resources {
+		opts.Resource = item
+		if !user.HasPermission(opts) {
+			http.Error(rw, "not authorized for this action", http.StatusUnauthorized)
+			return false
+		}
+	}
+	return true
+}

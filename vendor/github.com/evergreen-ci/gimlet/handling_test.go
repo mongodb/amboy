@@ -50,6 +50,7 @@ func TestSerializationErrors(t *testing.T) {
 	baseCases := map[OutputFormat]writeResponseBaseFunc{
 		JSON: WriteJSONResponse,
 		YAML: WriteYAMLResponse,
+		CSV:  WriteCSVResponse,
 	}
 
 	for _, wf := range baseCases {
@@ -92,7 +93,7 @@ func TestResponsesWritingHelpers(t *testing.T) {
 	for status, cases := range testTable {
 		for of, wf := range cases {
 			r := httptest.NewRecorder()
-			wf(r, struct{}{})
+			wf(r, []struct{}{})
 			assert.Equal(status, r.Code)
 			ct, ok := r.Header()["Content-Type"]
 			assert.True(ok)
@@ -107,7 +108,7 @@ func TestBytesConverter(t *testing.T) {
 	assert := assert.New(t)
 
 	cases := [][]interface{}{
-		{fmt.Sprintf("%v", t), t},
+		{fmt.Sprintf("%v", http.DefaultClient), http.DefaultClient},
 		{"gimlet", "gimlet"},
 		{"gimlet", errors.New("gimlet")},
 		{"gimlet", []byte("gimlet")},
@@ -123,12 +124,16 @@ func TestBytesConverter(t *testing.T) {
 		out := c[0].(string)
 		in := c[1]
 
-		assert.Equal([]byte(out), convertToBytes(in))
-		assert.Equal([]byte(out), convertToBin(in))
+		buf := &bytes.Buffer{}
+		_, err := writePayload(buf, in)
+		assert.NoError(err)
+		assert.Equal([]byte(out), buf.Bytes())
 	}
 
-	assert.Equal([]byte("gimletgimlet"), convertToBin([]string{"gimlet", "gimlet"}))
-	assert.Equal([]byte("gimlet\ngimlet"), convertToBytes([]string{"gimlet", "gimlet"}))
+	buf := &bytes.Buffer{}
+	_, err := writePayload(buf, []string{"gimlet", "gimlet"})
+	assert.NoError(err)
+	assert.Equal([]byte("gimlet\ngimlet"), buf.Bytes())
 }
 
 type mangledResponseWriter struct{ *httptest.ResponseRecorder }
@@ -136,7 +141,9 @@ type mangledResponseWriter struct{ *httptest.ResponseRecorder }
 func (r mangledResponseWriter) Write(b []byte) (int, error) { return 0, errors.New("always errors") }
 
 func TestWriteResponseErrorLogs(t *testing.T) {
-	defer grip.SetSender(grip.GetSender())
+	defer func(s send.Sender) {
+		assert.NoError(t, grip.SetSender(s))
+	}(grip.GetSender())
 	assert := assert.New(t)
 	sender := send.MakeInternalLogger()
 	rw := mangledResponseWriter{httptest.NewRecorder()}

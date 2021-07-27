@@ -9,9 +9,10 @@ const (
 	get httpMethod = iota
 	put
 	post
-	delete
+	del
 	patch
 	head
+	options
 )
 
 func (m httpMethod) String() string {
@@ -20,7 +21,7 @@ func (m httpMethod) String() string {
 		return http.MethodGet
 	case put:
 		return http.MethodPut
-	case delete:
+	case del:
 		return http.MethodDelete
 	case patch:
 		return http.MethodPatch
@@ -28,6 +29,8 @@ func (m httpMethod) String() string {
 		return http.MethodPost
 	case head:
 		return http.MethodHead
+	case options:
+		return http.MethodOptions
 	default:
 		return ""
 	}
@@ -44,12 +47,13 @@ const (
 	HTML
 	YAML
 	BINARY
+	CSV
 )
 
 // IsValid provides a predicate to validate OutputFormat values.
 func (o OutputFormat) IsValid() bool {
 	switch o {
-	case JSON, TEXT, HTML, BINARY, YAML:
+	case JSON, TEXT, HTML, BINARY, YAML, CSV:
 		return true
 	default:
 		return false
@@ -68,6 +72,8 @@ func (o OutputFormat) String() string {
 		return "binary"
 	case YAML:
 		return "yaml"
+	case CSV:
+		return "csv"
 	default:
 		return "text"
 	}
@@ -87,7 +93,10 @@ func (o OutputFormat) ContentType() string {
 		return "application/octet-stream"
 	case YAML:
 		return "application/yaml; charset=utf-8"
+	case CSV:
+		return "application/csv; charset=utf-8"
 	default:
 		return "text/plain; charset=utf-8"
+
 	}
 }

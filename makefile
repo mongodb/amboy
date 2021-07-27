@@ -126,6 +126,14 @@ $(buildDir)/output.%.lint:$(buildDir)/run-linter .FORCE
 	@$(if $(GO_BIN_PATH),PATH="$(shell dirname $(GO_BIN_PATH)):$(PATH)") ./$< --output=$@ --lintBin=$(buildDir)/golangci-lint --packages='$*'
 # end test and coverage artifacts
 
+
+run-glide:$(buildDir)/run-glide
+	$(buildDir)/run-glide $(if $(VENDOR_REVISION),--revision $(VENDOR_REVISION),) $(if $(VENDOR_PKG),--package $(VENDOR_PKG) ,)
+ifneq ($(VENDOR_REVISION),)
+revendor:run-glide vendor-clean
+else
+revendor:
+endif
 # mongodb utility targets
 mongodb/.get-mongodb:
 	rm -rf mongodb

@@ -12,16 +12,25 @@ package gimlet
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/mongodb/grip"
-	"github.com/mongodb/grip/recovery"
+	"github.com/pkg/errors"
+	"github.com/rs/cors"
 )
+
+// WaitFunc is a function type returned by some functions that allows
+// callers to wait on background processes started by the returning
+// function.
+//
+// If the context passed to a wait function is canceled then the wait
+// function should return immediately. You may wish to pass contexts
+// with a different timeout to the wait function from the one you
+// passed to the outer function to ensure correct waiting semantics.
+type WaitFunc func(context.Context)
 
 // APIApp is a structure representing a single API service.
 type APIApp struct {
@@ -29,6 +38,7 @@ type APIApp struct {
 	SimpleVersions bool
 	NoVersions     bool
 	isResolved     bool
+	hasMerged      bool
 	prefix         string
 	port           int
 	router         *mux.Router
@@ -92,40 +102,55 @@ func (a *APIApp) RestWrappers() {
 	a.wrappers = []Middleware{}
 }
 
+func (a *APIApp) AddCORS(opts cors.Options) *APIApp {
+	c := cors.New(opts)
+	a.AddMiddleware(c)
+	return a
+}
+
 // Run configured API service on the configured port. Before running
 // the application, Run also resolves any sub-apps, and adds all
 // routes.
+//
+// If you cancel the context that you pass to run, the application
+// will gracefully shutdown, and wait indefinitely until the
+// application has returned. To get different waiting behavior use
+// BackgroundRun.
 func (a *APIApp) Run(ctx context.Context) error {
-	n, err := a.getNegroni()
+	wait, err := a.BackgroundRun(ctx)
+
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
-	srv := &http.Server{
-		Addr:              fmt.Sprintf("%s:%d", a.address, a.port),
-		Handler:           n,
-		ReadTimeout:       time.Minute,
-		ReadHeaderTimeout: 30 * time.Second,
-		WriteTimeout:      time.Minute,
-	}
-
-	serviceWait := make(chan struct{})
-	go func() {
-		defer recovery.LogStackTraceAndContinue("app service")
-		grip.Noticef("starting app on: %s:%d", a.address, a.port)
-		srv.ListenAndServe()
-		close(serviceWait)
-	}()
-
-	go func() {
-		defer recovery.LogStackTraceAndContinue("server shutdown")
-		<-ctx.Done()
-		grip.Debug(srv.Shutdown(ctx))
-	}()
-
-	<-serviceWait
+	wait(context.Background())
 
 	return nil
+}
+
+// BackgroundRun is a non-blocking form of Run that allows you to
+// manage a service running in the background.
+func (a *APIApp) BackgroundRun(ctx context.Context) (WaitFunc, error) {
+	n, err := a.getNegroni()
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	conf := ServerConfig{
+		Handler: n,
+		Address: fmt.Sprintf("%s:%d", a.address, a.port),
+		Timeout: time.Minute,
+		Info:    fmt.Sprintf("app with '%s' prefix", a.prefix),
+	}
+
+	srv, err := conf.Resolve()
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	grip.Noticef("starting %s on: %s:%d", a.prefix, a.address, a.port)
+
+	return srv.Run(ctx)
 }
 
 // SetPort allows users to configure a default port for the API
@@ -168,7 +193,7 @@ func (a *APIApp) SetHost(name string) error {
 }
 
 // SetPrefix sets the route prefix, adding a leading slash, "/", if
-// neccessary.
+// necessary.
 func (a *APIApp) SetPrefix(p string) {
 	if !strings.HasPrefix(p, "/") {
 		p = "/" + p
