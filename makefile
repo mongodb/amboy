@@ -126,7 +126,6 @@ $(buildDir)/output.%.lint:$(buildDir)/run-linter .FORCE
 	@$(if $(GO_BIN_PATH),PATH="$(shell dirname $(GO_BIN_PATH)):$(PATH)") ./$< --output=$@ --lintBin=$(buildDir)/golangci-lint --packages='$*'
 # end test and coverage artifacts
 
-
 # mongodb utility targets
 mongodb/.get-mongodb:
 	rm -rf mongodb
