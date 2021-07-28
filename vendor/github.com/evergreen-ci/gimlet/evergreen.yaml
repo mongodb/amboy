@@ -1,9 +1,8 @@
-stepback: false 
+stepback: false
 command_type: test
 ignore:
-    - "*.md" # don't schedule tests if a commit only changes markdown files
-    - "*.rst"
-    - "buildscripts/*" # our scripts are untested, so don't schedule tests for them
+  - "*.md" # don't schedule tests if a commit only changes markdown files
+  - "*.rst"
 
 #######################################
 #         YAML Templates              #
@@ -18,9 +17,9 @@ variables:
         type: system
         params:
           directory: gopath/src/github.com/evergreen-ci/gimlet
+      - func: setup-mongodb
       - func: run-make
         vars: { target: "${task_name}" }
-
 
 #######################################
 #              Functions              #
@@ -31,17 +30,35 @@ functions:
     params:
       working_dir: gopath/src/github.com/evergreen-ci/gimlet
       binary: make
-      args: ["${make_args|}", "${target}"]
+      args: ["${target}"]
+      include_expansions_in_env: ["DISABLE_COVERAGE", "GO_BIN_PATH", "GOROOT", "RACE_DETECTOR", "TEST_TIMEOUT"]
       env:
-        DISABLE_COVERAGE: ${disable_coverage}
-        GOARCH: ${goarch}
-        GO_BIN_PATH: ${gobin}
-        GOOS: ${goos}
         GOPATH: ${workdir}/gopath
-        GOROOT: ${goroot}
-        RACE_ENABLED: ${race_enabed}
-        TEST_TIMEOUT: ${test_timeout}
-
+  setup-mongodb:
+    - command: subprocess.exec
+      type: setup
+      params:
+        env:
+          MONGODB_URL: ${mongodb_url}
+          DECOMPRESS: ${decompress}
+        working_dir: gopath/src/github.com/evergreen-ci/gimlet
+        command: make get-mongodb
+    - command: subprocess.exec
+      type: setup
+      params:
+        background: true
+        working_dir: gopath/src/github.com/evergreen-ci/gimlet
+        command: make start-mongod
+    - command: subprocess.exec
+      type: setup
+      params:
+        working_dir: gopath/src/github.com/evergreen-ci/gimlet
+        command: make check-mongod
+    - command: subprocess.exec
+      type: setup
+      params:
+        working_dir: gopath/src/github.com/evergreen-ci/gimlet
+        command: make init-rs
 
 #######################################
 #                Tasks                #
@@ -52,14 +69,15 @@ post:
     params:
       files:
         - "gopath/src/github.com/evergreen-ci/gimlet/build/output.*"
-        - "gopath/src/github.com/evergreen-ci/gimlet/build/test.*.out"
-        - "gopath/src/github.com/evergreen-ci/gimlet/build/race.*.out"
   - command: s3.put
     type: system
     params:
       aws_key: ${aws_key}
       aws_secret: ${aws_secret}
-      local_files_include_filter: ["gopath/src/github.com/evergreen-ci/gimlet/build/output.*.coverage.html"]
+      local_files_include_filter:
+        [
+          "gopath/src/github.com/evergreen-ci/gimlet/build/output.*.coverage.html",
+        ]
       remote_file: evergreen/${task_id}/
       bucket: mciuploads
       content_type: text/html
@@ -70,7 +88,8 @@ post:
     params:
       aws_key: ${aws_key}
       aws_secret: ${aws_secret}
-      local_files_include_filter: ["gopath/src/github.com/evergreen-ci/gimlet/build/output.*.coverage"]
+      local_files_include_filter:
+        ["gopath/src/github.com/evergreen-ci/gimlet/build/output.*.coverage"]
       remote_file: evergreen/${task_id}/
       bucket: mciuploads
       content_type: text/plain
@@ -90,23 +109,19 @@ tasks:
         vars: { target: "lint" }
 
   - name: coverage
-    tags: [ "report" ]
+    tags: ["report"]
     commands:
       - command: git.get_project
         params:
           directory: gopath/src/github.com/evergreen-ci/gimlet
+      - func: setup-mongodb
       - func: run-make
         vars:
           target: "coverage-html"
-          make_args: "-k"
 
   - <<: *run-build
     tags: ["test"]
     name: test
-
-  - <<: *run-build
-    tags: ["race"]
-    name: race
 
 #######################################
 #           Buildvariants             #
@@ -115,44 +130,50 @@ buildvariants:
   - name: race-detector
     display_name: Race Detector (Arch Linux)
     expansions:
-      race_enabed: true
-      test_timeout: 15m
-      disable_coverage: yes
+      DISABLE_COVERAGE: true
+      GO_BIN_PATH: /opt/golang/go1.16/bin/go
+      GOROOT: /opt/golang/go1.16
+      RACE_DETECTOR: true
+      TEST_TIMEOUT: 15m
+      mongodb_url: https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-ubuntu1804-4.0.13.tgz
     run_on:
-      - archlinux-test
+      - archlinux-new-small
     tasks:
-      - name: ".race"
+      - name: ".test"
 
   - name: coverage
     display_name: Coverage
     run_on:
-      - ubuntu1604-test
+      - ubuntu1804-small
     expansions:
-      test_timeout: 15m
-      gobin: /opt/go1.8/go/bin/go
-      goroot: /opt/go1.8/go
+      GO_BIN_PATH: /opt/golang/go1.16/bin/go
+      GOROOT: /opt/golang/go1.16
+      TEST_TIMEOUT: 15m
+      mongodb_url: https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-ubuntu1804-4.0.3.tgz
     tasks:
       - name: ".report"
         stepback: false
 
-  - name: ubuntu1604
-    display_name: Ubuntu 16.04
+  - name: ubuntu
+    display_name: Ubuntu 18.04
     expansions:
-      gobin: /opt/go1.8/go/bin/go
-      disable_coverage: yes
-      goroot: /opt/go1.8/go
+      GO_BIN_PATH: /opt/golang/go1.16/bin/go
+      GOROOT: /opt/golang/go1.16
+      DISABLE_COVERAGE: true
+      mongodb_url: https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-ubuntu1804-4.0.3.tgz
     run_on:
-      - ubuntu1604-test
+      - ubuntu1804-small
     tasks:
       - ".test"
 
   - name: macos
-    display_name: macOS 10.12
+    display_name: macOS
     expansions:
-      disable_coverage: yes
-      gobin: /usr/local/go1.8/go/bin/go
-      goroot: /usr/local/go1.8/go
+      DISABLE_COVERAGE: true
+      GO_BIN_PATH: /opt/golang/go1.16/bin/go
+      GOROOT: /opt/golang/go1.16
+      mongodb_url: https://fastdl.mongodb.org/osx/mongodb-osx-ssl-x86_64-4.0.3.tgz
     run_on:
-      - macos-1012
+      - macos-1014
     tasks:
       - name: ".test"

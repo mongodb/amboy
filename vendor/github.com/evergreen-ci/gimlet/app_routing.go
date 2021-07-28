@@ -19,6 +19,7 @@ type APIRoute struct {
 	wrappers          []Middleware
 	version           int
 	overrideAppPrefix bool
+	isPrefix          bool
 }
 
 func (r *APIRoute) String() string {
@@ -28,13 +29,14 @@ func (r *APIRoute) String() string {
 	}
 
 	return fmt.Sprintf(
-		"r='%s%s', v='%d', methods=[%s], defined=%t, prefixOverride=%t",
+		"r='%s%s', v='%d', methods=[%s], defined=%t, prefixOverride=%t, isPrefex=%t",
 		r.prefix,
 		r.route,
 		r.version,
 		strings.Join(methods, ", "),
 		r.handler != nil,
 		r.overrideAppPrefix,
+		r.isPrefix,
 	)
 }
 
@@ -50,6 +52,15 @@ func (a *APIApp) AddRoute(r string) *APIRoute {
 	}
 
 	a.routes = append(a.routes, route)
+
+	return route
+}
+
+// AddPrefixRoute creates and registers a new route with an application
+// matching everything under the given prefix.
+func (a *APIApp) AddPrefixRoute(prefix string) *APIRoute {
+	route := a.AddRoute(prefix)
+	route.isPrefix = true
 
 	return route
 }
@@ -144,19 +155,35 @@ func (r *APIRoute) Version(version int) *APIRoute {
 // Handler makes it possible to register an http.HandlerFunc with a
 // route. Chainable. The common pattern for implementing these
 // functions is to write functions and methods in your application
-// that *return* handler fucntions, so you can pass application state
+// that *return* handler functions, so you can pass application state
 // or other data into to the handlers when the applications start,
 // without relying on either global state *or* running into complex
 // typing issues.
 func (r *APIRoute) Handler(h http.HandlerFunc) *APIRoute {
 	if r.handler != nil {
 		grip.Warningf("called Handler more than once for route %s", r.route)
-	} else if h == nil {
+	}
+	if h == nil {
 		grip.Alertf("adding nil route handler will prorobably result in runtime panics for '%s'", r.route)
 	}
 
 	r.handler = h
 
+	return r
+}
+
+// HandlerType is equivalent to Handler, but allows you to use a type
+// that implements http.Handler rather than a function object.
+func (r *APIRoute) HandlerType(h http.Handler) *APIRoute {
+	if r.handler != nil {
+		grip.Warningf("called Handler more than once for route %s", r.route)
+	}
+
+	if h == nil {
+		grip.Alertf("adding nil route handler will prorobably result in runtime panics for '%s'", r.route)
+	}
+
+	r.handler = h.ServeHTTP
 	return r
 }
 
@@ -167,7 +194,9 @@ func (r *APIRoute) Handler(h http.HandlerFunc) *APIRoute {
 func (r *APIRoute) RouteHandler(h RouteHandler) *APIRoute {
 	if r.handler != nil {
 		grip.Warningf("called Handler more than once for route %s", r.route)
-	} else if h == nil {
+	}
+
+	if h == nil {
 		grip.Alertf("adding nil route handler will prorobably result in runtime panics for '%s'", r.route)
 	}
 
@@ -200,7 +229,7 @@ func (r *APIRoute) Post() *APIRoute {
 // Delete is a chainable method to add a handler for the DELETE method
 // to the current route. Routes may specify multiple methods.
 func (r *APIRoute) Delete() *APIRoute {
-	r.methods = append(r.methods, delete)
+	r.methods = append(r.methods, del)
 	return r
 }
 
@@ -218,6 +247,16 @@ func (r *APIRoute) Head() *APIRoute {
 	return r
 }
 
+func (r *APIRoute) Options() *APIRoute {
+	r.methods = append(r.methods, options)
+	return r
+}
+
+func (r *APIRoute) AllMethods() *APIRoute {
+	r.methods = append(r.methods, get, put, post, del, patch, head, options)
+	return r
+}
+
 // Method makes it possible to specify an HTTP method pragmatically.
 func (r *APIRoute) Method(m string) *APIRoute {
 	switch m {
@@ -227,7 +266,7 @@ func (r *APIRoute) Method(m string) *APIRoute {
 		return r.Put()
 	case post.String():
 		return r.Post()
-	case delete.String():
+	case del.String():
 		return r.Delete()
 	case patch.String():
 		return r.Patch()

@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	remoteAddrHeaderName = "X-Cluster-Client-Ip"
+	remoteAddrHeaderName = "X-Forwarded-For"
 )
 
 // appLogging provides a Negroni-compatible middleware to send all
@@ -102,7 +102,7 @@ func (l *appLogging) ServeHTTP(rw http.ResponseWriter, r *http.Request, next htt
 func setupLogger(logger grip.Journaler, r *http.Request) *http.Request {
 	r = setServiceLogger(r, logger)
 	remote := r.Header.Get(remoteAddrHeaderName)
-	if remote == "" {
+	if remote != "" {
 		r.RemoteAddr = remote
 	}
 
@@ -138,6 +138,9 @@ func finishLogger(logger grip.Journaler, r *http.Request, res negroni.ResponseWr
 		"outcome":     http.StatusText(res.Status()),
 		"length":      r.ContentLength,
 	}
+	if u := GetUser(ctx); u != nil {
+		m["user"] = u.Username()
+	}
 
 	if a != nil {
 		m[a.key] = a.value
@@ -170,18 +173,33 @@ func (l *appRecoveryLogger) ServeHTTP(rw http.ResponseWriter, r *http.Request, n
 	defer func() {
 		if err := recover(); err != nil {
 			if rw.Header().Get("Content-Type") == "" {
-				rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
+				rw.Header().Set("Content-Type", "application/json; charset=utf-8")
 			}
 			rw.WriteHeader(http.StatusInternalServerError)
 
-			_ = recovery.SendMessageWithPanicError(err, nil, l.Journaler, message.Fields{
-				"action":   "aborted",
-				"request":  GetRequestID(ctx),
-				"duration": time.Since(getRequestStartAt(ctx)),
-				"path":     r.URL.Path,
-				"remote":   r.RemoteAddr,
-				"length":   r.ContentLength,
-			})
+			// handlers panic with http.ErrAbortHandler to abort and suppress logging
+			// (https://golang.org/pkg/net/http/#Handler)
+			// log at a lower level
+			if err == http.ErrAbortHandler {
+				l.Debug(message.Fields{
+					"message":  "hit suppressed abort panic",
+					"action":   "aborted",
+					"request":  GetRequestID(ctx),
+					"duration": time.Since(getRequestStartAt(ctx)),
+					"path":     r.URL.Path,
+					"remote":   r.RemoteAddr,
+					"length":   r.ContentLength,
+				})
+			} else {
+				_ = recovery.SendMessageWithPanicError(err, nil, l.Journaler, message.Fields{
+					"action":   "aborted",
+					"request":  GetRequestID(ctx),
+					"duration": time.Since(getRequestStartAt(ctx)),
+					"path":     r.URL.Path,
+					"remote":   r.RemoteAddr,
+					"length":   r.ContentLength,
+				})
+			}
 
 			WriteJSONInternalError(rw, ErrorResponse{
 				StatusCode: http.StatusInternalServerError,

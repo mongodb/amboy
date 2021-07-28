@@ -54,6 +54,12 @@ func (s *RoutingSuite) TestPutMethod() {
 	s.Equal(r.methods[0].String(), "PUT")
 }
 
+func (s *RoutingSuite) TestAddPrefixRoute() {
+	r := s.app.AddPrefixRoute("/work").Get()
+	s.Len(s.app.routes, 1)
+	s.True(r.isPrefix)
+}
+
 func (s *RoutingSuite) TestPrefixMethod() {
 	r := s.app.AddRoute("/work").Prefix("foo")
 	s.Len(s.app.routes, 1)
@@ -70,7 +76,7 @@ func (s *RoutingSuite) TestDeleteMethod() {
 	r := s.app.AddRoute("/work").Delete()
 	s.Len(s.app.routes, 1)
 	s.Len(r.methods, 1)
-	s.Equal(r.methods[0], delete)
+	s.Equal(r.methods[0], del)
 	s.Equal(r.methods[0].String(), "DELETE")
 }
 
@@ -139,6 +145,20 @@ func (s *RoutingSuite) TestHandlerMethod() {
 	s.Equal(fmt.Sprint(r.handler), fmt.Sprint(htwo))
 }
 
+func (s *RoutingSuite) TestHandlerType() {
+	s.Len(s.app.routes, 0)
+	r := s.app.AddRoute("/foo")
+	s.Len(s.app.routes, 1)
+	s.NotNil(r)
+	s.Nil(r.handler)
+	r.Handler(nil)
+	s.Nil(r.handler)
+
+	hone := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) { grip.Debug("dummy route") })
+	r.HandlerType(hone)
+	s.NotNil(r.handler)
+}
+
 func (s *RoutingSuite) TestRouteValidation() {
 	r := &APIRoute{}
 	s.False(r.IsValid())
@@ -146,7 +166,7 @@ func (s *RoutingSuite) TestRouteValidation() {
 	r.version = 2
 	s.False(r.IsValid())
 
-	r.methods = []httpMethod{get, delete, post}
+	r.methods = []httpMethod{get, del, post}
 	s.False(r.IsValid())
 
 	r.handler = func(_ http.ResponseWriter, _ *http.Request) { grip.Debug("dummy route") }
