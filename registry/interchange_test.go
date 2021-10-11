@@ -169,15 +169,27 @@ func (s *JobInterchangeSuite) TestTimeInfoPersists() {
 	}
 }
 
-func (s *JobInterchangeSuite) TestApplyScopesOnEnqueuePersists() {
-	s.job.SetShouldApplyScopesOnEnqueue(true)
+func (s *JobInterchangeSuite) TestEnqueueScopesPersists() {
+	scopes := []string{"foo"}
+	s.job.SetEnqueueScopes(scopes...)
 
 	i, err := MakeJobInterchange(s.job, s.format)
 	s.Require().NoError(err)
 
 	j, err := i.Resolve(s.format)
 	s.Require().NoError(err)
-	s.True(j.ShouldApplyScopesOnEnqueue())
+	s.Equal(scopes, j.EnqueueScopes())
+}
+
+func (s *JobInterchangeSuite) TestEnqueueAllScopesPersists() {
+	s.job.SetEnqueueAllScopes(true)
+
+	i, err := MakeJobInterchange(s.job, s.format)
+	s.Require().NoError(err)
+
+	j, err := i.Resolve(s.format)
+	s.Require().NoError(err)
+	s.True(j.EnqueueAllScopes())
 }
 
 func (s *JobInterchangeSuite) TestRetryInfoPersists() {

@@ -607,9 +607,7 @@ func (d *mongoDriver) Put(ctx context.Context, j amboy.Job) error {
 		return errors.Wrap(err, "converting in-memory job to interchange job")
 	}
 
-	if j.ShouldApplyScopesOnEnqueue() {
-		ji.Scopes = j.Scopes()
-	}
+	ji.Scopes = j.EnqueueScopes()
 
 	d.addMetadata(ji)
 
@@ -819,10 +817,12 @@ func (d *mongoDriver) Complete(ctx context.Context, j amboy.Job) error {
 	}
 
 	// It is safe to drop the scopes now in all cases except for one - if the
-	// job still needs to retry and applies its scopes immediately to the retry
-	// job, we cannot let go of the scopes yet because they will need to be
-	// safely transferred to the retry job.
-	if !ji.RetryInfo.ShouldRetry() || !ji.ApplyScopesOnEnqueue {
+	// job still needs to retry, any scopes that are applied immediately on
+	// enqueue must still be held because they will need to be safely
+	// transferred to the retry job.
+	if ji.RetryInfo.ShouldRetry() {
+		ji.Scopes = j.EnqueueScopes()
+	} else {
 		ji.Scopes = nil
 	}
 

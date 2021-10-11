@@ -437,12 +437,12 @@ func TestQueueSmoke(t *testing.T) {
 
 				t.Run(runner.Name+"Pool", func(t *testing.T) {
 					var (
-						testRetryOnce                sync.Once
-						testWaitUntilOnce            sync.Once
-						testDispatchByOnce           sync.Once
-						testMaxTimeOnce              sync.Once
-						testScopesOnce               sync.Once
-						testApplyScopesOnEnqueueOnce sync.Once
+						testRetryOnce            sync.Once
+						testWaitUntilOnce        sync.Once
+						testDispatchByOnce       sync.Once
+						testMaxTimeOnce          sync.Once
+						testScopesOnce           sync.Once
+						testEnqueueAllScopesOnce sync.Once
 					)
 
 					for _, size := range DefaultSizeTestCases() {
@@ -517,10 +517,11 @@ func TestQueueSmoke(t *testing.T) {
 									})
 								}
 								if size.Size >= 2 {
-									testApplyScopesOnEnqueueOnce.Do(func() {
-										t.Run("ApplyScopesOnEnqueue", func(t *testing.T) {
-											ApplyScopesOnEnqueueTest(bctx, t, test, runner, size)
+									testEnqueueAllScopesOnce.Do(func() {
+										t.Run("EnqueueAllScopes", func(t *testing.T) {
+											EnqueueAllScopesTest(bctx, t, test, runner, size)
 										})
+										// kim: TODO: test EnqueueScopes.
 									})
 								}
 							}
@@ -1102,25 +1103,25 @@ waitLoop:
 	assert.Equal(t, size.Size, stats.Completed)
 }
 
-func ApplyScopesOnEnqueueTest(bctx context.Context, t *testing.T, test QueueTestCase, runner PoolTestCase, size SizeTestCase) {
+func EnqueueAllScopesTest(bctx context.Context, t *testing.T, test QueueTestCase, runner PoolTestCase, size SizeTestCase) {
 	for testName, testCase := range map[string]func(ctx context.Context, t *testing.T, q amboy.Queue){
 		"PutJobAppliesScopeAndPreservesSettings": func(ctx context.Context, t *testing.T, q amboy.Queue) {
 			j := newSleepJob()
 			j.Sleep = 10 * time.Millisecond
 			j.SetScopes([]string{"scope"})
-			j.SetShouldApplyScopesOnEnqueue(true)
+			j.SetEnqueueAllScopes(true)
 
 			require.NoError(t, q.Put(ctx, j))
 			fetchedJob, ok := q.Get(ctx, j.ID())
 			require.True(t, ok)
 			assert.EqualValues(t, j.Scopes(), fetchedJob.Scopes())
-			assert.True(t, fetchedJob.ShouldApplyScopesOnEnqueue())
+			assert.True(t, fetchedJob.EnqueueAllScopes())
 		},
 		"PutJobFollowedBySaveSucceeds": func(ctx context.Context, t *testing.T, q amboy.Queue) {
 			j := newSleepJob()
 			j.Sleep = 10 * time.Millisecond
 			j.SetScopes([]string{"scope"})
-			j.SetShouldApplyScopesOnEnqueue(true)
+			j.SetEnqueueAllScopes(true)
 			require.NoError(t, q.Put(ctx, j))
 			require.NoError(t, q.Save(ctx, j))
 		},
@@ -1128,12 +1129,12 @@ func ApplyScopesOnEnqueueTest(bctx context.Context, t *testing.T, test QueueTest
 			j1 := newSleepJob()
 			j1.Sleep = 10 * time.Millisecond
 			j1.SetScopes([]string{"scope"})
-			j1.SetShouldApplyScopesOnEnqueue(true)
+			j1.SetEnqueueAllScopes(true)
 
 			j2 := newSleepJob()
 			j2.Sleep = 10 * time.Millisecond
 			j2.SetScopes([]string{"scope"})
-			j2.SetShouldApplyScopesOnEnqueue(true)
+			j2.SetEnqueueAllScopes(true)
 
 			require.NoError(t, q.Put(ctx, j1))
 			require.Error(t, q.Put(ctx, j2))
@@ -1205,7 +1206,7 @@ func RetryableTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 		"ScopedJobRetriesOnceThenAllowsLaterJobToTakeScope": func(ctx context.Context, t *testing.T, rh amboy.RetryHandler, rq amboy.RetryableQueue) {
 			j := newMockRetryableJob("id")
 			j.NumTimesToRetry = 1
-			j.SetShouldApplyScopesOnEnqueue(true)
+			j.SetEnqueueAllScopes(true)
 			scopes := []string{"scope"}
 			j.SetScopes(scopes)
 
