@@ -51,6 +51,9 @@ func (s *JobInterchangeSuite) TestRoundTripHighLevel() {
 	outJob, err := i.Resolve(s.format)
 	s.NoError(err)
 
+	// Decoding the job from BSON sets the scopes to the empty slice instead of
+	// a nil slice.
+	outJob.SetScopes(nil)
 	if s.format == amboy.BSON || s.format == amboy.BSON2 {
 		// mgo/bson seems to unset/nil the private map in the
 		// implementation of the dependency. It's not material
