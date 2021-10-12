@@ -856,8 +856,6 @@ func (d *mongoDriver) doUpdate(ctx context.Context, ji *registry.JobInterchange)
 		ji.Status.InProgress = false
 	}
 
-	out := registry.JobInterchange{}
-	err := d.getCollection().FindOne(ctx, bson.M{"_id": ji.Name}).Decode(&out)
 	query := d.getAtomicQuery(ji.Name, ji.Status)
 
 	res, err := d.getCollection().ReplaceOne(ctx, query, ji)
