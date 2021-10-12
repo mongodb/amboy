@@ -145,7 +145,7 @@ func (s *DriverSuite) TestPutJobDoesNotAllowDuplicateIds() {
 	}
 }
 
-func (s *DriverSuite) TestPutJobDoesNotAllowDuplicateScopeAppliedInQueue() {
+func (s *DriverSuite) TestPutJobDoesNotAllowAllDuplicateEnqueueScopes() {
 	j1 := job.NewShellJob("echo foo", "")
 	j2 := job.NewShellJob("echo bar", "")
 
@@ -159,6 +159,41 @@ func (s *DriverSuite) TestPutJobDoesNotAllowDuplicateScopeAppliedInQueue() {
 	err := s.driver.Put(s.ctx, j2)
 	s.True(amboy.IsDuplicateJobError(err))
 	s.True(amboy.IsDuplicateJobScopeError(err))
+}
+
+func (s *DriverSuite) TestPutJobDoesNotAllowDuplicateSubsetOfEnqueueScopes() {
+	j1 := job.NewShellJob("echo foo", "")
+	j2 := job.NewShellJob("echo bar", "")
+
+	commonScope := "foo"
+	scopes1 := []string{"bar", commonScope}
+	j1.SetScopes(scopes1)
+	j1.SetEnqueueScopes(commonScope)
+
+	scopes2 := []string{"bat", commonScope}
+	j2.SetScopes(scopes2)
+	j2.SetEnqueueScopes(commonScope)
+
+	s.Require().NoError(s.driver.Put(s.ctx, j1))
+	err := s.driver.Put(s.ctx, j2)
+	s.True(amboy.IsDuplicateJobError(err))
+	s.True(amboy.IsDuplicateJobScopeError(err))
+}
+
+func (s *DriverSuite) TestPutJobIsAllowedForNoDuplicateEnqueueScopes() {
+	j1 := job.NewShellJob("echo foo", "")
+	j2 := job.NewShellJob("echo bar", "")
+
+	scopes1 := []string{"foo"}
+	j1.SetScopes(scopes1)
+	j1.SetEnqueueScopes(scopes1...)
+
+	scopes2 := []string{"bar"}
+	j2.SetScopes(scopes2)
+	j2.SetEnqueueScopes(scopes2...)
+
+	s.Require().NoError(s.driver.Put(s.ctx, j1))
+	s.Require().NoError(s.driver.Put(s.ctx, j2))
 }
 
 func (s *DriverSuite) TestPutJobDoesNotApplyScopesInQueueByDefault() {

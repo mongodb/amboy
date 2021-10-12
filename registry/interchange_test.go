@@ -51,7 +51,6 @@ func (s *JobInterchangeSuite) TestRoundTripHighLevel() {
 	outJob, err := i.Resolve(s.format)
 	s.NoError(err)
 
-	outJob.SetScopes(nil)
 	if s.format == amboy.BSON || s.format == amboy.BSON2 {
 		// mgo/bson seems to unset/nil the private map in the
 		// implementation of the dependency. It's not material
@@ -170,7 +169,8 @@ func (s *JobInterchangeSuite) TestTimeInfoPersists() {
 }
 
 func (s *JobInterchangeSuite) TestEnqueueScopesPersists() {
-	scopes := []string{"foo"}
+	scopes := []string{"foo", "bar"}
+	s.job.SetScopes(scopes)
 	s.job.SetEnqueueScopes(scopes...)
 
 	i, err := MakeJobInterchange(s.job, s.format)

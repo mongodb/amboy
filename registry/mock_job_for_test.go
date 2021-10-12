@@ -159,10 +159,16 @@ func (j *JobTest) SetTimeInfo(i amboy.JobTimeInfo) {
 }
 
 func (j *JobTest) SetScopes(in []string) {
+	if len(in) == 0 {
+		j.LockScopes = nil
+	}
 	j.LockScopes = in
 }
 
 func (j *JobTest) Scopes() []string {
+	if len(j.LockScopes) == 0 {
+		return nil
+	}
 	return j.LockScopes
 }
 
@@ -174,7 +180,11 @@ func (j *JobTest) EnqueueScopes() []string {
 	if j.EnqueueAllScopes() {
 		return j.LockScopes
 	}
-	return j.EnqueueWithScopes
+	scopes := utility.StringSliceIntersection(j.LockScopes, j.EnqueueWithScopes)
+	if len(scopes) == 0 {
+		return nil
+	}
+	return scopes
 }
 
 func (j *JobTest) SetEnqueueAllScopes(val bool) {
@@ -183,9 +193,6 @@ func (j *JobTest) SetEnqueueAllScopes(val bool) {
 
 func (j *JobTest) EnqueueAllScopes() bool {
 	if j.EnqueueWithAllScopes {
-		return true
-	}
-	if missing, _ := utility.StringSliceSymmetricDifference(j.EnqueueWithScopes, j.LockScopes); len(missing) == 0 {
 		return true
 	}
 	return false
