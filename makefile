@@ -128,7 +128,7 @@ ifneq (go,$(gobin))
 # binary in it, the linter won't work properly.
 lintEnvVars := PATH="$(shell dirname $(gobin)):$(PATH)"
 endif
-$(buildDir)/output.%.lint: $(buildDir)/run-linter .FORCE
+$(buildDir)/output.%.lint: $(lintDeps) .FORCE
 	@$(lintEnvVars) ./$< --output=$@ --lintBin=$(buildDir)/golangci-lint --packages='$*'
 # end test and coverage artifacts
 
