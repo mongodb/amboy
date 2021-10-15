@@ -18,12 +18,12 @@ type JobInterchange struct {
 	Priority      int                 `json:"priority" bson:"priority" yaml:"priority"`
 	Status        amboy.JobStatusInfo `bson:"status" json:"status" yaml:"status"`
 	Scopes        []string            `bson:"scopes,omitempty" json:"scopes,omitempty" yaml:"scopes,omitempty"`
-	EnqueueScopes []string            `bson:"enqueue_scopes" json:"enqueue_scopes,omitempty" yaml:"enqueue_scopes,omitempty"`
+	EnqueueScopes []string            `bson:"enqueue_scopes,omitempty" json:"enqueue_scopes,omitempty" yaml:"enqueue_scopes,omitempty"`
 	// TODO (EVG-15582): remove this field after all jobs containing this field
 	// have hit their 90 day TTL (2022-02-01) since no jobs will be stored with
 	// this field anymore.
 	EnqueueAllScopesDeprecated bool                   `bson:"apply_scopes_on_enqueue,omitempty" json:"apply_scopes_on_enqueue,omitempty" yaml:"apply_scopes_on_enqueue,omitempty"`
-	EnqueueAllScopes           bool                   `bson:"enqueue_all_scopes" json:"enqueue_all_scopes,omitempty" yaml:"enqueue_all_scopes,omitempty"`
+	EnqueueAllScopes           bool                   `bson:"enqueue_all_scopes,omitempty" json:"enqueue_all_scopes,omitempty" yaml:"enqueue_all_scopes,omitempty"`
 	RetryInfo                  amboy.JobRetryInfo     `bson:"retry_info" json:"retry_info,omitempty" yaml:"retry_info,omitempty"`
 	TimeInfo                   amboy.JobTimeInfo      `bson:"time_info" json:"time_info,omitempty" yaml:"time_info,omitempty"`
 	Job                        rawJob                 `json:"job" bson:"job" yaml:"job"`

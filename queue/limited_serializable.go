@@ -498,7 +498,7 @@ func (q *limitedSizeSerializableLocal) complete(ctx context.Context, j amboy.Job
 		scopesToRelease = j.Scopes()
 	}
 	if err := q.scopes.Release(name, scopesToRelease); err != nil {
-		return errors.Wrapf(err, "releasing scopes '%s'", j.Scopes())
+		return errors.Wrapf(err, "releasing scopes '%s'", scopesToRelease)
 	}
 
 	q.prepareComplete(j)
