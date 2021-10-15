@@ -52,7 +52,6 @@ $(shell mkdir -p $(buildDir))
 .DEFAULT_GOAL := compile
 
 # start lint setup targets
-lintDeps := $(buildDir)/run-linter $(buildDir)/golangci-lint
 $(buildDir)/golangci-lint:
 	@curl --retry 10 --retry-max-time 60 -sSfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $(buildDir) v1.40.0 >/dev/null 2>&1
 $(buildDir)/run-linter: cmd/run-linter/run-linter.go $(buildDir)/golangci-lint
@@ -128,7 +127,7 @@ ifneq (go,$(gobin))
 # binary in it, the linter won't work properly.
 lintEnvVars := PATH="$(shell dirname $(gobin)):$(PATH)"
 endif
-$(buildDir)/output.%.lint: $(lintDeps) .FORCE
+$(buildDir)/output.%.lint: $(buildDir)/run-linter .FORCE
 	@$(lintEnvVars) ./$< --output=$@ --lintBin=$(buildDir)/golangci-lint --packages='$*'
 # end test and coverage artifacts
 
