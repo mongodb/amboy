@@ -1,16 +1,20 @@
+command_type: test
+stepback: false
+ignore:
+  - "*.md"
+  - "*.rst"
+  - ".github/*"
+
 #######################################
 #         YAML Templates              #
 #######################################
 variables:
   - &run-build
-    # runs a build operations. The task name in evergreen should
+    # runs a build operation. The task name in evergreen should
     # correspond to a make target for the build operation.
     name: test
     commands:
-      - command: git.get_project
-        type: system
-        params:
-          directory: gopath/src/github.com/mongodb/amboy
+      - func: get-project-and-modules
       - func: run-make
         vars: { target: "${task_name}" }
   - &run-go-test-suite
@@ -19,10 +23,7 @@ variables:
     # that suite
     name: test
     commands:
-      - command: git.get_project
-        type: system
-        params:
-          directory: gopath/src/github.com/mongodb/amboy
+      - func: get-project-and-modules
       - func: run-make
         vars: { target: "${task_name}" }
     must_have_test_results: true
@@ -32,10 +33,7 @@ variables:
     # running mongod started for testing.
     name: test
     commands:
-      - command: git.get_project
-        type: system
-        params:
-          directory: gopath/src/github.com/mongodb/amboy
+      - func: get-project-and-modules
       - func: set-up-mongodb
       - func: run-make
         vars: { target: "${task_name}" }
@@ -46,18 +44,29 @@ variables:
 #              Functions              #
 #######################################
 functions:
+  get-project-and-modules:
+    - command: git.get_project
+      type: system
+      params:
+        directory: ${workdir}/amboy
+    - command: subprocess.exec
+      type: setup
+      params:
+        working_dir: ${workdir}/amboy
+        binary: make
+        args: ["mod-tidy"]
+        include_expansions_in_env: ["GOROOT"]
   run-make:
     command: subprocess.exec
     type: test
     params:
-      working_dir: gopath/src/github.com/mongodb/amboy
+      working_dir: ${workdir}/amboy
       binary: make
       args: ["${make_args}", "${target}"]
       include_expansions_in_env: ["DISABLE_COVERAGE", "GOROOT", "RACE_DETECTOR"]
       env:
         AWS_KEY: ${aws_key}
         AWS_SECRET: ${aws_secret}
-        GOPATH: ${workdir}/gopath
   set-up-mongodb:
     - command: subprocess.exec
       type: setup
@@ -66,83 +75,41 @@ functions:
         include_expansions_in_env: ["MONGODB_URL"]
         env:
           DECOMPRESS: ${decompress}
-        working_dir: gopath/src/github.com/mongodb/amboy
+        working_dir: ${workdir}/amboy
     - command: subprocess.exec
       type: setup
       params:
         command: make start-mongod
-        working_dir: gopath/src/github.com/mongodb/amboy
+        working_dir: ${workdir}/amboy
         background: true
     - command: subprocess.exec
       type: setup
       params:
         command: make check-mongod
-        working_dir: gopath/src/github.com/mongodb/amboy
+        working_dir: ${workdir}/amboy
     - command: subprocess.exec
       type: setup
       params:
         command: make init-rs
-        working_dir: gopath/src/github.com/mongodb/amboy
-
-
-#######################################
-#                Tasks                #
-#######################################
-tasks:
-  # the build (with and without the race detector) and lint tasks use
-  # a template that does not include test result parsing.
-  - <<: *run-build
-    name: build
-
-  - <<: *run-go-test-suite
-    tags: ["report"]
-    name: lint
-
-  # The coverage task is less generic.
-  - name: coverage
-    tags: [ "report" ]
-    commands:
-      - command: git.get_project
-        type: setup
-        params:
-          directory: gopath/src/github.com/mongodb/amboy
-      - func: set-up-mongodb
-      - func: run-make
-        vars:
-          target: "coverage-html"
-          make_args: "-k"
-
-  # define tasks for all test suites (modules)
-  - <<: *run-go-test-suite
-    name: test-dependency
-  - <<: *run-go-test-suite
-    name: test-job
-  - <<: *run-go-test-suite
-    name: test-registry
-  - <<: *run-go-test-suite
-    name: test-pool
-  - <<: *run-go-test-suite
-    name: test-rest
-  - <<: *run-go-test-suite
-    name: test-logger
-  - <<: *run-go-test-suite-with-mongodb
-    name: test-queue
-  - <<: *run-go-test-suite-with-mongodb
-    name: test-management
-
-post:
-  - command: gotest.parse_files
+        working_dir: ${workdir}/amboy
+  parse-results:
+    command: gotest.parse_files
     type: setup
     params:
       files:
-        - "gopath/src/github.com/mongodb/amboy/build/output.*.lint"
-        - "gopath/src/github.com/mongodb/amboy/build/output.*.test"
+        - "amboy/build/output.*"
+
+#######################################
+#                Post                 #
+#######################################
+post:
+  - func: parse-results
   - command: s3.put
     type: system
     params:
       aws_key: ${aws_key}
       aws_secret: ${aws_secret}
-      local_files_include_filter: ["gopath/src/github.com/mongodb/amboy/build/output.*.coverage.html"]
+      local_files_include_filter: ["amboy/build/output.*.coverage.html"]
       remote_file: evergreen/${task_id}/
       bucket: mciuploads
       content_type: text/html
@@ -153,13 +120,64 @@ post:
     params:
       aws_key: ${aws_key}
       aws_secret: ${aws_secret}
-      local_files_include_filter: ["gopath/src/github.com/mongodb/amboy/build/output.*.coverage"]
+      local_files_include_filter: ["amboy/build/output.*.coverage"]
       remote_file: evergreen/${task_id}/
       bucket: mciuploads
       content_type: text/plain
       permissions: public-read
       display_name: "(txt) coverage:"
 
+#######################################
+#                Tasks                #
+#######################################
+tasks:
+  - <<: *run-go-test-suite
+    tags: ["report"]
+    name: lint-amboy
+  - <<: *run-go-test-suite
+    tags: ["report"]
+    name: lint-dependency
+  - <<: *run-go-test-suite
+    tags: ["report"]
+    name: lint-job
+  - <<: *run-go-test-suite
+    tags: ["report"]
+    name: lint-logger
+  - <<: *run-go-test-suite
+    tags: ["report"]
+    name: lint-management
+  - <<: *run-go-test-suite
+    tags: ["report"]
+    name: lint-queue
+  - <<: *run-go-test-suite
+    tags: ["report"]
+    name: lint-pool
+  - <<: *run-go-test-suite
+    tags: ["report"]
+    name: lint-rest
+  - <<: *run-go-test-suite
+    tags: ["report"]
+    name: lint-registry
+
+  # define tasks for all test suites (modules)
+  - <<: *run-go-test-suite
+    name: test-amboy
+  - <<: *run-go-test-suite
+    name: test-dependency
+  - <<: *run-go-test-suite
+    name: test-job
+  - <<: *run-go-test-suite
+    name: test-logger
+  - <<: *run-go-test-suite-with-mongodb
+    name: test-management
+  - <<: *run-go-test-suite
+    name: test-pool
+  - <<: *run-go-test-suite-with-mongodb
+    name: test-queue
+  - <<: *run-go-test-suite
+    name: test-rest
+  - <<: *run-go-test-suite
+    name: test-registry
 
 #######################################
 #           Buildvariants             #
@@ -177,8 +195,8 @@ buildvariants:
     tasks:
       - ".test"
 
-  - name: report
-    display_name: Reporting
+  - name: lint
+    display_name: Lint (Arch Linux)
     run_on:
       - archlinux-new-large
     expansions:
@@ -197,7 +215,6 @@ buildvariants:
       GOROOT: /opt/golang/go1.16
       MONGODB_URL: https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-ubuntu1804-4.0.3.tgz
     tasks:
-      - build
       - ".test"
 
   - name: macos
@@ -209,20 +226,16 @@ buildvariants:
     run_on:
       - macos-1014
     tasks:
-      - build
       - ".test"
 
   - name: windows
     display_name: Windows
     run_on:
       - windows-64-vs2019-large
-      - windows-64-vs2019-small
       - windows-64-vs2017-large
-      - windows-64-vs2017-small
     expansions:
       GOROOT: C:/golang/go1.16
       DISABLE_COVERAGE: true
       MONGODB_URL: https://fastdl.mongodb.org/win32/mongodb-win32-x86_64-2008plus-ssl-4.0.3.zip
     tasks:
-      - build
       - ".test"
