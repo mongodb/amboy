@@ -111,9 +111,7 @@ func (s *SQSFifoQueueSuite) TestCompleteMethodChangesStatsAndResults() {
 }
 
 func TestSQSFifoQueueRunsJobsOnlyOnce(t *testing.T) {
-	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
-		t.Skip("skipping SQS tests on non-core platforms")
-	}
+	skipSQSTestIfUnsupported(t)
 
 	assert := assert.New(t)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
@@ -150,9 +148,7 @@ func TestSQSFifoQueueRunsJobsOnlyOnce(t *testing.T) {
 }
 
 func TestMultipleSQSFifoQueueRunsJobsOnlyOnce(t *testing.T) {
-	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
-		t.Skip("skipping SQS tests on non-core platforms")
-	}
+	skipSQSTestIfUnsupported(t)
 
 	// case two
 	mockJobCounters.Reset()

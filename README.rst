@@ -155,7 +155,7 @@ additional examples of amboy use.
 API and Documentation
 ---------------------
 
-See the `godoc API documentation <https://godoc.org/github.com/mongodb/amboy>`
+See the `API documentation <https://godoc.org/github.com/mongodb/amboy>`
 for more information about amboy interfaces and internals.
 
 Development
@@ -164,15 +164,14 @@ Development
 Getting Started
 ~~~~~~~~~~~~~~~
 
-Currently amboy vendors all of its dependencies, as a result of an upstream
-requirement to build on go1.9; however, eventually the project will move to use
-modules. For the time being, have a ``GOPATH`` set, and ensure that you check
-out the repository into ``$GOPATH/src/github/mongodb/amboy``.
+Amboy uses Go modules. To download the modules ::
+
+    make mod-tidy
 
 All project automation is managed by a makefile, with all output captured in the
 `build` directory. Consider the following operations: ::
 
-   make build                   # runs a test compile
+   make compile                 # runs a test compile
    make test                    # tests all packages
    make lint                    # lints all packages
    make test-<package>          # runs the tests only for a specific packages
