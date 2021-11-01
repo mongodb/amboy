@@ -4,30 +4,29 @@ go 1.16
 
 require (
 	github.com/VividCortex/ewma v1.2.0
-	github.com/aws/aws-sdk-go v1.41.10
+	github.com/aws/aws-sdk-go v1.41.11
 	github.com/cheynewallace/tabby v1.1.1
-	github.com/evergreen-ci/aviation v0.0.0-20211026175554-41a4410c650f // indirect
-	github.com/evergreen-ci/birch v0.0.0-20211025210128-7f3409c2b515 // indirect
 	github.com/evergreen-ci/gimlet v0.0.0-20211029160936-5b64c7b33753
-	github.com/evergreen-ci/pail v0.0.0-20211018155204-833e3187cfe7 // indirect
-	github.com/evergreen-ci/poplar v0.0.0-20211018155212-515ae4da0643
+	github.com/evergreen-ci/pail v0.0.0-20211028170419-8efd623fd305 // indirect
+	github.com/evergreen-ci/poplar v0.0.0-20211028171636-d45516ea1ce5
 	github.com/evergreen-ci/utility v0.0.0-20211026201827-97b21fa2660a
-	github.com/fsnotify/fsnotify v1.5.1 // indirect
-	github.com/go-ole/go-ole v1.2.6 // indirect
-	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
-	github.com/golang/protobuf v1.5.2 // indirect
+	github.com/fuyufjh/splunk-hec-go v0.3.4-0.20210909061418-feecd03924b7 // indirect
 	github.com/google/uuid v1.3.0
-	github.com/mitchellh/go-homedir v1.1.0 // indirect
-	github.com/mongodb/ftdc v0.0.0-20211018154918-80dd1c22e4cf // indirect
-	github.com/mongodb/grip v0.0.0-20211028155128-86e6e47bafdb
-	github.com/papertrail/go-tail v0.0.0-20180509224916-973c153b0431 // indirect
+	github.com/mattn/go-xmpp v0.0.0-20211029151415-912ba614897a // indirect
+	github.com/mongodb/ftdc v0.0.0-20211028165431-67f017692185 // indirect
+	github.com/mongodb/grip v0.0.0-20211101151816-abbea0c0d465
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.7.0
 	github.com/urfave/cli v1.22.5
+	github.com/youmark/pkcs8 v0.0.0-20201027041543-1326539a0a0a // indirect
 	go.mongodb.org/mongo-driver v1.7.3
-	golang.org/x/net v0.0.0-20211020060615-d418f374d309 // indirect
-	golang.org/x/sys v0.0.0-20211025201205-69cdffdb9359 // indirect
+	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519 // indirect
+	golang.org/x/net v0.0.0-20211029224645-99673261e6eb // indirect
+	golang.org/x/oauth2 v0.0.0-20211028175245-ba495a64dcb5 // indirect
+	golang.org/x/sys v0.0.0-20211031064116-611d5d643895 // indirect
+	golang.org/x/text v0.3.7 // indirect
 	gonum.org/v1/gonum v0.9.3
-	google.golang.org/protobuf v1.27.1 // indirect
+	google.golang.org/genproto v0.0.0-20211101144312-62acf1d99145 // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22
+	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 )
