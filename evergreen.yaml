@@ -159,6 +159,16 @@ tasks:
     tags: ["report"]
     name: lint-registry
 
+  - name: verify-mod-tidy
+    tags: ["report"]
+    commands:
+      - command: git.get_project
+        type: system
+        params:
+          directory: amboy
+      - func: run-make
+        vars: { target: "${task_name}" }
+
   # define tasks for all test suites (modules)
   - <<: *run-go-test-suite
     name: test-amboy
