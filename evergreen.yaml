@@ -165,7 +165,7 @@ tasks:
       - command: git.get_project
         type: system
         params:
-          directory: certdepot
+          directory: amboy
       - func: run-make
         vars: { target: "${task_name}" }
 
