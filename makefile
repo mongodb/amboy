@@ -112,9 +112,6 @@ endif
 ifneq (,$(RACE_DETECTOR))
 testArgs += -race
 endif
-ifeq (,$(DISABLE_COVERAGE))
-testArgs += -cover
-endif
 ifneq (,$(SKIP_LONG))
 testArgs += -short
 endif
@@ -123,7 +120,7 @@ $(buildDir)/output.%.test: .FORCE
 	@grep -s -q "^PASS" $@
 $(buildDir)/output.%.coverage: .FORCE
 	$(gobin) test $(testArgs) ./$(if $(subst $(name),,$*),$(subst -,/,$*),) -coverprofile $@ | tee $(buildDir)/output.$*.test
-	@-[ -f $@ ] && $(gobin) tool cover -func=$@ | sed 's%$(projectPath)/%%' | column -t
+	-[ -f $@ ] && $(gobin) tool cover -func=$@ | sed 's%$(projectPath)/%%' | column -t
 	@grep -s -q -e "^PASS" $(subst coverage,test,$@)
 $(buildDir)/output.%.coverage.html: $(buildDir)/output.%.coverage
 	$(gobin) tool cover -html=$< -o $@
