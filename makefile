@@ -75,8 +75,8 @@ $(buildDir)/run-benchmarks: cmd/run-benchmarks/run-benchmarks.go
 testOutput := $(foreach target,$(packages),$(buildDir)/output.$(target).test)
 testOutput := $(foreach target,$(packages),$(buildDir)/output.$(target).lint)
 coverageOutput := $(foreach target,$(packages),$(buildDir)/output.$(target).coverage)
-coverageHtmlOutput := $(foreach target,$(packages),$(buildDir)/output.$(target).coverage.html)
-.PRECIOUS: $(testOutput) $(lintOutput) $(coverageOutput) $(coverageHtmlOutput)
+htmlCoverageOutput := $(foreach target,$(packages),$(buildDir)/output.$(target).coverage.html)
+.PRECIOUS: $(testOutput) $(lintOutput) $(coverageOutput) $(htmlCoverageOutput)
 # end output files
 
 # start basic development targets
@@ -85,8 +85,8 @@ compile:
 test: $(foreach target,$(packages),$(buildDir)/output.$(target).test)
 lint: $(foreach target,$(packages),$(buildDir)/output.$(target).lint)
 coverage: $(coverageOutput)
-coverage-html: $(coverageHtmlOutput)
-phony := compile lint test coverage coverage-html
+html-coverage: $(htmlCoverageOutput)
+phony := compile lint test coverage html-coverage
 
 # start convenience targets for running tests and coverage tasks on a
 # specific package.

@@ -176,8 +176,8 @@ All project automation is managed by a makefile, with all output captured in the
    make lint                    # lints all packages
    make test-<package>          # runs the tests only for a specific packages
    make lint-<package>          # lints a specific package
-   make html-coverage-<package> # generates the coverage report for a specific package
-   make coverage-html           # generates the coverage report for all packages
+   make html-coverage-<package> # generates the HTML coverage report for a specific package
+   make html-coverage           # generates the HTML coverage report for all packages
 
 The buildsystem also has a number of flags, which may be useful for more
 iterative development workflows: ::
