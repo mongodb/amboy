@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/evergreen-ci/utility"
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/dependency"
 	"github.com/mongodb/amboy/job"
@@ -115,10 +116,13 @@ func (s *AdaptiveOrderItemsSuite) TestRefilterIgnoresWorkWithCanceledContext() {
 
 func (s *AdaptiveOrderItemsSuite) TestRefilterReordersItemsInSuite() {
 	ctx := context.Background()
-	originalOrder := []string{"foo", "bar", "buzz", "what", "foo"}
-	s.items.ready = []string{"foo", "bar", "buzz", "what", "foo"}
+	original := make([]string, 100)
+	for i := range original {
+		original[i] = utility.RandomString()
+	}
+	s.items.ready = original
 	s.items.refilter(ctx)
-	s.NotEqual(originalOrder, s.items.ready)
+	s.NotEqual(original, s.items.ready)
 }
 
 func (s *AdaptiveOrderItemsSuite) TestReadyTasksOnOtherQueuesMoved() {
