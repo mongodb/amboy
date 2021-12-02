@@ -54,7 +54,6 @@ func NewShellJobInstance() *ShellJob {
 			},
 		},
 	}
-	j.SetDependency(dependency.NewAlways())
 	return j
 }
 

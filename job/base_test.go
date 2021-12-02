@@ -28,7 +28,7 @@ func (s *BaseCheckSuite) SetupSuite() {
 }
 
 func (s *BaseCheckSuite) SetupTest() {
-	s.base = &Base{dep: dependency.NewAlways()}
+	s.base = &Base{}
 }
 
 func (s *BaseCheckSuite) TestInitialValuesOfBaseObject() {
@@ -86,17 +86,19 @@ func (s *BaseCheckSuite) TestIdIsAccessorForTaskIDAttribute() {
 }
 
 func (s *BaseCheckSuite) TestDependencyAccessorIsCorrect() {
-	s.Equal(s.base.dep, s.base.Dependency())
-	s.base.SetDependency(dependency.NewAlways())
-	s.Equal("always", s.base.Dependency().Type().Name)
+	s.Zero(s.base.dep)
+	dep := s.base.Dependency()
+	s.Require().NotZero(dep)
+	s.Equal("always", dep.Type().Name)
 }
 
 func (s *BaseCheckSuite) TestSetDependencyAcceptsAndPersistsChangesToDependencyType() {
-	s.Equal("always", s.base.dep.Type().Name)
+	dep := s.base.Dependency()
+	s.Equal("always", dep.Type().Name)
 	localDep := dependency.MakeLocalFile()
 	s.NotEqual(localDep.Type().Name, "always")
 	s.base.SetDependency(localDep)
-	s.Equal("local-file", s.base.dep.Type().Name)
+	s.Equal("local-file", s.base.Dependency().Type().Name)
 }
 
 func (s *BaseCheckSuite) TestMarkCompleteHelperSetsCompleteState() {

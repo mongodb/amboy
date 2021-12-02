@@ -45,16 +45,19 @@ func (s *JobInterchangeSuite) SetupTest() {
 }
 
 func (s *JobInterchangeSuite) TestRoundTripHighLevel() {
+	s.Equal("always", s.job.Dependency().Type().Name)
+
 	i, err := MakeJobInterchange(s.job, s.format)
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	outJob, err := i.Resolve(s.format)
 	s.NoError(err)
 
-	// Decoding the job from BSON sets the scopes to the empty slice instead of
-	// a nil slice.
-	outJob.SetScopes(nil)
-	if s.format == amboy.BSON || s.format == amboy.BSON2 {
+	if s.format == amboy.BSON {
+		s.Equal(s.job.Dependency().Type().Name, outJob.Dependency().Type().Name)
+		// Decoding the job from BSON sets the scopes to the empty slice instead of
+		// a nil slice.
+		outJob.SetScopes(nil)
 		// mgo/bson seems to unset/nil the private map in the
 		// implementation of the dependency. It's not material
 		// to this test so we fake it out
@@ -62,18 +65,6 @@ func (s *JobInterchangeSuite) TestRoundTripHighLevel() {
 	}
 
 	s.Equal(s.job, outJob)
-}
-
-func (s *JobInterchangeSuite) TestRoundTripLowLevel() {
-	i, err := MakeJobInterchange(s.job, s.format)
-	s.NoError(err)
-
-	j2, err := i.Resolve(s.format)
-	if s.NoError(err) {
-		j2.SetScopes(nil)
-		j2.SetDependency(dependency.NewAlways())
-		s.Equal(s.job, j2)
-	}
 }
 
 func (s *JobInterchangeSuite) TestConversionToInterchangeMaintainsMetaDataFidelity() {

@@ -169,19 +169,29 @@ func (b *Base) Type() amboy.JobType {
 }
 
 // Dependency returns an amboy Job dependency interface object, and is
-// a component of the Job interface.
+// a component of the Job interface. If no dependency manager has been
+// explicitly set, its default value is the always manager.
 func (b *Base) Dependency() dependency.Manager {
-	b.mutex.RLock()
-	defer b.mutex.RUnlock()
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	if b.dep == nil {
+		b.dep = dependency.NewAlways()
+	}
 
 	return b.dep
 }
 
 // SetDependency allows you to inject a different Job dependency
-// object, and is a component of the Job interface.
+// object, and is a component of the Job interface. If the given dependency
+// manager is nil, it will default to the always manager.
 func (b *Base) SetDependency(d dependency.Manager) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
+
+	if d == nil {
+		b.dep = dependency.NewAlways()
+	}
 
 	b.dep = d
 }

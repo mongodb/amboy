@@ -12,7 +12,6 @@ import (
 	"github.com/evergreen-ci/poplar"
 	"github.com/google/uuid"
 	"github.com/mongodb/amboy"
-	"github.com/mongodb/amboy/dependency"
 	"github.com/mongodb/amboy/job"
 	"github.com/mongodb/amboy/queue"
 	"github.com/mongodb/amboy/registry"
@@ -210,7 +209,6 @@ func newNoopJobInstance() *noopJob {
 			},
 		},
 	}
-	j.SetDependency(dependency.NewAlways())
 	return j
 }
 
