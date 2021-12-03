@@ -189,10 +189,6 @@ func (b *Base) SetDependency(d dependency.Manager) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
-	if d == nil {
-		b.dep = dependency.NewAlways()
-	}
-
 	b.dep = d
 }
 
