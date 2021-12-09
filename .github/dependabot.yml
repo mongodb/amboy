@@ -6,6 +6,7 @@ updates:
     schedule:
       interval: monthly
       time: "10:00"
+      timezone: "UTC"
     open-pull-requests-limit: 99
     commit-message:
       prefix: "CHORE: "
