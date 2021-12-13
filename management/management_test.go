@@ -9,7 +9,6 @@ import (
 	"github.com/evergreen-ci/utility"
 	"github.com/google/uuid"
 	"github.com/mongodb/amboy"
-	"github.com/mongodb/amboy/dependency"
 	"github.com/mongodb/amboy/job"
 	"github.com/mongodb/amboy/queue"
 	"github.com/mongodb/amboy/registry"
@@ -481,7 +480,6 @@ func makeTestJob() *testJob {
 			},
 		},
 	}
-	j.SetDependency(dependency.NewAlways())
 	return j
 }
 

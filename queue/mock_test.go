@@ -10,7 +10,6 @@ import (
 	"github.com/evergreen-ci/utility"
 	"github.com/google/uuid"
 	"github.com/mongodb/amboy"
-	"github.com/mongodb/amboy/dependency"
 	"github.com/mongodb/amboy/job"
 	"github.com/mongodb/amboy/registry"
 	"github.com/mongodb/grip"
@@ -245,7 +244,6 @@ func makeMockRetryableJob() *mockRetryableJob {
 			},
 		},
 	}
-	j.SetDependency(dependency.NewAlways())
 	return j
 }
 
@@ -327,7 +325,6 @@ func newMockJob() *mockJob {
 			},
 		},
 	}
-	j.SetDependency(dependency.NewAlways())
 	return j
 }
 
@@ -351,7 +348,6 @@ func newSleepJob() *sleepJob {
 			},
 		},
 	}
-	j.SetDependency(dependency.NewAlways())
 	j.SetID(uuid.New().String())
 	return j
 }

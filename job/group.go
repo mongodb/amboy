@@ -42,8 +42,6 @@ func newGroupInstance() *Group {
 			},
 		},
 	}
-
-	g.Base.SetDependency(dependency.NewAlways())
 	return g
 }
 
