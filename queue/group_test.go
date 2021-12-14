@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/evergreen-ci/utility"
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/job"
 	"github.com/mongodb/grip"
@@ -346,8 +347,8 @@ func TestQueueGroup(t *testing.T) {
 					require.NoError(t, q2.Put(ctx, j2))
 					require.NoError(t, q2.Put(ctx, j3))
 
-					amboy.WaitInterval(ctx, q1, 100*time.Millisecond)
-					amboy.WaitInterval(ctx, q2, 100*time.Millisecond)
+					require.True(t, amboy.WaitInterval(ctx, q1, 100*time.Millisecond))
+					require.True(t, amboy.WaitInterval(ctx, q2, 100*time.Millisecond))
 
 					resultsQ1 := []amboy.Job{}
 					for result := range q1.Results(ctx) {
@@ -473,7 +474,15 @@ func TestQueueGroup(t *testing.T) {
 					ctx, cancel := context.WithTimeout(bctx, 10*time.Second)
 					defer cancel()
 
-					g, closer, err := group.Constructor(ctx, time.Second)
+					ttl := time.Second
+					if group.Name == "Mongo" && utility.StringSliceContains([]string{"windows", "darwin"}, runtime.GOOS) {
+						// The tests are particularly slow on MacOS/Windows, so
+						// the queues need extra time to run all the jobs before
+						// being pruned.
+						ttl = 5 * time.Second
+					}
+
+					g, closer, err := group.Constructor(ctx, ttl)
 					defer func() { require.NoError(t, closer(ctx)) }()
 					require.NoError(t, err)
 					require.NotNil(t, g)
@@ -496,18 +505,18 @@ func TestQueueGroup(t *testing.T) {
 					require.NoError(t, q2.Put(ctx, j2))
 					require.NoError(t, q2.Put(ctx, j3))
 
-					amboy.WaitInterval(ctx, q2, 10*time.Millisecond)
-					amboy.WaitInterval(ctx, q1, 10*time.Millisecond)
+					require.True(t, amboy.WaitInterval(ctx, q2, 10*time.Millisecond))
+					require.True(t, amboy.WaitInterval(ctx, q1, 10*time.Millisecond))
 
 					// Queues should have completed work
-					assert.True(t, q1.Stats(ctx).IsComplete())
-					assert.True(t, q2.Stats(ctx).IsComplete())
+					require.True(t, q1.Stats(ctx).IsComplete())
+					require.True(t, q2.Stats(ctx).IsComplete())
 					assert.Equal(t, 1, q1.Stats(ctx).Completed)
 					assert.Equal(t, 2, q2.Stats(ctx).Completed)
 
 					require.Equal(t, 2, g.Len())
 
-					time.Sleep(2 * time.Second)
+					time.Sleep(ttl + time.Second)
 					require.NoError(t, g.Prune(ctx))
 
 					require.Equal(t, 0, g.Len())
