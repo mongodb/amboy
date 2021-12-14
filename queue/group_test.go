@@ -347,8 +347,8 @@ func TestQueueGroup(t *testing.T) {
 					require.NoError(t, q2.Put(ctx, j2))
 					require.NoError(t, q2.Put(ctx, j3))
 
-					amboy.WaitInterval(ctx, q1, 100*time.Millisecond)
-					amboy.WaitInterval(ctx, q2, 100*time.Millisecond)
+					require.True(t, amboy.WaitInterval(ctx, q1, 100*time.Millisecond))
+					require.True(t, amboy.WaitInterval(ctx, q2, 100*time.Millisecond))
 
 					resultsQ1 := []amboy.Job{}
 					for result := range q1.Results(ctx) {
