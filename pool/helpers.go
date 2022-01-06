@@ -72,15 +72,15 @@ func executeJob(ctx context.Context, id string, j amboy.Job, q amboy.Queue) {
 
 	ti := j.TimeInfo()
 	msg := message.Fields{
-		"job_id":        j.ID(),
-		"job_type":      j.Type().Name,
-		"duration_secs": ti.Duration().Seconds(),
-		"dispatch_secs": ti.Start.Sub(ti.Created).Seconds(),
-		"pending_secs":  ti.End.Sub(ti.Created).Seconds(),
-		"queue_type":    fmt.Sprintf("%T", q),
-		"stat":          j.Status(),
-		"pool":          id,
-		"max_time_secs": ti.MaxTime.Seconds(),
+		"job_id":          j.ID(),
+		"job_type":        j.Type().Name,
+		"duration_secs":   ti.Duration().Seconds(),
+		"dispatch_secs":   ti.Start.Sub(ti.Created).Seconds(),
+		"turnaround_secs": ti.End.Sub(ti.Created).Seconds(),
+		"queue_type":      fmt.Sprintf("%T", q),
+		"stat":            j.Status(),
+		"pool":            id,
+		"max_time_secs":   ti.MaxTime.Seconds(),
 	}
 
 	if err := j.Error(); err != nil {
