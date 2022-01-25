@@ -33,11 +33,11 @@ func (o *LocalQueueGroupOptions) Validate() error {
 }
 
 type LocalQueueOptions struct {
-	Constructor func(ctx context.Context, name string) (amboy.Queue, error)
+	Constructor func(ctx context.Context) (amboy.Queue, error)
 }
 
-func (o *LocalQueueOptions) BuildQueue(ctx context.Context, name string) (amboy.Queue, error) {
-	return o.Constructor(ctx, name)
+func (o *LocalQueueOptions) BuildQueue(ctx context.Context) (amboy.Queue, error) {
+	return o.Constructor(ctx)
 }
 
 func (o *LocalQueueOptions) Validate() error {
@@ -136,7 +136,7 @@ func (g *localQueueGroup) Get(ctx context.Context, id string, opts ...amboy.Queu
 	if err := queueOpts.Validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid queue options")
 	}
-	queue, err := queueOpts.BuildQueue(ctx, id)
+	queue, err := queueOpts.BuildQueue(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "problem starting queue")
 	}

@@ -12,6 +12,9 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 )
 
+// remoteMongoQueueGroupSingle is a group of queues backed by MongoDB that are
+// multiplexed into a single MongoDB collection and isolated by group
+// namespaces.
 type remoteMongoQueueGroupSingle struct {
 	canceler context.CancelFunc
 	opts     MongoDBQueueGroupOptions
@@ -33,8 +36,9 @@ func NewMongoDBSingleQueueGroup(ctx context.Context, opts MongoDBQueueGroupOptio
 		return nil, errors.New("no mongodb uri specified")
 	}
 
+	// This must be set to ensure that the driver accounts for multiplexing the
+	// jobs of several queues within a single collection.
 	opts.Queue.DB.UseGroups = true
-	opts.Queue.DB.GroupName = opts.Prefix
 
 	ctx, cancel := context.WithCancel(ctx)
 	g := &remoteMongoQueueGroupSingle{
@@ -88,7 +92,7 @@ func NewMongoDBSingleQueueGroup(ctx context.Context, opts MongoDBQueueGroupOptio
 // complete and have not recently completed a job within the TTL) are not
 // returned.
 func (g *remoteMongoQueueGroupSingle) getQueues(ctx context.Context) ([]string, error) {
-	cursor, err := g.opts.Queue.DB.Client.Database(g.opts.Queue.DB.DB).Collection(addGroupSuffix(g.opts.Prefix)).Aggregate(ctx,
+	cursor, err := g.opts.Queue.DB.Client.Database(g.opts.Queue.DB.DB).Collection(addGroupSuffix(g.opts.Queue.DB.GroupName)).Aggregate(ctx,
 		[]bson.M{
 			{
 				"$match": bson.M{
@@ -175,7 +179,13 @@ func (g *remoteMongoQueueGroupSingle) Get(ctx context.Context, id string, opts .
 		if err = queueOpts.Validate(); err != nil {
 			return nil, errors.Wrap(err, "invalid queue options")
 		}
-		queue, err = queueOpts.buildQueue(ctx, id)
+		// The name has to be set to respect the given queue name.
+		queueOpts.DB.Name = id
+		// These settings must apply to all queues in the queue group to ensure
+		// proper management of jobs within the single multiplexed collection.
+		queueOpts.DB.UseGroups = g.opts.Queue.DB.UseGroups
+		queueOpts.DB.GroupName = g.opts.Queue.DB.GroupName
+		queue, err = queueOpts.buildQueue(ctx)
 		// kim: TODO: remove
 		// queue, err = g.opts.constructor(ctx, id)
 		if err != nil {
@@ -185,25 +195,26 @@ func (g *remoteMongoQueueGroupSingle) Get(ctx context.Context, id string, opts .
 		return q, nil
 	}
 
-	var driver remoteQueueDriver
-	if queueOpts.DB.Client != nil {
-		driver, err = openNewMongoGroupDriver(ctx, g.opts.Prefix, *queueOpts.DB, id)
-		if err != nil {
-			return nil, errors.Wrap(err, "creating and opening group driver")
-		}
-	} else {
-		driver, err = newMongoGroupDriver(g.opts.Prefix, *queueOpts.DB, id)
-		if err != nil {
-			return nil, errors.Wrap(err, "creating group driver")
-		}
-		if err := driver.Open(ctx); err != nil {
-			return nil, errors.Wrap(err, "opening group driver")
-		}
-	}
-
-	if err = queue.SetDriver(driver); err != nil {
-		return nil, errors.Wrap(err, "setting driver")
-	}
+	// kim: TODO: remove
+	// var driver remoteQueueDriver
+	// if queueOpts.DB.Client != nil {
+	//     driver, err = openNewMongoGroupDriver(ctx, g.opts.Prefix, *queueOpts.DB, id)
+	//     if err != nil {
+	//         return nil, errors.Wrap(err, "creating and opening group driver")
+	//     }
+	// } else {
+	//     driver, err = newMongoGroupDriver(g.opts.Prefix, *queueOpts.DB, id)
+	//     if err != nil {
+	//         return nil, errors.Wrap(err, "creating group driver")
+	//     }
+	//     if err := driver.Open(ctx); err != nil {
+	//         return nil, errors.Wrap(err, "opening group driver")
+	//     }
+	// }
+	//
+	// if err = queue.SetDriver(driver); err != nil {
+	//     return nil, errors.Wrap(err, "setting driver")
+	// }
 
 	if err = g.cache.Set(id, queue, g.opts.TTL); err != nil {
 		// If another thread already created and set the queue in the cache in

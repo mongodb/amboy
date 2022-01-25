@@ -397,8 +397,8 @@ type QueueGroup interface {
 // QueueOptions represent options for an individual queue in a queue group.
 // Options are typically dependent on the particular queue implementation.
 type QueueOptions interface {
-	// BuildQueue creates a named queue from the queue options.
-	BuildQueue(ctx context.Context, name string) (Queue, error)
+	// BuildQueue creates a queue from the queue options.
+	BuildQueue(ctx context.Context) (Queue, error)
 	// Validate checks that the queue options are valid.
 	Validate() error
 }

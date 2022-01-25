@@ -80,23 +80,46 @@ type MongoDBOptions struct {
 	URI string
 	// DB is the name of the database in which the driver operates.
 	DB string
-	// GroupName is the name of the group of jobs managed by this driver. If
-	// this is set, UseGroups must also be set.
+	// Name is the namespace for this driver instance.
+	Name string
+	// GroupName is the name of the queue managed by this driver when the queue
+	// is part of a queue group. If this is set, UseGroups must also be set.
 	GroupName string
-	// UseGroups is true
-	UseGroups                bool
-	Priority                 bool
-	CheckWaitUntil           bool
-	CheckDispatchBy          bool
-	SkipQueueIndexBuilds     bool
+	// UseGroups determines if the queue is part of a queue group. If this is set,
+	// GroupName must also bet set.
+	UseGroups bool
+	// Priority determines if the queue obeys priority ordering of jobs.
+	Priority bool
+	// CheckWaitUntil determines if jobs that have not met their wait until time
+	// yet should be filtered from consideration for dispatch. If true, any job
+	// whose wait until constraint has not been reached yet will be filtered.
+	CheckWaitUntil bool
+	// CheckDispatchBy determines if jobs that have already exceeded their
+	// dispatch by deadline should be filtered from consideration for dispatch.
+	// If true, any job whose dispatch by deadline has been passed will be
+	// filtered.
+	CheckDispatchBy bool
+	// SkipQueueIndexBuilds determines if indexes required for regular queue
+	// operations should be built before using the driver.
+	SkipQueueIndexBuilds bool
+	// SkipReportingIndexBuilds determines if indexes related to reporting job
+	// state should be built before using the driver.
 	SkipReportingIndexBuilds bool
-	Format                   amboy.Format
-	WaitInterval             time.Duration
+	// Format is the internal format used to store jobs in the DB.
+	Format amboy.Format
+	// WaitInterval is the duration that the driver will wait in between checks
+	// for the next available job when no job is currently available to
+	// dispatch.
+	WaitInterval time.Duration
 	// TTL sets the number of seconds for a TTL index on the "info.created"
 	// field. If set to zero, the TTL index will not be created and
 	// and documents may live forever in the database.
 	TTL time.Duration
-	// LockTimeout overrides the default job lock timeout if set.
+	// LockTimeout determines how long the queue will wait for a job that's
+	// already been dispatched to finish without receiving a lock ping
+	// indicating liveliness. If the lock timeout has been exceeded without a
+	// lock ping, it will be considered stale and will be re-dispatched. If set,
+	// this overrides the default job lock timeout.
 	LockTimeout time.Duration
 	// SampleSize is the number of jobs that the driver will consider from the
 	// next available ones. If it samples from the available jobs, the order of
@@ -138,7 +161,7 @@ func (opts *MongoDBOptions) Validate() error {
 	catcher.NewWhen(opts.Priority && opts.SampleSize > 0, "cannot sample next jobs when ordering them by priority")
 	catcher.NewWhen(opts.LockTimeout < 0, "lock timeout cannot be negative")
 	// kim: TODO: test this extra group validation.
-	catcher.NewWhen(opts.GroupName != "" && !opts.UseGroups, "cannot set a group name if not using groups")
+	// catcher.NewWhen(opts.GroupName != "" && !opts.UseGroups, "cannot set a group name if not using groups")
 	catcher.NewWhen(opts.GroupName == "" && opts.UseGroups, "cannot use groups without a group name")
 	if opts.LockTimeout == 0 {
 		opts.LockTimeout = amboy.LockTimeout

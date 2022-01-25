@@ -24,10 +24,6 @@ type dbQueueManager struct {
 // queue managers, and accommodates both group-backed queues and conventional
 // queues.
 type DBQueueManagerOptions struct {
-	// Name is the prefix of the DB namespace to use.
-	Name string
-	// Group is the name of the queue group if managing a single group.
-	Group string
 	// SingleGroup indicates that the queue is managing a single queue group.
 	SingleGroup bool
 	// ByGroups indicates that the queue is managing multiple queues in a queue
@@ -41,10 +37,10 @@ func (o *DBQueueManagerOptions) hasGroups() bool { return o.SingleGroup || o.ByG
 
 func (o *DBQueueManagerOptions) collName() string {
 	if o.hasGroups() {
-		return addGroupSuffix(o.Name)
+		return addGroupSuffix(o.Options.Name)
 	}
 
-	return addJobsSuffix(o.Name)
+	return addJobsSuffix(o.Options.Name)
 }
 
 // Validate checks the state of the manager configuration, preventing logically
@@ -52,7 +48,6 @@ func (o *DBQueueManagerOptions) collName() string {
 func (o *DBQueueManagerOptions) Validate() error {
 	catcher := grip.NewBasicCatcher()
 	catcher.NewWhen(o.SingleGroup && o.ByGroups, "cannot specify conflicting group options")
-	catcher.NewWhen(o.Name == "", "must specify queue name")
 	catcher.Wrap(o.Options.Validate(), "invalid mongo options")
 	return catcher.Resolve()
 }
@@ -182,7 +177,7 @@ func (m *dbQueueManager) JobStatus(ctx context.Context, f StatusFilter) ([]JobTy
 	}
 
 	if m.opts.SingleGroup {
-		match["group"] = m.opts.Group
+		match["group"] = m.opts.Options.GroupName
 	} else if m.opts.ByGroups {
 		group["_id"] = bson.M{"type": "$type", "group": "$group"}
 	}
@@ -224,7 +219,7 @@ func (m *dbQueueManager) JobIDsByState(ctx context.Context, jobType string, f St
 	query = m.getStatusQuery(query, f)
 
 	if m.opts.SingleGroup {
-		query["group"] = m.opts.Group
+		query["group"] = m.opts.Options.GroupName
 	}
 
 	groupedIDs, err := m.findJobIDs(ctx, query)
@@ -304,8 +299,8 @@ func (m *dbQueueManager) completeJobs(ctx context.Context, query bson.M, f Statu
 		return errors.Wrapf(err, "invalid status filter")
 	}
 
-	if m.opts.Group != "" {
-		query["group"] = m.opts.Group
+	if groupName := m.opts.Options.GroupName; groupName != "" {
+		query["group"] = groupName
 	}
 
 	query = m.getStatusQuery(query, f)
@@ -325,10 +320,10 @@ func (m *dbQueueManager) completeJobs(ctx context.Context, query bson.M, f Statu
 func (m *dbQueueManager) CompleteJob(ctx context.Context, id string) error {
 	matchID := bson.M{}
 	matchRetryableJobID := bson.M{"retry_info.base_job_id": id}
-	if m.opts.Group != "" {
-		matchID["_id"] = m.buildCompoundID(m.opts.Group, id)
-		matchID["group"] = m.opts.Group
-		matchRetryableJobID["group"] = m.opts.Group
+	if groupName := m.opts.Options.GroupName; groupName != "" {
+		matchID["_id"] = m.buildCompoundID(groupName, id)
+		matchID["group"] = groupName
+		matchRetryableJobID["group"] = groupName
 	} else {
 		matchID["_id"] = id
 	}

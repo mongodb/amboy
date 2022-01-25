@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/evergreen-ci/utility"
 	"github.com/mongodb/amboy/queue"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,6 +16,7 @@ import (
 func defaultMongoDBTestOptions() queue.MongoDBOptions {
 	opts := queue.DefaultMongoDBOptions()
 	opts.DB = "amboy_test"
+	opts.Name = "test." + utility.RandomString()
 	return opts
 }
 
@@ -28,6 +30,7 @@ func TestMongoDBConstructors(t *testing.T) {
 
 	t.Run("NilSessionShouldError", func(t *testing.T) {
 		opts := defaultMongoDBTestOptions()
+		opts.Name = t.Name()
 		conf := DBQueueManagerOptions{Options: opts}
 
 		db, err := MakeDBQueueManager(ctx, conf, nil)
@@ -36,6 +39,7 @@ func TestMongoDBConstructors(t *testing.T) {
 	})
 	t.Run("UnpingableSessionError", func(t *testing.T) {
 		opts := defaultMongoDBTestOptions()
+		opts.Name = t.Name()
 		conf := DBQueueManagerOptions{Options: opts}
 
 		db, err := MakeDBQueueManager(ctx, conf, client)
@@ -44,6 +48,7 @@ func TestMongoDBConstructors(t *testing.T) {
 	})
 	t.Run("BuildNewConnector", func(t *testing.T) {
 		opts := defaultMongoDBTestOptions()
+		opts.Name = t.Name()
 		conf := DBQueueManagerOptions{Name: "foo", Options: opts}
 
 		db, err := MakeDBQueueManager(ctx, conf, client)
@@ -57,6 +62,7 @@ func TestMongoDBConstructors(t *testing.T) {
 	})
 	t.Run("DialWithNewConstructor", func(t *testing.T) {
 		opts := defaultMongoDBTestOptions()
+		opts.Name = t.Name()
 		conf := DBQueueManagerOptions{Name: "foo", Options: opts}
 
 		r, err := NewDBQueueManager(ctx, conf)
@@ -65,6 +71,7 @@ func TestMongoDBConstructors(t *testing.T) {
 	})
 	t.Run("DialWithBadURI", func(t *testing.T) {
 		opts := defaultMongoDBTestOptions()
+		opts.Name = t.Name()
 		opts.URI = "mongodb://lochost:26016"
 		conf := DBQueueManagerOptions{Options: opts}
 

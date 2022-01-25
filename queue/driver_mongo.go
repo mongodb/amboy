@@ -36,7 +36,7 @@ type mongoDriver struct {
 
 // NewMongoDriver constructs a MongoDB backed queue driver implementation using
 // the go.mongodb.org/mongo-driver as the database interface.
-func newMongoDriver(name string, opts MongoDBOptions) (*mongoDriver, error) {
+func newMongoDriver(opts MongoDBOptions) (*mongoDriver, error) {
 	host, _ := os.Hostname() // nolint
 
 	if err := opts.Validate(); err != nil {
@@ -44,18 +44,17 @@ func newMongoDriver(name string, opts MongoDBOptions) (*mongoDriver, error) {
 	}
 
 	return &mongoDriver{
-		name:       name,
+		name:       opts.Name,
 		opts:       opts,
-		instanceID: fmt.Sprintf("%s.%s.%s", name, host, uuid.New()),
+		instanceID: fmt.Sprintf("%s.%s.%s", opts.Name, host, uuid.New()),
 	}, nil
 }
 
 // openNewMongoDriver constructs a new MongoDB driver instance using the client
 // given in the MongoDB options. The returned driver does not take ownership of
 // the lifetime of the client.
-// kim: TODO: stuff the client into the MongoDBOptions.
-func openNewMongoDriver(ctx context.Context, name string, opts MongoDBOptions) (*mongoDriver, error) {
-	d, err := newMongoDriver(name, opts)
+func openNewMongoDriver(ctx context.Context, opts MongoDBOptions) (*mongoDriver, error) {
+	d, err := newMongoDriver(opts)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create driver")
 	}
@@ -67,44 +66,40 @@ func openNewMongoDriver(ctx context.Context, name string, opts MongoDBOptions) (
 	return d, nil
 }
 
+// kim: TODO: remove
 // newMongoGroupDriver is similar to newMongoDriver, except that it uses the
 // given group prefix as a means to distinguish one particular queue when
 // multiple distinct queues are multiplexed within a single MongoDB collection.
-func newMongoGroupDriver(name string, opts MongoDBOptions, group string) (*mongoDriver, error) {
-	host, _ := os.Hostname() // nolint
+// func newMongoGroupDriver(opts MongoDBOptions, group string) (*mongoDriver, error) {
+//     host, _ := os.Hostname() // nolint
+//
+//     if err := opts.Validate(); err != nil {
+//         return nil, errors.Wrap(err, "invalid mongo driver options")
+//     }
+//
+//     return &mongoDriver{
+//         name:       opts.Name,
+//         opts:       opts,
+//         instanceID: fmt.Sprintf("%s.%s.%s.%s", opts.Name, group, host, uuid.New()),
+//     }, nil
+// }
 
-	if err := opts.Validate(); err != nil {
-		return nil, errors.Wrap(err, "invalid mongo driver options")
-	}
-
-	opts.UseGroups = true
-	opts.GroupName = group
-
-	return &mongoDriver{
-		name:       name,
-		opts:       opts,
-		instanceID: fmt.Sprintf("%s.%s.%s.%s", name, group, host, uuid.New()),
-	}, nil
-}
-
+// kim: TODO: remove
 // openNewMongoGroupDriver is the same as openNewMongoDriver, except that it
 // uses the given group prefix to distinguish one particular queue when multiple
 // distinct queues are multiplexed within a single MongoDB collection.
-func openNewMongoGroupDriver(ctx context.Context, name string, opts MongoDBOptions, group string) (*mongoDriver, error) {
-	d, err := newMongoGroupDriver(name, opts, group)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not create driver")
-	}
-
-	opts.UseGroups = true
-	opts.GroupName = group
-
-	if err := d.start(ctx, clientStartOptions{client: opts.Client}); err != nil {
-		return nil, errors.Wrap(err, "starting driver")
-	}
-
-	return d, nil
-}
+// func openNewMongoGroupDriver(ctx context.Context, opts MongoDBOptions, group string) (*mongoDriver, error) {
+//     d, err := newMongoGroupDriver(opts, group)
+//     if err != nil {
+//         return nil, errors.Wrap(err, "could not create driver")
+//     }
+//
+//     if err := d.start(ctx, clientStartOptions{client: opts.Client}); err != nil {
+//         return nil, errors.Wrap(err, "starting driver")
+//     }
+//
+//     return d, nil
+// }
 
 func (d *mongoDriver) ID() string {
 	d.mu.RLock()

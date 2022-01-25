@@ -89,8 +89,10 @@ func TestQueueGroup(t *testing.T) {
 					defer cancel()
 
 					localOpts := LocalQueueGroupOptions{
-						Constructor: test.localConstructor,
-						TTL:         test.ttl,
+						Queue: LocalQueueOptions{
+							Constructor: test.localConstructor,
+						},
+						TTL: test.ttl,
 					}
 					g, err := NewLocalQueueGroup(ctx, localOpts) // nolint
 					if test.valid {
@@ -175,20 +177,26 @@ func TestQueueGroup(t *testing.T) {
 							ctx, cancel := context.WithCancel(bctx)
 							defer cancel()
 							mopts := MongoDBOptions{
+								Client:       client,
 								DB:           remoteTest.db,
+								Name:         remoteTest.name,
+								GroupName:    remoteTest.prefix,
+								UseGroups:    false,
 								URI:          remoteTest.uri,
 								WaitInterval: time.Millisecond,
 							}
 
 							remoteOpts := MongoDBQueueGroupOptions{
-								DefaultWorkers: remoteTest.workers,
-								WorkerPoolSize: remoteTest.workerFunc,
-								Prefix:         remoteTest.prefix,
+								Queue: MongoDBQueueOptions{
+									DB:             &mopts,
+									NumWorkers:     utility.ToIntPtr(remoteTest.workers),
+									WorkerPoolSize: remoteTest.workerFunc,
+								},
 								TTL:            test.ttl,
 								PruneFrequency: test.ttl,
 							}
 
-							g, err := NewMongoDBQueueGroup(ctx, remoteOpts, client, mopts) // nolint
+							g, err := NewMongoDBQueueGroup(ctx, remoteOpts)
 							if test.valid && remoteTest.valid {
 								require.NoError(t, err)
 								require.NotNil(t, g)
@@ -205,20 +213,26 @@ func TestQueueGroup(t *testing.T) {
 							ctx, cancel := context.WithCancel(bctx)
 							defer cancel()
 							mopts := MongoDBOptions{
+								Client:       client,
 								WaitInterval: time.Millisecond,
 								DB:           remoteTest.db,
+								Name:         newDriverID(),
+								GroupName:    remoteTest.prefix,
+								UseGroups:    true,
 								URI:          remoteTest.uri,
 							}
 
 							remoteOpts := MongoDBQueueGroupOptions{
-								DefaultWorkers: remoteTest.workers,
-								WorkerPoolSize: remoteTest.workerFunc,
-								Prefix:         remoteTest.prefix,
+								Queue: MongoDBQueueOptions{
+									DB:             &mopts,
+									NumWorkers:     utility.ToIntPtr(remoteTest.workers),
+									WorkerPoolSize: remoteTest.workerFunc,
+								},
 								TTL:            test.ttl,
 								PruneFrequency: test.ttl,
 							}
 
-							g, err := NewMongoDBSingleQueueGroup(ctx, remoteOpts, client, mopts)
+							g, err := NewMongoDBSingleQueueGroup(ctx, remoteOpts)
 							if test.valid && remoteTest.valid {
 								require.NoError(t, err)
 								require.NotNil(t, g)
@@ -234,25 +248,33 @@ func TestQueueGroup(t *testing.T) {
 	})
 	t.Run("Integration", func(t *testing.T) {
 		for _, group := range []struct {
-			Name        string
-			Constructor queueGroupConstructor
+			name        string
+			constructor queueGroupConstructor
 		}{
 			{
-				Name: "Local",
-				Constructor: func(ctx context.Context, ttl time.Duration) (amboy.QueueGroup, queueGroupCloser, error) {
-					qg, err := NewLocalQueueGroup(ctx, LocalQueueGroupOptions{Constructor: localConstructor, TTL: ttl})
+				name: "Local",
+				constructor: func(ctx context.Context, ttl time.Duration) (amboy.QueueGroup, queueGroupCloser, error) {
+					qg, err := NewLocalQueueGroup(ctx, LocalQueueGroupOptions{
+						Queue: LocalQueueOptions{
+							Constructor: localConstructor,
+						},
+						TTL: ttl,
+					},
+					)
 					closer := func(_ context.Context) error { return nil }
 					return qg, closer, err
 				},
 			},
 			{
-				Name: "Mongo",
-				Constructor: func(ctx context.Context, ttl time.Duration) (amboy.QueueGroup, queueGroupCloser, error) {
-					mopts := MongoDBOptions{
-						WaitInterval: time.Millisecond,
-						DB:           "amboy_group_test",
-						URI:          defaultMongoDBURI,
-					}
+				name: "Mongo",
+				constructor: func(ctx context.Context, ttl time.Duration) (amboy.QueueGroup, queueGroupCloser, error) {
+					mopts := defaultMongoDBTestOptions()
+					mopts.Client = client
+					mopts.DB = "amboy_group_test"
+					mopts.Name = newDriverID()
+					mopts.GroupName = "prefix"
+					mopts.UseGroups = false
+					mopts.WaitInterval = time.Millisecond
 
 					closer := func(cctx context.Context) error {
 						catcher := grip.NewBasicCatcher()
@@ -261,8 +283,10 @@ func TestQueueGroup(t *testing.T) {
 					}
 
 					opts := MongoDBQueueGroupOptions{
-						DefaultWorkers: 1,
-						Prefix:         "prefix",
+						Queue: MongoDBQueueOptions{
+							NumWorkers: utility.ToIntPtr(1),
+							DB:         &mopts,
+						},
 						TTL:            ttl,
 						PruneFrequency: ttl,
 					}
@@ -275,18 +299,20 @@ func TestQueueGroup(t *testing.T) {
 						return nil, closer, errors.Wrap(err, "server not pingable")
 					}
 
-					qg, err := NewMongoDBQueueGroup(ctx, opts, client, mopts)
+					qg, err := NewMongoDBQueueGroup(ctx, opts)
 					return qg, closer, err
 				},
 			},
 			{
-				Name: "MongoMerged",
-				Constructor: func(ctx context.Context, ttl time.Duration) (amboy.QueueGroup, queueGroupCloser, error) {
-					mopts := MongoDBOptions{
-						DB:           "amboy_group_test",
-						URI:          defaultMongoDBURI,
-						WaitInterval: time.Millisecond,
-					}
+				name: "MongoMerged",
+				constructor: func(ctx context.Context, ttl time.Duration) (amboy.QueueGroup, queueGroupCloser, error) {
+					mopts := defaultMongoDBTestOptions()
+					mopts.Client = client
+					mopts.DB = "amboy_group_test"
+					mopts.Name = newDriverID()
+					mopts.UseGroups = true
+					mopts.GroupName = "prefix"
+					mopts.WaitInterval = time.Millisecond
 
 					closer := func(cctx context.Context) error {
 						catcher := grip.NewBasicCatcher()
@@ -298,8 +324,10 @@ func TestQueueGroup(t *testing.T) {
 					}
 
 					opts := MongoDBQueueGroupOptions{
-						DefaultWorkers: 1,
-						Prefix:         "prefix",
+						Queue: MongoDBQueueOptions{
+							NumWorkers: utility.ToIntPtr(1),
+							DB:         &mopts,
+						},
 						TTL:            ttl,
 						PruneFrequency: ttl,
 					}
@@ -312,17 +340,17 @@ func TestQueueGroup(t *testing.T) {
 						return nil, closer, errors.Wrap(err, "server not pingable")
 					}
 
-					qg, err := NewMongoDBSingleQueueGroup(ctx, opts, client, mopts)
+					qg, err := NewMongoDBSingleQueueGroup(ctx, opts)
 					return qg, closer, err
 				},
 			},
 		} {
-			t.Run(group.Name, func(t *testing.T) {
+			t.Run(group.name, func(t *testing.T) {
 				t.Run("Get", func(t *testing.T) {
 					ctx, cancel := context.WithTimeout(bctx, 20*time.Second)
 					defer cancel()
 
-					g, closer, err := group.Constructor(ctx, 0)
+					g, closer, err := group.constructor(ctx, 0)
 					defer func() { require.NoError(t, closer(ctx)) }()
 					require.NoError(t, err)
 					require.NotNil(t, g)
@@ -386,7 +414,7 @@ func TestQueueGroup(t *testing.T) {
 					ctx, cancel := context.WithCancel(bctx)
 					defer cancel()
 
-					g, closer, err := group.Constructor(ctx, 0)
+					g, closer, err := group.constructor(ctx, 0)
 					defer func() { require.NoError(t, closer(ctx)) }()
 
 					require.NoError(t, err)
@@ -467,7 +495,7 @@ func TestQueueGroup(t *testing.T) {
 					require.Len(t, resultsQ4, 2)
 				})
 				t.Run("Prune", func(t *testing.T) {
-					if runtime.GOOS == "windows" && group.Name == "Mongo" {
+					if runtime.GOOS == "windows" && group.name == "Mongo" {
 						t.Skip("legacy implementation performs poorly on windows")
 					}
 
@@ -475,14 +503,14 @@ func TestQueueGroup(t *testing.T) {
 					defer cancel()
 
 					ttl := time.Second
-					if group.Name == "Mongo" && utility.StringSliceContains([]string{"windows", "darwin"}, runtime.GOOS) {
+					if group.name == "Mongo" && utility.StringSliceContains([]string{"windows", "darwin"}, runtime.GOOS) {
 						// The tests are particularly slow on MacOS/Windows, so
 						// the queues need extra time to run all the jobs before
 						// being pruned.
 						ttl = 5 * time.Second
 					}
 
-					g, closer, err := group.Constructor(ctx, ttl)
+					g, closer, err := group.constructor(ctx, ttl)
 					defer func() { require.NoError(t, closer(ctx)) }()
 					require.NoError(t, err)
 					require.NotNil(t, g)
@@ -525,7 +553,7 @@ func TestQueueGroup(t *testing.T) {
 					ctx, cancel := context.WithTimeout(bctx, 40*time.Second)
 					defer cancel()
 
-					g, closer, err := group.Constructor(ctx, 3*time.Second)
+					g, closer, err := group.constructor(ctx, 3*time.Second)
 					defer func() { require.NoError(t, closer(ctx)) }()
 					require.NoError(t, err)
 					require.NotNil(t, g)
@@ -576,7 +604,7 @@ func TestQueueGroup(t *testing.T) {
 					ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 					defer cancel()
 
-					g, closer, err := group.Constructor(ctx, 0)
+					g, closer, err := group.constructor(ctx, 0)
 					defer func() { require.NoError(t, closer(ctx)) }()
 					require.NoError(t, err)
 					require.NotNil(t, g)
@@ -609,26 +637,31 @@ func TestQueueGroup(t *testing.T) {
 			ctx, cancel := context.WithCancel(bctx)
 			defer cancel()
 			mopts := MongoDBOptions{
+				Client:       client,
 				DB:           "amboy_group_test",
+				Name:         newDriverID(),
+				GroupName:    "gen",
 				WaitInterval: time.Millisecond,
 				URI:          defaultMongoDBURI,
 			}
 
 			for i := 0; i < 10; i++ {
-				_, err := client.Database("amboy_group_test").Collection(fmt.Sprintf("gen-%d.jobs", i)).InsertOne(ctx, bson.M{"foo": "bar"})
+				_, err := client.Database("amboy_group_test").Collection(fmt.Sprintf("%s-%d.jobs", mopts.GroupName, i)).InsertOne(ctx, bson.M{"foo": "bar"})
 				require.NoError(t, err)
 			}
 			remoteOpts := MongoDBQueueGroupOptions{
-				Prefix:         "gen",
-				DefaultWorkers: 1,
+				Queue: MongoDBQueueOptions{
+					NumWorkers: utility.ToIntPtr(1),
+					DB:         &mopts,
+				},
 				TTL:            time.Second,
 				PruneFrequency: time.Second,
 			}
-			_, err := NewMongoDBQueueGroup(ctx, remoteOpts, client, mopts)
+			_, err := NewMongoDBQueueGroup(ctx, remoteOpts)
 			require.NoError(t, err)
 			time.Sleep(time.Second)
 			for i := 0; i < 10; i++ {
-				count, err := client.Database("amboy_group_test").Collection(fmt.Sprintf("gen-%d.jobs", i)).CountDocuments(ctx, bson.M{})
+				count, err := client.Database("amboy_group_test").Collection(fmt.Sprintf("%s-%d.jobs", mopts.GroupName, i)).CountDocuments(ctx, bson.M{})
 				require.NoError(t, err)
 				require.Zero(t, count, fmt.Sprintf("gen-%d.jobs not dropped", i))
 			}
