@@ -81,9 +81,9 @@ func (opts *MongoDBQueueCreationOptions) build(ctx context.Context) (amboy.Retry
 		err = driver.Open(ctx)
 	} else {
 		if opts.MDB.UseGroups {
-			driver, err = openNewMongoGroupDriver(ctx, opts.Name, opts.MDB, opts.MDB.GroupName, opts.Client)
+			driver, err = openNewMongoGroupDriver(ctx, opts.Name, opts.MDB, opts.MDB.GroupName)
 		} else {
-			driver, err = openNewMongoDriver(ctx, opts.Name, opts.MDB, opts.Client)
+			driver, err = openNewMongoDriver(ctx, opts.Name, opts.MDB)
 		}
 	}
 

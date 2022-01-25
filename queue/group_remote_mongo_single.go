@@ -10,40 +10,35 @@ import (
 	"github.com/mongodb/grip/recovery"
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type remoteMongoQueueGroupSingle struct {
 	canceler context.CancelFunc
-	client   *mongo.Client
 	opts     MongoDBQueueGroupOptions
-	dbOpts   MongoDBOptions
 	cache    GroupCache
 }
 
 // NewMongoDBSingleQueueGroup constructs a new remote queue group. If ttl is 0, the queues will not be
 // TTLed except when the client explicitly calls Prune.
-func NewMongoDBSingleQueueGroup(ctx context.Context, opts MongoDBQueueGroupOptions, client *mongo.Client, mdbopts MongoDBOptions) (amboy.QueueGroup, error) {
+func NewMongoDBSingleQueueGroup(ctx context.Context, opts MongoDBQueueGroupOptions) (amboy.QueueGroup, error) {
 	if err := opts.validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid remote queue options")
 	}
 
-	if mdbopts.DB == "" {
+	if opts.Queue.DB.DB == "" {
 		return nil, errors.New("no database name specified")
 	}
 
-	if mdbopts.URI == "" {
+	if opts.Queue.DB.URI == "" {
 		return nil, errors.New("no mongodb uri specified")
 	}
 
-	mdbopts.UseGroups = true
-	mdbopts.GroupName = opts.Prefix
+	opts.Queue.DB.UseGroups = true
+	opts.Queue.DB.GroupName = opts.Prefix
 
 	ctx, cancel := context.WithCancel(ctx)
 	g := &remoteMongoQueueGroupSingle{
 		canceler: cancel,
-		client:   client,
-		dbOpts:   mdbopts,
 		opts:     opts,
 		cache:    NewGroupCache(opts.TTL),
 	}
@@ -93,7 +88,7 @@ func NewMongoDBSingleQueueGroup(ctx context.Context, opts MongoDBQueueGroupOptio
 // complete and have not recently completed a job within the TTL) are not
 // returned.
 func (g *remoteMongoQueueGroupSingle) getQueues(ctx context.Context) ([]string, error) {
-	cursor, err := g.client.Database(g.dbOpts.DB).Collection(addGroupSuffix(g.opts.Prefix)).Aggregate(ctx,
+	cursor, err := g.opts.Queue.DB.Client.Database(g.opts.Queue.DB.DB).Collection(addGroupSuffix(g.opts.Prefix)).Aggregate(ctx,
 		[]bson.M{
 			{
 				"$match": bson.M{
@@ -158,15 +153,31 @@ func (g *remoteMongoQueueGroupSingle) startQueues(ctx context.Context) error {
 	return catcher.Resolve()
 }
 
-func (g *remoteMongoQueueGroupSingle) Get(ctx context.Context, id string) (amboy.Queue, error) {
+// Get a queue with the given id. Get sets the last accessed time to now. Note
+// that this means that the time between when the queue is retrieved and when
+// the caller actually performs an operation on the queue (e.g. add a job) must
+// be within the TTL; otherwise, the queue might be closed before the operation
+// is done.
+func (g *remoteMongoQueueGroupSingle) Get(ctx context.Context, id string, opts ...amboy.QueueOptions) (amboy.Queue, error) {
 	var queue remoteQueue
+	var queueOpts MongoDBQueueOptions
 	var err error
 
 	switch q := g.cache.Get(id).(type) {
 	case remoteQueue:
 		return q, nil
 	case nil:
-		queue, err = g.opts.constructor(ctx, id)
+		mdbOpts, err := getMongoDBQueueOptions(opts...)
+		if err != nil {
+			return nil, errors.Wrap(err, "invalid queue options")
+		}
+		queueOpts = mergeMongoDBQueueOptions(append([]MongoDBQueueOptions{g.opts.Queue}, mdbOpts...)...)
+		if err = queueOpts.Validate(); err != nil {
+			return nil, errors.Wrap(err, "invalid queue options")
+		}
+		queue, err = queueOpts.buildQueue(ctx, id)
+		// kim: TODO: remove
+		// queue, err = g.opts.constructor(ctx, id)
 		if err != nil {
 			return nil, errors.Wrap(err, "constructing queue")
 		}
@@ -175,13 +186,13 @@ func (g *remoteMongoQueueGroupSingle) Get(ctx context.Context, id string) (amboy
 	}
 
 	var driver remoteQueueDriver
-	if g.client != nil {
-		driver, err = openNewMongoGroupDriver(ctx, g.opts.Prefix, g.dbOpts, id, g.client)
+	if queueOpts.DB.Client != nil {
+		driver, err = openNewMongoGroupDriver(ctx, g.opts.Prefix, *queueOpts.DB, id)
 		if err != nil {
 			return nil, errors.Wrap(err, "creating and opening group driver")
 		}
 	} else {
-		driver, err = newMongoGroupDriver(g.opts.Prefix, g.dbOpts, id)
+		driver, err = newMongoGroupDriver(g.opts.Prefix, *queueOpts.DB, id)
 		if err != nil {
 			return nil, errors.Wrap(err, "creating group driver")
 		}

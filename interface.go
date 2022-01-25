@@ -372,8 +372,10 @@ type QueueInfo struct {
 // string. Users can use these queues if there are many different types
 // of work or if the types of work are only knowable at runtime.
 type QueueGroup interface {
-	// Get a queue with the given index.
-	Get(context.Context, string) (Queue, error)
+	// Get a queue with the given identifier, creating a new queue dynamically
+	// if necessary. Implementations should respect QueueOptions if creating a
+	// new queue, but may ignore the options if the queue already exists.
+	Get(context.Context, string, ...QueueOptions) (Queue, error)
 
 	// Put a queue at the given index.
 	Put(context.Context, string, Queue) error
@@ -390,6 +392,15 @@ type QueueGroup interface {
 
 	// Queues returns all currently registered and running queues
 	Queues(context.Context) []string
+}
+
+// QueueOptions represent options for an individual queue in a queue group.
+// Options are typically dependent on the particular queue implementation.
+type QueueOptions interface {
+	// BuildQueue creates a named queue from the queue options.
+	BuildQueue(ctx context.Context, name string) (Queue, error)
+	// Validate checks that the queue options are valid.
+	Validate() error
 }
 
 // RetryableQueue is the same as a Queue but supports additional operations for

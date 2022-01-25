@@ -34,9 +34,8 @@ type mongoDriver struct {
 	dispatcher Dispatcher
 }
 
-// NewMongoDriver constructs a MongoDB backed queue driver
-// implementation using the go.mongodb.org/mongo-driver as the
-// database interface.
+// NewMongoDriver constructs a MongoDB backed queue driver implementation using
+// the go.mongodb.org/mongo-driver as the database interface.
 func newMongoDriver(name string, opts MongoDBOptions) (*mongoDriver, error) {
 	host, _ := os.Hostname() // nolint
 
@@ -51,25 +50,26 @@ func newMongoDriver(name string, opts MongoDBOptions) (*mongoDriver, error) {
 	}, nil
 }
 
-// openNewMongoDriver constructs and opens a new MongoDB driver instance using
-// the specified client. The returned driver does not take ownership of the
-// lifetime of the client.
-func openNewMongoDriver(ctx context.Context, name string, opts MongoDBOptions, client *mongo.Client) (*mongoDriver, error) {
+// openNewMongoDriver constructs a new MongoDB driver instance using the client
+// given in the MongoDB options. The returned driver does not take ownership of
+// the lifetime of the client.
+// kim: TODO: stuff the client into the MongoDBOptions.
+func openNewMongoDriver(ctx context.Context, name string, opts MongoDBOptions) (*mongoDriver, error) {
 	d, err := newMongoDriver(name, opts)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create driver")
 	}
 
-	if err := d.start(ctx, clientStartOptions{client: client}); err != nil {
+	if err := d.start(ctx, clientStartOptions{client: opts.Client}); err != nil {
 		return nil, errors.Wrap(err, "problem starting driver")
 	}
 
 	return d, nil
 }
 
-// newMongoGroupDriver is similar to newMongoDriver, except it prefixes job ids
-// with a prefix and adds the group field to the documents in the database which
-// makes it possible to manage distinct queues with a single MongoDB collection.
+// newMongoGroupDriver is similar to newMongoDriver, except that it uses the
+// given group prefix as a means to distinguish one particular queue when
+// multiple distinct queues are multiplexed within a single MongoDB collection.
 func newMongoGroupDriver(name string, opts MongoDBOptions, group string) (*mongoDriver, error) {
 	host, _ := os.Hostname() // nolint
 
@@ -87,10 +87,10 @@ func newMongoGroupDriver(name string, opts MongoDBOptions, group string) (*mongo
 	}, nil
 }
 
-// openNewMongoGroupDriver constructs and opens a new MongoDB driver instance
-// using the specified client. The returned driver does not take ownership of
-// the lifetime of the client.
-func openNewMongoGroupDriver(ctx context.Context, name string, opts MongoDBOptions, group string, client *mongo.Client) (*mongoDriver, error) {
+// openNewMongoGroupDriver is the same as openNewMongoDriver, except that it
+// uses the given group prefix to distinguish one particular queue when multiple
+// distinct queues are multiplexed within a single MongoDB collection.
+func openNewMongoGroupDriver(ctx context.Context, name string, opts MongoDBOptions, group string) (*mongoDriver, error) {
 	d, err := newMongoGroupDriver(name, opts, group)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create driver")
@@ -99,7 +99,7 @@ func openNewMongoGroupDriver(ctx context.Context, name string, opts MongoDBOptio
 	opts.UseGroups = true
 	opts.GroupName = group
 
-	if err := d.start(ctx, clientStartOptions{client: client}); err != nil {
+	if err := d.start(ctx, clientStartOptions{client: opts.Client}); err != nil {
 		return nil, errors.Wrap(err, "starting driver")
 	}
 

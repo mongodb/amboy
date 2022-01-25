@@ -6,6 +6,7 @@ import (
 
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/grip"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // remoteQueueDriver describes the interface between a queue and an out of
@@ -70,9 +71,19 @@ const (
 // communicate MongoDB-specific settings about the driver's behavior and
 // operation.
 type MongoDBOptions struct {
-	URI                      string
-	DB                       string
-	GroupName                string
+	// Client is the MongoDB client used to connect a MongoDB queue driver to
+	// its MongoDB-backed storage if no MongoDB URI is specified. Either Client
+	// or URI must be set.
+	Client *mongo.Client
+	// URI is used to connect to MongoDB if no client is specified. Either
+	// Client or URI must be set.
+	URI string
+	// DB is the name of the database in which the driver operates.
+	DB string
+	// GroupName is the name of the group of jobs managed by this driver. If
+	// this is set, UseGroups must also be set.
+	GroupName string
+	// UseGroups is true
 	UseGroups                bool
 	Priority                 bool
 	CheckWaitUntil           bool
@@ -126,6 +137,9 @@ func (opts *MongoDBOptions) Validate() error {
 	catcher.NewWhen(opts.SampleSize < 0, "sample rate cannot be negative")
 	catcher.NewWhen(opts.Priority && opts.SampleSize > 0, "cannot sample next jobs when ordering them by priority")
 	catcher.NewWhen(opts.LockTimeout < 0, "lock timeout cannot be negative")
+	// kim: TODO: test this extra group validation.
+	catcher.NewWhen(opts.GroupName != "" && !opts.UseGroups, "cannot set a group name if not using groups")
+	catcher.NewWhen(opts.GroupName == "" && opts.UseGroups, "cannot use groups without a group name")
 	if opts.LockTimeout == 0 {
 		opts.LockTimeout = amboy.LockTimeout
 	}
