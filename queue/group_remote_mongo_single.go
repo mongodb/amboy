@@ -155,7 +155,7 @@ func (g *remoteMongoQueueGroupSingle) startQueues(ctx context.Context) error {
 
 	catcher := grip.NewBasicCatcher()
 	// Refresh the TTLs on all the queues that were recently accessed or still
-	// have.
+	// have jobs to run.
 	for _, id := range queues {
 		_, err := g.Get(ctx, id)
 		catcher.Add(err)
