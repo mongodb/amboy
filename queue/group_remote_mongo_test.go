@@ -8,5 +8,4 @@ import "testing"
 // * invalid options are rejected
 // * queue-level options can't overwrite group-level options
 func TestMongoDBQueueGroup(t *testing.T) {
-
 }

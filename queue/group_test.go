@@ -307,6 +307,7 @@ func TestQueueGroup(t *testing.T) {
 					mopts.DB = "amboy_group_test"
 					mopts.Collection = "prefix"
 					mopts.UseGroups = true
+					mopts.GroupName = "group"
 					mopts.WaitInterval = time.Millisecond
 
 					closer := func(cctx context.Context) error {

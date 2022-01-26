@@ -419,6 +419,10 @@ func DefaultSizeTestCases() []SizeTestCase {
 }
 
 func TestQueueSmoke(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping queue smoke tests in short mode")
+	}
+
 	bctx, bcancel := context.WithCancel(context.Background())
 	defer bcancel()
 

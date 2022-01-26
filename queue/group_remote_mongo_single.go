@@ -178,12 +178,9 @@ func (g *remoteMongoQueueGroupSingle) Get(ctx context.Context, id string, opts .
 	case nil:
 		mdbOpts, err := getMongoDBQueueOptions(opts...)
 		if err != nil {
-			return nil, errors.Wrap(err, "invalid queue options")
+			return nil, errors.Wrap(err, "getting queue options")
 		}
 		queueOpts = mergeMongoDBQueueOptions(append([]MongoDBQueueOptions{g.opts.Queue}, mdbOpts...)...)
-		if err = queueOpts.Validate(); err != nil {
-			return nil, errors.Wrap(err, "invalid queue options")
-		}
 		// The group name has to be set to ensure the queue uses its namespace
 		// within the single multiplexed collection.
 		queueOpts.DB.GroupName = id

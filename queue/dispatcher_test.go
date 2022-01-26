@@ -174,14 +174,12 @@ func TestDispatcherImplementations(t *testing.T) {
 	}
 
 	opts := defaultMongoDBTestOptions()
-	opts.Collection = newDriverID()
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(opts.URI))
 	require.NoError(t, err)
 	defer func() {
 		assert.NoError(t, client.Disconnect(ctx))
 	}()
 	opts.Client = client
-	opts.Collection = newDriverID()
 
 	driver, err := openNewMongoDriver(ctx, opts)
 	require.NoError(t, err)

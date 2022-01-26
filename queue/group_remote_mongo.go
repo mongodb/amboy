@@ -191,9 +191,11 @@ func (g *remoteMongoQueueGroup) startProcessingRemoteQueue(ctx context.Context, 
 	coll = trimJobsSuffix(coll)
 	mdbOpts, err := getMongoDBQueueOptions(opts...)
 	if err != nil {
-		return nil, errors.Wrap(err, "invalid queue options")
+		return nil, errors.Wrap(err, "getting queue options")
 	}
+
 	queueOpts := mergeMongoDBQueueOptions(append([]MongoDBQueueOptions{g.opts.Queue}, mdbOpts...)...)
+
 	// The collection name has to be set to ensure the queue uses its
 	// collection-level namespace.
 	queueOpts.DB.Collection = coll
@@ -202,9 +204,7 @@ func (g *remoteMongoQueueGroup) startProcessingRemoteQueue(ctx context.Context, 
 	// group's ability to manage jobs properly.
 	queueOpts.DB.UseGroups = g.opts.Queue.DB.UseGroups
 	queueOpts.DB.GroupName = g.opts.Queue.DB.GroupName
-	if err := queueOpts.Validate(); err != nil {
-		return nil, errors.Wrap(err, "invalid queue options")
-	}
+
 	q, err := queueOpts.buildQueue(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "constructing queue")

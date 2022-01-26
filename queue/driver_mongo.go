@@ -115,7 +115,6 @@ func DefaultMongoDBOptions() MongoDBOptions {
 // are unspecified and have a default value.
 func (opts *MongoDBOptions) Validate() error {
 	catcher := grip.NewBasicCatcher()
-	// kim: TODO: test
 	catcher.NewWhen(opts.URI == "" && opts.Client == nil, "must specify connection URI or an existing client")
 	catcher.NewWhen(opts.DB == "", "must specify database")
 	catcher.NewWhen(opts.Collection == "", "must specify collection")
@@ -144,8 +143,9 @@ type mongoDriver struct {
 	dispatcher Dispatcher
 }
 
-// NewMongoDriver constructs a MongoDB backed queue driver implementation using
-// the go.mongodb.org/mongo-driver as the database interface.
+// newMongoDriver constructs a MongoDB-backed queue driver instance without a
+// MongoDB client. Callers must follow this with a call to Open before using the
+// driver to set up the client.
 func newMongoDriver(opts MongoDBOptions) (*mongoDriver, error) {
 	host, _ := os.Hostname() // nolint
 
@@ -166,9 +166,11 @@ func newMongoDriver(opts MongoDBOptions) (*mongoDriver, error) {
 	}, nil
 }
 
-// openNewMongoDriver constructs a new MongoDB driver instance using the client
-// given in the MongoDB options. The returned driver does not take ownership of
-// the lifetime of the client.
+// openNewMongoDriver constructs a new MongoDB-backed queue driver instance
+// using the client given in the MongoDB options. Use this if creating the
+// driver with an existing client given in the MongoDB options; the client must
+// already have established a connection to the DB. The returned driver does not
+// take ownership of the lifetime of the client.
 func openNewMongoDriver(ctx context.Context, opts MongoDBOptions) (*mongoDriver, error) {
 	d, err := newMongoDriver(opts)
 	if err != nil {

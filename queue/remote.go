@@ -30,7 +30,6 @@ type MongoDBQueueOptions struct {
 }
 
 // Validate checks that the given queue options are valid.
-// kim: TODO: test
 func (o *MongoDBQueueOptions) Validate() error {
 	catcher := grip.NewBasicCatcher()
 	catcher.NewWhen(utility.FromIntPtr(o.NumWorkers) == 0 && o.WorkerPoolSize == nil, "must specify either a static, positive number of workers or a worker pool size")
@@ -51,8 +50,11 @@ func (o *MongoDBQueueOptions) BuildQueue(ctx context.Context) (amboy.Queue, erro
 	return o.buildQueue(ctx)
 }
 
-// kim: TODO: test
 func (o *MongoDBQueueOptions) buildQueue(ctx context.Context) (remoteQueue, error) {
+	if err := o.Validate(); err != nil {
+		return nil, errors.Wrap(err, "invalid queue options")
+	}
+
 	workers := utility.FromIntPtr(o.NumWorkers)
 	if o.WorkerPoolSize != nil {
 		workers = o.WorkerPoolSize(o.DB.Collection)
@@ -113,7 +115,6 @@ func (o *MongoDBQueueOptions) buildQueue(ctx context.Context) (remoteQueue, erro
 // getMongoDBQueueOptions resolves the given queue options into MongoDB-specific
 // queue options. If the given options are not MongoDB options, this will return
 // an error.
-// kim: TODO: test
 func getMongoDBQueueOptions(opts ...amboy.QueueOptions) ([]MongoDBQueueOptions, error) {
 	var mdbOpts []MongoDBQueueOptions
 
@@ -134,7 +135,6 @@ func getMongoDBQueueOptions(opts ...amboy.QueueOptions) ([]MongoDBQueueOptions, 
 // mergeMongoDBQueueOptions merges all the given MongoDBQueueOptions into a
 // single set of options. Options are applied in the order they're specified and
 // conflicting options are overwritten.
-// kim: TODO: test
 func mergeMongoDBQueueOptions(opts ...MongoDBQueueOptions) MongoDBQueueOptions {
 	var merged MongoDBQueueOptions
 
