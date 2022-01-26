@@ -29,21 +29,23 @@ type remoteMongoQueueGroupSingle struct {
 // collection. Group name as a means to namespace each queue within the
 // collection and ensure isolation.
 func NewMongoDBSingleQueueGroup(ctx context.Context, opts MongoDBQueueGroupOptions) (amboy.QueueGroup, error) {
+	// Because of the way this queue group is implemented, the driver must
+	// account for job isolation between multiplexed queues within a single
+	// collection, so it needs to set UseGroups.
+	opts.Queue.DB.UseGroups = true
+	// GroupName must be provided if UseGroups is set, but the queue's name is
+	// not yet known here; the queue's name is determined when the queue is
+	// generated dynamically in Get. Therefore, the GroupName set here is not
+	// actually important and is only necessary to pass validation; the actual
+	// queue's name will be validated when the queue is created.
+	originalGroupName := opts.Queue.DB.GroupName
+	opts.Queue.DB.GroupName = "placeholder"
+
 	if err := opts.validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid remote queue options")
 	}
 
-	if opts.Queue.DB.DB == "" {
-		return nil, errors.New("no database name specified")
-	}
-
-	if opts.Queue.DB.URI == "" {
-		return nil, errors.New("no mongodb uri specified")
-	}
-
-	// This must be set to ensure that the driver accounts for multiplexing the
-	// jobs of several queues within a single collection.
-	opts.Queue.DB.UseGroups = true
+	opts.Queue.DB.GroupName = originalGroupName
 
 	ctx, cancel := context.WithCancel(ctx)
 	g := &remoteMongoQueueGroupSingle{

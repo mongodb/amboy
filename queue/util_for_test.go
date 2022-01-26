@@ -5,6 +5,15 @@ import (
 	"github.com/mongodb/amboy"
 )
 
+// defaultMongoDBQueueGroupTestOptions returns default MongoDB queue group
+// options for testing purposes only.
+func defaultMongoDBQueueGroupTestOptions() MongoDBQueueGroupOptions {
+	queueOpts := defaultMongoDBQueueTestOptions()
+	return MongoDBQueueGroupOptions{
+		Queue: queueOpts,
+	}
+}
+
 // defaultMongoDBQueueTestOptions returns default MongoDB queue options for
 // testing purposes only.
 func defaultMongoDBQueueTestOptions() MongoDBQueueOptions {

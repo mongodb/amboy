@@ -30,9 +30,8 @@ func TestQueueGroup(t *testing.T) {
 	bctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client, cerr := mongo.NewClient(options.Client().ApplyURI(defaultMongoDBURI).SetConnectTimeout(2 * time.Second))
-	require.NoError(t, cerr)
-	require.NoError(t, client.Connect(bctx))
+	client, err := mongo.Connect(bctx, options.Client().ApplyURI(defaultMongoDBURI).SetConnectTimeout(2*time.Second))
+	require.NoError(t, err)
 	defer func() { require.NoError(t, client.Disconnect(bctx)) }()
 
 	t.Run("Constructor", func(t *testing.T) {
@@ -152,20 +151,6 @@ func TestQueueGroup(t *testing.T) {
 						name:    "DBMissing",
 						prefix:  "prefix",
 						uri:     "uri",
-						workers: 1,
-						valid:   false,
-					},
-					{
-						name:    "PrefixMissing",
-						db:      "db",
-						workers: 1,
-						uri:     "uri",
-						valid:   false,
-					},
-					{
-						name:    "URIMissing",
-						db:      "db",
-						prefix:  "prefix",
 						workers: 1,
 						valid:   false,
 					},

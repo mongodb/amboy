@@ -60,7 +60,6 @@ func (opts MongoDBQueueGroupOptions) validate() error {
 	catcher.NewWhen(opts.PruneFrequency < 0, "prune frequency must be greater than or equal to 0")
 	catcher.NewWhen(opts.PruneFrequency > 0 && opts.TTL < time.Second, "prune frequency cannot be less than 1 second, unless it is 0")
 	catcher.NewWhen((opts.TTL == 0 && opts.PruneFrequency != 0) || (opts.TTL != 0 && opts.PruneFrequency == 0), "ttl and prune frequency must both be 0 or both be not 0")
-	// catcher.NewWhen(opts.Queue.DB == nil || opts.Queue.DB.Name == "", " must be set")
 	catcher.Wrap(opts.Queue.Validate(), "invalid default queue options")
 	return catcher.Resolve()
 }
@@ -85,14 +84,6 @@ func NewMongoDBQueueGroup(ctx context.Context, opts MongoDBQueueGroupOptions) (a
 
 	if err := opts.validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid remote queue options")
-	}
-
-	if opts.Queue.DB.DB == "" {
-		return nil, errors.New("no database name specified")
-	}
-
-	if opts.Queue.DB.URI == "" {
-		return nil, errors.New("no mongodb uri specified")
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -252,7 +243,7 @@ func (g *remoteMongoQueueGroup) Get(ctx context.Context, id string, opts ...ambo
 		return queue, nil
 	}
 
-	queue, err := g.startProcessingRemoteQueue(ctx, g.collectionFromID(id))
+	queue, err := g.startProcessingRemoteQueue(ctx, g.collectionFromID(id), opts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "starting queue")
 	}
