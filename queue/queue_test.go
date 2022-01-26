@@ -185,7 +185,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 			Constructor: func(ctx context.Context, name string, size int) (amboy.Queue, TestCloser, error) {
 				mdbOpts := defaultMongoDBTestOptions()
 				mdbOpts.Client = client
-				mdbOpts.Name = name
+				mdbOpts.Collection = name
 				mdbOpts.Format = amboy.BSON2
 				opts := MongoDBQueueOptions{
 					DB:         &mdbOpts,
@@ -226,9 +226,9 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 			Constructor: func(ctx context.Context, name string, size int) (amboy.Queue, TestCloser, error) {
 				mdbOpts := defaultMongoDBTestOptions()
 				mdbOpts.Client = client
-				mdbOpts.Name = name
+				mdbOpts.Collection = name
 				mdbOpts.Format = amboy.BSON2
-				mdbOpts.GroupName = "group." + name
+				mdbOpts.GroupName = "group"
 				mdbOpts.UseGroups = true
 				opts := MongoDBQueueOptions{
 					DB:         &mdbOpts,
@@ -271,7 +271,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 			Constructor: func(ctx context.Context, name string, size int) (amboy.Queue, TestCloser, error) {
 				mdbOpts := defaultMongoDBTestOptions()
 				mdbOpts.Client = client
-				mdbOpts.Name = name
+				mdbOpts.Collection = name
 				mdbOpts.Format = amboy.BSON
 				opts := MongoDBQueueOptions{
 					DB:         &mdbOpts,
@@ -313,7 +313,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 			Constructor: func(ctx context.Context, name string, size int) (amboy.Queue, TestCloser, error) {
 				mdbOpts := defaultMongoDBTestOptions()
 				mdbOpts.Client = client
-				mdbOpts.Name = name
+				mdbOpts.Collection = name
 				mdbOpts.Format = amboy.BSON2
 				opts := MongoDBQueueOptions{
 					DB:         &mdbOpts,

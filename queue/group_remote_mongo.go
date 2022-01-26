@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/evergreen-ci/utility"
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/grip"
 	"github.com/mongodb/grip/message"
@@ -35,23 +34,6 @@ type MongoDBQueueGroupOptions struct {
 	// be optionally overridden at the individual queue level.
 	Queue MongoDBQueueOptions
 
-	// kim: TODO: remove
-	// Abortable controls if the queue will use an abortable pool
-	// implementation. The Ordered option controls if an
-	// order-respecting queue will be created, while default
-	// workers sets the default number of workers new queues will
-	// have if the WorkerPoolSize function is not set.
-	// Abortable      bool
-	// Ordered        bool
-	// DefaultWorkers int
-
-	// WorkerPoolSize determines how many works will be allocated
-	// to each queue, based on the queue ID passed to it.
-	// WorkerPoolSize func(string) int
-
-	// Retryable represents the options to configure retrying jobs in the queue.
-	// Retryable RetryableQueueOptions
-
 	// PruneFrequency is how often inactive queues are checked to see if they
 	// can be pruned.
 	PruneFrequency time.Duration
@@ -71,41 +53,6 @@ type MongoDBQueueGroupOptions struct {
 	TTL time.Duration
 }
 
-// kim: TODO: need to modify this constructor to be per-queue instead of global. func (opts *MongoDBQueueGroupOptions) constructor(ctx context.Context, name string) (remoteQueue, error) {
-//     workers := opts.Queue.NumWorkers
-//     if opts.Queue.WorkerPoolSize != nil {
-//         workers = opts.Queue.WorkerPoolSize(name)
-//         if workers == 0 {
-//             workers = opts.Queue.NumWorkers
-//         }
-//     }
-//
-//     var q remoteQueue
-//     var err error
-//     qOpts := remoteOptions{
-//         numWorkers: workers,
-//         retryable:  opts.Queue.Retryable,
-//     }
-//     if opts.Queue.Ordered {
-//         if q, err = newRemoteSimpleOrderedWithOptions(qOpts); err != nil {
-//             return nil, errors.Wrap(err, "initializing ordered queue")
-//         }
-//     } else {
-//         if q, err = newRemoteUnorderedWithOptions(qOpts); err != nil {
-//             return nil, errors.Wrap(err, "initializing unordered queue")
-//         }
-//     }
-//
-//     if opts.Queue.Abortable {
-//         p := pool.NewAbortablePool(workers, q)
-//         if err = q.SetRunner(p); err != nil {
-//             return nil, errors.Wrap(err, "configuring queue with runner")
-//         }
-//     }
-//
-//     return q, nil
-// }
-
 func (opts MongoDBQueueGroupOptions) validate() error {
 	catcher := grip.NewBasicCatcher()
 	catcher.NewWhen(opts.TTL < 0, "ttl must be greater than or equal to 0")
@@ -113,97 +60,28 @@ func (opts MongoDBQueueGroupOptions) validate() error {
 	catcher.NewWhen(opts.PruneFrequency < 0, "prune frequency must be greater than or equal to 0")
 	catcher.NewWhen(opts.PruneFrequency > 0 && opts.TTL < time.Second, "prune frequency cannot be less than 1 second, unless it is 0")
 	catcher.NewWhen((opts.TTL == 0 && opts.PruneFrequency != 0) || (opts.TTL != 0 && opts.PruneFrequency == 0), "ttl and prune frequency must both be 0 or both be not 0")
-	catcher.NewWhen(opts.Queue.DB == nil || opts.Queue.DB.GroupName == "", "group name must be set")
+	// catcher.NewWhen(opts.Queue.DB == nil || opts.Queue.DB.Name == "", " must be set")
 	catcher.Wrap(opts.Queue.Validate(), "invalid default queue options")
 	return catcher.Resolve()
-}
-
-// Validate checks that the given queue options are valid.
-// kim: TODO: test
-func (o *MongoDBQueueOptions) Validate() error {
-	catcher := grip.NewBasicCatcher()
-	catcher.NewWhen(utility.FromIntPtr(o.NumWorkers) == 0 && o.WorkerPoolSize == nil, "must specify either a static, positive number of workers or a worker pool size")
-	catcher.NewWhen(utility.FromIntPtr(o.NumWorkers) < 0, "cannot specify a negative number of workers")
-	if o.Retryable != nil {
-		catcher.Wrap(o.Retryable.Validate(), "invalid retryable queue options")
-	}
-	if o.DB != nil {
-		catcher.Wrap(o.DB.Validate(), "invalid DB options")
-	} else {
-		catcher.New("must specify DB options")
-	}
-	return catcher.Resolve()
-}
-
-// getMongoDBQueueOptions resolves the given queue options into MongoDB-specific
-// queue options. If the given options are not MongoDB options, this will return
-// an error.
-func getMongoDBQueueOptions(opts ...amboy.QueueOptions) ([]MongoDBQueueOptions, error) {
-	var concreteOpts []MongoDBQueueOptions
-
-	for _, o := range opts {
-		switch concreteOpt := o.(type) {
-		case *MongoDBQueueOptions:
-			if concreteOpt != nil {
-				concreteOpts = append(concreteOpts, *concreteOpt)
-			}
-		default:
-			return nil, errors.Errorf("found queue options of type '%T', but they must be MongoDB options", concreteOpt)
-		}
-	}
-
-	return concreteOpts, nil
-}
-
-// mergeMongoDBQueueOptions merges all the given MongoDBQueueOptions into a
-// single set of options. Options are applied in the order they're specified and
-// conflicting options are overwritten.
-// kim: TODO: test
-func mergeMongoDBQueueOptions(opts ...MongoDBQueueOptions) MongoDBQueueOptions {
-	var merged MongoDBQueueOptions
-
-	for _, o := range opts {
-		if o.DB != nil {
-			merged.DB = o.DB
-		}
-		if o.NumWorkers != nil {
-			merged.NumWorkers = o.NumWorkers
-		}
-		if o.WorkerPoolSize != nil {
-			merged.WorkerPoolSize = o.WorkerPoolSize
-		}
-		if o.Ordered != nil {
-			merged.Ordered = o.Ordered
-		}
-		if o.Abortable != nil {
-			merged.Abortable = o.Abortable
-		}
-		if o.Retryable != nil {
-			merged.Retryable = o.Retryable
-		}
-	}
-
-	return merged
 }
 
 type listCollectionsOutput struct {
 	Name string `bson:"name"`
 }
 
-// NewMongoDBQueueGroup constructs a new remote queue group. If
-// ttl is 0, the queues will not be TTLed except when the client
-// explicitly calls Prune.
+// NewMongoDBQueueGroup constructs a new remote queue group. If the TTL is 0,
+// the queues will not be TTLed except when the client explicitly calls Prune.
 //
-// The MongoDBRemoteQueue group creats a new collection for every queue,
-// unlike the other remote queue group implementations. This is
-// probably most viable for lower volume workloads; however, the
-// caching mechanism may be more responsive in some situations.
+// The MongoDB remote queue group creates a new collection for every queue. This
+// is probably most viable for lower volume workloads; however, the caching
+// mechanism may be more responsive in some situations.
 func NewMongoDBQueueGroup(ctx context.Context, opts MongoDBQueueGroupOptions) (amboy.QueueGroup, error) {
 	// Because of the way this queue is implemented, the driver's collection
 	// name has group information, but the jobs within the collection don't have
 	// any group information. Therefore, we have to set UseGroups to false so
 	// that the driver will treat the jobs as if they're in their own queue.
 	opts.Queue.DB.UseGroups = false
+	opts.Queue.DB.GroupName = ""
 
 	if err := opts.validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid remote queue options")
@@ -304,7 +182,7 @@ func (g *remoteMongoQueueGroup) Queues(ctx context.Context) []string {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 
-	out, _ := g.getExistingCollections(ctx, g.opts.Queue.DB.Client, g.opts.Queue.DB.DB, g.opts.Queue.DB.GroupName) // nolint
+	out, _ := g.getExistingCollections(ctx, g.opts.Queue.DB.Client, g.opts.Queue.DB.DB, g.opts.Queue.DB.Collection) // nolint
 
 	return out
 }
@@ -316,17 +194,18 @@ func (g *remoteMongoQueueGroup) startProcessingRemoteQueue(ctx context.Context, 
 		return nil, errors.Wrap(err, "invalid queue options")
 	}
 	queueOpts := mergeMongoDBQueueOptions(append([]MongoDBQueueOptions{g.opts.Queue}, mdbOpts...)...)
-	// These have to be set to ensure that the name of the queue is respected
-	// and that the queue is started with the queue group's settings.
-	queueOpts.DB.Name = coll
+	// The collection name has to be set to ensure the queue uses its
+	// collection-level namespace.
+	queueOpts.DB.Collection = coll
+	// These settings must apply to all queues in the queue group because if the
+	// queue-specific options differ from the defaults, it will affect the queue
+	// group's ability to manage jobs properly.
 	queueOpts.DB.UseGroups = g.opts.Queue.DB.UseGroups
 	queueOpts.DB.GroupName = g.opts.Queue.DB.GroupName
 	if err := queueOpts.Validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid queue options")
 	}
 	q, err := queueOpts.buildQueue(ctx)
-	// kim: TODO: remove
-	// q, err := g.opts.constructor(ctx, coll)
 	if err != nil {
 		return nil, errors.Wrap(err, "constructing queue")
 	}

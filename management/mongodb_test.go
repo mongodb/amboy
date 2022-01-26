@@ -16,7 +16,7 @@ import (
 func defaultMongoDBTestOptions() queue.MongoDBOptions {
 	opts := queue.DefaultMongoDBOptions()
 	opts.DB = "amboy_test"
-	opts.Name = "test." + utility.RandomString()
+	opts.Collection = "test." + utility.RandomString()
 	return opts
 }
 
@@ -28,30 +28,30 @@ func TestMongoDBConstructors(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, client.Connect(ctx))
 
-	t.Run("NilSessionShouldError", func(t *testing.T) {
+	t.Run("MissingClientShouldError", func(t *testing.T) {
 		opts := defaultMongoDBTestOptions()
-		opts.Name = t.Name()
 		conf := DBQueueManagerOptions{Options: opts}
 
-		db, err := MakeDBQueueManager(ctx, conf, nil)
+		db, err := MakeDBQueueManager(ctx, conf)
 		assert.Error(t, err)
-		assert.Nil(t, db)
+		assert.Zero(t, db)
 	})
-	t.Run("UnpingableSessionError", func(t *testing.T) {
+	t.Run("InvalidDBOptionsShouldError", func(t *testing.T) {
 		opts := defaultMongoDBTestOptions()
-		opts.Name = t.Name()
+		opts.Collection = ""
 		conf := DBQueueManagerOptions{Options: opts}
 
-		db, err := MakeDBQueueManager(ctx, conf, client)
+		db, err := MakeDBQueueManager(ctx, conf)
 		assert.Error(t, err)
-		assert.Nil(t, db)
+		assert.Zero(t, db)
 	})
 	t.Run("BuildNewConnector", func(t *testing.T) {
 		opts := defaultMongoDBTestOptions()
-		opts.Name = t.Name()
-		conf := DBQueueManagerOptions{Name: "foo", Options: opts}
+		opts.Client = client
+		opts.Collection = t.Name()
+		conf := DBQueueManagerOptions{Options: opts}
 
-		db, err := MakeDBQueueManager(ctx, conf, client)
+		db, err := MakeDBQueueManager(ctx, conf)
 		assert.NoError(t, err)
 		assert.NotNil(t, db)
 
@@ -62,8 +62,8 @@ func TestMongoDBConstructors(t *testing.T) {
 	})
 	t.Run("DialWithNewConstructor", func(t *testing.T) {
 		opts := defaultMongoDBTestOptions()
-		opts.Name = t.Name()
-		conf := DBQueueManagerOptions{Name: "foo", Options: opts}
+		opts.Collection = t.Name()
+		conf := DBQueueManagerOptions{Options: opts}
 
 		r, err := NewDBQueueManager(ctx, conf)
 		assert.NoError(t, err)
@@ -71,7 +71,7 @@ func TestMongoDBConstructors(t *testing.T) {
 	})
 	t.Run("DialWithBadURI", func(t *testing.T) {
 		opts := defaultMongoDBTestOptions()
-		opts.Name = t.Name()
+		opts.Collection = t.Name()
 		opts.URI = "mongodb://lochost:26016"
 		conf := DBQueueManagerOptions{Options: opts}
 

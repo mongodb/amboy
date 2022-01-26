@@ -37,10 +37,10 @@ func (o *DBQueueManagerOptions) hasGroups() bool { return o.SingleGroup || o.ByG
 
 func (o *DBQueueManagerOptions) collName() string {
 	if o.hasGroups() {
-		return addGroupSuffix(o.Options.Name)
+		return addGroupSuffix(o.Options.Collection)
 	}
 
-	return addJobsSuffix(o.Options.Name)
+	return addJobsSuffix(o.Options.Collection)
 }
 
 // Validate checks the state of the manager configuration, preventing logically
@@ -62,14 +62,16 @@ func NewDBQueueManager(ctx context.Context, opts DBQueueManagerOptions) (Manager
 
 	client, err := mongo.NewClient(options.Client().ApplyURI(opts.Options.URI).SetConnectTimeout(time.Second))
 	if err != nil {
-		return nil, errors.Wrap(err, "problem constructing mongodb client")
+		return nil, errors.Wrap(err, "constructing DB client")
 	}
 
-	if err = client.Connect(ctx); err != nil {
-		return nil, errors.Wrap(err, "problem connecting to database")
+	if err := client.Connect(ctx); err != nil {
+		return nil, errors.Wrap(err, "connecting to DB")
 	}
 
-	db, err := MakeDBQueueManager(ctx, opts, client)
+	opts.Options.Client = client
+
+	db, err := MakeDBQueueManager(ctx, opts)
 	if err != nil {
 		return nil, errors.Wrap(err, "problem building reporting interface")
 	}
@@ -78,25 +80,23 @@ func NewDBQueueManager(ctx context.Context, opts DBQueueManagerOptions) (Manager
 }
 
 // MakeDBQueueManager make it possible to produce a queue manager with an
-// existing database Connection. This operations runs the "ping" command and
-// and will return an error if there is no session or no active server.
-func MakeDBQueueManager(ctx context.Context, opts DBQueueManagerOptions, client *mongo.Client) (Manager, error) {
+// existing database Connection.
+func MakeDBQueueManager(ctx context.Context, opts DBQueueManagerOptions) (Manager, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid options")
 	}
 
-	if client == nil {
-		return nil, errors.New("cannot make a manager without a client")
+	if opts.Options.Client == nil {
+		return nil, errors.New("must provide a DB client")
 	}
-
-	if err := client.Ping(ctx, nil); err != nil {
-		return nil, errors.Wrap(err, "could not establish a connection with the database")
+	if err := opts.Options.Client.Ping(ctx, nil); err != nil {
+		return nil, errors.Wrap(err, "establishing DB connection")
 	}
 
 	db := &dbQueueManager{
 		opts:       opts,
-		client:     client,
-		collection: client.Database(opts.Options.DB).Collection(opts.collName()),
+		client:     opts.Options.Client,
+		collection: opts.Options.Client.Database(opts.Options.DB).Collection(opts.collName()),
 	}
 
 	return db, nil

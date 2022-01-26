@@ -179,9 +179,7 @@ func TestQueueGroup(t *testing.T) {
 							mopts := MongoDBOptions{
 								Client:       client,
 								DB:           remoteTest.db,
-								Name:         remoteTest.name,
-								GroupName:    remoteTest.prefix,
-								UseGroups:    false,
+								Collection:   remoteTest.prefix,
 								URI:          remoteTest.uri,
 								WaitInterval: time.Millisecond,
 							}
@@ -216,7 +214,7 @@ func TestQueueGroup(t *testing.T) {
 								Client:       client,
 								WaitInterval: time.Millisecond,
 								DB:           remoteTest.db,
-								Name:         newDriverID(),
+								Collection:   newDriverID(),
 								GroupName:    remoteTest.prefix,
 								UseGroups:    true,
 								URI:          remoteTest.uri,
@@ -271,9 +269,7 @@ func TestQueueGroup(t *testing.T) {
 					mopts := defaultMongoDBTestOptions()
 					mopts.Client = client
 					mopts.DB = "amboy_group_test"
-					mopts.Name = newDriverID()
-					mopts.GroupName = "prefix"
-					mopts.UseGroups = false
+					mopts.Collection = "prefix"
 					mopts.WaitInterval = time.Millisecond
 
 					closer := func(cctx context.Context) error {
@@ -309,9 +305,8 @@ func TestQueueGroup(t *testing.T) {
 					mopts := defaultMongoDBTestOptions()
 					mopts.Client = client
 					mopts.DB = "amboy_group_test"
-					mopts.Name = newDriverID()
+					mopts.Collection = "prefix"
 					mopts.UseGroups = true
-					mopts.GroupName = "prefix"
 					mopts.WaitInterval = time.Millisecond
 
 					closer := func(cctx context.Context) error {
@@ -639,7 +634,7 @@ func TestQueueGroup(t *testing.T) {
 			mopts := MongoDBOptions{
 				Client:       client,
 				DB:           "amboy_group_test",
-				Name:         newDriverID(),
+				Collection:   newDriverID(),
 				GroupName:    "gen",
 				WaitInterval: time.Millisecond,
 				URI:          defaultMongoDBURI,

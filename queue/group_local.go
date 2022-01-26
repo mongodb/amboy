@@ -48,20 +48,20 @@ func (o *LocalQueueOptions) Validate() error {
 }
 
 func getLocalQueueOptions(opts ...amboy.QueueOptions) ([]LocalQueueOptions, error) {
-	var concreteOpts []LocalQueueOptions
+	var localOpts []LocalQueueOptions
 
 	for _, o := range opts {
-		switch concreteOpt := o.(type) {
+		switch opt := o.(type) {
 		case *LocalQueueOptions:
-			if concreteOpt != nil {
-				concreteOpts = append(concreteOpts, *concreteOpt)
+			if opt != nil {
+				localOpts = append(localOpts, *opt)
 			}
 		default:
-			return nil, errors.Errorf("found queue options of type '%T', but they must be MongoDB options", concreteOpt)
+			return nil, errors.Errorf("found queue options of type '%T', but they must be MongoDB options", opt)
 		}
 	}
 
-	return concreteOpts, nil
+	return localOpts, nil
 }
 
 // mergeLocalQueueOptions merges all the given LocalQueueOptions into a single

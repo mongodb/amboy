@@ -42,7 +42,7 @@ func TestDriverSuiteWithMongoDBInstance(t *testing.T) {
 		"Basic": {
 			constructor: func() (remoteQueueDriver, error) {
 				opts := defaultMongoDBTestOptions()
-				opts.Name = "test-" + uuid.New().String()
+				opts.Collection = "test-" + uuid.New().String()
 				return newMongoDriver(opts)
 			},
 			tearDown: func() error {
@@ -63,7 +63,7 @@ func TestDriverSuiteWithMongoDBInstance(t *testing.T) {
 		"Group": {
 			constructor: func() (remoteQueueDriver, error) {
 				opts := defaultMongoDBTestOptions()
-				opts.Name = "test-" + uuid.New().String()
+				opts.Collection = "test-" + uuid.New().String()
 				opts.UseGroups = true
 				opts.GroupName = "group-" + uuid.New().String()
 				return newMongoDriver(opts)
@@ -868,7 +868,7 @@ func (s *DriverSuite) TestReturnsDefaultLockTimeout() {
 
 func (s *DriverSuite) TestInfoReturnsConfigurableLockTimeout() {
 	opts := defaultMongoDBTestOptions()
-	opts.Name = s.T().Name()
+	opts.Collection = s.T().Name()
 	opts.LockTimeout = 25 * time.Minute
 	d, err := newMongoDriver(opts)
 	s.Require().NoError(err)
@@ -890,7 +890,7 @@ func TestDriverDispatcherIntegration(t *testing.T) {
 
 	t.Run("NextJobIsSampled", func(t *testing.T) {
 		mdbOpts.SampleSize = size
-		mdbOpts.Name = t.Name()
+		mdbOpts.Collection = t.Name()
 		mdbOpts.Format = amboy.BSON2
 		opts := MongoDBQueueOptions{
 			DB:         &mdbOpts,
@@ -910,7 +910,7 @@ func TestDriverDispatcherIntegration(t *testing.T) {
 		require.NoError(t, err)
 
 		defer func() {
-			assert.NoError(t, client.Database(mdbOpts.DB).Collection(addJobsSuffix(mdbOpts.Name)).Drop(ctx))
+			assert.NoError(t, client.Database(mdbOpts.DB).Collection(addJobsSuffix(mdbOpts.Collection)).Drop(ctx))
 		}()
 
 		checkDispatched := func(t *testing.T, stat amboy.JobStatusInfo) {

@@ -10,7 +10,7 @@ import (
 func defaultMongoDBTestOptions() MongoDBOptions {
 	opts := DefaultMongoDBOptions()
 	opts.DB = "amboy_test"
-	opts.Name = "test." + utility.RandomString()
+	opts.Collection = "test." + utility.RandomString()
 	return opts
 }
 
