@@ -183,14 +183,15 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 			ScopesSupported:    true,
 			RetrySupported:     true,
 			Constructor: func(ctx context.Context, name string, size int) (amboy.Queue, TestCloser, error) {
-				opts := MongoDBQueueCreationOptions{
-					Size:    size,
-					Name:    name,
-					Ordered: false,
-					MDB:     defaultMongoDBTestOptions(),
-					Client:  client,
+				mdbOpts := defaultMongoDBTestOptions()
+				mdbOpts.Client = client
+				mdbOpts.Collection = name
+				mdbOpts.Format = amboy.BSON2
+				opts := MongoDBQueueOptions{
+					DB:         &mdbOpts,
+					NumWorkers: utility.ToIntPtr(size),
+					Ordered:    utility.FalsePtr(),
 				}
-				opts.MDB.Format = amboy.BSON2
 				q, err := NewMongoDBQueue(ctx, opts)
 				if err != nil {
 					return nil, nil, err
@@ -207,7 +208,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 						catcher.Add(d.Close(ctx))
 					}
 
-					catcher.Add(client.Database(opts.MDB.DB).Collection(addJobsSuffix(name)).Drop(ctx))
+					catcher.Add(client.Database(mdbOpts.DB).Collection(addJobsSuffix(name)).Drop(ctx))
 
 					return catcher.Resolve()
 				}
@@ -223,16 +224,17 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 			ScopesSupported:    true,
 			RetrySupported:     true,
 			Constructor: func(ctx context.Context, name string, size int) (amboy.Queue, TestCloser, error) {
-				opts := MongoDBQueueCreationOptions{
-					Size:    size,
-					Name:    name,
-					Ordered: false,
-					MDB:     defaultMongoDBTestOptions(),
-					Client:  client,
+				mdbOpts := defaultMongoDBTestOptions()
+				mdbOpts.Client = client
+				mdbOpts.Collection = name
+				mdbOpts.Format = amboy.BSON2
+				mdbOpts.GroupName = "group"
+				mdbOpts.UseGroups = true
+				opts := MongoDBQueueOptions{
+					DB:         &mdbOpts,
+					NumWorkers: utility.ToIntPtr(size),
+					Ordered:    utility.FalsePtr(),
 				}
-				opts.MDB.Format = amboy.BSON2
-				opts.MDB.GroupName = "group." + name
-				opts.MDB.UseGroups = true
 				q, err := NewMongoDBQueue(ctx, opts)
 				if err != nil {
 					return nil, nil, err
@@ -250,7 +252,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 						catcher.Add(d.Close(ctx))
 					}
 
-					catcher.Add(client.Database(opts.MDB.DB).Collection(addGroupSuffix(name)).Drop(ctx))
+					catcher.Add(client.Database(mdbOpts.DB).Collection(addGroupSuffix(name)).Drop(ctx))
 
 					return catcher.Resolve()
 				}
@@ -267,14 +269,15 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 			RetrySupported:     true,
 			MaxSize:            32,
 			Constructor: func(ctx context.Context, name string, size int) (amboy.Queue, TestCloser, error) {
-				opts := MongoDBQueueCreationOptions{
-					Size:    size,
-					Name:    name,
-					Ordered: false,
-					MDB:     defaultMongoDBTestOptions(),
-					Client:  client,
+				mdbOpts := defaultMongoDBTestOptions()
+				mdbOpts.Client = client
+				mdbOpts.Collection = name
+				mdbOpts.Format = amboy.BSON
+				opts := MongoDBQueueOptions{
+					DB:         &mdbOpts,
+					NumWorkers: utility.ToIntPtr(size),
+					Ordered:    utility.FalsePtr(),
 				}
-				opts.MDB.Format = amboy.BSON
 				q, err := NewMongoDBQueue(ctx, opts)
 				if err != nil {
 					return nil, nil, err
@@ -291,7 +294,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 						catcher.Add(d.Close(ctx))
 					}
 
-					catcher.Add(client.Database(opts.MDB.DB).Collection(addJobsSuffix(name)).Drop(ctx))
+					catcher.Add(client.Database(mdbOpts.DB).Collection(addJobsSuffix(name)).Drop(ctx))
 
 					return catcher.Resolve()
 				}
@@ -308,14 +311,15 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 			ScopesSupported:    true,
 			OrderedSupported:   true,
 			Constructor: func(ctx context.Context, name string, size int) (amboy.Queue, TestCloser, error) {
-				opts := MongoDBQueueCreationOptions{
-					Size:    size,
-					Name:    name,
-					Ordered: true,
-					MDB:     defaultMongoDBTestOptions(),
-					Client:  client,
+				mdbOpts := defaultMongoDBTestOptions()
+				mdbOpts.Client = client
+				mdbOpts.Collection = name
+				mdbOpts.Format = amboy.BSON2
+				opts := MongoDBQueueOptions{
+					DB:         &mdbOpts,
+					NumWorkers: utility.ToIntPtr(size),
+					Ordered:    utility.TruePtr(),
 				}
-				opts.MDB.Format = amboy.BSON2
 				q, err := NewMongoDBQueue(ctx, opts)
 				if err != nil {
 					return nil, nil, err
@@ -332,7 +336,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 						catcher.Add(d.Close(ctx))
 					}
 
-					catcher.Add(client.Database(opts.MDB.DB).Collection(addJobsSuffix(name)).Drop(ctx))
+					catcher.Add(client.Database(mdbOpts.DB).Collection(addJobsSuffix(name)).Drop(ctx))
 
 					return catcher.Resolve()
 				}
@@ -415,6 +419,10 @@ func DefaultSizeTestCases() []SizeTestCase {
 }
 
 func TestQueueSmoke(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping queue smoke tests in short mode")
+	}
+
 	bctx, bcancel := context.WithCancel(context.Background())
 	defer bcancel()
 

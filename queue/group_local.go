@@ -20,21 +20,69 @@ type localQueueGroup struct {
 
 // LocalQueueGroupOptions describe options passed to NewLocalQueueGroup.
 type LocalQueueGroupOptions struct {
+	Queue LocalQueueOptions
+	TTL   time.Duration
+}
+
+func (o *LocalQueueGroupOptions) Validate() error {
+	catcher := grip.NewBasicCatcher()
+	catcher.NewWhen(o.TTL < 0, "TTL cannot be negative")
+	catcher.NewWhen(o.TTL > 0 && o.TTL < time.Second, "TTL cannot be less than 1 second, unless it is 0")
+	catcher.Wrap(o.Queue.Validate(), "invalid queue options")
+	return catcher.Resolve()
+}
+
+// LocalQueueOptions represent options to construct a local queue.
+type LocalQueueOptions struct {
 	Constructor func(ctx context.Context) (amboy.Queue, error)
-	TTL         time.Duration
+}
+
+func (o *LocalQueueOptions) BuildQueue(ctx context.Context) (amboy.Queue, error) {
+	return o.Constructor(ctx)
+}
+
+func (o *LocalQueueOptions) Validate() error {
+	if o.Constructor == nil {
+		return errors.New("must specify a queue constructor")
+	}
+	return nil
+}
+
+func getLocalQueueOptions(opts ...amboy.QueueOptions) ([]LocalQueueOptions, error) {
+	var localOpts []LocalQueueOptions
+
+	for _, o := range opts {
+		switch opt := o.(type) {
+		case *LocalQueueOptions:
+			if opt != nil {
+				localOpts = append(localOpts, *opt)
+			}
+		default:
+			return nil, errors.Errorf("found queue options of type '%T', but they must be local queue options", opt)
+		}
+	}
+
+	return localOpts, nil
+}
+
+// mergeLocalQueueOptions merges all the given LocalQueueOptions into a single
+// set of options. Options are applied in the order they're specified and
+// conflicting options are overwritten.
+func mergeLocalQueueOptions(opts ...LocalQueueOptions) LocalQueueOptions {
+	var merged LocalQueueOptions
+	for _, o := range opts {
+		if o.Constructor != nil {
+			merged.Constructor = o.Constructor
+		}
+	}
+	return merged
 }
 
 // NewLocalQueueGroup constructs a new local queue group. If ttl is 0, the queues will not be
 // TTLed except when the client explicitly calls Prune.
 func NewLocalQueueGroup(ctx context.Context, opts LocalQueueGroupOptions) (amboy.QueueGroup, error) {
-	if opts.Constructor == nil {
-		return nil, errors.New("must pass a constructor")
-	}
-	if opts.TTL < 0 {
-		return nil, errors.New("ttl must be greater than or equal to 0")
-	}
-	if opts.TTL > 0 && opts.TTL < time.Second {
-		return nil, errors.New("ttl cannot be less than 1 second, unless it is 0")
+	if err := opts.Validate(); err != nil {
+		return nil, errors.Wrap(err, "invalid options")
 	}
 	g := &localQueueGroup{
 		opts:  opts,
@@ -70,16 +118,26 @@ func (g *localQueueGroup) Queues(_ context.Context) []string {
 	return g.cache.Names()
 }
 
-// Get a queue with the given index. Get sets the last accessed time to now. Note that this means
-// that the caller must add a job to the queue within the TTL, or else it may have attempted to add
-// a job to a closed queue.
-func (g *localQueueGroup) Get(ctx context.Context, id string) (amboy.Queue, error) {
+// Get a queue with the given id. Get sets the last accessed time to now. Note
+// that this means that the time between when the queue is retrieved and when
+// the caller actually performs an operation on the queue (e.g. add a job) must
+// be within the TTL; otherwise, the queue might be closed before the operation
+// is done.
+func (g *localQueueGroup) Get(ctx context.Context, id string, opts ...amboy.QueueOptions) (amboy.Queue, error) {
 	q := g.cache.Get(id)
 	if q != nil {
 		return q, nil
 	}
 
-	queue, err := g.opts.Constructor(ctx)
+	localQueueOpts, err := getLocalQueueOptions(opts...)
+	if err != nil {
+		return nil, errors.Wrap(err, "invalid queue options")
+	}
+	queueOpts := mergeLocalQueueOptions(append([]LocalQueueOptions{g.opts.Queue}, localQueueOpts...)...)
+	if err := queueOpts.Validate(); err != nil {
+		return nil, errors.Wrap(err, "invalid queue options")
+	}
+	queue, err := queueOpts.BuildQueue(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "problem starting queue")
 	}

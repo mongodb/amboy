@@ -179,8 +179,9 @@ func TestDispatcherImplementations(t *testing.T) {
 	defer func() {
 		assert.NoError(t, client.Disconnect(ctx))
 	}()
+	opts.Client = client
 
-	driver, err := openNewMongoDriver(ctx, newDriverID(), opts, client)
+	driver, err := openNewMongoDriver(ctx, opts)
 	require.NoError(t, err)
 	defer func() {
 		assert.NoError(t, driver.Close(ctx))
@@ -262,7 +263,7 @@ func TestDispatcherImplementations(t *testing.T) {
 					assert.NotZero(t, oldStatus.ModificationTime)
 					assert.True(t, oldStatus.InProgress)
 
-					time.Sleep(2 * lockTimeout)
+					time.Sleep(5 * lockTimeout)
 
 					newStatus := j.Status()
 					assert.True(t, oldStatus.ModificationTime.Before(newStatus.ModificationTime))

@@ -22,11 +22,119 @@ import (
 	"go.mongodb.org/mongo-driver/x/bsonx"
 )
 
+// MongoDBOptions represents options for creating a MongoDB driver to
+// communicate MongoDB-specific settings about the driver's behavior and
+// operation.
+type MongoDBOptions struct {
+	// Client is the MongoDB client used to connect a MongoDB queue driver to
+	// its MongoDB-backed storage if no MongoDB URI is specified. Either Client
+	// or URI must be set.
+	Client *mongo.Client
+	// URI is used to connect to MongoDB if no client is specified. Either
+	// Client or URI must be set.
+	URI string
+	// DB is the name of the database in which the driver operates.
+	DB string
+	// Collection is the collection name in which the driver manages jobs.
+	Collection string
+	// GroupName is the namespace for the jobs in the queue managed by this
+	// driver when the collection is shared by multiple queues. This is used to
+	// ensure that jobs within each queue are isolated from each other by
+	// namespace.
+	GroupName string
+	// UseGroups determines if the jobs in this collection could be in different
+	// queues. If true, the driver will ensure that jobs are isolated between
+	// the different queues using GroupName, and GroupName must be set.
+	UseGroups bool
+	// Priority determines if the queue obeys priority ordering of jobs.
+	Priority bool
+	// CheckWaitUntil determines if jobs that have not met their wait until time
+	// yet should be filtered from consideration for dispatch. If true, any job
+	// whose wait until constraint has not been reached yet will be filtered.
+	CheckWaitUntil bool
+	// CheckDispatchBy determines if jobs that have already exceeded their
+	// dispatch by deadline should be filtered from consideration for dispatch.
+	// If true, any job whose dispatch by deadline has been passed will be
+	// filtered.
+	CheckDispatchBy bool
+	// SkipQueueIndexBuilds determines if indexes required for regular queue
+	// operations should be built before using the driver.
+	SkipQueueIndexBuilds bool
+	// SkipReportingIndexBuilds determines if indexes related to reporting job
+	// state should be built before using the driver.
+	SkipReportingIndexBuilds bool
+	// Format is the internal format used to store jobs in the DB. The default
+	// value is amboy.BSON.
+	Format amboy.Format
+	// WaitInterval is the duration that the driver will wait in between checks
+	// for the next available job when no job is currently available to
+	// dispatch.
+	WaitInterval time.Duration
+	// TTL sets the number of seconds for a TTL index on the "info.created"
+	// field. If set to zero, the TTL index will not be created and
+	// and documents may live forever in the database.
+	TTL time.Duration
+	// LockTimeout determines how long the queue will wait for a job that's
+	// already been dispatched to finish without receiving a lock ping
+	// indicating liveliness. If the lock timeout has been exceeded without a
+	// lock ping, it will be considered stale and will be re-dispatched. If set,
+	// this overrides the default job lock timeout.
+	LockTimeout time.Duration
+	// SampleSize is the number of jobs that the driver will consider from the
+	// next available ones. If it samples from the available jobs, the order of
+	// next jobs are randomized. By default, the driver does not sample from the
+	// next available jobs. SampleSize cannot be used if Priority is true.
+	SampleSize int
+}
+
+// defaultMongoDBURI is the default URI to connect to a MongoDB instance.
+const defaultMongoDBURI = "mongodb://localhost:27017"
+
+// DefaultMongoDBOptions constructs a new options object with default
+// values: connecting to a MongoDB instance on localhost, using the
+// "amboy" database, and *not* using priority ordering of jobs.
+func DefaultMongoDBOptions() MongoDBOptions {
+	return MongoDBOptions{
+		URI:                      defaultMongoDBURI,
+		DB:                       "amboy",
+		Priority:                 false,
+		UseGroups:                false,
+		CheckWaitUntil:           true,
+		CheckDispatchBy:          false,
+		SkipQueueIndexBuilds:     false,
+		SkipReportingIndexBuilds: false,
+		WaitInterval:             time.Second,
+		Format:                   amboy.BSON,
+		LockTimeout:              amboy.LockTimeout,
+		SampleSize:               0,
+	}
+}
+
+// Validate validates that the required options are given and sets fields that
+// are unspecified and have a default value.
+func (opts *MongoDBOptions) Validate() error {
+	catcher := grip.NewBasicCatcher()
+	catcher.NewWhen(opts.URI == "" && opts.Client == nil, "must specify connection URI or an existing client")
+	catcher.NewWhen(opts.DB == "", "must specify database")
+	catcher.NewWhen(opts.Collection == "", "must specify collection")
+	catcher.NewWhen(opts.SampleSize < 0, "sample rate cannot be negative")
+	catcher.NewWhen(opts.Priority && opts.SampleSize > 0, "cannot sample next jobs when ordering them by priority")
+	catcher.NewWhen(opts.LockTimeout < 0, "lock timeout cannot be negative")
+	catcher.NewWhen(opts.GroupName == "" && opts.UseGroups, "cannot use groups without a group name")
+	if opts.LockTimeout == 0 {
+		opts.LockTimeout = amboy.LockTimeout
+	}
+	if !opts.Format.IsValid() {
+		opts.Format = amboy.BSON
+	}
+	return catcher.Resolve()
+}
+
 type mongoDriver struct {
 	client     *mongo.Client
 	ownsClient bool
-	name       string
 	opts       MongoDBOptions
+	collection string
 	instanceID string
 	mu         sync.RWMutex
 	cancel     context.CancelFunc
@@ -34,73 +142,42 @@ type mongoDriver struct {
 	dispatcher Dispatcher
 }
 
-// NewMongoDriver constructs a MongoDB backed queue driver
-// implementation using the go.mongodb.org/mongo-driver as the
-// database interface.
-func newMongoDriver(name string, opts MongoDBOptions) (*mongoDriver, error) {
+// newMongoDriver constructs a MongoDB-backed queue driver instance without a
+// MongoDB client. Callers must follow this with a call to Open before using the
+// driver to set up the client.
+func newMongoDriver(opts MongoDBOptions) (*mongoDriver, error) {
 	host, _ := os.Hostname() // nolint
 
 	if err := opts.Validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid mongo driver options")
 	}
 
+	instanceIDParts := []string{opts.Collection}
+	if opts.GroupName != "" {
+		instanceIDParts = append(instanceIDParts, opts.GroupName)
+	}
+	instanceIDParts = append(instanceIDParts, host, uuid.New().String())
+
 	return &mongoDriver{
-		name:       name,
+		collection: opts.Collection,
 		opts:       opts,
-		instanceID: fmt.Sprintf("%s.%s.%s", name, host, uuid.New()),
+		instanceID: strings.Join(instanceIDParts, "."),
 	}, nil
 }
 
-// openNewMongoDriver constructs and opens a new MongoDB driver instance using
-// the specified client. The returned driver does not take ownership of the
-// lifetime of the client.
-func openNewMongoDriver(ctx context.Context, name string, opts MongoDBOptions, client *mongo.Client) (*mongoDriver, error) {
-	d, err := newMongoDriver(name, opts)
+// openNewMongoDriver constructs a new MongoDB-backed queue driver instance
+// using the client given in the MongoDB options. Use this if creating the
+// driver with an existing client given in the MongoDB options; the client must
+// already have established a connection to the DB. The returned driver does not
+// take ownership of the lifetime of the client.
+func openNewMongoDriver(ctx context.Context, opts MongoDBOptions) (*mongoDriver, error) {
+	d, err := newMongoDriver(opts)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create driver")
 	}
 
-	if err := d.start(ctx, clientStartOptions{client: client}); err != nil {
+	if err := d.start(ctx, clientStartOptions{client: opts.Client}); err != nil {
 		return nil, errors.Wrap(err, "problem starting driver")
-	}
-
-	return d, nil
-}
-
-// newMongoGroupDriver is similar to newMongoDriver, except it prefixes job ids
-// with a prefix and adds the group field to the documents in the database which
-// makes it possible to manage distinct queues with a single MongoDB collection.
-func newMongoGroupDriver(name string, opts MongoDBOptions, group string) (*mongoDriver, error) {
-	host, _ := os.Hostname() // nolint
-
-	if err := opts.Validate(); err != nil {
-		return nil, errors.Wrap(err, "invalid mongo driver options")
-	}
-
-	opts.UseGroups = true
-	opts.GroupName = group
-
-	return &mongoDriver{
-		name:       name,
-		opts:       opts,
-		instanceID: fmt.Sprintf("%s.%s.%s.%s", name, group, host, uuid.New()),
-	}, nil
-}
-
-// openNewMongoGroupDriver constructs and opens a new MongoDB driver instance
-// using the specified client. The returned driver does not take ownership of
-// the lifetime of the client.
-func openNewMongoGroupDriver(ctx context.Context, name string, opts MongoDBOptions, group string, client *mongo.Client) (*mongoDriver, error) {
-	d, err := newMongoGroupDriver(name, opts, group)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not create driver")
-	}
-
-	opts.UseGroups = true
-	opts.GroupName = group
-
-	if err := d.start(ctx, clientStartOptions{client: client}); err != nil {
-		return nil, errors.Wrap(err, "starting driver")
 	}
 
 	return d, nil
@@ -176,10 +253,10 @@ func (d *mongoDriver) start(ctx context.Context, opts clientStartOptions) error 
 func (d *mongoDriver) getCollection() *mongo.Collection {
 	db := d.client.Database(d.opts.DB)
 	if d.opts.UseGroups {
-		return db.Collection(addGroupSuffix(d.name))
+		return db.Collection(addGroupSuffix(d.collection))
 	}
 
-	return db.Collection(addJobsSuffix(d.name))
+	return db.Collection(addJobsSuffix(d.collection))
 }
 
 func (d *mongoDriver) setupDB(ctx context.Context) error {

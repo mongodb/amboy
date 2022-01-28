@@ -543,8 +543,9 @@ func TestRetryableQueueImplementations(t *testing.T) {
 	defer func() {
 		assert.NoError(t, client.Disconnect(ctx))
 	}()
+	opts.Client = client
 
-	driver, err := openNewMongoDriver(ctx, newDriverID(), opts, client)
+	driver, err := openNewMongoDriver(ctx, opts)
 	require.NoError(t, err)
 	defer func() {
 		assert.NoError(t, driver.Close(ctx))
@@ -755,8 +756,9 @@ func TestRetryHandlerQueueIntegration(t *testing.T) {
 	defer func() {
 		assert.NoError(t, client.Disconnect(ctx))
 	}()
+	opts.Client = client
 
-	driver, err := openNewMongoDriver(ctx, newDriverID(), opts, client)
+	driver, err := openNewMongoDriver(ctx, opts)
 	require.NoError(t, err)
 
 	require.NoError(t, driver.Open(ctx))

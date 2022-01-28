@@ -41,7 +41,8 @@ func TestManagerImplementations(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(defaultMongoDBTestOptions().URI))
+	mdbOpts := defaultMongoDBTestOptions()
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(mdbOpts.URI))
 	require.NoError(t, err)
 	defer func() {
 		assert.NoError(t, client.Disconnect(ctx))
@@ -49,7 +50,7 @@ func TestManagerImplementations(t *testing.T) {
 
 	teardownDB := func(ctx context.Context) error {
 		catcher := grip.NewBasicCatcher()
-		catcher.Add(client.Database(defaultMongoDBTestOptions().DB).Drop(ctx))
+		catcher.Add(client.Database(mdbOpts.DB).Drop(ctx))
 		return catcher.Resolve()
 	}
 
@@ -156,47 +157,50 @@ func TestManagerImplementations(t *testing.T) {
 	}{
 		"MongoDB": {
 			makeQueue: func(ctx context.Context) (amboy.Queue, error) {
-				queueOpts := queue.MongoDBQueueCreationOptions{
-					Size:   queueSize,
-					Name:   name,
-					MDB:    defaultMongoDBTestOptions(),
-					Client: client,
+				mdbOpts := defaultMongoDBTestOptions()
+				mdbOpts.Client = client
+				mdbOpts.Collection = name
+				queueOpts := queue.MongoDBQueueOptions{
+					DB:         &mdbOpts,
+					NumWorkers: utility.ToIntPtr(queueSize),
 				}
 				return queue.NewMongoDBQueue(ctx, queueOpts)
 			},
 			makeManager: func(ctx context.Context, _ amboy.Queue) (Manager, error) {
+				mdbOpts := defaultMongoDBTestOptions()
+				mdbOpts.Client = client
+				mdbOpts.Collection = name
 				mgrOpts := DBQueueManagerOptions{
-					Options: defaultMongoDBTestOptions(),
-					Name:    name,
+					Options: mdbOpts,
 				}
-				return MakeDBQueueManager(ctx, mgrOpts, client)
+				return MakeDBQueueManager(ctx, mgrOpts)
 			},
 			teardown: teardownDB,
 		},
 		"MongoDBSingleGroup": {
 			makeQueue: func(ctx context.Context) (amboy.Queue, error) {
 				opts := defaultMongoDBTestOptions()
+				opts.Client = client
+				opts.Collection = name
 				opts.UseGroups = true
 				opts.GroupName = "group"
-				queueOpts := queue.MongoDBQueueCreationOptions{
-					Size:   queueSize,
-					Name:   name,
-					MDB:    opts,
-					Client: client,
+				queueOpts := queue.MongoDBQueueOptions{
+					NumWorkers: utility.ToIntPtr(queueSize),
+					DB:         &opts,
 				}
 				return queue.NewMongoDBQueue(ctx, queueOpts)
 			},
 			makeManager: func(ctx context.Context, _ amboy.Queue) (Manager, error) {
 				opts := defaultMongoDBTestOptions()
+				opts.Client = client
+				opts.Collection = name
 				opts.UseGroups = true
 				opts.GroupName = "group"
 				mgrOpts := DBQueueManagerOptions{
 					Options:     opts,
-					Name:        name,
-					Group:       opts.GroupName,
 					SingleGroup: true,
 				}
-				return MakeDBQueueManager(ctx, mgrOpts, client)
+				return MakeDBQueueManager(ctx, mgrOpts)
 			},
 			teardown: teardownDB,
 		},

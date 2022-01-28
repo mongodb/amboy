@@ -41,10 +41,9 @@ func TestDriverSuiteWithMongoDBInstance(t *testing.T) {
 	}{
 		"Basic": {
 			constructor: func() (remoteQueueDriver, error) {
-				id := "test-" + uuid.New().String()
 				opts := defaultMongoDBTestOptions()
-
-				return newMongoDriver(id, opts)
+				opts.Collection = "test-" + uuid.New().String()
+				return newMongoDriver(opts)
 			},
 			tearDown: func() error {
 				ctx, cancel := context.WithCancel(context.Background())
@@ -63,13 +62,11 @@ func TestDriverSuiteWithMongoDBInstance(t *testing.T) {
 		},
 		"Group": {
 			constructor: func() (remoteQueueDriver, error) {
-				id := "test-" + uuid.New().String()
-				groupName := "group-" + uuid.New().String()
 				opts := defaultMongoDBTestOptions()
+				opts.Collection = "test-" + uuid.New().String()
 				opts.UseGroups = true
-				opts.GroupName = groupName
-
-				return newMongoDriver(id, opts)
+				opts.GroupName = "group-" + uuid.New().String()
+				return newMongoDriver(opts)
 			},
 			tearDown: func() error {
 				ctx, cancel := context.WithCancel(context.Background())
@@ -871,8 +868,9 @@ func (s *DriverSuite) TestReturnsDefaultLockTimeout() {
 
 func (s *DriverSuite) TestInfoReturnsConfigurableLockTimeout() {
 	opts := defaultMongoDBTestOptions()
+	opts.Collection = s.T().Name()
 	opts.LockTimeout = 25 * time.Minute
-	d, err := newMongoDriver(s.T().Name(), opts)
+	d, err := newMongoDriver(opts)
 	s.Require().NoError(err)
 	s.Equal(opts.LockTimeout, d.LockTimeout())
 }
@@ -888,17 +886,16 @@ func TestDriverDispatcherIntegration(t *testing.T) {
 	defer func() {
 		assert.NoError(t, client.Disconnect(ctx))
 	}()
+	mdbOpts.Client = client
 
 	t.Run("NextJobIsSampled", func(t *testing.T) {
 		mdbOpts.SampleSize = size
-		qName := t.Name()
-		opts := MongoDBQueueCreationOptions{
-			Name:   qName,
-			Size:   size,
-			MDB:    mdbOpts,
-			Client: client,
+		mdbOpts.Collection = t.Name()
+		mdbOpts.Format = amboy.BSON2
+		opts := MongoDBQueueOptions{
+			DB:         &mdbOpts,
+			NumWorkers: utility.ToIntPtr(size),
 		}
-		opts.MDB.Format = amboy.BSON2
 		q, err := NewMongoDBQueue(ctx, opts)
 		require.NoError(t, err)
 		defer func() {
@@ -913,7 +910,7 @@ func TestDriverDispatcherIntegration(t *testing.T) {
 		require.NoError(t, err)
 
 		defer func() {
-			assert.NoError(t, client.Database(opts.MDB.DB).Collection(addJobsSuffix(qName)).Drop(ctx))
+			assert.NoError(t, client.Database(mdbOpts.DB).Collection(addJobsSuffix(mdbOpts.Collection)).Drop(ctx))
 		}()
 
 		checkDispatched := func(t *testing.T, stat amboy.JobStatusInfo) {

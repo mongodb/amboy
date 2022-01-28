@@ -5,11 +5,31 @@ import (
 	"github.com/mongodb/amboy"
 )
 
+// defaultMongoDBQueueGroupTestOptions returns default MongoDB queue group
+// options for testing purposes only.
+func defaultMongoDBQueueGroupTestOptions() MongoDBQueueGroupOptions {
+	queueOpts := defaultMongoDBQueueTestOptions()
+	return MongoDBQueueGroupOptions{
+		Queue: queueOpts,
+	}
+}
+
+// defaultMongoDBQueueTestOptions returns default MongoDB queue options for
+// testing purposes only.
+func defaultMongoDBQueueTestOptions() MongoDBQueueOptions {
+	dbOpts := defaultMongoDBTestOptions()
+	return MongoDBQueueOptions{
+		DB:         &dbOpts,
+		NumWorkers: utility.ToIntPtr(1),
+	}
+}
+
 // defaultMongoDBTestOptions returns default MongoDB options for testing
 // purposes only.
 func defaultMongoDBTestOptions() MongoDBOptions {
 	opts := DefaultMongoDBOptions()
 	opts.DB = "amboy_test"
+	opts.Collection = newDriverID()
 	return opts
 }
 

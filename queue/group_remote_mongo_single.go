@@ -10,40 +10,49 @@ import (
 	"github.com/mongodb/grip/recovery"
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
 )
 
+// remoteMongoQueueGroupSingle is a group of queues backed by MongoDB that are
+// multiplexed into a single MongoDB collection and isolated by group
+// namespaces.
 type remoteMongoQueueGroupSingle struct {
 	canceler context.CancelFunc
-	client   *mongo.Client
 	opts     MongoDBQueueGroupOptions
-	dbOpts   MongoDBOptions
 	cache    GroupCache
 }
 
-// NewMongoDBSingleQueueGroup constructs a new remote queue group. If ttl is 0, the queues will not be
-// TTLed except when the client explicitly calls Prune.
-func NewMongoDBSingleQueueGroup(ctx context.Context, opts MongoDBQueueGroupOptions, client *mongo.Client, mdbopts MongoDBOptions) (amboy.QueueGroup, error) {
+// NewMongoDBSingleQueueGroup constructs a new remote queue group. If the TTL is
+// 0, the queues will not be TTLed except when the client explicitly calls
+// Prune.
+//
+// The MongoDB single remote queue group multiplexes all queues into a single
+// collection.
+func NewMongoDBSingleQueueGroup(ctx context.Context, opts MongoDBQueueGroupOptions) (amboy.QueueGroup, error) {
+	if opts.Queue.DB == nil {
+		return nil, errors.New("must provide DB options")
+	}
+
+	// Because of the way this queue group is implemented, the driver must
+	// account for job isolation between multiplexed queues within a single
+	// collection, so it needs to set UseGroups.
+	opts.Queue.DB.UseGroups = true
+	// GroupName must be provided if UseGroups is set, but the queue's name is
+	// not yet known here; the queue's name is determined when the queue is
+	// generated dynamically in Get. Therefore, the GroupName set here is not
+	// actually important and is only necessary to pass validation; the actual
+	// queue's name will be validated when the queue is created.
+	originalGroupName := opts.Queue.DB.GroupName
+	opts.Queue.DB.GroupName = "placeholder"
+
 	if err := opts.validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid remote queue options")
 	}
 
-	if mdbopts.DB == "" {
-		return nil, errors.New("no database name specified")
-	}
-
-	if mdbopts.URI == "" {
-		return nil, errors.New("no mongodb uri specified")
-	}
-
-	mdbopts.UseGroups = true
-	mdbopts.GroupName = opts.Prefix
+	opts.Queue.DB.GroupName = originalGroupName
 
 	ctx, cancel := context.WithCancel(ctx)
 	g := &remoteMongoQueueGroupSingle{
 		canceler: cancel,
-		client:   client,
-		dbOpts:   mdbopts,
 		opts:     opts,
 		cache:    NewGroupCache(opts.TTL),
 	}
@@ -93,7 +102,7 @@ func NewMongoDBSingleQueueGroup(ctx context.Context, opts MongoDBQueueGroupOptio
 // complete and have not recently completed a job within the TTL) are not
 // returned.
 func (g *remoteMongoQueueGroupSingle) getQueues(ctx context.Context) ([]string, error) {
-	cursor, err := g.client.Database(g.dbOpts.DB).Collection(addGroupSuffix(g.opts.Prefix)).Aggregate(ctx,
+	cursor, err := g.opts.Queue.DB.Client.Database(g.opts.Queue.DB.DB).Collection(addGroupSuffix(g.opts.Queue.DB.Collection)).Aggregate(ctx,
 		[]bson.M{
 			{
 				"$match": bson.M{
@@ -149,8 +158,11 @@ func (g *remoteMongoQueueGroupSingle) startQueues(ctx context.Context) error {
 
 	catcher := grip.NewBasicCatcher()
 	// Refresh the TTLs on all the queues that were recently accessed or still
-	// have.
+	// have jobs to run.
 	for _, id := range queues {
+		// TODO (EVG-16210): add a means to initialize the cache with queues
+		// that obey queue-specific options when those queues already exist in
+		// the DB.
 		_, err := g.Get(ctx, id)
 		catcher.Add(err)
 	}
@@ -158,40 +170,38 @@ func (g *remoteMongoQueueGroupSingle) startQueues(ctx context.Context) error {
 	return catcher.Resolve()
 }
 
-func (g *remoteMongoQueueGroupSingle) Get(ctx context.Context, id string) (amboy.Queue, error) {
+// Get a queue with the given id. Get sets the last accessed time to now. Note
+// that this means that the time between when the queue is retrieved and when
+// the caller actually performs an operation on the queue (e.g. add a job) must
+// be within the TTL; otherwise, the queue might be closed before the operation
+// is done.
+func (g *remoteMongoQueueGroupSingle) Get(ctx context.Context, id string, opts ...amboy.QueueOptions) (amboy.Queue, error) {
 	var queue remoteQueue
+	var queueOpts MongoDBQueueOptions
 	var err error
 
 	switch q := g.cache.Get(id).(type) {
 	case remoteQueue:
 		return q, nil
 	case nil:
-		queue, err = g.opts.constructor(ctx, id)
+		mdbOpts, err := getMongoDBQueueOptions(opts...)
+		if err != nil {
+			return nil, errors.Wrap(err, "getting queue options")
+		}
+		queueOpts = mergeMongoDBQueueOptions(append([]MongoDBQueueOptions{g.opts.Queue}, mdbOpts...)...)
+		// The group name has to be set to ensure the queue uses its namespace
+		// within the single multiplexed collection.
+		queueOpts.DB.GroupName = id
+		// These settings must apply to all queues in the queue group to ensure
+		// proper management of jobs within the single multiplexed collection.
+		queueOpts.DB.UseGroups = g.opts.Queue.DB.UseGroups
+		queueOpts.DB.Collection = g.opts.Queue.DB.Collection
+		queue, err = queueOpts.buildQueue(ctx)
 		if err != nil {
 			return nil, errors.Wrap(err, "constructing queue")
 		}
 	default:
 		return q, nil
-	}
-
-	var driver remoteQueueDriver
-	if g.client != nil {
-		driver, err = openNewMongoGroupDriver(ctx, g.opts.Prefix, g.dbOpts, id, g.client)
-		if err != nil {
-			return nil, errors.Wrap(err, "creating and opening group driver")
-		}
-	} else {
-		driver, err = newMongoGroupDriver(g.opts.Prefix, g.dbOpts, id)
-		if err != nil {
-			return nil, errors.Wrap(err, "creating group driver")
-		}
-		if err := driver.Open(ctx); err != nil {
-			return nil, errors.Wrap(err, "opening group driver")
-		}
-	}
-
-	if err = queue.SetDriver(driver); err != nil {
-		return nil, errors.Wrap(err, "setting driver")
 	}
 
 	if err = g.cache.Set(id, queue, g.opts.TTL); err != nil {

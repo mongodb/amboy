@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/mongodb/amboy"
-	"github.com/mongodb/grip"
 )
 
 // remoteQueueDriver describes the interface between a queue and an out of
@@ -65,72 +64,3 @@ const (
 	// retrying but have not done so recently.
 	retryableJobStaleRetrying retryableJobFilter = "stale-retrying"
 )
-
-// MongoDBOptions is a struct passed to the MongoDB driver constructor to
-// communicate MongoDB-specific settings about the driver's behavior and
-// operation.
-type MongoDBOptions struct {
-	URI                      string
-	DB                       string
-	GroupName                string
-	UseGroups                bool
-	Priority                 bool
-	CheckWaitUntil           bool
-	CheckDispatchBy          bool
-	SkipQueueIndexBuilds     bool
-	SkipReportingIndexBuilds bool
-	Format                   amboy.Format
-	WaitInterval             time.Duration
-	// TTL sets the number of seconds for a TTL index on the "info.created"
-	// field. If set to zero, the TTL index will not be created and
-	// and documents may live forever in the database.
-	TTL time.Duration
-	// LockTimeout overrides the default job lock timeout if set.
-	LockTimeout time.Duration
-	// SampleSize is the number of jobs that the driver will consider from the
-	// next available ones. If it samples from the available jobs, the order of
-	// next jobs are randomized. By default, the driver does not sample from the
-	// next available jobs. SampleSize cannot be used if Priority is true.
-	SampleSize int
-}
-
-// defaultMongoDBURI is the default URI to connect to a MongoDB instance.
-const defaultMongoDBURI = "mongodb://localhost:27017"
-
-// DefaultMongoDBOptions constructs a new options object with default
-// values: connecting to a MongoDB instance on localhost, using the
-// "amboy" database, and *not* using priority ordering of jobs.
-func DefaultMongoDBOptions() MongoDBOptions {
-	return MongoDBOptions{
-		URI:                      defaultMongoDBURI,
-		DB:                       "amboy",
-		Priority:                 false,
-		UseGroups:                false,
-		CheckWaitUntil:           true,
-		CheckDispatchBy:          false,
-		SkipQueueIndexBuilds:     false,
-		SkipReportingIndexBuilds: false,
-		WaitInterval:             time.Second,
-		Format:                   amboy.BSON,
-		LockTimeout:              amboy.LockTimeout,
-		SampleSize:               0,
-	}
-}
-
-// Validate validates that the required options are given and sets fields that
-// are unspecified and have a default value.
-func (opts *MongoDBOptions) Validate() error {
-	catcher := grip.NewBasicCatcher()
-	catcher.NewWhen(opts.URI == "", "must specify connection URI")
-	catcher.NewWhen(opts.DB == "", "must specify database")
-	catcher.NewWhen(opts.SampleSize < 0, "sample rate cannot be negative")
-	catcher.NewWhen(opts.Priority && opts.SampleSize > 0, "cannot sample next jobs when ordering them by priority")
-	catcher.NewWhen(opts.LockTimeout < 0, "lock timeout cannot be negative")
-	if opts.LockTimeout == 0 {
-		opts.LockTimeout = amboy.LockTimeout
-	}
-	if !opts.Format.IsValid() {
-		opts.Format = amboy.BSON
-	}
-	return catcher.Resolve()
-}
