@@ -43,10 +43,8 @@ type MongoDBOptions struct {
 	// namespace.
 	GroupName string
 	// UseGroups determines if the jobs in this collection could be in different
-	// queues. to be grouped together to ensure isolation between the different
 	// queues. If true, the driver will ensure that jobs are isolated between
-	// the different queues using GroupName. If this is set, GroupName must also
-	// be set.
+	// the different queues using GroupName, and GroupName must be set.
 	UseGroups bool
 	// Priority determines if the queue obeys priority ordering of jobs.
 	Priority bool
@@ -65,7 +63,8 @@ type MongoDBOptions struct {
 	// SkipReportingIndexBuilds determines if indexes related to reporting job
 	// state should be built before using the driver.
 	SkipReportingIndexBuilds bool
-	// Format is the internal format used to store jobs in the DB.
+	// Format is the internal format used to store jobs in the DB. The default
+	// value is amboy.BSON.
 	Format amboy.Format
 	// WaitInterval is the duration that the driver will wait in between checks
 	// for the next available job when no job is currently available to

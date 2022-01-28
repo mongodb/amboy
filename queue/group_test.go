@@ -179,7 +179,7 @@ func TestQueueGroup(t *testing.T) {
 								PruneFrequency: test.ttl,
 							}
 
-							g, err := NewMongoDBQueueGroup(ctx, remoteOpts)
+							g, err := NewMongoDBQueueGroup(ctx, "prefix.", remoteOpts)
 							if test.valid && remoteTest.valid {
 								require.NoError(t, err)
 								require.NotNil(t, g)
@@ -280,7 +280,7 @@ func TestQueueGroup(t *testing.T) {
 						return nil, closer, errors.Wrap(err, "server not pingable")
 					}
 
-					qg, err := NewMongoDBQueueGroup(ctx, opts)
+					qg, err := NewMongoDBQueueGroup(ctx, "prefix.", opts)
 					return qg, closer, err
 				},
 			},
@@ -620,14 +620,13 @@ func TestQueueGroup(t *testing.T) {
 			mopts := MongoDBOptions{
 				Client:       client,
 				DB:           "amboy_group_test",
-				Collection:   newDriverID(),
-				GroupName:    "gen",
 				WaitInterval: time.Millisecond,
 				URI:          defaultMongoDBURI,
 			}
+			collPrefix := "gen"
 
 			for i := 0; i < 10; i++ {
-				_, err := client.Database("amboy_group_test").Collection(fmt.Sprintf("%s-%d.jobs", mopts.GroupName, i)).InsertOne(ctx, bson.M{"foo": "bar"})
+				_, err := client.Database("amboy_group_test").Collection(fmt.Sprintf("%s-%d.jobs", collPrefix, i)).InsertOne(ctx, bson.M{"foo": "bar"})
 				require.NoError(t, err)
 			}
 			remoteOpts := MongoDBQueueGroupOptions{
@@ -638,11 +637,11 @@ func TestQueueGroup(t *testing.T) {
 				TTL:            time.Second,
 				PruneFrequency: time.Second,
 			}
-			_, err := NewMongoDBQueueGroup(ctx, remoteOpts)
+			_, err := NewMongoDBQueueGroup(ctx, collPrefix, remoteOpts)
 			require.NoError(t, err)
 			time.Sleep(time.Second)
 			for i := 0; i < 10; i++ {
-				count, err := client.Database("amboy_group_test").Collection(fmt.Sprintf("%s-%d.jobs", mopts.GroupName, i)).CountDocuments(ctx, bson.M{})
+				count, err := client.Database("amboy_group_test").Collection(fmt.Sprintf("%s-%d.jobs", collPrefix, i)).CountDocuments(ctx, bson.M{})
 				require.NoError(t, err)
 				require.Zero(t, count, fmt.Sprintf("gen-%d.jobs not dropped", i))
 			}

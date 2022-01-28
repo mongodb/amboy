@@ -32,6 +32,7 @@ func (o *LocalQueueGroupOptions) Validate() error {
 	return catcher.Resolve()
 }
 
+// LocalQueueOptions represent options to construct a local queue.
 type LocalQueueOptions struct {
 	Constructor func(ctx context.Context) (amboy.Queue, error)
 }
@@ -57,7 +58,7 @@ func getLocalQueueOptions(opts ...amboy.QueueOptions) ([]LocalQueueOptions, erro
 				localOpts = append(localOpts, *opt)
 			}
 		default:
-			return nil, errors.Errorf("found queue options of type '%T', but they must be MongoDB options", opt)
+			return nil, errors.Errorf("found queue options of type '%T', but they must be local queue options", opt)
 		}
 	}
 

@@ -14,17 +14,17 @@ import (
 	"github.com/mongodb/grip/recovery"
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // remoteMongoQueueGroup is a group of queues backed by MongoDB where each queue
 // belongs to its own collection for namespace isolation.
 type remoteMongoQueueGroup struct {
-	canceler context.CancelFunc
-	mu       sync.RWMutex
-	opts     MongoDBQueueGroupOptions
-	queues   map[string]amboy.Queue
-	ttlMap   map[string]time.Time
+	collPrefix string
+	canceler   context.CancelFunc
+	mu         sync.RWMutex
+	opts       MongoDBQueueGroupOptions
+	queues     map[string]amboy.Queue
+	ttlMap     map[string]time.Time
 }
 
 // MongoDBQueueGroupOptions describe options to create a queue group backed by
@@ -55,12 +55,13 @@ type MongoDBQueueGroupOptions struct {
 
 func (opts MongoDBQueueGroupOptions) validate() error {
 	catcher := grip.NewBasicCatcher()
-	catcher.NewWhen(opts.TTL < 0, "ttl must be greater than or equal to 0")
-	catcher.NewWhen(opts.TTL > 0 && opts.TTL < time.Second, "ttl cannot be less than 1 second, unless it is 0")
+	catcher.NewWhen(opts.TTL < 0, "TTL must be greater than or equal to 0")
+	catcher.NewWhen(opts.TTL > 0 && opts.TTL < time.Second, "TTL cannot be less than 1 second, unless it is 0")
 	catcher.NewWhen(opts.PruneFrequency < 0, "prune frequency must be greater than or equal to 0")
 	catcher.NewWhen(opts.PruneFrequency > 0 && opts.TTL < time.Second, "prune frequency cannot be less than 1 second, unless it is 0")
 	catcher.NewWhen((opts.TTL == 0 && opts.PruneFrequency != 0) || (opts.TTL != 0 && opts.PruneFrequency == 0), "ttl and prune frequency must both be 0 or both be not 0")
 	catcher.Wrap(opts.Queue.Validate(), "invalid default queue options")
+	catcher.NewWhen(opts.Queue.DB == nil || opts.Queue.DB.Client == nil, "must provide a DB client for queue group operations")
 	return catcher.Resolve()
 }
 
@@ -68,13 +69,18 @@ type listCollectionsOutput struct {
 	Name string `bson:"name"`
 }
 
-// NewMongoDBQueueGroup constructs a new remote queue group. If the TTL is 0,
-// the queues will not be TTLed except when the client explicitly calls Prune.
+// NewMongoDBQueueGroup constructs a new remote queue group with the given
+// prefix for its collection names. If the TTL is 0, the queues will not be
+// TTLed except when the client explicitly calls Prune.
 //
 // The MongoDB remote queue group creates a new collection for every queue. This
 // is probably most viable for lower volume workloads; however, the caching
 // mechanism may be more responsive in some situations.
-func NewMongoDBQueueGroup(ctx context.Context, opts MongoDBQueueGroupOptions) (amboy.QueueGroup, error) {
+func NewMongoDBQueueGroup(ctx context.Context, collPrefix string, opts MongoDBQueueGroupOptions) (amboy.QueueGroup, error) {
+	if opts.Queue.DB == nil {
+		return nil, errors.New("must provide DB options")
+	}
+
 	// Because of the way this queue is implemented, the driver's collection
 	// name has group information, but the jobs within the collection don't have
 	// any group information. Therefore, we have to set UseGroups to false so
@@ -82,16 +88,27 @@ func NewMongoDBQueueGroup(ctx context.Context, opts MongoDBQueueGroupOptions) (a
 	opts.Queue.DB.UseGroups = false
 	opts.Queue.DB.GroupName = ""
 
+	// Collection must be provided for queue options, but the collection's name
+	// is not yet known here; the collection's name is determine when the queue
+	// is generated dynamically in Get. Therefore, the Collection set here is
+	// not actually important and is only necessary to pass validation; the
+	// actual collection name will be validated when the queue is created.
+	originalCollName := opts.Queue.DB.Collection
+	opts.Queue.DB.Collection = "placeholder"
+
 	if err := opts.validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid remote queue options")
 	}
 
+	opts.Queue.DB.Collection = originalCollName
+
 	ctx, cancel := context.WithCancel(ctx)
 	g := &remoteMongoQueueGroup{
-		canceler: cancel,
-		opts:     opts,
-		queues:   map[string]amboy.Queue{},
-		ttlMap:   map[string]time.Time{},
+		collPrefix: collPrefix,
+		canceler:   cancel,
+		opts:       opts,
+		queues:     map[string]amboy.Queue{},
+		ttlMap:     map[string]time.Time{},
 	}
 
 	if opts.PruneFrequency > 0 && opts.TTL > 0 {
@@ -143,7 +160,7 @@ func (g *remoteMongoQueueGroup) startQueues(ctx context.Context) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	colls, err := g.getExistingCollections(ctx, g.opts.Queue.DB.Client, g.opts.Queue.DB.DB, g.opts.Queue.DB.GroupName)
+	colls, err := g.getExistingCollections(ctx)
 	if err != nil {
 		return errors.Wrap(err, "getting existing collections")
 	}
@@ -173,7 +190,7 @@ func (g *remoteMongoQueueGroup) Queues(ctx context.Context) []string {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 
-	out, _ := g.getExistingCollections(ctx, g.opts.Queue.DB.Client, g.opts.Queue.DB.DB, g.opts.Queue.DB.Collection) // nolint
+	out, _ := g.getExistingCollections(ctx)
 
 	return out
 }
@@ -207,8 +224,9 @@ func (g *remoteMongoQueueGroup) startProcessingRemoteQueue(ctx context.Context, 
 	return q, nil
 }
 
-func (g *remoteMongoQueueGroup) getExistingCollections(ctx context.Context, client *mongo.Client, db, prefix string) ([]string, error) {
-	c, err := client.Database(db).ListCollections(ctx, bson.M{"name": bson.M{"$regex": fmt.Sprintf("^%s.*", prefix)}})
+func (g *remoteMongoQueueGroup) getExistingCollections(ctx context.Context) ([]string, error) {
+
+	c, err := g.opts.Queue.DB.Client.Database(g.opts.Queue.DB.DB).ListCollections(ctx, bson.M{"name": bson.M{"$regex": fmt.Sprintf("^%s.*", g.collPrefix)}})
 	if err != nil {
 		return nil, errors.Wrap(err, "calling listCollections")
 	}
@@ -281,7 +299,7 @@ func (g *remoteMongoQueueGroup) Prune(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	colls, err := g.getExistingCollections(ctx, g.opts.Queue.DB.Client, g.opts.Queue.DB.DB, g.opts.Queue.DB.GroupName)
+	colls, err := g.getExistingCollections(ctx)
 	if err != nil {
 		return errors.Wrap(err, "getting collections")
 	}
@@ -391,9 +409,9 @@ func (g *remoteMongoQueueGroup) Close(ctx context.Context) error {
 }
 
 func (g *remoteMongoQueueGroup) collectionFromID(id string) string {
-	return addJobsSuffix(g.opts.Queue.DB.GroupName + id)
+	return addJobsSuffix(g.collPrefix + id)
 }
 
 func (g *remoteMongoQueueGroup) idFromCollection(collection string) string {
-	return trimJobsSuffix(strings.TrimPrefix(collection, g.opts.Queue.DB.GroupName))
+	return trimJobsSuffix(strings.TrimPrefix(collection, g.collPrefix))
 }

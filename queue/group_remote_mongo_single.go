@@ -26,9 +26,12 @@ type remoteMongoQueueGroupSingle struct {
 // Prune.
 //
 // The MongoDB single remote queue group multiplexes all queues into a single
-// collection. Group name as a means to namespace each queue within the
-// collection and ensure isolation.
+// collection.
 func NewMongoDBSingleQueueGroup(ctx context.Context, opts MongoDBQueueGroupOptions) (amboy.QueueGroup, error) {
+	if opts.Queue.DB == nil {
+		return nil, errors.New("must provide DB options")
+	}
+
 	// Because of the way this queue group is implemented, the driver must
 	// account for job isolation between multiplexed queues within a single
 	// collection, so it needs to set UseGroups.
@@ -157,6 +160,9 @@ func (g *remoteMongoQueueGroupSingle) startQueues(ctx context.Context) error {
 	// Refresh the TTLs on all the queues that were recently accessed or still
 	// have jobs to run.
 	for _, id := range queues {
+		// TODO (EVG-16210): add a means to initialize the cache with queues
+		// that obey queue-specific options when those queues already exist in
+		// the DB.
 		_, err := g.Get(ctx, id)
 		catcher.Add(err)
 	}
