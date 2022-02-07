@@ -28,27 +28,27 @@ type remoteMongoQueueGroupSingle struct {
 // The MongoDB single remote queue group multiplexes all queues into a single
 // collection.
 func NewMongoDBSingleQueueGroup(ctx context.Context, opts MongoDBQueueGroupOptions) (amboy.QueueGroup, error) {
-	if opts.Queue.DB == nil {
+	if opts.DefaultQueue.DB == nil {
 		return nil, errors.New("must provide DB options")
 	}
 
 	// Because of the way this queue group is implemented, the driver must
 	// account for job isolation between multiplexed queues within a single
 	// collection, so it needs to set UseGroups.
-	opts.Queue.DB.UseGroups = true
+	opts.DefaultQueue.DB.UseGroups = true
 	// GroupName must be provided if UseGroups is set, but the queue's name is
 	// not yet known here; the queue's name is determined when the queue is
 	// generated dynamically in Get. Therefore, the GroupName set here is not
 	// actually important and is only necessary to pass validation; the actual
 	// queue's name will be validated when the queue is created.
-	originalGroupName := opts.Queue.DB.GroupName
-	opts.Queue.DB.GroupName = "placeholder"
+	originalGroupName := opts.DefaultQueue.DB.GroupName
+	opts.DefaultQueue.DB.GroupName = "placeholder"
 
 	if err := opts.validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid remote queue options")
 	}
 
-	opts.Queue.DB.GroupName = originalGroupName
+	opts.DefaultQueue.DB.GroupName = originalGroupName
 
 	ctx, cancel := context.WithCancel(ctx)
 	g := &remoteMongoQueueGroupSingle{
@@ -102,7 +102,7 @@ func NewMongoDBSingleQueueGroup(ctx context.Context, opts MongoDBQueueGroupOptio
 // complete and have not recently completed a job within the TTL) are not
 // returned.
 func (g *remoteMongoQueueGroupSingle) getQueues(ctx context.Context) ([]string, error) {
-	cursor, err := g.opts.Queue.DB.Client.Database(g.opts.Queue.DB.DB).Collection(addGroupSuffix(g.opts.Queue.DB.Collection)).Aggregate(ctx,
+	cursor, err := g.opts.DefaultQueue.DB.Client.Database(g.opts.DefaultQueue.DB.DB).Collection(addGroupSuffix(g.opts.DefaultQueue.DB.Collection)).Aggregate(ctx,
 		[]bson.M{
 			{
 				"$match": bson.M{
@@ -160,9 +160,6 @@ func (g *remoteMongoQueueGroupSingle) startQueues(ctx context.Context) error {
 	// Refresh the TTLs on all the queues that were recently accessed or still
 	// have jobs to run.
 	for _, id := range queues {
-		// TODO (EVG-16210): add a means to initialize the cache with queues
-		// that obey queue-specific options when those queues already exist in
-		// the DB.
 		_, err := g.Get(ctx, id)
 		catcher.Add(err)
 	}
@@ -177,7 +174,6 @@ func (g *remoteMongoQueueGroupSingle) startQueues(ctx context.Context) error {
 // is done.
 func (g *remoteMongoQueueGroupSingle) Get(ctx context.Context, id string, opts ...amboy.QueueOptions) (amboy.Queue, error) {
 	var queue remoteQueue
-	var queueOpts MongoDBQueueOptions
 	var err error
 
 	switch q := g.cache.Get(id).(type) {
@@ -188,14 +184,22 @@ func (g *remoteMongoQueueGroupSingle) Get(ctx context.Context, id string, opts .
 		if err != nil {
 			return nil, errors.Wrap(err, "getting queue options")
 		}
-		queueOpts = mergeMongoDBQueueOptions(append([]MongoDBQueueOptions{g.opts.Queue}, mdbOpts...)...)
+
+		precedenceOrderedOpts := []MongoDBQueueOptions{g.opts.DefaultQueue}
+		if perQueueOpts, ok := g.opts.PerQueue[id]; ok {
+			precedenceOrderedOpts = append(precedenceOrderedOpts, perQueueOpts)
+		}
+		precedenceOrderedOpts = append(precedenceOrderedOpts, mdbOpts...)
+		queueOpts := mergeMongoDBQueueOptions(precedenceOrderedOpts...)
+
 		// The group name has to be set to ensure the queue uses its namespace
 		// within the single multiplexed collection.
 		queueOpts.DB.GroupName = id
 		// These settings must apply to all queues in the queue group to ensure
 		// proper management of jobs within the single multiplexed collection.
-		queueOpts.DB.UseGroups = g.opts.Queue.DB.UseGroups
-		queueOpts.DB.Collection = g.opts.Queue.DB.Collection
+		queueOpts.DB.UseGroups = g.opts.DefaultQueue.DB.UseGroups
+		queueOpts.DB.Collection = g.opts.DefaultQueue.DB.Collection
+
 		queue, err = queueOpts.buildQueue(ctx)
 		if err != nil {
 			return nil, errors.Wrap(err, "constructing queue")

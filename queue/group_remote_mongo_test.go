@@ -49,15 +49,17 @@ func TestMongoDBQueueGroup(t *testing.T) {
 						_, ok = q.(*remoteUnordered)
 						assert.True(t, ok, "queue should be default remote queue (unordered)")
 					},
-					"CreatesQueueWithOverriddenOptions": func(ctx context.Context, t *testing.T, opts MongoDBQueueGroupOptions) {
+					"CreatesQueueWithPerQueueOptionsTakingPrecedenceOverDefaults": func(ctx context.Context, t *testing.T, opts MongoDBQueueGroupOptions) {
+						id := utility.RandomString()
+						opts.PerQueue = map[string]MongoDBQueueOptions{
+							id: {
+								Abortable: utility.FalsePtr(),
+							},
+						}
 						qg, err := makeQueueGroup(ctx, opts)
 						require.NoError(t, err)
 
-						queueOpts := &MongoDBQueueOptions{
-							Abortable: utility.FalsePtr(),
-							Ordered:   utility.TruePtr(),
-						}
-						q, err := qg.Get(ctx, utility.RandomString(), queueOpts)
+						q, err := qg.Get(ctx, id)
 						require.NoError(t, err)
 
 						assert.True(t, q.Info().Started, "queue should be started")
@@ -67,14 +69,43 @@ func TestMongoDBQueueGroup(t *testing.T) {
 						_, ok := runner.(amboy.AbortableRunner)
 						assert.False(t, ok, "runner pool should override the default to be unabortable")
 
+						_, ok = q.(*remoteUnordered)
+						assert.True(t, ok, "queue should default to unordered remote queue")
+					},
+					"CreatesQueueWithExplicitParameterOptionsTakingPrecedenceOverPerQueueOptions": func(ctx context.Context, t *testing.T, opts MongoDBQueueGroupOptions) {
+						id := utility.RandomString()
+						opts.PerQueue = map[string]MongoDBQueueOptions{
+							id: {
+								Abortable: utility.FalsePtr(),
+								Ordered:   utility.TruePtr(),
+							},
+						}
+
+						qg, err := makeQueueGroup(ctx, opts)
+						require.NoError(t, err)
+
+						queueOpts := &MongoDBQueueOptions{
+							Abortable: utility.TruePtr(),
+							Ordered:   utility.TruePtr(),
+						}
+						q, err := qg.Get(ctx, id, queueOpts)
+						require.NoError(t, err)
+
+						assert.True(t, q.Info().Started, "queue should be started")
+
+						runner := q.Runner()
+						require.NotZero(t, runner)
+						_, ok := runner.(amboy.AbortableRunner)
+						assert.True(t, ok, "runner pool should override the per-queue options to be unabortable")
+
 						_, ok = q.(*remoteSimpleOrdered)
-						assert.True(t, ok, "queue should be default remote queue to be ordered")
+						assert.True(t, ok, "queue should override the per-queue options to be ordered remote queue")
 					},
 					"FailsToCreateQueueWithInvalidOptions": func(ctx context.Context, t *testing.T, opts MongoDBQueueGroupOptions) {
 						qg, err := makeQueueGroup(ctx, opts)
 						require.NoError(t, err)
 
-						dbOptsCopy := *opts.Queue.DB
+						dbOptsCopy := *opts.DefaultQueue.DB
 						dbOptsCopy.LockTimeout = -time.Minute
 						q, err := qg.Get(ctx, utility.RandomString(), &MongoDBQueueOptions{
 							DB: &dbOptsCopy,
@@ -112,13 +143,13 @@ func TestMongoDBQueueGroup(t *testing.T) {
 						defer cancel()
 
 						opts := defaultMongoDBQueueGroupTestOptions()
-						opts.Queue.DB.Client = client
-						opts.Queue.Abortable = utility.TruePtr()
-						opts.Queue.Ordered = utility.FalsePtr()
+						opts.DefaultQueue.DB.Client = client
+						opts.DefaultQueue.Abortable = utility.TruePtr()
+						opts.DefaultQueue.Ordered = utility.FalsePtr()
 
-						require.NoError(t, client.Database(opts.Queue.DB.DB).Drop(ctx))
+						require.NoError(t, client.Database(opts.DefaultQueue.DB.DB).Drop(ctx))
 						defer func() {
-							assert.NoError(t, client.Database(opts.Queue.DB.DB).Drop(ctx))
+							assert.NoError(t, client.Database(opts.DefaultQueue.DB.DB).Drop(ctx))
 						}()
 
 						tCase(tctx, t, opts)
