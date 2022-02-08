@@ -76,7 +76,7 @@ func (o MongoDBQueueGroupOptions) validate() error {
 // based on the order that they're given.
 func (o MongoDBQueueGroupOptions) getQueueOptsWithPrecedence(id string, opts ...MongoDBQueueOptions) MongoDBQueueOptions {
 	precedenceOrderedOpts := []MongoDBQueueOptions{o.DefaultQueue}
-	if perQueueOpts, ok := g.opts.PerQueue[id]; ok {
+	if perQueueOpts, ok := o.PerQueue[id]; ok {
 		precedenceOrderedOpts = append(precedenceOrderedOpts, perQueueOpts)
 	}
 	precedenceOrderedOpts = append(precedenceOrderedOpts, opts...)
