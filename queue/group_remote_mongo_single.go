@@ -185,12 +185,7 @@ func (g *remoteMongoQueueGroupSingle) Get(ctx context.Context, id string, opts .
 			return nil, errors.Wrap(err, "getting queue options")
 		}
 
-		precedenceOrderedOpts := []MongoDBQueueOptions{g.opts.DefaultQueue}
-		if perQueueOpts, ok := g.opts.PerQueue[id]; ok {
-			precedenceOrderedOpts = append(precedenceOrderedOpts, perQueueOpts)
-		}
-		precedenceOrderedOpts = append(precedenceOrderedOpts, mdbOpts...)
-		queueOpts := mergeMongoDBQueueOptions(precedenceOrderedOpts...)
+		queueOpts := g.opts.getQueueOptsWithPrecedence(id, mdbOpts...)
 
 		// The group name has to be set to ensure the queue uses its namespace
 		// within the single multiplexed collection.

@@ -57,16 +57,30 @@ type MongoDBQueueGroupOptions struct {
 	TTL time.Duration
 }
 
-func (opts MongoDBQueueGroupOptions) validate() error {
+func (o MongoDBQueueGroupOptions) validate() error {
 	catcher := grip.NewBasicCatcher()
-	catcher.NewWhen(opts.TTL < 0, "TTL must be greater than or equal to 0")
-	catcher.NewWhen(opts.TTL > 0 && opts.TTL < time.Second, "TTL cannot be less than 1 second, unless it is 0")
-	catcher.NewWhen(opts.PruneFrequency < 0, "prune frequency must be greater than or equal to 0")
-	catcher.NewWhen(opts.PruneFrequency > 0 && opts.TTL < time.Second, "prune frequency cannot be less than 1 second, unless it is 0")
-	catcher.NewWhen((opts.TTL == 0 && opts.PruneFrequency != 0) || (opts.TTL != 0 && opts.PruneFrequency == 0), "ttl and prune frequency must both be 0 or both be not 0")
-	catcher.Wrap(opts.DefaultQueue.Validate(), "invalid default queue options")
-	catcher.NewWhen(opts.DefaultQueue.DB == nil || opts.DefaultQueue.DB.Client == nil, "must provide a DB client for queue group operations")
+	catcher.NewWhen(o.TTL < 0, "TTL must be greater than or equal to 0")
+	catcher.NewWhen(o.TTL > 0 && o.TTL < time.Second, "TTL cannot be less than 1 second, unless it is 0")
+	catcher.NewWhen(o.PruneFrequency < 0, "prune frequency must be greater than or equal to 0")
+	catcher.NewWhen(o.PruneFrequency > 0 && o.TTL < time.Second, "prune frequency cannot be less than 1 second, unless it is 0")
+	catcher.NewWhen((o.TTL == 0 && o.PruneFrequency != 0) || (o.TTL != 0 && o.PruneFrequency == 0), "ttl and prune frequency must both be 0 or both be not 0")
+	catcher.Wrap(o.DefaultQueue.Validate(), "invalid default queue options")
+	catcher.NewWhen(o.DefaultQueue.DB == nil || o.DefaultQueue.DB.Client == nil, "must provide a DB client for queue group operations")
 	return catcher.Resolve()
+}
+
+// getQueueOptsWithPrecedence returns the merged options for the queue given by
+// the ID. The order of precedence for merging conflicting options is (in order
+// of increasing precedence): default options, per-queue options, parameter
+// options. If additional options are passed as parameters, their precedence is
+// based on the order that they're given.
+func (o MongoDBQueueGroupOptions) getQueueOptsWithPrecedence(id string, opts ...MongoDBQueueOptions) MongoDBQueueOptions {
+	precedenceOrderedOpts := []MongoDBQueueOptions{o.DefaultQueue}
+	if perQueueOpts, ok := g.opts.PerQueue[id]; ok {
+		precedenceOrderedOpts = append(precedenceOrderedOpts, perQueueOpts)
+	}
+	precedenceOrderedOpts = append(precedenceOrderedOpts, opts...)
+	return mergeMongoDBQueueOptions(precedenceOrderedOpts...)
 }
 
 type listCollectionsOutput struct {
@@ -209,12 +223,7 @@ func (g *remoteMongoQueueGroup) startProcessingRemoteQueue(ctx context.Context, 
 		return nil, errors.Wrap(err, "getting queue options")
 	}
 
-	precedenceOrderedOpts := []MongoDBQueueOptions{g.opts.DefaultQueue}
-	if perQueueOpts, ok := g.opts.PerQueue[id]; ok {
-		precedenceOrderedOpts = append(precedenceOrderedOpts, perQueueOpts)
-	}
-	precedenceOrderedOpts = append(precedenceOrderedOpts, mdbOpts...)
-	queueOpts := mergeMongoDBQueueOptions(precedenceOrderedOpts...)
+	queueOpts := g.opts.getQueueOptsWithPrecedence(id, mdbOpts...)
 
 	// The collection name has to be set to ensure the queue uses its
 	// collection-level namespace.
