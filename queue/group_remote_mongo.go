@@ -30,21 +30,25 @@ type remoteMongoQueueGroup struct {
 // MongoDBQueueGroupOptions describe options to create a queue group backed by
 // MongoDB.
 type MongoDBQueueGroupOptions struct {
-	// Queue represents default options for queues in the queue group. These can
-	// be optionally overridden at the individual queue level.
-	Queue MongoDBQueueOptions
+	// DefaultQueue represents default options for queues in the queue group.
+	// These can be optionally overridden at the individual queue level.
+	DefaultQueue MongoDBQueueOptions
+
+	// PerQueue represent options for specific queues by ID. These take
+	// precedence over the DefaultQueue options.
+	PerQueue map[string]MongoDBQueueOptions
 
 	// PruneFrequency is how often inactive queues are checked to see if they
 	// can be pruned.
 	PruneFrequency time.Duration
 
-	// BackgroundCreateFrequency is how often active queues can have their
-	// TTLs periodically refreshed in the background. A queue is active as long
-	// as it either still has jobs to complete or the most recently completed
-	// job finished within the TTL. This is useful in case a queue still has
-	// jobs to process but a user does not explicitly access the queue - if the
-	// goal is to ensure a queue is never pruned when it still has jobs to
-	// complete, this should be set to a value lower than the TTL.
+	// BackgroundCreateFrequency is how often active queues can have their TTLs
+	// periodically refreshed in the background. A queue is active as long as it
+	// either still has jobs to complete or the most recently completed job
+	// finished within the TTL. This is useful in case a queue still has jobs to
+	// process but a user does not explicitly access the queue - if the goal is
+	// to ensure a queue is never pruned when it still has jobs to complete,
+	// this should be set to a value lower than the TTL.
 	BackgroundCreateFrequency time.Duration
 
 	// TTL determines how long a queue is considered active without performing
@@ -53,16 +57,30 @@ type MongoDBQueueGroupOptions struct {
 	TTL time.Duration
 }
 
-func (opts MongoDBQueueGroupOptions) validate() error {
+func (o MongoDBQueueGroupOptions) validate() error {
 	catcher := grip.NewBasicCatcher()
-	catcher.NewWhen(opts.TTL < 0, "TTL must be greater than or equal to 0")
-	catcher.NewWhen(opts.TTL > 0 && opts.TTL < time.Second, "TTL cannot be less than 1 second, unless it is 0")
-	catcher.NewWhen(opts.PruneFrequency < 0, "prune frequency must be greater than or equal to 0")
-	catcher.NewWhen(opts.PruneFrequency > 0 && opts.TTL < time.Second, "prune frequency cannot be less than 1 second, unless it is 0")
-	catcher.NewWhen((opts.TTL == 0 && opts.PruneFrequency != 0) || (opts.TTL != 0 && opts.PruneFrequency == 0), "ttl and prune frequency must both be 0 or both be not 0")
-	catcher.Wrap(opts.Queue.Validate(), "invalid default queue options")
-	catcher.NewWhen(opts.Queue.DB == nil || opts.Queue.DB.Client == nil, "must provide a DB client for queue group operations")
+	catcher.NewWhen(o.TTL < 0, "TTL must be greater than or equal to 0")
+	catcher.NewWhen(o.TTL > 0 && o.TTL < time.Second, "TTL cannot be less than 1 second, unless it is 0")
+	catcher.NewWhen(o.PruneFrequency < 0, "prune frequency must be greater than or equal to 0")
+	catcher.NewWhen(o.PruneFrequency > 0 && o.TTL < time.Second, "prune frequency cannot be less than 1 second, unless it is 0")
+	catcher.NewWhen((o.TTL == 0 && o.PruneFrequency != 0) || (o.TTL != 0 && o.PruneFrequency == 0), "ttl and prune frequency must both be 0 or both be not 0")
+	catcher.Wrap(o.DefaultQueue.Validate(), "invalid default queue options")
+	catcher.NewWhen(o.DefaultQueue.DB == nil || o.DefaultQueue.DB.Client == nil, "must provide a DB client for queue group operations")
 	return catcher.Resolve()
+}
+
+// getQueueOptsWithPrecedence returns the merged options for the queue given by
+// the ID. The order of precedence for merging conflicting options is (in order
+// of increasing precedence): default options, per-queue options, parameter
+// options. If additional options are passed as parameters, their precedence is
+// based on the order that they're given.
+func (o MongoDBQueueGroupOptions) getQueueOptsWithPrecedence(id string, opts ...MongoDBQueueOptions) MongoDBQueueOptions {
+	precedenceOrderedOpts := []MongoDBQueueOptions{o.DefaultQueue}
+	if perQueueOpts, ok := o.PerQueue[id]; ok {
+		precedenceOrderedOpts = append(precedenceOrderedOpts, perQueueOpts)
+	}
+	precedenceOrderedOpts = append(precedenceOrderedOpts, opts...)
+	return mergeMongoDBQueueOptions(precedenceOrderedOpts...)
 }
 
 type listCollectionsOutput struct {
@@ -77,7 +95,7 @@ type listCollectionsOutput struct {
 // is probably most viable for lower volume workloads; however, the caching
 // mechanism may be more responsive in some situations.
 func NewMongoDBQueueGroup(ctx context.Context, collPrefix string, opts MongoDBQueueGroupOptions) (amboy.QueueGroup, error) {
-	if opts.Queue.DB == nil {
+	if opts.DefaultQueue.DB == nil {
 		return nil, errors.New("must provide DB options")
 	}
 
@@ -85,22 +103,22 @@ func NewMongoDBQueueGroup(ctx context.Context, collPrefix string, opts MongoDBQu
 	// name has group information, but the jobs within the collection don't have
 	// any group information. Therefore, we have to set UseGroups to false so
 	// that the driver will treat the jobs as if they're in their own queue.
-	opts.Queue.DB.UseGroups = false
-	opts.Queue.DB.GroupName = ""
+	opts.DefaultQueue.DB.UseGroups = false
+	opts.DefaultQueue.DB.GroupName = ""
 
 	// Collection must be provided for queue options, but the collection's name
 	// is not yet known here; the collection's name is determine when the queue
 	// is generated dynamically in Get. Therefore, the Collection set here is
 	// not actually important and is only necessary to pass validation; the
 	// actual collection name will be validated when the queue is created.
-	originalCollName := opts.Queue.DB.Collection
-	opts.Queue.DB.Collection = "placeholder"
+	originalCollName := opts.DefaultQueue.DB.Collection
+	opts.DefaultQueue.DB.Collection = "placeholder"
 
 	if err := opts.validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid remote queue options")
 	}
 
-	opts.Queue.DB.Collection = originalCollName
+	opts.DefaultQueue.DB.Collection = originalCollName
 
 	ctx, cancel := context.WithCancel(ctx)
 	g := &remoteMongoQueueGroup{
@@ -196,13 +214,16 @@ func (g *remoteMongoQueueGroup) Queues(ctx context.Context) []string {
 }
 
 func (g *remoteMongoQueueGroup) startProcessingRemoteQueue(ctx context.Context, coll string, opts ...amboy.QueueOptions) (amboy.Queue, error) {
+	id := g.idFromCollection(coll)
+	// The driver already adds the jobs suffix implicitly to the collection
+	// name.
 	coll = trimJobsSuffix(coll)
 	mdbOpts, err := getMongoDBQueueOptions(opts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting queue options")
 	}
 
-	queueOpts := mergeMongoDBQueueOptions(append([]MongoDBQueueOptions{g.opts.Queue}, mdbOpts...)...)
+	queueOpts := g.opts.getQueueOptsWithPrecedence(id, mdbOpts...)
 
 	// The collection name has to be set to ensure the queue uses its
 	// collection-level namespace.
@@ -210,8 +231,8 @@ func (g *remoteMongoQueueGroup) startProcessingRemoteQueue(ctx context.Context, 
 	// These settings must apply to all queues in the queue group because if the
 	// queue-specific options differ from the defaults, it will affect the queue
 	// group's ability to manage jobs properly.
-	queueOpts.DB.UseGroups = g.opts.Queue.DB.UseGroups
-	queueOpts.DB.GroupName = g.opts.Queue.DB.GroupName
+	queueOpts.DB.UseGroups = g.opts.DefaultQueue.DB.UseGroups
+	queueOpts.DB.GroupName = g.opts.DefaultQueue.DB.GroupName
 
 	q, err := queueOpts.buildQueue(ctx)
 	if err != nil {
@@ -225,8 +246,7 @@ func (g *remoteMongoQueueGroup) startProcessingRemoteQueue(ctx context.Context, 
 }
 
 func (g *remoteMongoQueueGroup) getExistingCollections(ctx context.Context) ([]string, error) {
-
-	c, err := g.opts.Queue.DB.Client.Database(g.opts.Queue.DB.DB).ListCollections(ctx, bson.M{"name": bson.M{"$regex": fmt.Sprintf("^%s.*", g.collPrefix)}})
+	c, err := g.opts.DefaultQueue.DB.Client.Database(g.opts.DefaultQueue.DB.DB).ListCollections(ctx, bson.M{"name": bson.M{"$regex": fmt.Sprintf("^%s.*", g.collPrefix)}})
 	if err != nil {
 		return nil, errors.Wrap(err, "calling listCollections")
 	}
@@ -328,7 +348,7 @@ func (g *remoteMongoQueueGroup) Prune(ctx context.Context) error {
 			defer recovery.LogStackTraceAndContinue("panic in pruning collections")
 			defer wg.Done()
 			for nextColl := range collsDropChan {
-				c := g.opts.Queue.DB.Client.Database(g.opts.Queue.DB.DB).Collection(nextColl)
+				c := g.opts.DefaultQueue.DB.Client.Database(g.opts.DefaultQueue.DB.DB).Collection(nextColl)
 				count, err := c.CountDocuments(ctx, bson.M{
 					"status.completed": true,
 					"status.in_prog":   false,

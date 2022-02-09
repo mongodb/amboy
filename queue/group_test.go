@@ -88,7 +88,7 @@ func TestQueueGroup(t *testing.T) {
 					defer cancel()
 
 					localOpts := LocalQueueGroupOptions{
-						Queue: LocalQueueOptions{
+						DefaultQueue: LocalQueueOptions{
 							Constructor: test.localConstructor,
 						},
 						TTL: test.ttl,
@@ -170,7 +170,7 @@ func TestQueueGroup(t *testing.T) {
 							}
 
 							remoteOpts := MongoDBQueueGroupOptions{
-								Queue: MongoDBQueueOptions{
+								DefaultQueue: MongoDBQueueOptions{
 									DB:             &mopts,
 									NumWorkers:     utility.ToIntPtr(remoteTest.workers),
 									WorkerPoolSize: remoteTest.workerFunc,
@@ -206,7 +206,7 @@ func TestQueueGroup(t *testing.T) {
 							}
 
 							remoteOpts := MongoDBQueueGroupOptions{
-								Queue: MongoDBQueueOptions{
+								DefaultQueue: MongoDBQueueOptions{
 									DB:             &mopts,
 									NumWorkers:     utility.ToIntPtr(remoteTest.workers),
 									WorkerPoolSize: remoteTest.workerFunc,
@@ -238,7 +238,7 @@ func TestQueueGroup(t *testing.T) {
 				name: "Local",
 				constructor: func(ctx context.Context, ttl time.Duration) (amboy.QueueGroup, queueGroupCloser, error) {
 					qg, err := NewLocalQueueGroup(ctx, LocalQueueGroupOptions{
-						Queue: LocalQueueOptions{
+						DefaultQueue: LocalQueueOptions{
 							Constructor: localConstructor,
 						},
 						TTL: ttl,
@@ -264,7 +264,7 @@ func TestQueueGroup(t *testing.T) {
 					}
 
 					opts := MongoDBQueueGroupOptions{
-						Queue: MongoDBQueueOptions{
+						DefaultQueue: MongoDBQueueOptions{
 							NumWorkers: utility.ToIntPtr(1),
 							DB:         &mopts,
 						},
@@ -305,7 +305,7 @@ func TestQueueGroup(t *testing.T) {
 					}
 
 					opts := MongoDBQueueGroupOptions{
-						Queue: MongoDBQueueOptions{
+						DefaultQueue: MongoDBQueueOptions{
 							NumWorkers: utility.ToIntPtr(1),
 							DB:         &mopts,
 						},
@@ -630,7 +630,7 @@ func TestQueueGroup(t *testing.T) {
 				require.NoError(t, err)
 			}
 			remoteOpts := MongoDBQueueGroupOptions{
-				Queue: MongoDBQueueOptions{
+				DefaultQueue: MongoDBQueueOptions{
 					NumWorkers: utility.ToIntPtr(1),
 					DB:         &mopts,
 				},

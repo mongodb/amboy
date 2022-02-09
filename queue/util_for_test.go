@@ -10,7 +10,7 @@ import (
 func defaultMongoDBQueueGroupTestOptions() MongoDBQueueGroupOptions {
 	queueOpts := defaultMongoDBQueueTestOptions()
 	return MongoDBQueueGroupOptions{
-		Queue: queueOpts,
+		DefaultQueue: queueOpts,
 	}
 }
 

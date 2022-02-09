@@ -20,15 +20,15 @@ type localQueueGroup struct {
 
 // LocalQueueGroupOptions describe options passed to NewLocalQueueGroup.
 type LocalQueueGroupOptions struct {
-	Queue LocalQueueOptions
-	TTL   time.Duration
+	DefaultQueue LocalQueueOptions
+	TTL          time.Duration
 }
 
 func (o *LocalQueueGroupOptions) Validate() error {
 	catcher := grip.NewBasicCatcher()
 	catcher.NewWhen(o.TTL < 0, "TTL cannot be negative")
 	catcher.NewWhen(o.TTL > 0 && o.TTL < time.Second, "TTL cannot be less than 1 second, unless it is 0")
-	catcher.Wrap(o.Queue.Validate(), "invalid queue options")
+	catcher.Wrap(o.DefaultQueue.Validate(), "invalid queue options")
 	return catcher.Resolve()
 }
 
@@ -133,7 +133,7 @@ func (g *localQueueGroup) Get(ctx context.Context, id string, opts ...amboy.Queu
 	if err != nil {
 		return nil, errors.Wrap(err, "invalid queue options")
 	}
-	queueOpts := mergeLocalQueueOptions(append([]LocalQueueOptions{g.opts.Queue}, localQueueOpts...)...)
+	queueOpts := mergeLocalQueueOptions(append([]LocalQueueOptions{g.opts.DefaultQueue}, localQueueOpts...)...)
 	if err := queueOpts.Validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid queue options")
 	}
