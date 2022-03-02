@@ -9,7 +9,7 @@ require (
 	github.com/evergreen-ci/gimlet v0.0.0-20211029160936-5b64c7b33753
 	github.com/evergreen-ci/pail v0.0.0-20211028170419-8efd623fd305 // indirect
 	github.com/evergreen-ci/poplar v0.0.0-20211028171636-d45516ea1ce5
-	github.com/evergreen-ci/utility v0.0.0-20211026201827-97b21fa2660a
+	github.com/evergreen-ci/utility v0.0.0-20220302150552-3f7a1a268ea7
 	github.com/fuyufjh/splunk-hec-go v0.3.4-0.20210909061418-feecd03924b7 // indirect
 	github.com/google/uuid v1.3.0
 	github.com/mattn/go-xmpp v0.0.0-20211029151415-912ba614897a // indirect
