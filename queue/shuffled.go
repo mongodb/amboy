@@ -149,7 +149,7 @@ func (q *shuffledLocal) Save(ctx context.Context, j amboy.Job) error {
 	id := j.ID()
 
 	if !q.Info().Started {
-		return errors.Errorf("cannot save jobs when queue is not active", id)
+		return errors.New("cannot save jobs when queue is not active")
 	}
 
 	if err := q.scopes.Acquire(id, j.Scopes()); err != nil {

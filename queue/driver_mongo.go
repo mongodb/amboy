@@ -944,8 +944,6 @@ func (d *mongoDriver) doUpdate(ctx context.Context, ji *registry.JobInterchange)
 	}
 
 	if res.MatchedCount == 0 {
-		// kim: TODO: verify that this works with errors.Cause to identify
-		// JobNotFoundError.
 		return message.WrapError(amboy.NewJobNotFoundErrorf("unmatched job"), message.Fields{
 			"matched":  res.MatchedCount,
 			"modified": res.ModifiedCount,
