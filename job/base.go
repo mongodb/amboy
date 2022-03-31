@@ -134,11 +134,11 @@ func (b *Base) Lock(id string, lockTimeout time.Duration) error {
 	defer b.mutex.Unlock()
 
 	if b.status.InProgress && time.Since(b.status.ModificationTime) < lockTimeout && b.status.Owner != id {
-		return errors.Errorf("cannot take lock for '%s' because lock has been held for %s by %s",
+		return errors.Errorf("cannot take lock for job '%s' because lock has been held for %s by owner '%s'",
 			id, time.Since(b.status.ModificationTime), b.status.Owner)
 	}
 	if b.status.Completed && b.retryInfo.NeedsRetry && time.Since(b.status.ModificationTime) < lockTimeout && b.status.Owner != id {
-		return errors.Errorf("cannot take retry lock for '%s' because lock has been held for %s by %s", id, time.Since(b.status.ModificationTime), b.status.Owner)
+		return errors.Errorf("cannot take lock for job '%s' that needs to retry because lock has been held for %s by owner '%s'", id, time.Since(b.status.ModificationTime), b.status.Owner)
 	}
 	b.status.Owner = id
 	b.status.ModificationTime = time.Now()

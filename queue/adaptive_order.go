@@ -88,7 +88,7 @@ func (q *adaptiveLocalOrdering) reactor(ctx context.Context) {
 
 func (q *adaptiveLocalOrdering) Put(ctx context.Context, j amboy.Job) error {
 	if !q.Info().Started {
-		return errors.New("cannot add job to unopened queue")
+		return errors.New("cannot add job to unstarted queue")
 	}
 
 	out := make(chan error)
@@ -116,7 +116,7 @@ func (q *adaptiveLocalOrdering) Put(ctx context.Context, j amboy.Job) error {
 
 func (q *adaptiveLocalOrdering) Save(ctx context.Context, j amboy.Job) error {
 	if !q.Info().Started {
-		return errors.New("cannot add job to unopened queue")
+		return errors.New("cannot add job to unstarted queue")
 	}
 
 	name := j.ID()
@@ -347,7 +347,7 @@ func (q *adaptiveLocalOrdering) Complete(ctx context.Context, j amboy.Job) error
 func (q *adaptiveLocalOrdering) Runner() amboy.Runner { return q.runner }
 func (q *adaptiveLocalOrdering) SetRunner(r amboy.Runner) error {
 	if q.runner != nil && q.runner.Started() {
-		return errors.New("cannot set a runner, current runner is running")
+		return errors.New("cannot change runners on an active queue")
 	}
 
 	q.runner = r

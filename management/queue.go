@@ -132,7 +132,7 @@ func (m *queueManager) getJob(ctx context.Context, info amboy.JobInfo) (amboy.Jo
 func (m *queueManager) CompleteJob(ctx context.Context, id string) error {
 	j, ok := m.queue.Get(ctx, id)
 	if !ok {
-		return errors.Errorf("cannot recover job with ID '%s'", id)
+		return errors.Errorf("getting job '%s'", id)
 	}
 
 	return m.completeJob(ctx, j)
@@ -230,7 +230,7 @@ func (m *queueManager) CompleteJobsByPattern(ctx context.Context, f StatusFilter
 
 		j, err := m.getJob(ctx, info)
 		if err != nil {
-			catcher.Wrapf(err, "could not get job '%s' from info", info.ID)
+			catcher.Wrapf(err, "getting job '%s' from info", info.ID)
 			continue
 		}
 

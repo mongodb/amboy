@@ -25,7 +25,7 @@ func (p *noopPool) Start(ctx context.Context) error {
 	}
 
 	if p.queue == nil {
-		return errors.New("cannot start pool without set queue")
+		return errors.New("cannot start pool without setting a queue")
 	}
 
 	p.isStarted = true

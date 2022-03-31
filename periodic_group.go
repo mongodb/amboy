@@ -26,14 +26,15 @@ type GroupQueueOperation struct {
 // function, it panics.
 func IntervalGroupQueueOperation(ctx context.Context, qg QueueGroup, interval time.Duration, startAt time.Time, conf QueueOperationConfig, ops ...GroupQueueOperation) {
 	if len(ops) == 0 {
-		panic("queue group operation must contain operations")
+		grip.Error("queue group operation must contain at least one operation")
+		return
 	}
 
 	go func() {
 		var err error
 
 		if interval <= time.Microsecond {
-			grip.Criticalf("invalid interval queue operation '%s'", interval)
+			grip.Criticalf("interval for queue group operation '%s' must be greater than a microsecond", interval)
 			return
 		}
 
@@ -83,7 +84,7 @@ func IntervalGroupQueueOperation(ctx context.Context, qg QueueGroup, interval ti
 				return
 			case <-ticker.C:
 				for _, op := range ops {
-					if err := scheduleGroupOp(ctx, qg, op, conf); err != nil {
+					if err := scheduleGroupOp(ctx, qg, op, conf); err != nil && !conf.ContinueOnError {
 						return
 					}
 				}
@@ -97,15 +98,18 @@ func IntervalGroupQueueOperation(ctx context.Context, qg QueueGroup, interval ti
 func scheduleGroupOp(ctx context.Context, group QueueGroup, op GroupQueueOperation, conf QueueOperationConfig) error {
 	if op.Check == nil || op.Check(ctx) {
 		q, err := group.Get(ctx, op.Queue)
-		if conf.ContinueOnError {
-			grip.WarningWhen(conf.LogErrors, err)
-		} else {
+		if err != nil {
+			if conf.ContinueOnError {
+				grip.WarningWhen(conf.LogErrors, err)
+				return nil
+			}
+
 			grip.CriticalWhen(conf.LogErrors, err)
-			return errors.Wrapf(err, "problem getting queue '%s' from group", op.Queue)
+			return errors.Wrapf(err, "getting queue '%s' from group", op.Queue)
 		}
 
 		if err = scheduleOp(ctx, q, op.Operation, conf); err != nil {
-			return errors.Wrapf(err, "problem scheduling job on group queue '%s'", op.Queue)
+			return errors.Wrapf(err, "scheduling job on group queue '%s'", op.Queue)
 		}
 	}
 	return nil

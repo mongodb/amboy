@@ -66,7 +66,7 @@ func (q *limitedSizeLocal) ID() string {
 // block, so it is not recommended to pass a long-lived context to Put.
 func (q *limitedSizeLocal) Put(ctx context.Context, j amboy.Job) error {
 	if !q.Info().Started {
-		return errors.Errorf("queue not open. could not add %s", j.ID())
+		return errors.New("cannot enqueue jobs when queue is not active")
 	}
 
 	j.UpdateTimeInfo(amboy.JobTimeInfo{
@@ -82,7 +82,7 @@ func (q *limitedSizeLocal) Put(ctx context.Context, j amboy.Job) error {
 	q.mu.Lock()
 	if _, ok := q.storage[name]; ok {
 		q.mu.Unlock()
-		return amboy.NewDuplicateJobErrorf("cannot dispatch '%s', already complete", name)
+		return amboy.NewDuplicateJobErrorf("cannot enqueue job '%s' because it already exists in the queue", name)
 	}
 
 	if err := q.scopes.Acquire(j.ID(), j.EnqueueScopes()); err != nil {
@@ -100,7 +100,7 @@ func (q *limitedSizeLocal) Put(ctx context.Context, j amboy.Job) error {
 		delete(q.pendingStorage, name)
 		delete(q.storage, name)
 		q.mu.Unlock()
-		return errors.Wrapf(ctx.Err(), "queue full, cannot add %s", name)
+		return errors.Wrapf(ctx.Err(), "queue is full, cannot add job '%s'", name)
 	case q.channel <- j:
 		q.mu.Lock()
 		delete(q.pendingStorage, name)
@@ -111,7 +111,7 @@ func (q *limitedSizeLocal) Put(ctx context.Context, j amboy.Job) error {
 
 func (q *limitedSizeLocal) Save(ctx context.Context, j amboy.Job) error {
 	if !q.Info().Started {
-		return errors.Errorf("queue not open. could not add %s", j.ID())
+		return errors.New("queue is not active")
 	}
 
 	name := j.ID()
@@ -119,7 +119,7 @@ func (q *limitedSizeLocal) Save(ctx context.Context, j amboy.Job) error {
 	defer q.mu.Unlock()
 
 	if _, ok := q.storage[name]; !ok {
-		return amboy.NewJobNotFoundErrorf("cannot save '%s', which is not tracked", name)
+		return amboy.NewJobNotFoundErrorf("job '%s' does not exist in the queue", name)
 	}
 
 	if err := q.scopes.Acquire(name, j.Scopes()); err != nil {
@@ -272,7 +272,7 @@ func (q *limitedSizeLocal) SetRunner(r amboy.Runner) error {
 	defer q.mu.Unlock()
 
 	if q.channel != nil {
-		return errors.New("cannot set runner on started queue")
+		return errors.New("cannot set runner on active queue")
 	}
 
 	q.runner = r
@@ -338,7 +338,7 @@ func (q *limitedSizeLocal) Start(ctx context.Context) error {
 	defer q.mu.Unlock()
 
 	if q.channel != nil {
-		return errors.New("cannot start a running queue")
+		return errors.New("cannot start an already-active queue")
 	}
 
 	q.lifetimeCtx = ctx

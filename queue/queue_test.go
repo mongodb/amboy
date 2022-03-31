@@ -426,7 +426,7 @@ func TestQueueSmoke(t *testing.T) {
 	bctx, bcancel := context.WithCancel(context.Background())
 	defer bcancel()
 
-	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://localhost:27017").SetConnectTimeout(time.Second))
+	client, err := mongo.NewClient(options.Client().ApplyURI(defaultMongoDBURI).SetConnectTimeout(time.Second))
 	require.NoError(t, err)
 	require.NoError(t, client.Connect(bctx))
 
@@ -1376,5 +1376,4 @@ func retryableTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 			testCase(ctx, t, rq.RetryHandler(), rq)
 		})
 	}
-
 }

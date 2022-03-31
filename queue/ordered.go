@@ -109,11 +109,11 @@ func (q *depGraphOrderedLocal) Put(ctx context.Context, j amboy.Job) error {
 	defer q.mutex.Unlock()
 
 	if q.started {
-		return errors.Errorf("cannot add %s because ordered task dispatching has begun", name)
+		return errors.Errorf("cannot add job '%s' because ordered task dispatching has begun", name)
 	}
 
 	if _, ok := q.tasks.m[name]; ok {
-		return amboy.NewDuplicateJobErrorf("cannot add %s because duplicate job ids are not allowed", name)
+		return amboy.NewDuplicateJobErrorf("cannot add job '%s' because duplicate job ids are not allowed", name)
 	}
 
 	node := q.tasks.graph.NewNode()
@@ -134,11 +134,11 @@ func (q *depGraphOrderedLocal) Save(ctx context.Context, j amboy.Job) error {
 	defer q.mutex.Unlock()
 
 	if !q.started {
-		return errors.Errorf("cannot save %s because dispatching has not begun", name)
+		return errors.Errorf("cannot save job '%s' because dispatching has not begun", name)
 	}
 
 	if _, ok := q.tasks.m[name]; !ok {
-		return amboy.NewJobNotFoundErrorf("cannot add %s because job does not exist", name)
+		return amboy.NewJobNotFoundErrorf("cannot add job '%s' because job does not exist", name)
 	}
 
 	q.tasks.m[name] = j
@@ -155,7 +155,7 @@ func (q *depGraphOrderedLocal) Runner() amboy.Runner {
 // started.
 func (q *depGraphOrderedLocal) SetRunner(r amboy.Runner) error {
 	if q.Info().Started {
-		return errors.New("cannot change runners after starting")
+		return errors.New("cannot set runner on active queue")
 	}
 
 	q.runner = r

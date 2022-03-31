@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/evergreen-ci/poplar"
+	"github.com/evergreen-ci/utility"
 	"github.com/google/uuid"
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/job"
@@ -166,10 +167,9 @@ func queueBenchmarkSuite() poplar.BenchmarkSuite {
 func makeMongoDBQueue(ctx context.Context) (amboy.Queue, closeFunc, error) {
 	mdbOpts := queue.DefaultMongoDBOptions()
 	mdbOpts.DB = "amboy_benchmarks"
-	queueOpts := queue.MongoDBQueueCreationOptions{
-		Size: runtime.NumCPU(),
-		Name: uuid.New().String(),
-		MDB:  mdbOpts,
+	queueOpts := queue.MongoDBQueueOptions{
+		NumWorkers: utility.ToIntPtr(runtime.NumCPU()),
+		DB:         &mdbOpts,
 	}
 	queue, err := queue.NewMongoDBQueue(ctx, queueOpts)
 	if err != nil {

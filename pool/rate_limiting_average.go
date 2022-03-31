@@ -3,7 +3,6 @@ package pool
 import (
 	"context"
 	"math"
-	"strings"
 	"sync"
 	"time"
 
@@ -23,26 +22,14 @@ import (
 // Returns an error if the size or target numbers are less than one
 // and if the period is less than a millisecond.
 func NewMovingAverageRateLimitedWorkers(size, targetNum int, period time.Duration, q amboy.Queue) (amboy.AbortableRunner, error) {
-	errs := []string{}
+	catcher := grip.NewBasicCatcher()
+	catcher.NewWhen(targetNum <= 0, "cannot specify a target number of jobs less than 1")
+	catcher.NewWhen(size <= 0, "cannot specify a pool size less than 1")
+	catcher.NewWhen(period < time.Millisecond, "cannot specify a scheduling period interval less than a millisecond")
+	catcher.NewWhen(q == nil, "cannot specify a nil queue")
 
-	if targetNum <= 0 {
-		errs = append(errs, "cannot specify a target number of tasks less than 1")
-	}
-
-	if size <= 0 {
-		errs = append(errs, "cannot specify a pool size less than 1")
-	}
-
-	if period < time.Millisecond {
-		errs = append(errs, "cannot specify a scheduling period interval less than a millisecond.")
-	}
-
-	if q == nil {
-		errs = append(errs, "cannot specify a nil queue")
-	}
-
-	if len(errs) > 0 {
-		return nil, errors.New(strings.Join(errs, "; "))
+	if catcher.HasErrors() {
+		return nil, errors.Wrap(catcher.Resolve(), "invalid queue options")
 	}
 
 	p := &ewmaRateLimiting{

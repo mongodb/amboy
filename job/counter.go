@@ -17,7 +17,7 @@ func init() {
 }
 
 // GetNumber is a source of safe monotonically increasing integers
-// for use in Job ids.
+// for use in Job IDs.
 func GetNumber() int {
 	return <-jobIDSource
 }

@@ -110,7 +110,7 @@ func IntervalQueueOperation(ctx context.Context, q Queue, interval time.Duration
 		var err error
 
 		if interval <= time.Microsecond {
-			grip.Criticalf("invalid interval queue operation '%s'", interval)
+			grip.Criticalf("interval for queue operation '%s' must be greater than a microsecond", interval)
 			return
 		}
 
@@ -171,7 +171,7 @@ func scheduleOp(ctx context.Context, q Queue, op QueueOperation, conf QueueOpera
 		return nil
 	}
 
-	if err := errors.Wrap(op(ctx, q), "problem encountered during periodic job scheduling"); err != nil {
+	if err := errors.Wrap(op(ctx, q), "periodic job operation"); err != nil {
 		if !conf.EnableDuplicateJobReporting && IsDuplicateJobError(err) {
 			return nil
 		}

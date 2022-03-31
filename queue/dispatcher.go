@@ -72,7 +72,7 @@ func (d *dispatcherImpl) Dispatch(ctx context.Context, j amboy.Job) error {
 
 	if info, ok := d.popInfo(j.ID()); ok {
 		grip.Debug(message.Fields{
-			"message":  "re-dispatching job that has already been dispatched",
+			"message":  "re-dispatching job that has already been dispatched before",
 			"queue_id": d.queue.ID(),
 			"job_id":   j.ID(),
 			"service":  "amboy.queue.dispatcher",
@@ -106,10 +106,10 @@ func (d *dispatcherImpl) Dispatch(ctx context.Context, j amboy.Job) error {
 	}
 
 	if err := j.Lock(d.queue.ID(), d.queue.Info().LockTimeout); err != nil {
-		return errors.Wrap(err, "problem locking job")
+		return errors.Wrap(err, "locking job")
 	}
 	if err := d.queue.Save(ctx, j); err != nil {
-		return errors.Wrap(err, "problem saving job state")
+		return errors.Wrap(err, "saving job state")
 	}
 
 	info.pingCompleted = make(chan struct{})
@@ -184,7 +184,7 @@ func (d *dispatcherImpl) Complete(ctx context.Context, j amboy.Job) {
 	j.UpdateTimeInfo(ti)
 
 	if info.pingCtx.Err() != nil && j.Error() == nil {
-		j.AddError(errors.New("job was aborted during execution"))
+		j.AddError(errors.Wrap(info.pingCtx.Err(), "job was aborted during execution"))
 	}
 
 	grip.Warning(message.WrapError(d.waitForPing(ctx, info), message.Fields{

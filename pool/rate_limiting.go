@@ -37,7 +37,7 @@ func NewSimpleRateLimitedWorkers(size int, sleepInterval time.Duration, q amboy.
 	}
 
 	if sleepInterval < time.Millisecond {
-		errs = append(errs, "cannot specify a sleep interval less than a millisecond.")
+		errs = append(errs, "cannot specify a sleep interval less than a millisecond")
 	}
 
 	if q == nil {

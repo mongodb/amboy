@@ -182,16 +182,6 @@ func TestGroupCache(t *testing.T) {
 
 					},
 				},
-				// {
-				//	name: "",
-				//	test: func(t *testing.T, cache GroupCache) {
-				//	},
-				// },
-				// {
-				//	name: "",
-				//	test: func(t *testing.T, cache GroupCache) {
-				//	},
-				// },
 			} {
 				t.Run(test.name, func(t *testing.T) {
 					cache := impl.factory()

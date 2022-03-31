@@ -34,7 +34,7 @@ func NewAbortablePool(size int, q amboy.Queue) amboy.AbortableRunner {
 	}
 
 	if p.size <= 0 {
-		grip.Infof("setting minimal pool size is 1, overriding setting of '%d'", p.size)
+		grip.Infof("minimum pool size is 1, overriding invalid setting of %d", p.size)
 		p.size = 1
 	}
 
@@ -228,7 +228,7 @@ func (p *abortablePool) Abort(ctx context.Context, id string) error {
 
 	job, ok := p.queue.Get(ctx, id)
 	if !ok {
-		return errors.Errorf("could not find '%s' in the queue", id)
+		return errors.Errorf("could not find job '%s' in the queue", id)
 	}
 
 	return errors.Wrap(p.queue.Complete(ctx, job), "marking job complete")
