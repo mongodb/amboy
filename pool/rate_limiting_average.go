@@ -73,7 +73,7 @@ func (p *ewmaRateLimiting) getNextTime(dur time.Duration) time.Duration {
 	tasksPerPeriod := p.period / averageRuntime
 
 	// the capacity of the pool is the size of the pool and the
-	// target number of tasks
+	// target number of jobs
 	capacity := time.Duration(p.target * p.size)
 
 	// if the average runtime
