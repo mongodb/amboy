@@ -16,7 +16,7 @@ require (
 	github.com/mongodb/ftdc v0.0.0-20211028165431-67f017692185 // indirect
 	github.com/mongodb/grip v0.0.0-20211101151816-abbea0c0d465
 	github.com/pkg/errors v0.9.1
-	github.com/stretchr/testify v1.7.0
+	github.com/stretchr/testify v1.7.1
 	github.com/urfave/cli v1.22.5
 	github.com/youmark/pkcs8 v0.0.0-20201027041543-1326539a0a0a // indirect
 	go.mongodb.org/mongo-driver v1.8.4
