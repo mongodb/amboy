@@ -4,7 +4,7 @@ go 1.16
 
 require (
 	github.com/VividCortex/ewma v1.2.0
-	github.com/aws/aws-sdk-go v1.43.8
+	github.com/aws/aws-sdk-go v1.43.30
 	github.com/cheynewallace/tabby v1.1.1
 	github.com/evergreen-ci/gimlet v0.0.0-20211029160936-5b64c7b33753
 	github.com/evergreen-ci/pail v0.0.0-20211028170419-8efd623fd305 // indirect
