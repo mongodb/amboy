@@ -60,10 +60,10 @@ type MongoDBQueueGroupOptions struct {
 func (o MongoDBQueueGroupOptions) validate() error {
 	catcher := grip.NewBasicCatcher()
 	catcher.NewWhen(o.TTL < 0, "TTL cannot be negative")
-	catcher.NewWhen(o.TTL > 0 && o.TTL < time.Second, "TTL cannot be less than 1 second, unless it is not set")
+	catcher.NewWhen(o.TTL > 0 && o.TTL < time.Second, "if specified, TTL cannot be less than 1 second")
 	catcher.NewWhen(o.PruneFrequency < 0, "prune frequency cannot be negative")
-	catcher.NewWhen(o.PruneFrequency > 0 && o.TTL < time.Second, "prune frequency cannot be less than 1 second, unless it is not set")
-	catcher.NewWhen((o.TTL == 0 && o.PruneFrequency != 0) || (o.TTL != 0 && o.PruneFrequency == 0), "TTL and prune frequency must both be set or both be not set")
+	catcher.NewWhen(o.PruneFrequency > 0 && o.TTL < time.Second, "if specified, prune frequency cannot be less than 1 second")
+	catcher.NewWhen((o.TTL == 0 && o.PruneFrequency != 0) || (o.TTL != 0 && o.PruneFrequency == 0), "must specify both TTL and prune frequency or neither of them")
 	catcher.Wrap(o.DefaultQueue.Validate(), "invalid default queue options")
 	catcher.NewWhen(o.DefaultQueue.DB == nil || o.DefaultQueue.DB.Client == nil, "must provide a DB client for queue group operations")
 	return catcher.Resolve()

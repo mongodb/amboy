@@ -102,7 +102,7 @@ func (q *shuffledLocal) Put(ctx context.Context, j amboy.Job) error {
 	id := j.ID()
 
 	if !q.Info().Started {
-		return errors.New("cannot enqueue jobs when queue not active")
+		return errors.New("cannot enqueue jobs when queue is not active")
 	}
 
 	j.UpdateTimeInfo(amboy.JobTimeInfo{

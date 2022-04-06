@@ -20,8 +20,8 @@ type QueueOperation func(context.Context, Queue) error
 // QueueOperationConfig describes the behavior of the periodic
 // interval schedulers.
 //
-// The theshold, if ResepectThreshold is set, causes the periodic
-// scheduler to noop if there are more than that many pending jobs.
+// The theshold, if RespectThreshold is set, causes the periodic
+// scheduler to no-op if there are more than that many pending jobs.
 type QueueOperationConfig struct {
 	ContinueOnError             bool `bson:"continue_on_error" json:"continue_on_error" yaml:"continue_on_error"`
 	LogErrors                   bool `bson:"log_errors" json:"log_errors" yaml:"log_errors"`
@@ -171,7 +171,7 @@ func scheduleOp(ctx context.Context, q Queue, op QueueOperation, conf QueueOpera
 		return nil
 	}
 
-	if err := errors.Wrap(op(ctx, q), "periodic job operation"); err != nil {
+	if err := errors.Wrap(op(ctx, q), "running periodic job operation"); err != nil {
 		if !conf.EnableDuplicateJobReporting && IsDuplicateJobError(err) {
 			return nil
 		}

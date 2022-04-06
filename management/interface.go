@@ -64,7 +64,7 @@ func (t StatusFilter) Validate() error {
 	case InProgress, Pending, Stale, Completed, Retrying, All:
 		return nil
 	default:
-		return errors.Errorf("'%s' is not a valid status filter type", t)
+		return errors.Errorf("invalid filter type '%s'", t)
 	}
 }
 

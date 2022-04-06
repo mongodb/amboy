@@ -14,10 +14,10 @@ import (
 )
 
 // NewMovingAverageRateLimitedWorkers returns a worker pool
-// implementation that attempts to run a target number of tasks over a
+// implementation that attempts to run a target number of jobs over a
 // specified period to provide a more stable dispatching rate. It uses
-// an exponentially weighted average of task time when determining the
-// rate, which favors recent tasks over previous tasks.
+// an exponentially weighted average of job time when determining the
+// rate, which favors recent jobs over previous jobs.
 //
 // Returns an error if the size or target numbers are less than one
 // and if the period is less than a millisecond.
@@ -26,7 +26,7 @@ func NewMovingAverageRateLimitedWorkers(size, targetNum int, period time.Duratio
 	catcher.NewWhen(targetNum <= 0, "cannot specify a target number of jobs less than 1")
 	catcher.NewWhen(size <= 0, "cannot specify a pool size less than 1")
 	catcher.NewWhen(period < time.Millisecond, "cannot specify a scheduling period interval less than a millisecond")
-	catcher.NewWhen(q == nil, "cannot specify a nil queue")
+	catcher.NewWhen(q == nil, "must specify a queue")
 
 	if catcher.HasErrors() {
 		return nil, errors.Wrap(catcher.Resolve(), "invalid queue options")
@@ -62,28 +62,28 @@ func (p *ewmaRateLimiting) getNextTime(dur time.Duration) time.Duration {
 
 	p.ewma.Add(float64(dur))
 
-	// find the average runtime of a recent job using or weighted moving average
+	// Find the average runtime of a recent job using the weighted moving
+	// average.
 	averageRuntime := time.Duration(math.Ceil(p.ewma.Value()))
 
 	if averageRuntime == 0 {
 		return time.Duration(0)
 	}
 
-	// find number of tasks per period, given the average runtime
-	tasksPerPeriod := p.period / averageRuntime
+	// Find number of jobs per period, given the average runtime.
+	jobsPerPeriod := p.period / averageRuntime
 
-	// the capacity of the pool is the size of the pool and the
-	// target number of jobs
+	// The capacity of the pool is the size of the pool and the
+	// target number of jobs.
 	capacity := time.Duration(p.target * p.size)
 
-	// if the average runtime
-	// of a task is such that the pool will run fewer than this
-	// number of tasks, then no sleeping is necessary
-	if tasksPerPeriod*capacity >= p.period {
+	// If the average runtime of a job is such that the pool will run fewer
+	// than this number of jobs, then no sleeping is necessary.
+	if jobsPerPeriod*capacity >= p.period {
 		return time.Duration(0)
 	}
 
-	// if the average runtime times the capcity of the pool
+	// If the average runtime times the capcity of the pool
 	// (e.g. the theoretical max) is larger than the specified
 	// period, no sleeping is required, because runtime is the
 	// limiting factor.
@@ -92,10 +92,10 @@ func (p *ewmaRateLimiting) getNextTime(dur time.Duration) time.Duration {
 		return time.Duration(0)
 	}
 
-	// therefore, there's excess time, which means we should sleep
+	// Therefore, there's excess time, which means we should sleep
 	// for a fraction of that time before running the next job.
 	//
-	// we multiply by size here so that the interval/sleep time
+	// We multiply by size here so that the interval/sleep time
 	// scales as we add workers.
 	excessTime := (p.period - runtimePerPeriod) * time.Duration(p.size)
 	return (excessTime / time.Duration(p.target))
@@ -233,11 +233,11 @@ func (p *ewmaRateLimiting) Close(ctx context.Context) {
 	p.canceler = nil
 	grip.Debug("pool's context canceled, waiting for running jobs to complete")
 
-	// because of the timer+2 contexts in the worker
+	// Because of the timer+2 contexts in the worker
 	// implementation, we can end up returning earlier and because
 	// pools are restartable, end up calling wait more than once,
 	// which doesn't affect behavior but does cause this to panic in
-	// tests
+	// tests.
 	defer func() { _ = recover() }()
 	wait := make(chan struct{})
 	go func() {
