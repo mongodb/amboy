@@ -20,7 +20,7 @@ type QueueOperation func(context.Context, Queue) error
 // QueueOperationConfig describes the behavior of the periodic
 // interval schedulers.
 //
-// The theshold, if RespectThreshold is set, causes the periodic
+// The threshold, if RespectThreshold is set, causes the periodic
 // scheduler to no-op if there are more than that many pending jobs.
 type QueueOperationConfig struct {
 	ContinueOnError             bool `bson:"continue_on_error" json:"continue_on_error" yaml:"continue_on_error"`
