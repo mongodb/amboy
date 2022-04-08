@@ -799,9 +799,6 @@ func getMongoDupKeyErrors(err error) mongoDupKeyErrors {
 	return dupKeyErrs
 }
 
-// TODO: this logic is a copy-paste and could potentially be replaced by
-// upgrading the Go driver to a newer version:
-// (https://github.com/mongodb/mongo-go-driver/blob/213fb80b373f70dba4f9f516dc4c718abe41c76b/mongo/errors.go#L87-L96)
 func getMongoDupKeyWriteConcernError(err mongo.WriteException) *mongo.WriteConcernError {
 	wce := err.WriteConcernError
 	if wce == nil {
