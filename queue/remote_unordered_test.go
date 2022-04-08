@@ -52,9 +52,6 @@ func TestRemoteUnorderedMongoSuite(t *testing.T) {
 	suite.Run(t, tests)
 }
 
-// TODO run these same tests with different drivers by cloning the
-// above Test function and replacing the driverConstructor function.
-
 func (s *RemoteUnorderedSuite) SetupTest() {
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	var err error
