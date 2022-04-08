@@ -118,7 +118,7 @@ func (q *QueueTester) Runner() amboy.Runner {
 
 func (q *QueueTester) SetRunner(r amboy.Runner) error {
 	if q.Info().Started {
-		return errors.New("cannot set runner in a started pool")
+		return errors.New("cannot set runner on active queue")
 	}
 	q.pool = r
 	return nil
@@ -140,7 +140,7 @@ func (q *QueueTester) Start(ctx context.Context) error {
 
 	err := q.pool.Start(ctx)
 	if err != nil {
-		return errors.Wrap(err, "problem starting worker pool")
+		return errors.Wrap(err, "starting worker pool")
 	}
 
 	q.mutex.Lock()
@@ -206,7 +206,7 @@ func jobsChanWithPanicingJobs(ctx context.Context, num int) chan amboy.Job {
 	out := make(chan amboy.Job)
 
 	go func() {
-		defer close(out) // nolint
+		defer close(out)
 		count := 0
 		for {
 			if count >= num {

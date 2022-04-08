@@ -40,7 +40,7 @@ func (r *single) SetQueue(q amboy.Queue) error {
 	defer r.mu.Unlock()
 
 	if r.canceler != nil {
-		return errors.New("cannot add new queue after starting a runner")
+		return errors.New("cannot change queue on an active runner")
 	}
 
 	r.queue = q

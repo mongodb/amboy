@@ -48,7 +48,7 @@ func (s *scopeManagerImpl) Acquire(id string, scopes []string) error {
 		if holder == id {
 			continue
 		}
-		return amboy.NewDuplicateJobScopeErrorf("could not acquire lock scope '%s' held by '%s', not '%s'", sc, holder, id)
+		return amboy.NewDuplicateJobScopeErrorf("scope '%s' is already held by '%s', not '%s'", sc, holder, id)
 	}
 
 	for _, sc := range scopesToAcquire {
@@ -89,7 +89,7 @@ func (s *scopeManagerImpl) getScopesToRelease(id string, scopes []string) ([]str
 			scopesToRelease = append(scopesToRelease, sc)
 			continue
 		}
-		return nil, errors.Errorf("could not release lock scope '%s', held by '%s' not '%s'", sc, holder, id)
+		return nil, errors.Errorf("'%s' cannot release scope '%s' because it is owned by '%s'", id, sc, holder)
 	}
 	return scopesToRelease, nil
 }
@@ -117,7 +117,7 @@ func (s *scopeManagerImpl) ReleaseAndAcquire(ownerToRelease string, scopesToRele
 		if holder == ownerToAcquire {
 			continue
 		}
-		return amboy.NewDuplicateJobScopeErrorf("could not acquire lock scope '%s' held by '%s', which is neither '%s' nor '%s'", sc, holder, ownerToAcquire, ownerToRelease)
+		return amboy.NewDuplicateJobScopeErrorf("scope '%s' is already held by '%s', which is neither '%s' nor '%s'", sc, holder, ownerToAcquire, ownerToRelease)
 	}
 
 	for _, sc := range toRelease {

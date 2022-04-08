@@ -187,7 +187,7 @@ func (q *priorityLocalQueue) Runner() amboy.Runner {
 // operation returns an error and has no effect.
 func (q *priorityLocalQueue) SetRunner(r amboy.Runner) error {
 	if q.Info().Started {
-		return errors.New("cannot set runner after queue is started")
+		return errors.New("cannot set runner on active queue")
 	}
 
 	q.runner = r

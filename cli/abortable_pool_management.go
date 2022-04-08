@@ -131,7 +131,7 @@ func manageAbortJob(opts *ServiceOptions) cli.Command {
 				t.Print()
 
 				if hasErrors {
-					return errors.New("problem aborting some jobs")
+					return errors.New("encountered errors while running some jobs")
 				}
 
 				return nil

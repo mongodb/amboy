@@ -48,7 +48,7 @@ func (o *DBQueueManagerOptions) collName() string {
 func (o *DBQueueManagerOptions) Validate() error {
 	catcher := grip.NewBasicCatcher()
 	catcher.NewWhen(o.SingleGroup && o.ByGroups, "cannot specify conflicting group options")
-	catcher.Wrap(o.Options.Validate(), "invalid mongo options")
+	catcher.Wrap(o.Options.Validate(), "invalid DB options")
 	return catcher.Resolve()
 }
 
@@ -73,7 +73,7 @@ func NewDBQueueManager(ctx context.Context, opts DBQueueManagerOptions) (Manager
 
 	db, err := MakeDBQueueManager(ctx, opts)
 	if err != nil {
-		return nil, errors.Wrap(err, "problem building reporting interface")
+		return nil, errors.Wrap(err, "building reporting interface")
 	}
 
 	return db, nil
@@ -105,7 +105,7 @@ func MakeDBQueueManager(ctx context.Context, opts DBQueueManagerOptions) (Manage
 func (m *dbQueueManager) aggregateCounters(ctx context.Context, stages ...bson.M) ([]JobTypeCount, error) {
 	cursor, err := m.collection.Aggregate(ctx, stages, options.Aggregate().SetAllowDiskUse(true))
 	if err != nil {
-		return nil, errors.Wrap(err, "problem running aggregation")
+		return nil, errors.Wrap(err, "running aggregation")
 	}
 
 	catcher := grip.NewBasicCatcher()
@@ -129,7 +129,7 @@ func (m *dbQueueManager) aggregateCounters(ctx context.Context, stages ...bson.M
 	}
 	catcher.Add(cursor.Err())
 	if catcher.HasErrors() {
-		return nil, errors.Wrap(catcher.Resolve(), "problem running job counters aggregation")
+		return nil, errors.Wrap(catcher.Resolve(), "iterating through job counters aggregation")
 	}
 
 	return out, nil
@@ -152,12 +152,12 @@ func (m *dbQueueManager) findJobIDs(ctx context.Context, match bson.M) ([]Groupe
 
 	cursor, err := m.collection.Aggregate(ctx, stages, options.Aggregate().SetAllowDiskUse(true))
 	if err != nil {
-		return nil, errors.Wrap(err, "problem running query")
+		return nil, errors.Wrap(err, "running query")
 	}
 
 	if cursor.Next(ctx) {
 		if err := cursor.Decode(&out); err != nil {
-			return nil, errors.Wrap(err, "problem decoding result")
+			return nil, errors.Wrap(err, "decoding result")
 		}
 	}
 
@@ -312,7 +312,7 @@ func (m *dbQueueManager) completeJobs(ctx context.Context, query bson.M, f Statu
 		"filter":     f,
 		"modified":   res.ModifiedCount,
 	})
-	return errors.Wrap(err, "problem marking jobs complete")
+	return errors.Wrap(err, "marking jobs complete")
 }
 
 // CompleteJob marks a job complete by ID. The ID matches internally-stored job

@@ -412,7 +412,7 @@ func (q *limitedSizeSerializableLocal) SetRunner(r amboy.Runner) error {
 	defer q.mu.Unlock()
 
 	if q.started {
-		return errors.New("cannot set runner on started queue")
+		return errors.New("cannot set runner on active queue")
 	}
 
 	q.runner = r
@@ -436,7 +436,7 @@ func (q *limitedSizeSerializableLocal) SetRetryHandler(rh amboy.RetryHandler) er
 	defer q.mu.Unlock()
 
 	if q.retryHandler != nil && q.retryHandler.Started() {
-		return errors.New("cannot change retry handler after it is already started")
+		return errors.New("cannot change retry handler on active queue")
 	}
 	if err := rh.SetQueue(q); err != nil {
 		return err
@@ -576,7 +576,7 @@ func (q *limitedSizeSerializableLocal) CompleteRetryingAndPut(ctx context.Contex
 		return errors.Errorf("cannot find job '%s'", toComplete.ID())
 	}
 	if q.jobStored(toPutName) {
-		return amboy.NewDuplicateJobErrorf("cannot enqueue duplicate job '%s'", toPut.ID())
+		return amboy.NewDuplicateJobErrorf("duplicate job '%s'", toPut.ID())
 	}
 
 	if err := q.validateAndPreparePut(toPut); err != nil {

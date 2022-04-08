@@ -27,7 +27,7 @@ func NewLocalWorkers(numWorkers int, q amboy.Queue) amboy.Runner {
 	}
 
 	if r.size <= 0 {
-		grip.Infof("setting minimal pool size is 1, overriding setting of '%d'", r.size)
+		grip.Infof("minimum pool size is 1, overriding invalid setting of %d", r.size)
 		r.size = 1
 	}
 
@@ -52,7 +52,7 @@ func (r *localWorkers) SetQueue(q amboy.Queue) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.started {
-		return errors.New("cannot add new queue after starting a runner")
+		return errors.New("cannot change queue after starting a runner")
 	}
 
 	r.queue = q

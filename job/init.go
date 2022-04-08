@@ -3,7 +3,6 @@ package job
 import (
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/registry"
-	"github.com/mongodb/grip"
 )
 
 // RegisterDefaultJobs registers all default job types in the amboy
@@ -20,10 +19,7 @@ func RegisterDefaultJobs() {
 	registry.AddJobType("shell", func() amboy.Job {
 		return NewShellJobInstance()
 	})
-	grip.Info("registered 'shell' job type")
-
 	registry.AddJobType("group", func() amboy.Job {
 		return newGroupInstance()
 	})
-	grip.Info("registered 'group' job type")
 }

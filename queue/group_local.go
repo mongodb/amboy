@@ -139,17 +139,17 @@ func (g *localQueueGroup) Get(ctx context.Context, id string, opts ...amboy.Queu
 	}
 	queue, err := queueOpts.BuildQueue(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "problem starting queue")
+		return nil, errors.Wrap(err, "starting queue")
 	}
 
 	if err = g.cache.Set(id, queue, g.opts.TTL); err != nil {
-		// safe to throw away the partially constructed
-		// here, because another won and we  haven't started the workers.
+		// It should be safe to throw away the queue here because another thread
+		// already created it and we haven't started the workers.
 		if q := g.cache.Get(id); q != nil {
 			return q, nil
 		}
 
-		return nil, errors.Wrap(err, "problem caching queue")
+		return nil, errors.Wrap(err, "caching queue")
 	}
 
 	if err = queue.Start(ctx); err != nil {

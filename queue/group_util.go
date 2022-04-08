@@ -90,7 +90,7 @@ func (c *cacheImpl) Set(name string, q amboy.Queue, ttl time.Duration) error {
 	defer c.mu.Unlock()
 
 	if _, ok := c.q[name]; ok {
-		return errors.Errorf("queue named '%s' is already cached", name)
+		return errors.Errorf("queue '%s' is already cached", name)
 	}
 
 	if ttl <= 0 {
@@ -132,7 +132,7 @@ func (c *cacheImpl) Remove(ctx context.Context, name string) error {
 
 	queue := c.q[name].q
 	if !queue.Stats(ctx).IsComplete() {
-		return errors.Errorf("cannot delete in progress queue, '%s'", name)
+		return errors.Errorf("cannot delete active queue '%s'", name)
 	}
 
 	queue.Close(ctx)

@@ -50,7 +50,7 @@ type remoteOptions struct {
 
 func (opts *remoteOptions) validate() error {
 	catcher := grip.NewBasicCatcher()
-	catcher.NewWhen(opts.numWorkers <= 0, "number of workers must be a positive number")
+	catcher.NewWhen(opts.numWorkers <= 0, "number of workers must be a positive non-zero number")
 	catcher.Wrap(opts.retryable.Validate(), "invalid retryable queue options")
 	return catcher.Resolve()
 }
@@ -375,7 +375,7 @@ func (q *remoteBase) Runner() amboy.Runner {
 // error to use SetRunner.
 func (q *remoteBase) SetRunner(r amboy.Runner) error {
 	if q.runner != nil && q.runner.Started() {
-		return errors.New("cannot change runners after starting")
+		return errors.New("cannot change runners on active queue")
 	}
 
 	q.runner = r
@@ -398,7 +398,7 @@ func (q *remoteBase) SetRetryHandler(rh amboy.RetryHandler) error {
 	defer q.mutex.Unlock()
 
 	if q.retryHandler != nil && q.retryHandler.Started() {
-		return errors.New("cannot change retry handler after it is already started")
+		return errors.New("cannot change retry handler on active queue")
 	}
 	if err := rh.SetQueue(q); err != nil {
 		return err
@@ -421,7 +421,7 @@ func (q *remoteBase) Driver() remoteQueueDriver {
 // a queue. This method is not part of the amboy.Queue interface.
 func (q *remoteBase) SetDriver(d remoteQueueDriver) error {
 	if q.Info().Started {
-		return errors.New("cannot change drivers after starting queue")
+		return errors.New("cannot change drivers on active queue")
 	}
 	q.driver = d
 	q.driver.SetDispatcher(q.dispatcher)
@@ -451,12 +451,12 @@ func (q *remoteBase) Start(ctx context.Context) error {
 
 	err := q.runner.Start(ctx)
 	if err != nil {
-		return errors.Wrap(err, "problem starting runner in remote queue")
+		return errors.Wrap(err, "starting runner in remote queue")
 	}
 
 	err = q.driver.Open(ctx)
 	if err != nil {
-		return errors.Wrap(err, "problem starting driver in remote queue")
+		return errors.Wrap(err, "opening driver in remote queue")
 	}
 
 	if q.retryHandler != nil {

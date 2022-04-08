@@ -127,7 +127,7 @@ func managementCompleteJob(opts *ServiceOptions) cli.Command {
 
 			return opts.withManagementClient(ctx, c, func(client management.Manager) error {
 				if err := client.CompleteJob(ctx, name); err != nil {
-					return errors.Wrap(err, "problem marking job complete")
+					return errors.Wrap(err, "marking job complete")
 				}
 				return nil
 			})
@@ -154,7 +154,7 @@ func managementCompleteJobsByStatus(opts *ServiceOptions) cli.Command {
 
 			return opts.withManagementClient(ctx, c, func(client management.Manager) error {
 				if err := client.CompleteJobs(ctx, filter); err != nil {
-					return errors.Wrap(err, "problem marking jobs complete")
+					return errors.Wrap(err, "marking jobs complete")
 				}
 				return nil
 			})
@@ -186,7 +186,7 @@ func managementCompleteJobsByType(opts *ServiceOptions) cli.Command {
 
 			return opts.withManagementClient(ctx, c, func(client management.Manager) error {
 				if err := client.CompleteJobsByType(ctx, filter, jobType); err != nil {
-					return errors.Wrap(err, "problem marking jobs complete")
+					return errors.Wrap(err, "marking jobs complete")
 				}
 				return nil
 			})
@@ -217,7 +217,7 @@ func managementCompleteJobsByPattern(opts *ServiceOptions) cli.Command {
 
 			return opts.withManagementClient(ctx, c, func(client management.Manager) error {
 				if err := client.CompleteJobsByPattern(ctx, filter, pattern); err != nil {
-					return errors.Wrap(err, "problem marking jobs complete")
+					return errors.Wrap(err, "marking jobs complete")
 				}
 				return nil
 			})

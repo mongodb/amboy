@@ -56,7 +56,7 @@ func (r *registryCache) addManager(name string, factory ManagerFactory) {
 	defer r.mmu.Unlock()
 
 	if _, ok := r.m[name]; ok {
-		grip.Warningf("overriding cached dependency Manager '%s'", name)
+		grip.Warningf("overriding cached dependency manager '%s'", name)
 	}
 
 	r.m[name] = factory

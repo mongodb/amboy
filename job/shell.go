@@ -72,7 +72,7 @@ func (j *ShellJob) Run(ctx context.Context) {
 	j.mutex.RUnlock()
 
 	cmd.Dir = j.WorkingDir
-	cmd.Env = j.getEnVars()
+	cmd.Env = j.getEnvVars()
 
 	output, err := cmd.CombinedOutput()
 	j.AddError(err)
@@ -83,7 +83,7 @@ func (j *ShellJob) Run(ctx context.Context) {
 	j.Output = strings.TrimSpace(string(output))
 }
 
-func (j *ShellJob) getEnVars() []string {
+func (j *ShellJob) getEnvVars() []string {
 	if len(j.Env) == 0 {
 		return []string{}
 	}

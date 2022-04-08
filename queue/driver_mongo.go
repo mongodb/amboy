@@ -149,7 +149,7 @@ func newMongoDriver(opts MongoDBOptions) (*mongoDriver, error) {
 	host, _ := os.Hostname() // nolint
 
 	if err := opts.Validate(); err != nil {
-		return nil, errors.Wrap(err, "invalid mongo driver options")
+		return nil, errors.Wrap(err, "invalid driver options")
 	}
 
 	instanceIDParts := []string{opts.Collection}
@@ -173,11 +173,11 @@ func newMongoDriver(opts MongoDBOptions) (*mongoDriver, error) {
 func openNewMongoDriver(ctx context.Context, opts MongoDBOptions) (*mongoDriver, error) {
 	d, err := newMongoDriver(opts)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not create driver")
+		return nil, errors.Wrap(err, "creating driver")
 	}
 
 	if err := d.start(ctx, clientStartOptions{client: opts.Client}); err != nil {
-		return nil, errors.Wrap(err, "problem starting driver")
+		return nil, errors.Wrap(err, "starting driver")
 	}
 
 	return d, nil
@@ -202,7 +202,7 @@ func (d *mongoDriver) Open(ctx context.Context) error {
 
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(d.opts.URI))
 	if err != nil {
-		return errors.Wrapf(err, "opening connection to mongodb at '%s", d.opts.URI)
+		return errors.Wrapf(err, "opening connection to DB at URI '%s", d.opts.URI)
 	}
 
 	return errors.Wrap(d.start(ctx, clientStartOptions{
@@ -218,7 +218,7 @@ type clientStartOptions struct {
 
 func (d *mongoDriver) start(ctx context.Context, opts clientStartOptions) error {
 	if opts.client == nil {
-		return errors.New("cannot start the mongo driver without a client")
+		return errors.New("cannot start the driver without a client")
 	}
 
 	d.mu.Lock()
@@ -233,7 +233,7 @@ func (d *mongoDriver) start(ctx context.Context, opts clientStartOptions) error 
 	go func() {
 		<-dCtx.Done()
 		grip.Info(message.Fields{
-			"message":   "closing session for mongodb driver",
+			"message":   "closing session for driver",
 			"driver_id": d.instanceID,
 			"uptime":    time.Since(startAt),
 			"span":      time.Since(startAt).String(),
@@ -923,13 +923,13 @@ func (d *mongoDriver) doUpdate(ctx context.Context, ji *registry.JobInterchange)
 
 	if ji.Status.InProgress && ji.Status.Completed {
 		err := errors.New("job was found both in progress and complete")
-		grip.Error(message.WrapError(err, (message.Fields{
+		grip.Error(message.WrapError(err, message.Fields{
 			"message":     "programmer error: a job should not be saved as both in progress and complete - manually changing in progress to false",
 			"jira_ticket": "EVG-14609",
 			"job_id":      ji.Name,
 			"service":     "amboy.queue.mdb",
 			"driver_id":   d.instanceID,
-		})))
+		}))
 		ji.Status.InProgress = false
 	}
 
@@ -944,7 +944,11 @@ func (d *mongoDriver) doUpdate(ctx context.Context, ji *registry.JobInterchange)
 	}
 
 	if res.MatchedCount == 0 {
-		return amboy.NewJobNotFoundErrorf("unmatched job [id=%s, matched=%d, modified=%d]", ji.Name, res.MatchedCount, res.ModifiedCount)
+		return message.WrapError(amboy.NewJobNotFoundErrorf("unmatched job"), message.Fields{
+			"matched":  res.MatchedCount,
+			"modified": res.ModifiedCount,
+			"job_id":   ji.Name,
+		})
 	}
 
 	return nil

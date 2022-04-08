@@ -24,7 +24,7 @@ func TestMongoDBConstructors(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://localhost:27017").SetConnectTimeout(time.Second))
+	client, err := mongo.NewClient(options.Client().ApplyURI(defaultMongoDBTestOptions().URI).SetConnectTimeout(time.Second))
 	require.NoError(t, err)
 	require.NoError(t, client.Connect(ctx))
 

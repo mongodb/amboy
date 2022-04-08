@@ -55,7 +55,7 @@ func (g *Group) Add(j amboy.Job) error {
 	defer g.mutex.Unlock()
 	_, exists := g.Jobs[name]
 	if exists {
-		return errors.Errorf("job named '%s', already exists in Group %s",
+		return errors.Errorf("job named '%s' already exists in group '%s'",
 			name, g.ID())
 	}
 
@@ -76,7 +76,7 @@ func (g *Group) Run(ctx context.Context) {
 	defer g.MarkComplete()
 
 	if g.Status().Completed {
-		g.AddError(errors.Errorf("Group '%s' has already executed", g.ID()))
+		g.AddError(errors.Errorf("group '%s' has already executed", g.ID()))
 		return
 	}
 
@@ -97,10 +97,10 @@ func (g *Group) Run(ctx context.Context) {
 
 		depState := runnableJob.Dependency().State()
 		if depState == dependency.Passed {
-			grip.Infof("skipping job %s because of dependency", runnableJob.ID())
+			grip.Infof("skipping job '%s' because of dependency", runnableJob.ID())
 			continue
 		} else if depState == dependency.Blocked || depState == dependency.Unresolved {
-			grip.Warningf("dispatching blocked/unresolved job %s", runnableJob.ID())
+			grip.Warningf("dispatching blocked/unresolved job '%s'", runnableJob.ID())
 		}
 
 		wg.Add(1)
@@ -149,8 +149,7 @@ func (g *Group) Run(ctx context.Context) {
 // type.
 func (g *Group) SetDependency(d dependency.Manager) {
 	if d == nil || d.Type().Name != "always" {
-		grip.Warningf("group job types must have 'always' dependency types, '%s' is invalid",
-			d.Type().Name)
+		grip.Warningf("group job types must have 'always' dependency types, '%s' is invalid", d.Type().Name)
 		return
 	}
 

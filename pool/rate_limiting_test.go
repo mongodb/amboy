@@ -61,14 +61,14 @@ func TestAverageRateLimitingConstructor(t *testing.T) {
 	assert.Nil(runner)
 	assert.Error(err)
 	assert.Contains(err.Error(), "less than a millisecond")
-	assert.Contains(err.Error(), "target number of tasks less than 1")
-	assert.Contains(err.Error(), "nil queue")
+	assert.Contains(err.Error(), "target number of jobs less than 1")
+	assert.Contains(err.Error(), "must specify a queue")
 
 	runner, err = NewMovingAverageRateLimitedWorkers(0, 1, time.Millisecond, nil)
 	assert.Nil(runner)
 	assert.Error(err)
 	assert.Contains(err.Error(), "pool size less than 1")
-	assert.Contains(err.Error(), "nil queue")
+	assert.Contains(err.Error(), "must specify a queue")
 
 	runner, err = NewMovingAverageRateLimitedWorkers(4, 10, 10*time.Millisecond, queue)
 	assert.NoError(err)

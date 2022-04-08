@@ -102,7 +102,7 @@ func (q *shuffledLocal) Put(ctx context.Context, j amboy.Job) error {
 	id := j.ID()
 
 	if !q.Info().Started {
-		return errors.Errorf("cannot put job %s; queue not started", id)
+		return errors.New("cannot enqueue jobs when queue is not active")
 	}
 
 	j.UpdateTimeInfo(amboy.JobTimeInfo{
@@ -149,7 +149,7 @@ func (q *shuffledLocal) Save(ctx context.Context, j amboy.Job) error {
 	id := j.ID()
 
 	if !q.Info().Started {
-		return errors.Errorf("cannot save job %s; queue not started", id)
+		return errors.New("cannot save jobs when queue is not active")
 	}
 
 	if err := q.scopes.Acquire(id, j.Scopes()); err != nil {
@@ -450,7 +450,7 @@ func (q *shuffledLocal) Complete(ctx context.Context, j amboy.Job) error {
 // error if the current runner has started.
 func (q *shuffledLocal) SetRunner(r amboy.Runner) error {
 	if q.runner != nil && q.runner.Started() {
-		return errors.New("cannot set a runner, current runner is running")
+		return errors.New("cannot set runner on active queue")
 	}
 
 	q.runner = r

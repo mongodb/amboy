@@ -59,11 +59,11 @@ type MongoDBQueueGroupOptions struct {
 
 func (o MongoDBQueueGroupOptions) validate() error {
 	catcher := grip.NewBasicCatcher()
-	catcher.NewWhen(o.TTL < 0, "TTL must be greater than or equal to 0")
-	catcher.NewWhen(o.TTL > 0 && o.TTL < time.Second, "TTL cannot be less than 1 second, unless it is 0")
-	catcher.NewWhen(o.PruneFrequency < 0, "prune frequency must be greater than or equal to 0")
-	catcher.NewWhen(o.PruneFrequency > 0 && o.TTL < time.Second, "prune frequency cannot be less than 1 second, unless it is 0")
-	catcher.NewWhen((o.TTL == 0 && o.PruneFrequency != 0) || (o.TTL != 0 && o.PruneFrequency == 0), "ttl and prune frequency must both be 0 or both be not 0")
+	catcher.NewWhen(o.TTL < 0, "TTL cannot be negative")
+	catcher.NewWhen(o.TTL > 0 && o.TTL < time.Second, "if specified, TTL cannot be less than 1 second")
+	catcher.NewWhen(o.PruneFrequency < 0, "prune frequency cannot be negative")
+	catcher.NewWhen(o.PruneFrequency > 0 && o.TTL < time.Second, "if specified, prune frequency cannot be less than 1 second")
+	catcher.NewWhen((o.TTL == 0 && o.PruneFrequency != 0) || (o.TTL != 0 && o.PruneFrequency == 0), "must specify both TTL and prune frequency or neither of them")
 	catcher.Wrap(o.DefaultQueue.Validate(), "invalid default queue options")
 	catcher.NewWhen(o.DefaultQueue.DB == nil || o.DefaultQueue.DB.Client == nil, "must provide a DB client for queue group operations")
 	return catcher.Resolve()
@@ -145,7 +145,7 @@ func NewMongoDBQueueGroup(ctx context.Context, collPrefix string, opts MongoDBQu
 				case <-ctx.Done():
 					return
 				case <-ticker.C:
-					grip.Error(message.WrapError(g.Prune(ctx), "pruning remote queue group database"))
+					grip.Error(message.WrapError(g.Prune(ctx), "pruning remote queue group"))
 				}
 			}
 		}()

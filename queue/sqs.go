@@ -305,7 +305,7 @@ func (q *sqsFIFOQueue) Runner() amboy.Runner {
 
 func (q *sqsFIFOQueue) SetRunner(r amboy.Runner) error {
 	if q.Info().Started {
-		return errors.New("cannot change runners after starting")
+		return errors.New("cannot change runners on an active queue")
 	}
 
 	q.runner = r
@@ -324,7 +324,7 @@ func (q *sqsFIFOQueue) Start(ctx context.Context) error {
 	q.started = true
 	err := q.runner.Start(ctx)
 	if err != nil {
-		return errors.Wrap(err, "problem starting runner")
+		return errors.Wrap(err, "starting runner")
 	}
 	return nil
 }

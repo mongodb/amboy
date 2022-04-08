@@ -231,7 +231,7 @@ func (g *remoteMongoQueueGroupSingle) Len() int { return g.cache.Len() }
 
 func (g *remoteMongoQueueGroupSingle) Queues(ctx context.Context) []string {
 	queues, err := g.getQueues(ctx)
-	grip.Warning(message.WrapError(err, "problem getting active queues in queue group"))
+	grip.Warning(message.WrapError(err, "getting active queues in queue group"))
 	return queues
 }
 

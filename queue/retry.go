@@ -115,7 +115,7 @@ func (rh *BasicRetryHandler) SetQueue(q amboy.RetryableQueue) error {
 	rh.mu.Lock()
 	defer rh.mu.Unlock()
 	if rh.started {
-		return errors.New("cannot set retry handler queue after it's already been started")
+		return errors.New("cannot set retry handler queue on active retry handler")
 	}
 	rh.queue = q
 	return nil
@@ -304,7 +304,7 @@ func (rh *BasicRetryHandler) completeRetrying(ctx context.Context, j amboy.Job) 
 		}
 	}
 
-	return errors.Wrapf(catcher.Resolve(), "giving up after attempt %d", maxAttempts)
+	return errors.Wrapf(catcher.Resolve(), "giving up after max attempts %d hit", maxAttempts)
 }
 
 func (rh *BasicRetryHandler) handleJob(ctx context.Context, j amboy.Job) error {
