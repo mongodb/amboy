@@ -742,6 +742,7 @@ func waitUntilTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 		sz = 2
 	}
 	numJobsToComplete := sz * len(testNames)
+	numJobsWaiting := sz * len(testNames)
 	wg := &sync.WaitGroup{}
 
 	for i := 0; i < sz; i++ {
@@ -798,22 +799,27 @@ waitLoop:
 			timer.Reset(interval)
 		}
 	}
+	assert.Zero(t, ctx.Err())
 
 	stats := q.Stats(ctx)
-	require.Equal(t, numJobsToComplete*2, stats.Total, "%+v", stats)
+	require.Equal(t, numJobsToComplete+numJobsWaiting, stats.Total, "%+v", stats)
 	assert.Equal(t, numJobsToComplete, stats.Completed)
+	assert.Equal(t, numJobsWaiting, stats.Pending)
 
 	var numCompleted int
+	var numIncompleted int
 	for info := range q.JobInfo(ctx) {
 		if info.Status.Completed {
 			numCompleted++
 			require.True(t, info.Time.WaitUntil.IsZero(), "val=%s id=%s", info.Time.WaitUntil, info.ID)
 		} else {
+			numIncompleted++
 			require.False(t, info.Time.WaitUntil.IsZero(), "val=%s id=%s", info.Time.WaitUntil, info.ID)
 		}
 	}
 
 	assert.Equal(t, numJobsToComplete, numCompleted)
+	assert.Equal(t, numJobsWaiting, numIncompleted)
 }
 
 func dispatchByTest(bctx context.Context, t *testing.T, test QueueTestCase, runner PoolTestCase, size SizeTestCase) {
