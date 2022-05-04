@@ -804,7 +804,7 @@ waitLoop:
 	stats := q.Stats(ctx)
 	require.Equal(t, numJobsToComplete+numJobsWaiting, stats.Total, "%+v", stats)
 	assert.Equal(t, numJobsToComplete, stats.Completed)
-	assert.Equal(t, numJobsWaiting, stats.Pending)
+	assert.Equal(t, numJobsWaiting, stats.Total-stats.Completed)
 
 	var numCompleted int
 	var numIncompleted int
