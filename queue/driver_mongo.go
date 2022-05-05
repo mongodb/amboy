@@ -1222,9 +1222,6 @@ func (d *mongoDriver) getNextQuery() bson.M {
 		checkDispatchBy := bson.M{"$or": []bson.M{
 			{"time_info.dispatch_by": bson.M{"$gt": now}},
 			{"time_info.dispatch_by": bson.M{"$exists": false}},
-			// TODO (EVG-15581): remove zero value case after 90 day TTL
-			// (2022-02-01) since the field will be omitted.
-			{"time_info.dispatch_by": time.Time{}},
 		}}
 		timeLimits = append(timeLimits, checkDispatchBy)
 	}

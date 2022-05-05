@@ -741,7 +741,8 @@ func waitUntilTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 	} else if sz < 2 {
 		sz = 2
 	}
-	numJobs := sz * len(testNames)
+	numJobsToComplete := sz * len(testNames)
+	numJobsWaiting := sz * len(testNames)
 	wg := &sync.WaitGroup{}
 
 	for i := 0; i < sz; i++ {
@@ -753,7 +754,7 @@ func waitUntilTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 				j := job.NewShellJob(cmd, "")
 				ti := j.TimeInfo()
 				require.Zero(t, ti.WaitUntil)
-				require.NoError(t, q.Put(ctx, j), fmt.Sprintf("(a) with %d workers", num))
+				require.NoError(t, q.Put(ctx, j))
 				_, ok := q.Get(ctx, j.ID())
 				require.True(t, ok)
 
@@ -764,14 +765,14 @@ func waitUntilTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 				})
 				ti2 := j2.TimeInfo()
 				require.NotZero(t, ti2.WaitUntil)
-				require.NoError(t, q.Put(ctx, j2), fmt.Sprintf("(b) with %d workers", num))
+				require.NoError(t, q.Put(ctx, j2))
 				_, ok = q.Get(ctx, j2.ID())
 				require.True(t, ok)
 			}
 		}(i)
 	}
 	wg.Wait()
-	// waitC for things to finish
+
 	const (
 		interval = 100 * time.Millisecond
 		maxTime  = 3 * time.Second
@@ -787,7 +788,7 @@ waitLoop:
 		case <-timer.C:
 			dur += interval
 			stat := q.Stats(ctx)
-			if stat.Completed >= numJobs {
+			if stat.Completed >= numJobsToComplete {
 				break waitLoop
 			}
 
@@ -798,25 +799,27 @@ waitLoop:
 			timer.Reset(interval)
 		}
 	}
+	assert.Zero(t, ctx.Err())
 
 	stats := q.Stats(ctx)
-	require.Equal(t, numJobs*2, stats.Total, "%+v", stats)
-	assert.Equal(t, numJobs, stats.Completed)
+	require.Equal(t, numJobsToComplete+numJobsWaiting, stats.Total, "%+v", stats)
+	assert.Equal(t, numJobsToComplete, stats.Completed)
+	assert.Equal(t, numJobsWaiting, stats.Total-stats.Completed)
 
-	completed := 0
-	for result := range q.Results(ctx) {
-		status := result.Status()
-		ti := result.TimeInfo()
-
-		if status.Completed {
-			completed++
-			require.True(t, ti.WaitUntil.IsZero(), "val=%s id=%s", ti.WaitUntil, result.ID())
+	var numCompleted int
+	var numIncompleted int
+	for info := range q.JobInfo(ctx) {
+		if info.Status.Completed {
+			numCompleted++
+			require.True(t, info.Time.WaitUntil.IsZero(), "val=%s id=%s", info.Time.WaitUntil, info.ID)
 		} else {
-			require.False(t, ti.WaitUntil.IsZero(), "val=%s id=%s", ti.WaitUntil, result.ID())
+			numIncompleted++
+			require.False(t, info.Time.WaitUntil.IsZero(), "val=%s id=%s", info.Time.WaitUntil, info.ID)
 		}
 	}
 
-	assert.Equal(t, numJobs, completed)
+	assert.Equal(t, numJobsToComplete, numCompleted)
+	assert.Equal(t, numJobsWaiting, numIncompleted)
 }
 
 func dispatchByTest(bctx context.Context, t *testing.T, test QueueTestCase, runner PoolTestCase, size SizeTestCase) {
@@ -830,7 +833,8 @@ func dispatchByTest(bctx context.Context, t *testing.T, test QueueTestCase, runn
 
 	require.NoError(t, q.Start(ctx))
 
-	for i := 0; i < 2*size.Size; i++ {
+	numJobsToComplete := size.Size
+	for i := 0; i < 2*numJobsToComplete; i++ {
 		j := job.NewShellJob("ls", "")
 		ti := j.TimeInfo()
 
@@ -852,15 +856,15 @@ waitLoop:
 			break waitLoop
 		case <-ticker.C:
 			stat := q.Stats(ctx)
-			if stat.Completed == size.Size {
+			if stat.Completed == numJobsToComplete {
 				break waitLoop
 			}
 		}
 	}
 
 	stats := q.Stats(ctx)
-	assert.Equal(t, 2*size.Size, stats.Total)
-	assert.Equal(t, size.Size, stats.Completed)
+	assert.Equal(t, 2*numJobsToComplete, stats.Total)
+	assert.Equal(t, numJobsToComplete, stats.Completed)
 }
 
 func maxTimeTest(bctx context.Context, t *testing.T, test QueueTestCase, runner PoolTestCase, size SizeTestCase) {
