@@ -78,6 +78,7 @@ func executeJob(ctx context.Context, id string, j amboy.Job, q amboy.Queue) {
 		"dispatch_secs":   ti.Start.Sub(ti.Created).Seconds(),
 		"turnaround_secs": ti.End.Sub(ti.Created).Seconds(),
 		"queue_type":      fmt.Sprintf("%T", q),
+		"queue_id":        q.ID(),
 		"stat":            j.Status(),
 		"pool":            id,
 		"max_time_secs":   ti.MaxTime.Seconds(),
