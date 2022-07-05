@@ -29,7 +29,7 @@ func (s *StatesSuite) TestStateValidatorReturnsTrueForValidValues() {
 	}
 }
 
-func (s StatesSuite) TestStringerInterfaceSatisfied() {
+func (s *StatesSuite) TestStringerInterfaceSatisfied() {
 	s.Implements((*fmt.Stringer)(nil), State(0))
 }
 
