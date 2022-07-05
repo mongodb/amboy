@@ -14,7 +14,7 @@ require (
 	github.com/mattn/go-xmpp v0.0.0-20211029151415-912ba614897a // indirect
 	github.com/mongodb/grip v0.0.0-20220401165023-6a1d9bb90c21
 	github.com/pkg/errors v0.9.1
-	github.com/stretchr/testify v1.7.1
+	github.com/stretchr/testify v1.8.0
 	github.com/urfave/cli v1.22.9
 	github.com/youmark/pkcs8 v0.0.0-20201027041543-1326539a0a0a // indirect
 	go.mongodb.org/mongo-driver v1.9.1
@@ -23,5 +23,4 @@ require (
 	gonum.org/v1/gonum v0.11.0
 	google.golang.org/genproto v0.0.0-20211101144312-62acf1d99145 // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22
-	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 )
