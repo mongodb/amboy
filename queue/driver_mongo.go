@@ -1460,9 +1460,21 @@ func (d *mongoDriver) tryDispatchJob(ctx context.Context, iter *mongo.Cursor, st
 
 		if err = d.dispatcher.Dispatch(ctx, j); err != nil {
 			dispatchInfo.misses++
-			grip.DebugWhen(dispatchable && !d.isMongoDupScope(err),
+			// Log dispatch errors if they're not caused by dispatch contention.
+			//
+			// The job may not be found if two workers attempt to concurrently
+			// dispatch the same job. This is not an error condition since Amboy
+			// should gracefully handle the contention so that only one worker
+			// will actually run the job.
+			//
+			// The duplicate scope error can occur if two workers attempt to
+			// concurrently dispatch two different jobs that have the same
+			// scope. This is also not an error condition and simply means
+			// scopes are working as designed.
+			isDueToContention := amboy.IsJobNotFoundError(err) || amboy.IsDuplicateJobScopeError(err)
+			grip.DebugWhen(!isDueToContention,
 				message.WrapError(err, message.Fields{
-					"message":       "failed to dispatch job, possibly due to lock contention",
+					"message":       "failed to dispatch job for reasons other than dispatch/scope contention",
 					"driver_id":     d.instanceID,
 					"service":       "amboy.queue.mdb",
 					"operation":     "dispatch job",
