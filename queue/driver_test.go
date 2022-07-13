@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/job"
+	"github.com/mongodb/grip/sometimes"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -875,32 +876,44 @@ func (s *DriverSuite) TestInfoReturnsConfigurableLockTimeout() {
 	s.Equal(opts.LockTimeout, d.LockTimeout())
 }
 
-func TestDriverDispatcherIntegration(t *testing.T) {
+func TestDriverNextJob(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	const size = 10
-	mdbOpts := defaultMongoDBTestOptions()
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(mdbOpts.URI).SetConnectTimeout(time.Second))
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(defaultMongoDBURI).SetConnectTimeout(time.Second))
 	require.NoError(t, err)
 	defer func() {
 		assert.NoError(t, client.Disconnect(ctx))
 	}()
-	mdbOpts.Client = client
 
-	t.Run("NextJobIsSampled", func(t *testing.T) {
-		mdbOpts.SampleSize = size
+	getMDBOpts := func(t *testing.T) MongoDBOptions {
+		mdbOpts := defaultMongoDBTestOptions()
 		mdbOpts.Collection = t.Name()
+		mdbOpts.Client = client
 		mdbOpts.Format = amboy.BSON2
+		return mdbOpts
+	}
+
+	checkDispatched := func(t *testing.T, stat amboy.JobStatusInfo) {
+		assert.True(t, stat.InProgress)
+		assert.False(t, stat.Completed)
+		assert.NotZero(t, stat.ModificationCount)
+		assert.NotZero(t, stat.ModificationTime)
+	}
+
+	const queueSize = 10
+
+	makeMockRemoteQueue := func(t *testing.T, mdbOpts MongoDBOptions) *mockRemoteQueue {
 		opts := MongoDBQueueOptions{
 			DB:         &mdbOpts,
-			NumWorkers: utility.ToIntPtr(size),
+			NumWorkers: utility.ToIntPtr(queueSize),
 		}
 		q, err := NewMongoDBQueue(ctx, opts)
 		require.NoError(t, err)
 		defer func() {
 			q.Close(ctx)
 		}()
+
 		rq, ok := q.(remoteQueue)
 		require.True(t, ok, "MongoDB queue should be a remote queue")
 		mq, err := newMockRemoteQueue(mockRemoteQueueOptions{
@@ -909,70 +922,110 @@ func TestDriverDispatcherIntegration(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		defer func() {
-			assert.NoError(t, client.Database(mdbOpts.DB).Collection(addJobsSuffix(mdbOpts.Collection)).Drop(ctx))
-		}()
+		return mq
+	}
 
-		checkDispatched := func(t *testing.T, stat amboy.JobStatusInfo) {
-			assert.True(t, stat.InProgress)
-			assert.False(t, stat.Completed)
-			assert.NotZero(t, stat.ModificationCount)
-			assert.NotZero(t, stat.ModificationTime)
-		}
+	for queueType, modifyMDBOpts := range map[string]func(t *testing.T, mdbOpts MongoDBOptions) MongoDBOptions{
+		"SampleEntireQueue": func(t *testing.T, mdbOpts MongoDBOptions) MongoDBOptions {
+			mdbOpts.SampleSize = queueSize
+			return mdbOpts
+		},
+		"SampleSubsetOfQueue": func(t *testing.T, mdbOpts MongoDBOptions) MongoDBOptions {
+			mdbOpts.SampleSize = queueSize / 2
+			return mdbOpts
+		},
+		"Unsampled": func(t *testing.T, mdbOpts MongoDBOptions) MongoDBOptions { return mdbOpts },
+	} {
+		t.Run(queueType, func(t *testing.T) {
+			mdbOpts := modifyMDBOpts(t, getMDBOpts(t))
+			defer func() {
+				assert.NoError(t, mdbOpts.Client.Database(mdbOpts.DB).Collection(addJobsSuffix(mdbOpts.Collection)).Drop(ctx))
+			}()
+			mq := makeMockRemoteQueue(t, mdbOpts)
 
-		for testName, testCase := range map[string]func(ctx context.Context, t *testing.T, driver *mongoDriver, dispatcher *mockDispatcher){
-			"NextReturnsNoJobIfNoneExists": func(ctx context.Context, t *testing.T, driver *mongoDriver, dispatcher *mockDispatcher) {
-				j := driver.Next(ctx)
-				assert.Nil(t, j)
-			},
-			"NextDispatchesOnePendingJob": func(ctx context.Context, t *testing.T, driver *mongoDriver, dispatcher *mockDispatcher) {
-				j := newMockJob()
-				j.SetID("id")
-				require.NoError(t, driver.Put(ctx, j))
+			for testName, testCase := range map[string]func(ctx context.Context, t *testing.T, driver *mongoDriver){
+				"NextReturnsNoJobIfNoneExists": func(ctx context.Context, t *testing.T, driver *mongoDriver) {
+					j := driver.Next(ctx)
+					assert.Nil(t, j)
+				},
+				"NextDispatchesOnePendingJob": func(ctx context.Context, t *testing.T, driver *mongoDriver) {
+					j := newMockJob()
+					j.SetID(utility.RandomString())
+					require.NoError(t, driver.Put(ctx, j))
 
-				next := driver.Next(ctx)
-				require.NotNil(t, next)
-				assert.Equal(t, j.ID(), next.ID())
+					next := driver.Next(ctx)
+					require.NotNil(t, next)
+					assert.Equal(t, j.ID(), next.ID())
 
-				checkDispatched(t, next.Status())
-			},
-			"NextDispatchesEachPendingJob": func(ctx context.Context, t *testing.T, driver *mongoDriver, dispatcher *mockDispatcher) {
-				j0 := newMockJob()
-				j0.SetID("id0")
-				j1 := newMockJob()
-				j0.SetID("id1")
-				require.NoError(t, driver.Put(ctx, j0))
-				require.NoError(t, driver.Put(ctx, j1))
+					checkDispatched(t, next.Status())
+				},
+				"NextDispatchesEachPendingJob": func(ctx context.Context, t *testing.T, driver *mongoDriver) {
+					j0 := newMockJob()
+					j0.SetID(utility.RandomString())
+					j1 := newMockJob()
+					j1.SetID(utility.RandomString())
+					require.NoError(t, driver.Put(ctx, j0))
+					require.NoError(t, driver.Put(ctx, j1))
 
-				next0 := driver.Next(ctx)
-				require.NotNil(t, next0)
-				checkDispatched(t, next0.Status())
+					next0 := driver.Next(ctx)
+					require.NotNil(t, next0)
+					checkDispatched(t, next0.Status())
 
-				switch next0.ID() {
-				case j0.ID():
-					next1 := driver.Next(ctx)
-					require.NotNil(t, next1)
-					assert.Equal(t, j1.ID(), next1.ID(), "the other job should be returned by the second call to Next")
-					checkDispatched(t, next1.Status())
-				case j1.ID():
-					next1 := driver.Next(ctx)
-					require.NotNil(t, next1)
-					assert.Equal(t, j0.ID(), next1.ID(), "the other job should be returned by the second call to Next")
-					checkDispatched(t, next1.Status())
-				default:
-					require.FailNow(t, "next job should be one of the enqueued jobs")
-				}
-			},
-		} {
-			t.Run(testName, func(t *testing.T) {
-				tctx, tcancel := context.WithTimeout(ctx, time.Second)
-				defer tcancel()
-				mDriver, ok := mq.Driver().(*mongoDriver)
-				require.True(t, ok, "driver must be a MongoDB driver")
-				mDispatcher, ok := mq.dispatcher.(*mockDispatcher)
-				require.True(t, ok)
-				testCase(tctx, t, mDriver, mDispatcher)
-			})
-		}
-	})
+					switch next0.ID() {
+					case j0.ID():
+						next1 := driver.Next(ctx)
+						require.NotNil(t, next1)
+						assert.Equal(t, j1.ID(), next1.ID(), "the other job should be returned by the second call to Next")
+						checkDispatched(t, next1.Status())
+					case j1.ID():
+						next1 := driver.Next(ctx)
+						require.NotNil(t, next1)
+						assert.Equal(t, j0.ID(), next1.ID(), "the other job should be returned by the second call to Next")
+						checkDispatched(t, next1.Status())
+					default:
+						require.FailNow(t, "next job should be one of the enqueued jobs")
+					}
+				},
+				"ReturnsStaleInProgressJobsBeforePendingJobs": func(ctx context.Context, t *testing.T, driver *mongoDriver) {
+					staleInProgJobs := map[string]bool{}
+					for i := 0; i < queueSize; i++ {
+						j := newMockJob()
+						j.SetID(utility.RandomString())
+						if sometimes.Percent(25) {
+							j.SetStatus(amboy.JobStatusInfo{
+								Completed:        false,
+								InProgress:       true,
+								ModificationTime: time.Now().Add(-10 * amboy.LockTimeout),
+							})
+							staleInProgJobs[j.ID()] = false
+						}
+						require.NoError(t, driver.Put(ctx, j))
+					}
+					for i := 0; i < queueSize; i++ {
+						next := driver.Next(ctx)
+						require.NotNil(t, next, "expected %d jobs in the queue waiting to run, but got %d", queueSize, i+1)
+						checkDispatched(t, next.Status())
+						if i < len(staleInProgJobs) {
+							seen, ok := staleInProgJobs[next.ID()]
+							assert.True(t, ok, "stale in progress jobs should appear first in next job ordering, but got status info: %#v", next.Status())
+							assert.False(t, seen, "should not return the same stale in progress job multiple times")
+							staleInProgJobs[next.ID()] = true
+						}
+					}
+				},
+			} {
+				t.Run(testName, func(t *testing.T) {
+					tctx, tcancel := context.WithTimeout(ctx, time.Second)
+					defer tcancel()
+
+					require.NoError(t, mdbOpts.Client.Database(mdbOpts.DB).Collection(addJobsSuffix(mdbOpts.Collection)).Drop(ctx))
+
+					mDriver, ok := mq.Driver().(*mongoDriver)
+					require.True(t, ok, "driver must be a MongoDB driver")
+
+					testCase(tctx, t, mDriver)
+				})
+			}
+		})
+	}
 }

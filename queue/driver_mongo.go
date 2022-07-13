@@ -1196,13 +1196,13 @@ func (d *mongoDriver) JobInfo(ctx context.Context) <-chan amboy.JobInfo {
 
 // getNextQuery returns the query for the next available jobs.
 func (d *mongoDriver) getNextQuery() bson.M {
-	lockTimeout := d.LockTimeout()
 	now := time.Now()
+	staleBefore := now.Add(-d.LockTimeout())
 	qd := bson.M{
 		"$or": []bson.M{
 			d.getPendingQuery(bson.M{}),
 			d.getInProgQuery(
-				bson.M{"status.mod_ts": bson.M{"$lte": now.Add(-lockTimeout)}},
+				bson.M{"status.mod_ts": bson.M{"$lte": staleBefore}},
 			),
 		},
 	}
@@ -1239,6 +1239,13 @@ func (d *mongoDriver) getNextQuery() bson.M {
 // same job may be returned multiple times.
 func (d *mongoDriver) getNextSampledPipeline(sampleSize int) []bson.M {
 	match := bson.M{"$match": d.getNextQuery()}
+
+	// Sort before $sample to ensure that stale in progress jobs appear in the
+	// sampled set.
+	sortStatus := bson.M{
+		"$sort": d.getInProgSort(),
+	}
+
 	// $limit is necessary for performance reasons. $sample scans all input
 	// documents to randomly select documents to return. Therefore, without a
 	// limit on the number of jobs to consider, the cost of $sample will become
@@ -1248,7 +1255,10 @@ func (d *mongoDriver) getNextSampledPipeline(sampleSize int) []bson.M {
 	limit := bson.M{"$limit": sampleSize}
 	sample := bson.M{"$sample": bson.M{"size": sampleSize}}
 
-	return []bson.M{match, limit, sample}
+	// The aggregation must sort again after $sample because $sample randomizes
+	// the document order, and stale in progress jobs should be returned before
+	// pending jobs in the final results.
+	return []bson.M{match, sortStatus, limit, sample, sortStatus}
 }
 
 func (d *mongoDriver) getNextCursor(ctx context.Context) (*mongo.Cursor, error) {
@@ -1259,13 +1269,23 @@ func (d *mongoDriver) getNextCursor(ctx context.Context) (*mongo.Cursor, error) 
 	}
 
 	opts := options.Find()
+	// Return stale in progress jobs before pending jobs.
+	sort := d.getInProgSort()
 	if d.opts.Priority {
-		opts.SetSort(bson.M{"priority": -1})
+		sort = append(sort, bson.E{Key: "priority", Value: -1})
 	}
+	opts.SetSort(sort)
 
 	q := d.getNextQuery()
 	iter, err := d.getCollection().Find(ctx, q, opts)
 	return iter, errors.Wrap(err, "getting next jobs")
+}
+
+// getInProgSort returns a sort to prioritize jobs that are in progress.
+func (d *mongoDriver) getInProgSort() bson.D {
+	return bson.D{
+		{Key: "status.in_prog", Value: -1},
+	}
 }
 
 func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
