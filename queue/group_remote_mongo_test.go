@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"regexp"
 	"testing"
 	"time"
 
@@ -48,6 +49,34 @@ func TestMongoDBQueueGroup(t *testing.T) {
 
 						_, ok = q.(*remoteUnordered)
 						assert.True(t, ok, "queue should be default remote queue (unordered)")
+					},
+					"CreatesQueueWithRegexpQueueOptionsTakingPrecedenceOverDefaults": func(ctx context.Context, t *testing.T, opts MongoDBQueueGroupOptions) {
+						id := utility.RandomString()
+						re, err := regexp.Compile(id)
+						require.NoError(t, err)
+						opts.RegexpQueue = []RegexpMongoDBQueueOptions{
+							{
+								Regexp: *re,
+								Options: MongoDBQueueOptions{
+									Abortable: utility.FalsePtr(),
+								},
+							},
+						}
+						qg, err := makeQueueGroup(ctx, opts)
+						require.NoError(t, err)
+
+						q, err := qg.Get(ctx, id)
+						require.NoError(t, err)
+
+						assert.True(t, q.Info().Started, "queue should be started")
+
+						runner := q.Runner()
+						require.NotZero(t, runner)
+						_, ok := runner.(amboy.AbortableRunner)
+						assert.False(t, ok, "runner pool should override the default to be unabortable")
+
+						_, ok = q.(*remoteUnordered)
+						assert.True(t, ok, "queue should default to unordered remote queue")
 					},
 					"CreatesQueueWithPerQueueOptionsTakingPrecedenceOverDefaults": func(ctx context.Context, t *testing.T, opts MongoDBQueueGroupOptions) {
 						id := utility.RandomString()

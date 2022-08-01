@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -34,8 +35,13 @@ type MongoDBQueueGroupOptions struct {
 	// These can be optionally overridden at the individual queue level.
 	DefaultQueue MongoDBQueueOptions
 
+	// RegexpQueue represents options for queues by IDs that match a regular
+	// expression. These take precedence over the DefaultQueue options but have
+	// lower precedence than the PerQueue options.
+	RegexpQueue []RegexpMongoDBQueueOptions
+
 	// PerQueue represent options for specific queues by ID. These take
-	// precedence over the DefaultQueue options.
+	// precedence over the DefaultQueue and PerQueueRegexp options.
 	PerQueue map[string]MongoDBQueueOptions
 
 	// PruneFrequency is how often inactive queues are checked to see if they
@@ -57,6 +63,15 @@ type MongoDBQueueGroupOptions struct {
 	TTL time.Duration
 }
 
+// RegexpMongoDBQueueOptions represents a mapping from a regular expression to
+// match named queues in a queue group to options for those queues.
+type RegexpMongoDBQueueOptions struct {
+	// Regexp is the regular expression to match against the queue ID.
+	Regexp regexp.Regexp
+	// Options are the queue options to apply to matching queues.
+	Options MongoDBQueueOptions
+}
+
 func (o MongoDBQueueGroupOptions) validate() error {
 	catcher := grip.NewBasicCatcher()
 	catcher.NewWhen(o.TTL < 0, "TTL cannot be negative")
@@ -76,9 +91,17 @@ func (o MongoDBQueueGroupOptions) validate() error {
 // based on the order that they're given.
 func (o MongoDBQueueGroupOptions) getQueueOptsWithPrecedence(id string, opts ...MongoDBQueueOptions) MongoDBQueueOptions {
 	precedenceOrderedOpts := []MongoDBQueueOptions{o.DefaultQueue}
+
+	for _, regexpOpts := range o.RegexpQueue {
+		if regexpOpts.Regexp.MatchString(id) {
+			precedenceOrderedOpts = append(precedenceOrderedOpts, regexpOpts.Options)
+		}
+	}
+
 	if perQueueOpts, ok := o.PerQueue[id]; ok {
 		precedenceOrderedOpts = append(precedenceOrderedOpts, perQueueOpts)
 	}
+
 	precedenceOrderedOpts = append(precedenceOrderedOpts, opts...)
 	return mergeMongoDBQueueOptions(precedenceOrderedOpts...)
 }
