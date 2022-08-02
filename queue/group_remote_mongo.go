@@ -41,7 +41,7 @@ type MongoDBQueueGroupOptions struct {
 	RegexpQueue []RegexpMongoDBQueueOptions
 
 	// PerQueue represent options for specific queues by ID. These take
-	// precedence over the DefaultQueue and PerQueueRegexp options.
+	// precedence over the DefaultQueue and RegexpQueue options.
 	PerQueue map[string]MongoDBQueueOptions
 
 	// PruneFrequency is how often inactive queues are checked to see if they
