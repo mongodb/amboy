@@ -158,6 +158,12 @@ API and Documentation
 See the `API documentation <https://godoc.org/github.com/mongodb/amboy>`
 for more information about amboy interfaces and internals.
 
+Notice for External Users
+-------------------------
+Amboy is being continuously developed for `Evergreen <https://github.com/evergreen-ci/evergreen>`. This is not a stable
+library and upgrades are at your own risk - it may be changed to add, remove, or modify functionality in a way that
+breaks backward compatibility.
+
 Development
 -----------
 
