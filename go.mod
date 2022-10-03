@@ -19,7 +19,7 @@ require (
 	github.com/youmark/pkcs8 v0.0.0-20201027041543-1326539a0a0a // indirect
 	go.mongodb.org/mongo-driver v1.10.2
 	golang.org/x/oauth2 v0.0.0-20211028175245-ba495a64dcb5 // indirect
-	gonum.org/v1/gonum v0.11.0
+	gonum.org/v1/gonum v0.12.0
 	google.golang.org/genproto v0.0.0-20211101144312-62acf1d99145 // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22
 )
