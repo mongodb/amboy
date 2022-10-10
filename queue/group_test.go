@@ -23,7 +23,7 @@ type queueGroupCloser func(context.Context) error
 type queueGroupConstructor func(context.Context, time.Duration) (amboy.QueueGroup, queueGroupCloser, error)
 
 func localConstructor(ctx context.Context) (amboy.Queue, error) {
-	return NewLocalLimitedSize(2, 128), nil
+	return NewLocalLimitedSizeSerializable(2, 128)
 }
 
 func TestQueueGroup(t *testing.T) {
@@ -190,7 +190,7 @@ func TestQueueGroup(t *testing.T) {
 						})
 					}
 				})
-				t.Run("MongoMerged", func(t *testing.T) {
+				t.Run("MongoSingle", func(t *testing.T) {
 					for _, remoteTest := range remoteTests {
 						t.Run(remoteTest.name, func(t *testing.T) {
 							ctx, cancel := context.WithCancel(bctx)
@@ -285,7 +285,7 @@ func TestQueueGroup(t *testing.T) {
 				},
 			},
 			{
-				name: "MongoMerged",
+				name: "MongoSingle",
 				constructor: func(ctx context.Context, ttl time.Duration) (amboy.QueueGroup, queueGroupCloser, error) {
 					mopts := defaultMongoDBTestOptions()
 					mopts.Client = client
@@ -477,15 +477,15 @@ func TestQueueGroup(t *testing.T) {
 				})
 				t.Run("Prune", func(t *testing.T) {
 					if runtime.GOOS == "windows" && group.name == "Mongo" {
-						t.Skip("legacy implementation performs poorly on windows")
+						t.Skip("legacy implementation performs poorly on Windows")
 					}
 
 					ctx, cancel := context.WithTimeout(bctx, 10*time.Second)
 					defer cancel()
 
 					ttl := time.Second
-					if group.name == "Mongo" && utility.StringSliceContains([]string{"windows", "darwin"}, runtime.GOOS) {
-						// The tests are particularly slow on MacOS/Windows, so
+					if group.name == "Mongo" && runtime.GOOS == "darwin" {
+						// The tests are particularly slow on MacOS, so
 						// the queues need extra time to run all the jobs before
 						// being pruned.
 						ttl = 5 * time.Second
@@ -523,12 +523,12 @@ func TestQueueGroup(t *testing.T) {
 					assert.Equal(t, 1, q1.Stats(ctx).Completed)
 					assert.Equal(t, 2, q2.Stats(ctx).Completed)
 
-					require.Equal(t, 2, g.Len())
+					assert.Equal(t, 2, g.Len(), "all queues should have run job recently so should still be active")
 
 					time.Sleep(ttl + time.Second)
 					require.NoError(t, g.Prune(ctx))
 
-					require.Equal(t, 0, g.Len())
+					assert.Zero(t, g.Len())
 				})
 				t.Run("PruneWithTTL", func(t *testing.T) {
 					ctx, cancel := context.WithTimeout(bctx, 40*time.Second)
@@ -551,22 +551,29 @@ func TestQueueGroup(t *testing.T) {
 					j1 := job.NewShellJob("true", "")
 					j2 := job.NewShellJob("true", "")
 					j3 := job.NewShellJob("true", "")
+					j4 := newMockRetryableJob("id")
+					const attempts = 10
+					j4.UpdateRetryInfo(amboy.JobRetryOptions{
+						MaxAttempts: utility.ToIntPtr(attempts),
+					})
+					j4.NumTimesToRetry = attempts
 
 					// Add j1 to q1. Add j2 and j3 to q2.
 					require.NoError(t, q1.Put(ctx, j1))
 					require.NoError(t, q2.Put(ctx, j2))
 					require.NoError(t, q2.Put(ctx, j3))
+					require.NoError(t, q2.Put(ctx, j4))
 
-					amboy.WaitInterval(ctx, q1, 100*time.Millisecond)
-					amboy.WaitInterval(ctx, q2, 100*time.Millisecond)
+					assert.True(t, amboy.WaitInterval(ctx, q1, 100*time.Millisecond))
+					assert.True(t, amboy.WaitInterval(ctx, q2, 100*time.Millisecond))
 
 					// Queues should have completed work
 					assert.True(t, q1.Stats(ctx).IsComplete())
 					assert.True(t, q2.Stats(ctx).IsComplete())
 					assert.Equal(t, 1, q1.Stats(ctx).Completed)
-					assert.Equal(t, 2, q2.Stats(ctx).Completed)
+					assert.Equal(t, 2+attempts, q2.Stats(ctx).Completed)
 
-					require.Equal(t, 2, g.Len())
+					assert.Equal(t, 2, g.Len(), "all queues should have run job recently so should still be active")
 
 					// this is just a way for tests that
 					// prune more quickly to avoid a long sleep.
@@ -579,7 +586,7 @@ func TestQueueGroup(t *testing.T) {
 						}
 					}
 
-					require.Equal(t, 0, g.Len())
+					assert.Zero(t, g.Len(), "all queues should be considered inactive so should be pruned in the background")
 				})
 				t.Run("Close", func(t *testing.T) {
 					ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)

@@ -28,7 +28,7 @@ func TestMongoDBQueueGroup(t *testing.T) {
 		"Mongo": func(ctx context.Context, opts MongoDBQueueGroupOptions) (amboy.QueueGroup, error) {
 			return NewMongoDBQueueGroup(ctx, "prefix.", opts)
 		},
-		"MongoMerged": NewMongoDBSingleQueueGroup,
+		"MongoSingle": NewMongoDBSingleQueueGroup,
 	} {
 		t.Run(groupName, func(t *testing.T) {
 			t.Run("Get", func(t *testing.T) {
