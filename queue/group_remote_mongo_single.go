@@ -99,7 +99,7 @@ func NewMongoDBSingleQueueGroup(ctx context.Context, opts MongoDBQueueGroupOptio
 // getQueues return all queues that are active. A queue is active if it still
 // has jobs to process (still has pending, in progress, or retrying jobs), or if
 // it recently completed a job within the TTL. Inactive queues (i.e. queues that
-// are have no jobs to process and have not recently completed a job within the
+// have no jobs to process and have not recently completed a job within the
 // TTL) are not returned.
 func (g *remoteMongoQueueGroupSingle) getQueues(ctx context.Context) ([]string, error) {
 	cursor, err := g.opts.DefaultQueue.DB.Client.Database(g.opts.DefaultQueue.DB.DB).Collection(addGroupSuffix(g.opts.DefaultQueue.DB.Collection)).Aggregate(ctx,
