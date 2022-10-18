@@ -244,10 +244,11 @@ func (rh *BasicRetryHandler) waitForJob(ctx context.Context) {
 
 			if err := rh.handleJob(ctx, j); err != nil && ctx.Err() == nil {
 				grip.Error(message.WrapError(err, message.Fields{
-					"message":  "could not retry job",
-					"queue_id": rh.queue.ID(),
-					"job_id":   j.ID(),
-					"service":  "amboy.queue.retry",
+					"message":     "could not retry job",
+					"queue_id":    rh.queue.ID(),
+					"job_id":      j.ID(),
+					"job_attempt": j.RetryInfo().CurrentAttempt,
+					"service":     "amboy.queue.retry",
 				}))
 				j.AddError(err)
 
@@ -255,10 +256,11 @@ func (rh *BasicRetryHandler) waitForJob(ctx context.Context) {
 				// job retry again.
 				if err := rh.completeRetrying(ctx, j); err != nil {
 					grip.Warning(message.WrapError(err, message.Fields{
-						"message":  "failed to mark job retry as processed",
-						"job_id":   j.ID(),
-						"job_type": j.Type().Name,
-						"service":  "amboy.queue.retry",
+						"message":     "failed to mark job retry as processed",
+						"job_id":      j.ID(),
+						"job_attempt": j.RetryInfo().CurrentAttempt,
+						"job_type":    j.Type().Name,
+						"service":     "amboy.queue.retry",
 					}))
 				}
 			}
@@ -289,11 +291,12 @@ func (rh *BasicRetryHandler) completeRetrying(ctx context.Context, j amboy.Job) 
 				}
 
 				grip.Error(message.WrapError(err, message.Fields{
-					"message":  "failed to mark retrying job as completed",
-					"attempt":  attempt,
-					"job_id":   j.ID(),
-					"queue_id": rh.queue.ID(),
-					"service":  "amboy.queue.mdb",
+					"message":                   "failed to mark retrying job as completed",
+					"complete_retrying_attempt": attempt,
+					"job_id":                    j.ID(),
+					"job_attempt":               j.RetryInfo().CurrentAttempt,
+					"queue_id":                  rh.queue.ID(),
+					"service":                   "amboy.queue.retry",
 				}))
 
 				timer.Reset(retryInterval)
@@ -328,17 +331,18 @@ func (rh *BasicRetryHandler) handleJob(ctx context.Context, j amboy.Job) error {
 		case <-timer.C:
 			canRetry, err := rh.tryEnqueueJob(ctx, j)
 			if err != nil {
-				catcher.Wrapf(err, "enqueueing retrying job attempt %d", i)
-				grip.Error(message.WrapError(err, message.Fields{
-					"message":        "failed to enqueue job retry",
-					"job_id":         j.ID(),
-					"queue_id":       rh.queue.ID(),
-					"attempt":        i,
-					"max_attempts":   rh.opts.MaxRetryAttempts,
-					"retry_time":     time.Since(startAt),
-					"max_retry_time": rh.opts.MaxRetryTime.String(),
-					"can_retry":      canRetry,
-					"service":        "amboy.queue.retry",
+				catcher.Wrapf(err, "attempt %d to enqueue retrying job", i)
+				grip.WarningWhen(canRetry, message.WrapError(err, message.Fields{
+					"message":         "failed to enqueue job retry, but will re-attempt to enqueue",
+					"job_id":          j.ID(),
+					"job_attempt":     j.RetryInfo().CurrentAttempt,
+					"queue_id":        rh.queue.ID(),
+					"enqueue_attempt": i,
+					"max_attempts":    rh.opts.MaxRetryAttempts,
+					"retry_time":      time.Since(startAt),
+					"max_retry_time":  rh.opts.MaxRetryTime.String(),
+					"can_retry":       canRetry,
+					"service":         "amboy.queue.retry",
 				}))
 
 				if canRetry {
@@ -385,6 +389,7 @@ func (rh *BasicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Job) (ca
 			"stale_owner":    j.Status().Owner,
 			"stale_mod_time": j.Status().ModificationTime,
 			"job_id":         j.ID(),
+			"job_attempt":    j.RetryInfo().CurrentAttempt,
 			"queue_id":       rh.queue.ID(),
 			"service":        "amboy.queue.retry",
 		})
