@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -948,6 +949,51 @@ func TestDriverNextJob(t *testing.T) {
 					j := driver.Next(ctx)
 					assert.Nil(t, j)
 				},
+				"NextResolvesJobContentionAndDispatchesToSingleWorker": func(ctx context.Context, t *testing.T, driver *mongoDriver) {
+					j := newMockJob()
+					j.SetID(utility.RandomString())
+					require.NoError(t, driver.Put(ctx, j))
+
+					tryGettingNext := make(chan struct{})
+
+					var wg sync.WaitGroup
+
+					// Run many goroutines, all contending to dispatch the one job.
+					const numWorkers = 100
+					dispatchedJobs := make(chan amboy.Job, numWorkers)
+					for i := 0; i < numWorkers; i++ {
+						wg.Add(1)
+						go func() {
+							select {
+							case <-ctx.Done():
+								return
+							case <-tryGettingNext:
+								next := driver.Next(ctx)
+								if next != nil {
+									// This is safe and will not hang because it's a buffered channel.
+									dispatchedJobs <- next
+								}
+								wg.Done()
+								return
+							}
+						}()
+					}
+
+					// Signal to all the waiting workers to try dispatching the one job.
+					close(tryGettingNext)
+
+					// Wait until all workers finish trying to get a job, then close the channel to check the results.
+					wg.Wait()
+					close(dispatchedJobs)
+
+					var numDispatches int
+					for dispatched := range dispatchedJobs {
+						numDispatches++
+						assert.Equal(t, j.ID(), dispatched.ID())
+						checkDispatched(t, dispatched.Status())
+					}
+					assert.Equal(t, 1, numDispatches, "should have resolved the worker contention by dispatching the job to exactly one worker")
+				},
 				"NextDispatchesOnePendingJob": func(ctx context.Context, t *testing.T, driver *mongoDriver) {
 					j := newMockJob()
 					j.SetID(utility.RandomString())
@@ -958,6 +1004,46 @@ func TestDriverNextJob(t *testing.T) {
 					assert.Equal(t, j.ID(), next.ID())
 
 					checkDispatched(t, next.Status())
+				},
+				"NextIgnoresJobThatHasNotHitWaitUntilRequirementYet": func(ctx context.Context, t *testing.T, driver *mongoDriver) {
+					j := newMockJob()
+					j.SetID(utility.RandomString())
+					j.SetTimeInfo(amboy.JobTimeInfo{WaitUntil: time.Now().Add(time.Hour)})
+					require.NoError(t, driver.Put(ctx, j))
+
+					// Poll for the next job on a short enough timeout that it doesn't wait unnnecessarily long for a
+					// job while giving it sufficient time to poll at least once.
+					nextCtx, nextCancel := context.WithTimeout(ctx, 500*time.Millisecond)
+					defer nextCancel()
+
+					next := driver.Next(nextCtx)
+					assert.Zero(t, next, "job that has not yet reached wait until requirement should not be dispatched")
+
+					enqueuedJob, err := driver.Get(ctx, j.ID())
+					require.NoError(t, err, "job that has not yet reached wait until requirement should remain enqueued")
+					assert.Equal(t, j.ID(), enqueuedJob.ID())
+				},
+				"NextIgnoresJobAndDequeuesJobThatHasExceededDispatchByRequirement": func(ctx context.Context, t *testing.T, driver *mongoDriver) {
+					j := newMockJob()
+					j.SetID(utility.RandomString())
+					j.SetTimeInfo(amboy.JobTimeInfo{DispatchBy: time.Now().Add(-time.Hour)})
+					require.NoError(t, driver.Put(ctx, j))
+
+					enqueuedJob, err := driver.Get(ctx, j.ID())
+					require.NoError(t, err)
+					assert.Equal(t, j.ID(), enqueuedJob.ID())
+
+					// Poll for the next job on a short enough timeout that it doesn't wait unnnecessarily long for a
+					// job while giving it sufficient time to poll at least once.
+					nextCtx, nextCancel := context.WithTimeout(ctx, 500*time.Millisecond)
+					defer nextCancel()
+
+					next := driver.Next(nextCtx)
+					assert.Zero(t, next)
+
+					enqueuedJob, err = driver.Get(ctx, j.ID())
+					assert.True(t, amboy.IsJobNotFoundError(err), "job that exceeds dispatch by time should be dequeued")
+					assert.Zero(t, enqueuedJob)
 				},
 				"NextDispatchesEachPendingJob": func(ctx context.Context, t *testing.T, driver *mongoDriver) {
 					j0 := newMockJob()
