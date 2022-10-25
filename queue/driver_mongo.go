@@ -581,6 +581,9 @@ func (d *mongoDriver) Get(ctx context.Context, name string) (amboy.Job, error) {
 	}
 	res := d.getCollection().FindOne(ctx, d.getIDQuery(name), options.FindOne().SetSort(byRetryAttempt))
 	if err := res.Err(); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, amboy.NewJobNotFoundError("no such job found")
+		}
 		return nil, errors.Wrap(err, "finding job")
 	}
 
@@ -1293,6 +1296,10 @@ func (d *mongoDriver) getInProgSort() bson.D {
 	}
 }
 
+// Next is the means by which callers can dispatch and run jobs by handing out the next job available to run. If the
+// driver finds an unowned job that is waiting to dispatch, it will dispatch the job, effectively giving the caller
+// ownership and responsibility of running it. If there is no job that can be currently dispatched to the worker, it
+// will periodically poll until a job becomes available or the given context errors.
 func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 	var (
 		job            amboy.Job
