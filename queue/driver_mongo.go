@@ -1265,7 +1265,11 @@ func (d *mongoDriver) getNextCursor(ctx context.Context) (*mongo.Cursor, error) 
 	if d.opts.SampleSize > 0 && !d.opts.Priority {
 		p := d.getNextSampledPipeline(d.opts.SampleSize)
 		// Hotfix to include the index hint, should do in a better way later.
-		iter, err := d.getCollection().Aggregate(ctx, p, options.Aggregate().SetHint("group_1_status.completed_1_status.in_prog_1_status.mod_ts_1"))
+		opts := options.Aggregate()
+		if d.opts.UseGroups {
+			opts.SetHint("group_1_status.completed_1_status.in_prog_1_status.mod_ts_1")
+		}
+		iter, err := d.getCollection().Aggregate(ctx, p, opts)
 		return iter, errors.Wrap(err, "sampling next jobs")
 	}
 
