@@ -63,6 +63,9 @@ type MongoDBOptions struct {
 	// SkipReportingIndexBuilds determines if indexes related to reporting job
 	// state should be built before using the driver.
 	SkipReportingIndexBuilds bool
+	// PreferredIndexes allows users to explicitly use a particular index to
+	// fulfill driver queries.
+	PreferredIndexes PreferredIndexOptions
 	// Format is the internal format used to store jobs in the DB. The default
 	// value is amboy.BSON.
 	Format amboy.Format
@@ -87,6 +90,17 @@ type MongoDBOptions struct {
 	SampleSize int
 }
 
+// PreferredIndexOptions provide options to explicitly set the index for use in
+// specific scenarios. If an index is not explicitly given, the index will be
+// picked auomatically.
+type PreferredIndexOptions struct {
+	// NextJob determines the index pattern that will be used for requesting the
+	// next job in the queue.
+	// For the queue group, the driver will implicitly include the group, so it
+	// does not need to be included in the index pattern.
+	NextJob bson.D
+}
+
 // defaultMongoDBURI is the default URI to connect to a MongoDB instance.
 const defaultMongoDBURI = "mongodb://localhost:27017"
 
@@ -103,6 +117,7 @@ func DefaultMongoDBOptions() MongoDBOptions {
 		CheckDispatchBy:          false,
 		SkipQueueIndexBuilds:     false,
 		SkipReportingIndexBuilds: false,
+		PreferredIndexes:         PreferredIndexOptions{},
 		WaitInterval:             time.Second,
 		Format:                   amboy.BSON,
 		LockTimeout:              amboy.LockTimeout,
@@ -277,80 +292,69 @@ func (d *mongoDriver) setupDB(ctx context.Context) error {
 }
 
 func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
-	primary := bsonx.Doc{}
-	retrying := bsonx.Doc{}
-	retryableJobIDAndAttempt := bsonx.Doc{}
-	scopes := bsonx.Doc{}
-
-	if d.opts.UseGroups {
-		group := bsonx.Elem{Key: "group", Value: bsonx.Int32(1)}
-		primary = append(primary, group)
-		retryableJobIDAndAttempt = append(retryableJobIDAndAttempt, group)
-		retrying = append(retrying, group)
-		scopes = append(scopes, group)
-	}
-
-	primary = append(primary,
-		bsonx.Elem{
+	primary := d.ensureGroupIndexPrefix(bson.D{
+		bson.E{
 			Key:   "status.completed",
 			Value: bsonx.Int32(1),
 		},
-		bsonx.Elem{
+		bson.E{
 			Key:   "status.in_prog",
 			Value: bsonx.Int32(1),
-		})
+		},
+	})
+	retrying := d.ensureGroupIndexPrefix(bson.D{
+		bson.E{
+			Key:   "status.completed",
+			Value: bsonx.Int32(1),
+		},
+		bson.E{
+			Key:   "retry_info.retryable",
+			Value: bsonx.Int32(1),
+		},
+		bson.E{
+			Key:   "retry_info.needs_retry",
+			Value: bsonx.Int32(1),
+		},
+		bson.E{
+			Key:   "status.mod_ts",
+			Value: bsonx.Int32(-1),
+		},
+	})
+	retryableJobIDAndAttempt := d.ensureGroupIndexPrefix(bson.D{
+		bson.E{
+			Key:   "retry_info.base_job_id",
+			Value: bsonx.Int32(1),
+		},
+		bson.E{
+			Key:   "retry_info.current_attempt",
+			Value: bsonx.Int32(-1),
+		},
+	})
+	scopes := d.ensureGroupIndexPrefix(bson.D{
+		bson.E{
+			Key:   "scopes",
+			Value: bsonx.Int32(1),
+		},
+	})
 
 	if d.opts.Priority {
-		primary = append(primary, bsonx.Elem{
+		primary = append(primary, bson.E{
 			Key:   "priority",
 			Value: bsonx.Int32(1),
 		})
 	}
 
 	if d.opts.CheckWaitUntil {
-		primary = append(primary, bsonx.Elem{
+		primary = append(primary, bson.E{
 			Key:   "time_info.wait_until",
 			Value: bsonx.Int32(1),
 		})
 	} else if d.opts.CheckDispatchBy {
-		primary = append(primary, bsonx.Elem{
+		primary = append(primary, bson.E{
 			Key:   "time_info.dispatch_by",
 			Value: bsonx.Int32(1),
 		})
 	}
-
-	retryableJobIDAndAttempt = append(retryableJobIDAndAttempt,
-		bsonx.Elem{
-			Key:   "retry_info.base_job_id",
-			Value: bsonx.Int32(1),
-		},
-		bsonx.Elem{
-			Key:   "retry_info.current_attempt",
-			Value: bsonx.Int32(-1),
-		},
-	)
-	retrying = append(retrying,
-		bsonx.Elem{
-			Key:   "status.completed",
-			Value: bsonx.Int32(1),
-		},
-		bsonx.Elem{
-			Key:   "retry_info.retryable",
-			Value: bsonx.Int32(1),
-		},
-		bsonx.Elem{
-			Key:   "retry_info.needs_retry",
-			Value: bsonx.Int32(1),
-		},
-		bsonx.Elem{
-			Key:   "status.mod_ts",
-			Value: bsonx.Int32(-1),
-		},
-	)
-	scopes = append(scopes, bsonx.Elem{
-		Key:   "scopes",
-		Value: bsonx.Int32(1),
-	})
 
 	indexes := []mongo.IndexModel{
 		{Keys: primary},
@@ -373,7 +377,7 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 	if d.opts.TTL > 0 {
 		ttl := int32(d.opts.TTL / time.Second)
 		indexes = append(indexes, mongo.IndexModel{
-			Keys: bsonx.Doc{
+			Keys: bson.D{
 				{
 					Key:   "time_info.created",
 					Value: bsonx.Int32(1),
@@ -387,99 +391,80 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 }
 
 func (d *mongoDriver) reportingIndexes() []mongo.IndexModel {
-	indexes := []mongo.IndexModel{}
-	completedInProgModTs := bsonx.Doc{}
-	completedEnd := bsonx.Doc{}
-	completedCreated := bsonx.Doc{}
-	typeCompletedInProgModTs := bsonx.Doc{}
-	typeCompletedEnd := bsonx.Doc{}
-
-	if d.opts.UseGroups {
-		group := bsonx.Elem{Key: "group", Value: bsonx.Int32(1)}
-		completedInProgModTs = append(completedInProgModTs, group)
-		completedEnd = append(completedEnd, group)
-		completedCreated = append(completedCreated, group)
-		typeCompletedInProgModTs = append(typeCompletedInProgModTs, group)
-		typeCompletedEnd = append(typeCompletedEnd, group)
-	}
-
-	completedInProgModTs = append(completedInProgModTs,
-		bsonx.Elem{
+	completedInProgModTs := d.ensureGroupIndexPrefix(bson.D{
+		bson.E{
 			Key:   "status.completed",
 			Value: bsonx.Int32(1),
 		},
-		bsonx.Elem{
+		bson.E{
 			Key:   "status.in_prog",
 			Value: bsonx.Int32(1),
 		},
-		bsonx.Elem{
+		bson.E{
 			Key:   "status.mod_ts",
 			Value: bsonx.Int32(1),
 		},
-	)
-	indexes = append(indexes, mongo.IndexModel{Keys: completedInProgModTs})
-
-	completedEnd = append(completedEnd,
-		bsonx.Elem{
+	})
+	completedEnd := d.ensureGroupIndexPrefix(bson.D{
+		bson.E{
 			Key:   "status.completed",
 			Value: bsonx.Int32(1),
 		},
-		bsonx.Elem{
+		bson.E{
 			Key:   "time_info.end",
 			Value: bsonx.Int32(1),
 		},
-	)
-	indexes = append(indexes, mongo.IndexModel{Keys: completedEnd})
-
-	completedCreated = append(completedCreated,
-		bsonx.Elem{
+	})
+	completedCreated := d.ensureGroupIndexPrefix(bson.D{
+		bson.E{
 			Key:   "status.completed",
 			Value: bsonx.Int32(1),
 		},
-		bsonx.Elem{
+		bson.E{
 			Key:   "time_info.created",
 			Value: bsonx.Int32(1),
 		},
-	)
-	indexes = append(indexes, mongo.IndexModel{Keys: completedCreated})
-
-	typeCompletedInProgModTs = append(typeCompletedInProgModTs,
-		bsonx.Elem{
+	})
+	typeCompletedInProgModTs := d.ensureGroupIndexPrefix(bson.D{
+		bson.E{
 			Key:   "type",
 			Value: bsonx.Int32(1),
 		},
-		bsonx.Elem{
+		bson.E{
 			Key:   "status.completed",
 			Value: bsonx.Int32(1),
 		},
-		bsonx.Elem{
+		bson.E{
 			Key:   "status.in_prog",
 			Value: bsonx.Int32(1),
 		},
-		bsonx.Elem{
+		bson.E{
 			Key:   "status.mod_ts",
 			Value: bsonx.Int32(1),
 		},
-	)
-	indexes = append(indexes, mongo.IndexModel{Keys: typeCompletedInProgModTs})
-
-	typeCompletedEnd = append(typeCompletedEnd,
-		bsonx.Elem{
+	})
+	typeCompletedEnd := d.ensureGroupIndexPrefix(bson.D{
+		bson.E{
 			Key:   "type",
 			Value: bsonx.Int32(1),
 		},
-		bsonx.Elem{
+		bson.E{
 			Key:   "status.completed",
 			Value: bsonx.Int32(1),
 		},
-		bsonx.Elem{
+		bson.E{
 			Key:   "time_info.end",
 			Value: bsonx.Int32(1),
 		},
-	)
-	indexes = append(indexes, mongo.IndexModel{Keys: typeCompletedEnd})
+	})
 
-	return indexes
+	return []mongo.IndexModel{
+		{Keys: completedInProgModTs},
+		{Keys: completedEnd},
+		{Keys: completedCreated},
+		{Keys: typeCompletedInProgModTs},
+		{Keys: typeCompletedEnd},
+	}
 }
 
 // Close closes the resources for the driver. If it initialized a new client, it
@@ -1264,10 +1249,9 @@ func (d *mongoDriver) getNextSampledPipeline(sampleSize int) []bson.M {
 func (d *mongoDriver) getNextCursor(ctx context.Context) (*mongo.Cursor, error) {
 	if d.opts.SampleSize > 0 && !d.opts.Priority {
 		p := d.getNextSampledPipeline(d.opts.SampleSize)
-		// Hotfix to include the index hint, should do in a better way later.
 		opts := options.Aggregate()
-		if d.opts.UseGroups {
-			opts.SetHint("group_1_status.completed_1_status.in_prog_1_status.mod_ts_1")
+		if d.opts.PreferredIndexes.NextJob != nil {
+			opts.SetHint(d.ensureGroupIndexPrefix(d.opts.PreferredIndexes.NextJob))
 		}
 		iter, err := d.getCollection().Aggregate(ctx, p, opts)
 		return iter, errors.Wrap(err, "sampling next jobs")
@@ -1280,6 +1264,10 @@ func (d *mongoDriver) getNextCursor(ctx context.Context) (*mongo.Cursor, error) 
 		sort = append(sort, bson.E{Key: "priority", Value: -1})
 	}
 	opts.SetSort(sort)
+
+	if d.opts.PreferredIndexes.NextJob != nil {
+		opts.SetHint(d.ensureGroupIndexPrefix(d.opts.PreferredIndexes.NextJob))
+	}
 
 	q := d.getNextQuery()
 	iter, err := d.getCollection().Find(ctx, q, opts)
@@ -1669,4 +1657,18 @@ func (d *mongoDriver) SetDispatcher(disp Dispatcher) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.dispatcher = disp
+}
+
+// ensureGroupPrefixPattern adds the group prefix for the index if it's for a
+// driver using groups and the group prefix isn't already present.
+func (d *mongoDriver) ensureGroupIndexPrefix(doc bson.D) bson.D {
+	if !d.opts.UseGroups {
+		return doc
+	}
+	if len(doc) > 0 && doc[0].Key == "group" {
+		return doc
+	}
+	doc = append([]bson.E{{Key: "group", Value: bsonx.Int32(1)}}, doc...)
+
+	return doc
 }
