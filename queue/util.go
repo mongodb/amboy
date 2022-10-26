@@ -38,9 +38,15 @@ func addGroupSuffix(s string) string {
 	return s + ".group"
 }
 
-func isDispatchable(stat amboy.JobStatusInfo, lockTimeout time.Duration) bool {
-	if isStaleJob(stat, lockTimeout) {
+func isDispatchable(stat amboy.JobStatusInfo, ti amboy.JobTimeInfo, lockTimeout time.Duration) bool {
+	if isStaleInProgressJob(stat, lockTimeout) {
 		return true
+	}
+	if ti.IsStale() {
+		return false
+	}
+	if !ti.IsDispatchable() {
+		return false
 	}
 	if stat.Completed {
 		return false
@@ -52,6 +58,6 @@ func isDispatchable(stat amboy.JobStatusInfo, lockTimeout time.Duration) bool {
 	return true
 }
 
-func isStaleJob(stat amboy.JobStatusInfo, lockTimeout time.Duration) bool {
+func isStaleInProgressJob(stat amboy.JobStatusInfo, lockTimeout time.Duration) bool {
 	return stat.InProgress && time.Since(stat.ModificationTime) > lockTimeout
 }

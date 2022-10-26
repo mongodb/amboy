@@ -945,11 +945,11 @@ func TestDriverNextJob(t *testing.T) {
 			mq := makeMockRemoteQueue(t, mdbOpts)
 
 			for testName, testCase := range map[string]func(ctx context.Context, t *testing.T, driver *mongoDriver){
-				"NextReturnsNoJobIfNoneExists": func(ctx context.Context, t *testing.T, driver *mongoDriver) {
+				"ReturnsNoJobIfNoneExists": func(ctx context.Context, t *testing.T, driver *mongoDriver) {
 					j := driver.Next(ctx)
 					assert.Nil(t, j)
 				},
-				"NextResolvesJobContentionAndDispatchesToSingleWorker": func(ctx context.Context, t *testing.T, driver *mongoDriver) {
+				"ResolvesJobContentionAndDispatchesToSingleWorker": func(ctx context.Context, t *testing.T, driver *mongoDriver) {
 					j := newMockJob()
 					j.SetID(utility.RandomString())
 					require.NoError(t, driver.Put(ctx, j))
@@ -994,7 +994,7 @@ func TestDriverNextJob(t *testing.T) {
 					}
 					assert.Equal(t, 1, numDispatches, "should have resolved the worker contention by dispatching the job to exactly one worker")
 				},
-				"NextDispatchesOnePendingJob": func(ctx context.Context, t *testing.T, driver *mongoDriver) {
+				"DispatchesOnePendingJob": func(ctx context.Context, t *testing.T, driver *mongoDriver) {
 					j := newMockJob()
 					j.SetID(utility.RandomString())
 					require.NoError(t, driver.Put(ctx, j))
@@ -1005,7 +1005,7 @@ func TestDriverNextJob(t *testing.T) {
 
 					checkDispatched(t, next.Status())
 				},
-				"NextIgnoresJobThatHasNotHitWaitUntilRequirementYet": func(ctx context.Context, t *testing.T, driver *mongoDriver) {
+				"IgnoresJobThatHasNotHitWaitUntilRequirementYet": func(ctx context.Context, t *testing.T, driver *mongoDriver) {
 					j := newMockJob()
 					j.SetID(utility.RandomString())
 					j.SetTimeInfo(amboy.JobTimeInfo{WaitUntil: time.Now().Add(time.Hour)})
@@ -1023,7 +1023,7 @@ func TestDriverNextJob(t *testing.T) {
 					require.NoError(t, err, "job that has not yet reached wait until requirement should remain enqueued")
 					assert.Equal(t, j.ID(), enqueuedJob.ID())
 				},
-				"NextIgnoresJobAndDequeuesJobThatHasExceededDispatchByRequirement": func(ctx context.Context, t *testing.T, driver *mongoDriver) {
+				"IgnoresJobAndDequeuesJobThatHasExceededDispatchByRequirement": func(ctx context.Context, t *testing.T, driver *mongoDriver) {
 					j := newMockJob()
 					j.SetID(utility.RandomString())
 					j.SetTimeInfo(amboy.JobTimeInfo{DispatchBy: time.Now().Add(-time.Hour)})
@@ -1045,7 +1045,7 @@ func TestDriverNextJob(t *testing.T) {
 					assert.True(t, amboy.IsJobNotFoundError(err), "job that exceeds dispatch by time should be dequeued")
 					assert.Zero(t, enqueuedJob)
 				},
-				"NextDispatchesEachPendingJob": func(ctx context.Context, t *testing.T, driver *mongoDriver) {
+				"DispatchesEachPendingJob": func(ctx context.Context, t *testing.T, driver *mongoDriver) {
 					j0 := newMockJob()
 					j0.SetID(utility.RandomString())
 					j1 := newMockJob()

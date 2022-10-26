@@ -1449,7 +1449,7 @@ func (d *mongoDriver) tryDispatchJob(ctx context.Context, iter *mongo.Cursor, st
 		}
 
 		lockTimeout := d.LockTimeout()
-		dispatchable := isDispatchable(j.Status(), lockTimeout)
+		dispatchable := isDispatchable(j.Status(), j.TimeInfo(), lockTimeout)
 		if !dispatchable {
 			dispatchInfo.skips++
 			continue

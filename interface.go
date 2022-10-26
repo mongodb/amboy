@@ -256,7 +256,7 @@ type JobRetryOptions struct {
 func (j JobTimeInfo) Duration() time.Duration { return j.End.Sub(j.Start) }
 
 // IsStale determines if the job is too old to be dispatched, and if
-// so, queues may remove or drop the job entirely.
+// so, queues may skip or dequeue the job.
 func (j JobTimeInfo) IsStale() bool {
 	if j.DispatchBy.IsZero() {
 		return false
