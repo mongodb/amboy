@@ -1089,7 +1089,7 @@ func TestDriverNextJob(t *testing.T) {
 					}
 					for i := 0; i < queueSize; i++ {
 						next := driver.Next(ctx)
-						require.NotNil(t, next, "expected %d jobs in the queue waiting to run, but got %d", queueSize, i+1)
+						require.NotNil(t, next, "expected %d jobs in the queue waiting to run, but got %d", queueSize, i)
 						checkDispatched(t, next.Status())
 						if i < len(staleInProgJobs) {
 							seen, ok := staleInProgJobs[next.ID()]

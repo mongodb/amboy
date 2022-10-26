@@ -16,7 +16,12 @@ func randomString(x int) string {
 	return hex.EncodeToString(b)
 }
 
+// addJobsSuffix adds the expected collection suffix for the non-grouped queue
+// if it doesn't already have the suffix.
 func addJobsSuffix(s string) string {
+	if strings.HasSuffix(s, ".jobs") {
+		return s
+	}
 	return s + ".jobs"
 }
 
@@ -24,7 +29,12 @@ func trimJobsSuffix(s string) string {
 	return strings.TrimSuffix(s, ".jobs")
 }
 
+// addGroupSuffix adds the expected collection suffix for a queue group if it
+// doesn't already have the suffix.
 func addGroupSuffix(s string) string {
+	if strings.HasSuffix(s, ".group") {
+		return s
+	}
 	return s + ".group"
 }
 
