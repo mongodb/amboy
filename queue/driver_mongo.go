@@ -92,7 +92,7 @@ type MongoDBOptions struct {
 
 // PreferredIndexOptions provide options to explicitly set the index for use in
 // specific scenarios. If an index is not explicitly given, the index will be
-// picked auomatically.
+// picked automatically.
 type PreferredIndexOptions struct {
 	// NextJob determines the index pattern that will be used for requesting the
 	// next job in the queue.
