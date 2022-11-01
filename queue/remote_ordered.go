@@ -114,7 +114,7 @@ func (q *remoteSimpleOrdered) Next(ctx context.Context) amboy.Job {
 					// this is just an optimization; if there's one dependency it's easy
 					// to move that job up in the queue by submitting it here.
 					dj, ok := q.Get(ctx, edges[0])
-					if ok && isDispatchable(dj.Status(), q.Info().LockTimeout) {
+					if ok && isDispatchable(dj.Status(), dj.TimeInfo(), q.Info().LockTimeout) {
 						// might need to make this non-blocking.
 						q.dispatcher.Release(ctx, job)
 						if q.dispatcher.Dispatch(ctx, dj) == nil {
