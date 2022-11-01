@@ -935,6 +935,10 @@ func TestDriverNextJob(t *testing.T) {
 			mdbOpts.SampleSize = queueSize / 2
 			return mdbOpts
 		},
+		"UnsampledAndDoesNotQueryWaitUntil": func(t *testing.T, mdbOpts MongoDBOptions) MongoDBOptions {
+			mdbOpts.CheckWaitUntil = false
+			return mdbOpts
+		},
 		"Unsampled": func(t *testing.T, mdbOpts MongoDBOptions) MongoDBOptions { return mdbOpts },
 	} {
 		t.Run(queueType, func(t *testing.T) {
