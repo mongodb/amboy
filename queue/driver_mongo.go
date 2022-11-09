@@ -292,16 +292,8 @@ func (d *mongoDriver) setupDB(ctx context.Context) error {
 }
 
 func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
-	primary := d.ensureGroupIndexPrefix(bson.D{
-		bson.E{
-			Key:   "status.completed",
-			Value: bsonx.Int32(1),
-		},
-		bson.E{
-			Key:   "status.in_prog",
-			Value: bsonx.Int32(1),
-		},
-	})
+	var indexes []mongo.IndexModel
+
 	retrying := d.ensureGroupIndexPrefix(bson.D{
 		bson.E{
 			Key:   "status.completed",
@@ -320,6 +312,16 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 			Value: bsonx.Int32(-1),
 		},
 	})
+	indexes = append(indexes, mongo.IndexModel{
+		Keys: retrying,
+		// We have to shorten the index name because the index name length
+		// is limited to 127 bytes for MongoDB 4.0.
+		// Source: https://docs.mongodb.com/manual/reference/limits/#Index-Name-Length
+		// TODO: this only affects tests. Remove the custom index name once
+		// CI tests have upgraded to MongoDB 4.2+.
+		Options: options.Index().SetName("retrying_jobs"),
+	})
+
 	retryableJobIDAndAttempt := d.ensureGroupIndexPrefix(bson.D{
 		bson.E{
 			Key:   "retry_info.base_job_id",
@@ -330,49 +332,18 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 			Value: bsonx.Int32(-1),
 		},
 	})
+	indexes = append(indexes, mongo.IndexModel{Keys: retryableJobIDAndAttempt})
+
 	scopes := d.ensureGroupIndexPrefix(bson.D{
 		bson.E{
 			Key:   "scopes",
 			Value: bsonx.Int32(1),
 		},
 	})
-
-	if d.opts.Priority {
-		primary = append(primary, bson.E{
-			Key:   "priority",
-			Value: bsonx.Int32(1),
-		})
-	}
-
-	if d.opts.CheckWaitUntil {
-		primary = append(primary, bson.E{
-			Key:   "time_info.wait_until",
-			Value: bsonx.Int32(1),
-		})
-	} else if d.opts.CheckDispatchBy {
-		primary = append(primary, bson.E{
-			Key:   "time_info.dispatch_by",
-			Value: bsonx.Int32(1),
-		})
-	}
-
-	indexes := []mongo.IndexModel{
-		{Keys: primary},
-		{Keys: retryableJobIDAndAttempt},
-		{
-			Keys: retrying,
-			// We have to shorten the index name because the index name length
-			// is limited to 127 bytes for MongoDB 4.0.
-			// Source: https://docs.mongodb.com/manual/reference/limits/#Index-Name-Length
-			// TODO: this only affects tests. Remove the custom index name once
-			// CI tests have upgraded to MongoDB 4.2+.
-			Options: options.Index().SetName("retrying_jobs"),
-		},
-		{
-			Keys:    scopes,
-			Options: options.Index().SetUnique(true).SetPartialFilterExpression(bson.M{"scopes": bson.M{"$exists": true}}),
-		},
-	}
+	indexes = append(indexes, mongo.IndexModel{
+		Keys:    scopes,
+		Options: options.Index().SetUnique(true).SetPartialFilterExpression(bson.M{"scopes": bson.M{"$exists": true}}),
+	})
 
 	if d.opts.TTL > 0 {
 		ttl := int32(d.opts.TTL / time.Second)
@@ -385,6 +356,44 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 			},
 			Options: options.Index().SetExpireAfterSeconds(ttl),
 		})
+	}
+
+	makePrimary := func() bson.D {
+		primary := d.ensureGroupIndexPrefix(bson.D{
+			bson.E{
+				Key:   "status.completed",
+				Value: bsonx.Int32(1),
+			},
+			bson.E{
+				Key:   "status.in_prog",
+				Value: bsonx.Int32(1),
+			},
+		})
+		if d.opts.Priority {
+			primary = append(primary, bson.E{
+				Key:   "priority",
+				Value: bsonx.Int32(1),
+			})
+		}
+		return primary
+	}
+
+	if d.opts.CheckWaitUntil {
+		waitUntil := append(makePrimary(), bson.E{
+			Key:   "time_info.wait_until",
+			Value: bsonx.Int32(1),
+		})
+		indexes = append(indexes, mongo.IndexModel{Keys: waitUntil})
+	}
+	if d.opts.CheckDispatchBy {
+		dispatchBy := append(makePrimary(), bson.E{
+			Key:   "time_info.dispatch_by",
+			Value: bsonx.Int32(1),
+		})
+		indexes = append(indexes, mongo.IndexModel{Keys: dispatchBy})
+	}
+	if !d.opts.CheckWaitUntil && !d.opts.CheckDispatchBy {
+		indexes = append(indexes, mongo.IndexModel{Keys: makePrimary()})
 	}
 
 	return indexes
