@@ -1,20 +1,11 @@
 package queue
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"strings"
 	"time"
 
 	"github.com/mongodb/amboy"
 )
-
-// randomString returns a cryptographically random string.
-func randomString(x int) string {
-	b := make([]byte, x)
-	_, _ = rand.Read(b) // nolint
-	return hex.EncodeToString(b)
-}
 
 // addJobsSuffix adds the expected collection suffix for the non-grouped queue
 // if it doesn't already have the suffix.

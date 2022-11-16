@@ -21,8 +21,6 @@ type MongoDBQueueOptions struct {
 	// WorkerPoolSize returns the number of workers the queue should use. If
 	// set, this takes precedence over NumWorkers.
 	WorkerPoolSize func(string) int
-	// Ordered indicates whether the queue should obey job dependency ordering.
-	Ordered *bool
 	// Abortable indicates whether executing jobs can be aborted.
 	Abortable *bool
 	// Retryable represents options to retry jobs after they complete.
@@ -73,14 +71,8 @@ func (o *MongoDBQueueOptions) buildQueue(ctx context.Context) (remoteQueue, erro
 		numWorkers: workers,
 		retryable:  retryable,
 	}
-	if utility.FromBoolPtr(o.Ordered) {
-		if q, err = newRemoteSimpleOrderedWithOptions(qOpts); err != nil {
-			return nil, errors.Wrap(err, "initializing ordered queue")
-		}
-	} else {
-		if q, err = newRemoteUnorderedWithOptions(qOpts); err != nil {
-			return nil, errors.Wrap(err, "initializing unordered queue")
-		}
+	if q, err = newRemoteWithOptions(qOpts); err != nil {
+		return nil, errors.Wrap(err, "initializing remote queue")
 	}
 
 	if utility.FromBoolPtr(o.Abortable) {
@@ -147,9 +139,6 @@ func mergeMongoDBQueueOptions(opts ...MongoDBQueueOptions) MongoDBQueueOptions {
 		}
 		if o.WorkerPoolSize != nil {
 			merged.WorkerPoolSize = o.WorkerPoolSize
-		}
-		if o.Ordered != nil {
-			merged.Ordered = o.Ordered
 		}
 		if o.Abortable != nil {
 			merged.Abortable = o.Abortable

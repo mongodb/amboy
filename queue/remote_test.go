@@ -83,7 +83,6 @@ func TestMongoDBQueueOptions(t *testing.T) {
 		})
 		t.Run("CreatesRemoteQueue", func(t *testing.T) {
 			opts := defaultMongoDBQueueTestOptions()
-			opts.Ordered = utility.FalsePtr()
 			opts.Abortable = utility.FalsePtr()
 
 			q, err := opts.BuildQueue(ctx)
@@ -96,32 +95,8 @@ func TestMongoDBQueueOptions(t *testing.T) {
 			_, ok := runner.(amboy.AbortableRunner)
 			assert.False(t, ok, "runner pool should not be abortable")
 
-			rq, ok := q.(*remoteUnordered)
-			require.True(t, ok, "queue should be unordered remote queue")
-
-			d := rq.Driver()
-			require.NotZero(t, d)
-			md, ok := d.(*mongoDriver)
-			require.True(t, ok)
-			assert.Equal(t, *opts.DB, md.opts, "DB options should be forwarded to the DB")
-		})
-		t.Run("CreatesOrderedRemoteQueue", func(t *testing.T) {
-			opts := defaultMongoDBQueueTestOptions()
-			opts.Ordered = utility.TruePtr()
-			opts.Abortable = utility.FalsePtr()
-
-			q, err := opts.BuildQueue(ctx)
-			require.NoError(t, err)
-
-			assert.False(t, q.Info().Started, "queue should not be started after being built")
-
-			runner := q.Runner()
-			require.NotZero(t, runner)
-			_, ok := runner.(amboy.AbortableRunner)
-			assert.False(t, ok, "runner pool should not be abortable")
-
-			rq, ok := q.(*remoteSimpleOrdered)
-			require.True(t, ok, "queue should be ordered remote queue")
+			rq, ok := q.(*remote)
+			require.True(t, ok, "queue should be remote queue")
 
 			d := rq.Driver()
 			require.NotZero(t, d)
@@ -131,7 +106,6 @@ func TestMongoDBQueueOptions(t *testing.T) {
 		})
 		t.Run("CreatesRemoteQueueWithAbortableWorkers", func(t *testing.T) {
 			opts := defaultMongoDBQueueTestOptions()
-			opts.Ordered = utility.FalsePtr()
 			opts.Abortable = utility.TruePtr()
 
 			q, err := opts.BuildQueue(ctx)
@@ -144,8 +118,8 @@ func TestMongoDBQueueOptions(t *testing.T) {
 			_, ok := runner.(amboy.AbortableRunner)
 			assert.True(t, ok, "runner pool should be abortable")
 
-			rq, ok := q.(*remoteUnordered)
-			require.True(t, ok, "queue should be ordered remote queue")
+			rq, ok := q.(*remote)
+			require.True(t, ok, "queue should be remote queue")
 
 			d := rq.Driver()
 			require.NotZero(t, d)

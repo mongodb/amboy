@@ -15,35 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSimpleRateLimitingConstructor(t *testing.T) {
-	var (
-		runner amboy.Runner
-		err    error
-	)
-
-	assert := assert.New(t)
-	queue := &QueueTester{
-		toProcess: make(chan amboy.Job),
-		storage:   make(map[string]amboy.Job),
-	}
-
-	runner, err = NewSimpleRateLimitedWorkers(1, time.Nanosecond, nil)
-	assert.Nil(runner)
-	assert.Error(err)
-	assert.Contains(err.Error(), "less than a millisecond")
-	assert.Contains(err.Error(), "nil queue")
-
-	runner, err = NewSimpleRateLimitedWorkers(0, time.Millisecond, nil)
-	assert.Nil(runner)
-	assert.Error(err)
-	assert.Contains(err.Error(), "pool size less than 1")
-	assert.Contains(err.Error(), "nil queue")
-
-	runner, err = NewSimpleRateLimitedWorkers(10, 10*time.Millisecond, queue)
-	assert.NoError(err)
-	assert.NotNil(runner)
-}
-
 func TestAverageRateLimitingConstructor(t *testing.T) {
 	assert := assert.New(t) // nolint
 
@@ -136,19 +107,6 @@ func TestAvergeTimeCalculator(t *testing.T) {
 	// duration is larger than period, returns zero
 	assert.Equal(p.getNextTime(time.Hour), time.Duration(0))
 
-}
-
-func TestSimpleRateLimitingWorkerHandlesPanicingJobs(t *testing.T) {
-	assert := assert.New(t) // nolint
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-	defer cancel()
-
-	p := &simpleRateLimited{}
-	p.queue = &QueueTester{
-		toProcess: jobsChanWithPanicingJobs(ctx, 10),
-		storage:   make(map[string]amboy.Job),
-	}
-	assert.NotPanics(func() { p.worker(ctx) })
 }
 
 func TestEWMARateLimitingWorkerHandlesPanicingJobs(t *testing.T) {

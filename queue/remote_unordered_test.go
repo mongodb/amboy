@@ -15,8 +15,8 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type RemoteUnorderedSuite struct {
-	queue             *remoteUnordered
+type remoteSuite struct {
+	queue             *remote
 	driver            remoteQueueDriver
 	driverConstructor func() (remoteQueueDriver, error)
 	tearDown          func() error
@@ -26,8 +26,8 @@ type RemoteUnorderedSuite struct {
 	suite.Suite
 }
 
-func TestRemoteUnorderedMongoSuite(t *testing.T) {
-	tests := new(RemoteUnorderedSuite)
+func TestRemoteSuite(t *testing.T) {
+	tests := new(remoteSuite)
 	opts := defaultMongoDBTestOptions()
 	opts.Collection = "test-" + uuid.New().String()
 
@@ -52,20 +52,20 @@ func TestRemoteUnorderedMongoSuite(t *testing.T) {
 	suite.Run(t, tests)
 }
 
-func (s *RemoteUnorderedSuite) SetupTest() {
+func (s *remoteSuite) SetupTest() {
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	var err error
 	s.driver, err = s.driverConstructor()
 	s.Require().NoError(err)
 	s.Require().NoError(s.driver.Open(s.ctx))
-	rq, err := newRemoteUnordered(2)
+	rq, err := newRemote(2)
 	s.Require().NoError(err)
-	q, ok := rq.(*remoteUnordered)
+	q, ok := rq.(*remote)
 	s.Require().True(ok)
 	s.queue = q
 }
 
-func (s *RemoteUnorderedSuite) TearDownTest() {
+func (s *remoteSuite) TearDownTest() {
 	// this order is important, running teardown before canceling
 	// the context to prevent closing the connection before
 	// running the teardown procedure, given that some connection
@@ -74,16 +74,16 @@ func (s *RemoteUnorderedSuite) TearDownTest() {
 	s.cancel()
 }
 
-func (s *RemoteUnorderedSuite) TestDriverIsUnitializedByDefault() {
+func (s *remoteSuite) TestDriverIsUnitializedByDefault() {
 	s.Nil(s.queue.Driver())
 }
 
-func (s *RemoteUnorderedSuite) TestRemoteUnorderdImplementsQueueInterface() {
+func (s *remoteSuite) TestRemoteUnorderdImplementsQueueInterface() {
 	s.Implements((*amboy.Queue)(nil), s.queue)
 	s.Implements((*amboy.RetryableQueue)(nil), s.queue)
 }
 
-func (s *RemoteUnorderedSuite) TestJobPutIntoQueueFetchableViaGetMethod() {
+func (s *remoteSuite) TestJobPutIntoQueueFetchableViaGetMethod() {
 	s.Require().NoError(s.queue.SetDriver(s.driver))
 	s.Require().NotNil(s.queue.Driver())
 
@@ -106,7 +106,7 @@ func (s *RemoteUnorderedSuite) TestJobPutIntoQueueFetchableViaGetMethod() {
 	s.Equal(j.Type(), nj.Type())
 }
 
-func (s *RemoteUnorderedSuite) TestGetMethodHandlesMissingJobs() {
+func (s *remoteSuite) TestGetMethodHandlesMissingJobs() {
 	s.Require().Nil(s.queue.Driver())
 	s.Require().NoError(s.queue.SetDriver(s.driver))
 	s.Require().NotNil(s.queue.Driver())
@@ -129,7 +129,7 @@ func (s *RemoteUnorderedSuite) TestGetMethodHandlesMissingJobs() {
 	s.Nil(fetchedJob)
 }
 
-func (s *RemoteUnorderedSuite) TestInternalRunnerCanBeChangedBeforeStartingTheQueue() {
+func (s *remoteSuite) TestInternalRunnerCanBeChangedBeforeStartingTheQueue() {
 	s.NoError(s.queue.SetDriver(s.driver))
 
 	originalRunner := s.queue.Runner()
@@ -140,7 +140,7 @@ func (s *RemoteUnorderedSuite) TestInternalRunnerCanBeChangedBeforeStartingTheQu
 	s.Exactly(newRunner, s.queue.Runner())
 }
 
-func (s *RemoteUnorderedSuite) TestInternalRunnerCannotBeChangedAfterStartingAQueue() {
+func (s *remoteSuite) TestInternalRunnerCannotBeChangedAfterStartingAQueue() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -156,7 +156,7 @@ func (s *RemoteUnorderedSuite) TestInternalRunnerCannotBeChangedAfterStartingAQu
 	s.NotEqual(runner, newRunner)
 }
 
-func (s *RemoteUnorderedSuite) TestPuttingAJobIntoAQueueImpactsStats() {
+func (s *remoteSuite) TestPuttingAJobIntoAQueueImpactsStats() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -177,7 +177,7 @@ func (s *RemoteUnorderedSuite) TestPuttingAJobIntoAQueueImpactsStats() {
 	s.Equal(existing.Total+1, stats.Total, report)
 }
 
-func (s *RemoteUnorderedSuite) TestQueueFailsToStartIfDriverIsNotSet() {
+func (s *remoteSuite) TestQueueFailsToStartIfDriverIsNotSet() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -192,7 +192,7 @@ func (s *RemoteUnorderedSuite) TestQueueFailsToStartIfDriverIsNotSet() {
 	s.NoError(s.queue.Start(ctx))
 }
 
-func (s *RemoteUnorderedSuite) TestQueueFailsToStartIfRunnerIsNotSet() {
+func (s *remoteSuite) TestQueueFailsToStartIfRunnerIsNotSet() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -206,7 +206,7 @@ func (s *RemoteUnorderedSuite) TestQueueFailsToStartIfRunnerIsNotSet() {
 	s.Error(s.queue.Start(ctx))
 }
 
-func (s *RemoteUnorderedSuite) TestSetDriverErrorsIfQueueHasStarted() {
+func (s *remoteSuite) TestSetDriverErrorsIfQueueHasStarted() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -216,7 +216,7 @@ func (s *RemoteUnorderedSuite) TestSetDriverErrorsIfQueueHasStarted() {
 	s.Error(s.queue.SetDriver(s.driver))
 }
 
-func (s *RemoteUnorderedSuite) TestStartMethodCanBeCalledMultipleTimes() {
+func (s *remoteSuite) TestStartMethodCanBeCalledMultipleTimes() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -227,7 +227,7 @@ func (s *RemoteUnorderedSuite) TestStartMethodCanBeCalledMultipleTimes() {
 	}
 }
 
-func (s *RemoteUnorderedSuite) TestNextMethodSkipsLockedJobs() {
+func (s *remoteSuite) TestNextMethodSkipsLockedJobs() {
 	s.Require().NoError(s.queue.SetDriver(s.driver))
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -294,7 +294,7 @@ checkResults:
 	s.Equal(created, observed+numLocked, "%+v", qStat)
 }
 
-func (s *RemoteUnorderedSuite) TestJobInfo() {
+func (s *remoteSuite) TestJobInfo() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	s.Require().NoError(s.queue.SetDriver(s.driver))
@@ -319,7 +319,7 @@ func (s *RemoteUnorderedSuite) TestJobInfo() {
 	s.Equal(counter, 30)
 }
 
-func (s *RemoteUnorderedSuite) TestTimeInfoPersists() {
+func (s *remoteSuite) TestTimeInfoPersists() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	s.Require().NoError(s.queue.SetDriver(s.driver))
@@ -331,11 +331,11 @@ func (s *RemoteUnorderedSuite) TestTimeInfoPersists() {
 	s.NotZero(j2.TimeInfo())
 }
 
-func (s *RemoteUnorderedSuite) TestInfoReturnsDefaultLockTimeout() {
+func (s *remoteSuite) TestInfoReturnsDefaultLockTimeout() {
 	s.Equal(amboy.LockTimeout, s.queue.Info().LockTimeout)
 }
 
-func (s *RemoteUnorderedSuite) TestInfoReturnsConfigurableLockTimeout() {
+func (s *remoteSuite) TestInfoReturnsConfigurableLockTimeout() {
 	opts := defaultMongoDBTestOptions()
 	opts.LockTimeout = 30 * time.Minute
 	opts.Collection = s.T().Name()

@@ -2,13 +2,12 @@ package logger
 
 import (
 	"context"
-	"fmt"
 	"io/ioutil"
-	"math/rand"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/evergreen-ci/utility"
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/queue"
 	"github.com/mongodb/grip"
@@ -22,7 +21,6 @@ import (
 type SenderSuite struct {
 	senders  map[string]send.Sender
 	mock     *send.InternalSender
-	rand     *rand.Rand
 	queue    amboy.Queue
 	canceler context.CancelFunc
 	tempDir  string
@@ -35,8 +33,7 @@ func TestSenderSuite(t *testing.T) {
 
 func (s *SenderSuite) SetupSuite() {
 	var err error
-	s.rand = rand.New(rand.NewSource(time.Now().Unix()))
-	s.tempDir, err = ioutil.TempDir("", fmt.Sprintf("%v", s.rand))
+	s.tempDir, err = ioutil.TempDir("", utility.RandomString())
 	s.Require().NoError(err)
 }
 
@@ -95,20 +92,10 @@ func (s *SenderSuite) TestSenderImplementsInterface() {
 	}
 }
 
-const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$%^&*()"
-
-func randomString(n int, r *rand.Rand) string {
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = letters[r.Int63()%int64(len(letters))]
-	}
-	return string(b)
-}
-
 func (s *SenderSuite) TestNameSetterRoundTrip() {
 	for n, sender := range s.senders {
 		for i := 0; i < 100; i++ {
-			name := randomString(12, s.rand)
+			name := utility.MakeRandomString(6)
 			s.NotEqual(sender.Name(), name, n)
 			sender.SetName(name)
 			s.Equal(sender.Name(), name, n)
@@ -161,7 +148,7 @@ func (s *SenderSuite) TestBasicNoopSendTest() {
 	for name, sender := range s.senders {
 		grip.Info(name)
 		for i := -10; i <= 110; i += 5 {
-			m := message.NewDefaultMessage(level.Priority(i), "hello world! "+randomString(10, s.rand))
+			m := message.NewDefaultMessage(level.Priority(i), "hello world! "+utility.MakeRandomString(5))
 			sender.Send(m)
 		}
 	}

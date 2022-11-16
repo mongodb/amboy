@@ -12,12 +12,12 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-// LocalLimitedSizeQueue suite tests the queue implementation that
+// limitedSizeQueueSuite suite tests the queue implementation that
 // uses the CappedResultStorage. These tests exercise the aspects of
 // this queue implementation that are not covered by the tests of the
 // storage object *or* exercised by the general queue functionality
 // tests, which test all implementations.
-type LimitedSizeQueueSuite struct {
+type limitedSizeQueueSuite struct {
 	queue       *limitedSizeLocal
 	numWorkers  int
 	numCapacity int
@@ -26,20 +26,20 @@ type LimitedSizeQueueSuite struct {
 }
 
 func TestLimitedSizeQueueSuite(t *testing.T) {
-	suite.Run(t, new(LimitedSizeQueueSuite))
+	suite.Run(t, new(limitedSizeQueueSuite))
 }
 
-func (s *LimitedSizeQueueSuite) SetupSuite() {
+func (s *limitedSizeQueueSuite) SetupSuite() {
 	s.numWorkers = 2
 	s.numCapacity = 100
 	s.require = s.Require()
 }
 
-func (s *LimitedSizeQueueSuite) SetupTest() {
+func (s *limitedSizeQueueSuite) SetupTest() {
 	s.queue = NewLocalLimitedSize(s.numWorkers, s.numCapacity).(*limitedSizeLocal)
 }
 
-func (s *LimitedSizeQueueSuite) TestBufferForPendingWorkEqualToCapacityForResults() {
+func (s *limitedSizeQueueSuite) TestBufferForPendingWorkEqualToCapacityForResults() {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
@@ -71,7 +71,7 @@ func (s *LimitedSizeQueueSuite) TestBufferForPendingWorkEqualToCapacityForResult
 	s.Len(s.queue.channel, s.numCapacity)
 }
 
-func (s *LimitedSizeQueueSuite) TestCallingStartMultipleTimesDoesNotImpactState() {
+func (s *limitedSizeQueueSuite) TestCallingStartMultipleTimesDoesNotImpactState() {
 	s.False(s.queue.Info().Started)
 	s.Nil(s.queue.channel)
 	ctx := context.Background()
@@ -85,8 +85,8 @@ func (s *LimitedSizeQueueSuite) TestCallingStartMultipleTimesDoesNotImpactState(
 	s.NotNil(s.queue.channel)
 }
 
-func (s *LimitedSizeQueueSuite) TestCannotSetRunnerAfterQueueIsOpened() {
-	secondRunner := pool.NewSingle()
+func (s *limitedSizeQueueSuite) TestCannotSetRunnerAfterQueueIsOpened() {
+	secondRunner := pool.NewAbortablePool(1, s.queue)
 	runner := s.queue.runner
 
 	s.False(s.queue.Info().Started)

@@ -9,27 +9,27 @@ import (
 	"github.com/pkg/errors"
 )
 
-// remoteUnordered implements the amboy.RetryableQueue interface. It uses a
-// Driver to access a backend for job storage and processing. The queue does not
-// impose any additional job ordering beyond what's provided by the driver.
-type remoteUnordered struct {
+// remote implements the amboy.RetryableQueue interface. It uses a Driver to
+// access a backend for job storage and processing. The queue does not impose
+// any additional job ordering beyond what's provided by the driver.
+type remote struct {
 	*remoteBase
 }
 
-// newRemoteUnordered returns a queue that has been initialized with a
-// configured local worker pool with the specified number of workers.
-func newRemoteUnordered(size int) (remoteQueue, error) {
-	return newRemoteUnorderedWithOptions(remoteOptions{numWorkers: size})
+// newRemote returns a queue that has been initialized with a configured local
+// worker pool with the specified number of workers.
+func newRemote(size int) (remoteQueue, error) {
+	return newRemoteWithOptions(remoteOptions{numWorkers: size})
 }
 
-// newRemoteUnorderedWithOptions returns a queue that has been initialized with
-// a configured runner and the given options.
-func newRemoteUnorderedWithOptions(opts remoteOptions) (remoteQueue, error) {
+// newRemoteWithOptions returns a queue that has been initialized with a
+// configured runner and the given options.
+func newRemoteWithOptions(opts remoteOptions) (remoteQueue, error) {
 	b, err := newRemoteBaseWithOptions(opts)
 	if err != nil {
 		return nil, errors.Wrap(err, "initializing remote base")
 	}
-	q := &remoteUnordered{remoteBase: b}
+	q := &remote{remoteBase: b}
 	q.dispatcher = NewDispatcher(q)
 	if err := q.SetRunner(pool.NewLocalWorkers(opts.numWorkers, q)); err != nil {
 		return nil, errors.Wrap(err, "configuring runner")
@@ -39,11 +39,10 @@ func newRemoteUnorderedWithOptions(opts remoteOptions) (remoteQueue, error) {
 	return q, nil
 }
 
-// Next returns a Job from the queue. Returns a nil Job object if the
-// context is canceled. The operation is blocking until an
-// undispatched, unlocked job is available. This operation takes a job
-// lock.
-func (q *remoteUnordered) Next(ctx context.Context) amboy.Job {
+// Next returns a Job from the queue. Returns a nil Job object if the context is
+// canceled. The operation is blocking until an undispatched, unlocked job is
+// available. This operation takes a job lock.
+func (q *remote) Next(ctx context.Context) amboy.Job {
 	count := 0
 	for {
 		count++
