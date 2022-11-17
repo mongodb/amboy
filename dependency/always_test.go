@@ -8,7 +8,7 @@ import (
 
 // AlwaysRebuildSuite tests the Always dependency implementation which
 // always returns the Ready dependency state. Does contain support for
-// dependency graph resolution, but the tasks will always run.
+// dependency graph resolution, but the job will always run.
 type AlwaysRebuildSuite struct {
 	dep *alwaysManager
 	suite.Suite

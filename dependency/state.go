@@ -3,13 +3,13 @@ package dependency
 // State provides a consistent set of values for
 // DependencyManager implementations to use to report their state, and
 // provide Queues and Jobs with a common set of terms to describe the
-// state of a task's dependencies
+// state of a job's dependencies
 type State int
 
 //go:generate stringer -type=State
 
 const (
-	// Ready indicates that a task is safe to execute from the
+	// Ready indicates that a job is safe to execute from the
 	// perspective of the Dependency Manager.
 	Ready State = iota
 
@@ -17,12 +17,12 @@ const (
 	// dependency.
 	Passed
 
-	// Blocked tasks are waiting for their dependencies to be
+	// Blocked job are waiting for their dependencies to be
 	// resolved.
 	Blocked
 
 	// Unresolved states are for cyclic dependencies or cases
-	// where tasks depend on resources that cannot be built.
+	// where jobs depend on resources that cannot be built.
 	Unresolved
 )
 

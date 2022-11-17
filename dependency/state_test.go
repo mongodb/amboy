@@ -9,7 +9,7 @@ import (
 )
 
 // StatesSuites checks the States types, which are the constants that
-// define if a task needs to run or can be a noop.
+// define if a job needs to run or can be a noop.
 type StatesSuite struct {
 	suite.Suite
 }

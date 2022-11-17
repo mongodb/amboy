@@ -81,7 +81,7 @@ func NewLocalLimitedSizeSerializableWithOptions(opts LocalLimitedSizeSerializabl
 		opts:     opts,
 		storage:  make(map[string]amboy.Job),
 		scopes:   NewLocalScopeManager(),
-		id:       fmt.Sprintf("queue.local.unordered.fixed.serializable.%s", uuid.New().String()),
+		id:       fmt.Sprintf("queue.local.fixed.serializable.%s", uuid.New().String()),
 		pending:  make(chan amboy.Job, opts.Capacity),
 		toDelete: make([]string, 0, opts.Capacity),
 	}

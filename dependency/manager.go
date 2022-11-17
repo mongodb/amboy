@@ -14,11 +14,11 @@ type TypeInfo struct {
 // implementation can use to order Jobs.
 type Manager interface {
 	// Reports the state of the dependency, and allows calling
-	// tasks to determine if the dependencies for a Job have been
+	// jobs to determine if the dependencies for a Job have been
 	// satisfied.
 	State() State
 
-	// Computes and returns a list of Job IDs that this task
+	// Computes and returns a list of Job IDs that this job
 	// depends on. While the State() method is ultimately
 	// responsible for determining if a Dependency is resolved,
 	// the Edges() function provides Queue implementations with a

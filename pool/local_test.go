@@ -79,7 +79,7 @@ func (s *LocalWorkersSuite) TestPoolStartsAndProcessesJobs() {
 	var jobs []amboy.Job
 
 	for i := 0; i < num; i++ {
-		cmd := fmt.Sprintf("echo 'task=%d'", i)
+		cmd := fmt.Sprintf("echo 'job=%d'", i)
 		jobs = append(jobs, job.NewShellJob(cmd, ""))
 	}
 

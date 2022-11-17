@@ -31,8 +31,8 @@ type Job interface {
 	// completed state for the job.
 	Run(context.Context)
 
-	// Type returns a JobType object that Queue
-	// implementations can use to de-serialize tasks.
+	// Type returns a JobType object that describes the kind of job that's being
+	// run. Queue implementations can use to de-serialize jobs.
 	Type() JobType
 
 	// Provides access to the job's dependency information, and
@@ -74,7 +74,7 @@ type Job interface {
 	// AddRetryableError annotates the job with an error and marks the job as
 	// needing to retry.
 	AddRetryableError(error)
-	// Error returns an error object if the task was an
+	// Error returns an error object if the job encountered an
 	// error. Typically if the job has not run, this is nil.
 	Error() error
 
@@ -303,7 +303,7 @@ func NewJobInfo(j Job) JobInfo {
 }
 
 // Queue describes a very simple Job queue interface that allows users
-// to define Job objects, add them to a worker queue and execute tasks
+// to define Job objects, add them to a worker queue, and execute jobs
 // from that queue. Queue implementations may run locally or as part
 // of a distributed application, with multiple workers and submitter
 // Queue instances, which can support different job dispatching and
@@ -511,7 +511,7 @@ func (opts *RetryHandlerOptions) IsUnlimitedMaxCapacity() bool {
 
 // Runner describes a simple worker interface for executing jobs in
 // the context of a Queue. Used by queue implementations to run
-// tasks. Generally Queue implementations will spawn a runner as part
+// jobs. Generally Queue implementations will spawn a runner as part
 // of their constructor or Start() methods, but client code can inject
 // alternate Runner implementations, as required.
 type Runner interface {

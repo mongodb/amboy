@@ -644,12 +644,12 @@ func (s *DriverSuite) TestJobsMethodReturnsAllJobs() {
 
 	counter := 0
 	for j := range s.driver.Jobs(s.ctx) {
-		task := j.(*job.ShellJob)
+		job := j.(*job.ShellJob)
 		counter++
 		mock, ok := mocks[j.ID()]
 		if s.True(ok) {
-			s.Equal(mock.ID(), task.ID())
-			s.Equal(mock.Command, task.Command)
+			s.Equal(mock.ID(), job.ID())
+			s.Equal(mock.Command, job.Command)
 		}
 	}
 

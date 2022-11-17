@@ -70,7 +70,7 @@ func TestAvergeTimeCalculator(t *testing.T) {
 	//
 	// getNexttime returns how much time the worker loop should
 	// sleep between jobs, as a result of the average execution
-	// time of a task going down from the ~minute used above, the
+	// time of a job going down from the ~minute used above, the
 	// amount of time needed to spend sleeping is going *up* which
 	// means the values are going up in this function.
 	var last time.Duration
@@ -83,7 +83,7 @@ func TestAvergeTimeCalculator(t *testing.T) {
 
 	assert.True(p.getNextTime(time.Second) > time.Second)
 
-	// also run tests of the wrapper runJobs function which executes tasks and calls getNextTime
+	// also run tests of the wrapper runJobs function which executes job and calls getNextTime
 	p.queue = &QueueTester{
 		toProcess: make(chan amboy.Job),
 		storage:   make(map[string]amboy.Job),
@@ -98,8 +98,8 @@ func TestAvergeTimeCalculator(t *testing.T) {
 	assert.True(val > time.Microsecond)
 	assert.True(j.Status().Completed)
 
-	// mess with the target number of tasks to make sure that we
-	// get 0 wait time if there's no time needed between tasks
+	// mess with the target number of job to make sure that we
+	// get 0 wait time if there's no time needed between job
 	p.target = 100000
 	assert.Equal(p.getNextTime(time.Millisecond), time.Duration(0))
 	p.target = 10

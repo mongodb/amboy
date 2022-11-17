@@ -1,11 +1,11 @@
 /*
 Edges
 
-Dependencies have methods to add or access Edges of the task. These
+Dependencies have methods to add or access Edges of the job. These
 allow Jobs, by way of their dependencies to express relationships
 between Jobs. Fundamentally managing Job ordering is a property of a
-Queue implementation, but these methods allow tasks to express their
-dependencies on other tasks as a hint to Queue
+Queue implementation, but these methods allow jobs to express their
+dependencies on other jobs as a hint to Queue
 implementations. Separately, queue implementation checks the
 environment to ensure that all prerequisites are satisfied.
 */

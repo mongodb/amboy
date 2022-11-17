@@ -78,7 +78,7 @@ func (s *remoteSuite) TestDriverIsUnitializedByDefault() {
 	s.Nil(s.queue.Driver())
 }
 
-func (s *remoteSuite) TestRemoteUnorderdImplementsQueueInterface() {
+func (s *remoteSuite) TestRemoteImplementsQueueInterface() {
 	s.Implements((*amboy.Queue)(nil), s.queue)
 	s.Implements((*amboy.RetryableQueue)(nil), s.queue)
 }

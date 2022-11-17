@@ -340,8 +340,8 @@ func TestQueueSmoke(t *testing.T) {
 						}
 
 						t.Run("MaxSize"+size.Name, func(t *testing.T) {
-							t.Run("Unordered", func(t *testing.T) {
-								unorderedTest(bctx, t, test, runner, size)
+							t.Run("Basic", func(t *testing.T) {
+								basicTest(bctx, t, test, runner, size)
 							})
 
 							if test.WaitUntilSupported {
@@ -460,7 +460,10 @@ func TestQueueSmoke(t *testing.T) {
 	}
 }
 
-func unorderedTest(bctx context.Context, t *testing.T, test QueueTestCase, runner PoolTestCase, size SizeTestCase) {
+// basicTest verifies basic queue correctness by enqueueing several jobs,
+// waiting for them to complete, and verifying that the queue interface methods
+// provide the expected data on completed jobs.
+func basicTest(bctx context.Context, t *testing.T, test QueueTestCase, runner PoolTestCase, size SizeTestCase) {
 	ctx, cancel := context.WithCancel(bctx)
 	defer cancel()
 
