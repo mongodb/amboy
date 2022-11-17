@@ -4,7 +4,7 @@ go 1.16
 
 require (
 	github.com/VividCortex/ewma v1.2.0
-	github.com/aws/aws-sdk-go v1.44.127
+	github.com/aws/aws-sdk-go v1.44.127 // indirect
 	github.com/cheynewallace/tabby v1.1.1
 	github.com/evergreen-ci/gimlet v0.0.0-20220401151443-33c830c51cee
 	github.com/evergreen-ci/poplar v0.0.0-20220405164038-0cfe3198c320
@@ -19,7 +19,6 @@ require (
 	github.com/youmark/pkcs8 v0.0.0-20201027041543-1326539a0a0a // indirect
 	go.mongodb.org/mongo-driver v1.10.3
 	golang.org/x/oauth2 v0.0.0-20211028175245-ba495a64dcb5 // indirect
-	gonum.org/v1/gonum v0.12.0
 	google.golang.org/genproto v0.0.0-20211101144312-62acf1d99145 // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22
 )
