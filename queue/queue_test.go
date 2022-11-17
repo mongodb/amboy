@@ -3,9 +3,6 @@ package queue
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
-	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -477,6 +474,8 @@ func unorderedTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 
 	wg := &sync.WaitGroup{}
 
+	require.NoError(t, q.Start(ctx))
+
 	for i := 0; i < size.Size; i++ {
 		wg.Add(1)
 		go func(num int) {
@@ -493,13 +492,9 @@ func unorderedTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 	}
 	wg.Wait()
 
-	require.NoError(t, q.Start(ctx))
-
-	amboy.WaitInterval(ctx, q, 100*time.Millisecond)
+	assert.True(t, amboy.WaitInterval(ctx, q, 100*time.Millisecond))
 
 	assert.Equal(t, numJobs, q.Stats(ctx).Total, fmt.Sprintf("with %d workers", size.Size))
-
-	amboy.WaitInterval(ctx, q, 100*time.Millisecond)
 
 	grip.Infof("workers complete for %d worker smoke test", size.Size)
 	assert.Equal(t, numJobs, q.Stats(ctx).Completed, fmt.Sprintf("%+v", q.Stats(ctx)))
@@ -520,57 +515,6 @@ func unorderedTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 	assert.Equal(t, numJobs, statCounter, fmt.Sprintf("want job info for every job"))
 
 	grip.Infof("completed results check for %d worker smoke test", size.Size)
-}
-
-func orderedTest(bctx context.Context, t *testing.T, test QueueTestCase, runner PoolTestCase, size SizeTestCase) {
-	ctx, cancel := context.WithCancel(bctx)
-	defer cancel()
-
-	q, closer, err := test.Constructor(ctx, newDriverID(), size.Size)
-	require.NoError(t, err)
-	defer func() { require.NoError(t, closer(ctx)) }()
-	require.NoError(t, runner.SetPool(q, size.Size))
-
-	var lastJobName string
-
-	testNames := []string{"amboy", "cusseta", "jasper", "sardis", "dublin"}
-
-	numJobs := size.Size / 2 * len(testNames)
-
-	tempDir, err := ioutil.TempDir("", strings.Join([]string{"amboy-ordered-queue-smoke-test",
-		uuid.New().String()}, "-"))
-	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
-
-	for i := 0; i < size.Size/2; i++ {
-		for _, name := range testNames {
-			fn := filepath.Join(tempDir, fmt.Sprintf("%s.%d", name, i))
-			cmd := fmt.Sprintf("echo %s", fn)
-			j := job.NewShellJob(cmd, fn)
-			if lastJobName != "" {
-				require.NoError(t, j.Dependency().AddEdge(lastJobName))
-			}
-			lastJobName = j.ID()
-
-			require.NoError(t, q.Put(ctx, j))
-		}
-	}
-
-	require.NoError(t, q.Start(ctx))
-
-	require.Equal(t, numJobs, q.Stats(ctx).Total, fmt.Sprintf("with %d workers", size.Size))
-	amboy.WaitInterval(ctx, q, 50*time.Millisecond)
-	require.Equal(t, numJobs, q.Stats(ctx).Completed, fmt.Sprintf("%+v", q.Stats(ctx)))
-	for result := range q.Results(ctx) {
-		require.True(t, result.Status().Completed, fmt.Sprintf("with %d workers", size.Size))
-	}
-
-	statCounter := 0
-	for info := range q.JobInfo(ctx) {
-		statCounter++
-		require.NotEmpty(t, info.ID)
-	}
-	require.Equal(t, statCounter, numJobs)
 }
 
 func waitUntilTest(bctx context.Context, t *testing.T, test QueueTestCase, runner PoolTestCase, size SizeTestCase) {
@@ -750,9 +694,6 @@ func maxTimeTest(bctx context.Context, t *testing.T, test QueueTestCase, runner 
 }
 
 func oneExecutionTest(bctx context.Context, t *testing.T, test QueueTestCase, runner PoolTestCase, size SizeTestCase) {
-	if test.Name == "LocalOrdered" {
-		t.Skip("topological sort deadlocks")
-	}
 	ctx, cancel := context.WithTimeout(bctx, 2*time.Minute)
 	defer cancel()
 
@@ -765,6 +706,8 @@ func oneExecutionTest(bctx context.Context, t *testing.T, test QueueTestCase, ru
 	mockJobCounters.Reset()
 	count := 40
 
+	require.NoError(t, q.Start(ctx))
+
 	for i := 0; i < count; i++ {
 		j := newMockJob()
 		jobID := fmt.Sprintf("%d.%d.mock.single-exec", i, job.GetNumber())
@@ -772,9 +715,7 @@ func oneExecutionTest(bctx context.Context, t *testing.T, test QueueTestCase, ru
 		assert.NoError(t, q.Put(ctx, j))
 	}
 
-	require.NoError(t, q.Start(ctx))
-
-	amboy.WaitInterval(ctx, q, 100*time.Millisecond)
+	assert.True(t, amboy.WaitInterval(ctx, q, 100*time.Millisecond))
 	assert.Equal(t, count, mockJobCounters.Count())
 }
 
@@ -822,8 +763,8 @@ func multiExecutionTest(bctx context.Context, t *testing.T, test QueueTestCase, 
 	grip.Info("added jobs to queues")
 
 	// wait for all jobs to complete.
-	amboy.WaitInterval(ctx, qOne, 100*time.Millisecond)
-	amboy.WaitInterval(ctx, qTwo, 100*time.Millisecond)
+	assert.True(t, amboy.WaitInterval(ctx, qOne, 100*time.Millisecond))
+	assert.True(t, amboy.WaitInterval(ctx, qTwo, 100*time.Millisecond))
 
 	// check that both queues see all jobs
 	statsOne := qOne.Stats(ctx)
@@ -913,7 +854,7 @@ func manyQueueTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 	grip.Notice("waiting to run jobs")
 
 	for _, q := range queues {
-		amboy.WaitInterval(ctx, q, 20*time.Millisecond)
+		assert.True(t, amboy.WaitInterval(ctx, q, 20*time.Millisecond))
 	}
 
 	assert.Equal(t, size.Size*inside*outside, mockJobCounters.Count())

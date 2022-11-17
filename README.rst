@@ -68,9 +68,7 @@ The `DependencyManager
 interface makes it possible for jobs to express relationships to each
 other and to their environment so that Job operations can noop or
 block if their requirements are not satisfied. The data about
-relationships between jobs can inform job ordering as in the `LocalOrdered
-<https://godoc.org/github.com/mongodb/amboy/queue#LocalOrdered>`_
-queue.
+relationships between jobs can inform job ordering.
 
 The handling of dependency information is the responsibility of the
 queue implementation. Most queue implementations do not support this, unless
@@ -169,11 +167,11 @@ All project automation is managed by a makefile, with all output captured in the
 
    make compile                 # runs a test compile
    make test                    # tests all packages
-   make lint                    # lints all packages
    make test-<package>          # runs the tests only for a specific packages
+   make lint                    # lints all packages
    make lint-<package>          # lints a specific package
-   make html-coverage-<package> # generates the HTML coverage report for a specific package
    make html-coverage           # generates the HTML coverage report for all packages
+   make html-coverage-<package> # generates the HTML coverage report for a specific package
 
 The buildsystem also has a number of flags, which may be useful for more
 iterative development workflows: ::

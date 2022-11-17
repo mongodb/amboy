@@ -22,17 +22,6 @@ func TestSingleMsgJobSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func TestMultiMsgJobSuite(t *testing.T) {
-	s := new(MsgJobSuite)
-	s.constructor = func(m message.Composer, s send.Sender) amboy.Job {
-		if s == nil {
-			return NewMultiSendMessageJob(m, []send.Sender{})
-		}
-		return NewMultiSendMessageJob(m, []send.Sender{s})
-	}
-	suite.Run(t, s)
-}
-
 func (s *MsgJobSuite) TestIsNotSerializable() {
 	job := s.constructor(nil, nil)
 	s.True(0 > job.Type().Version)
