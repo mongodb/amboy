@@ -83,7 +83,7 @@ func TestAvergeTimeCalculator(t *testing.T) {
 
 	assert.True(p.getNextTime(time.Second) > time.Second)
 
-	// also run tests of the wrapper runJobs function which executes job and calls getNextTime
+	// also run tests of the wrapper runJobs function which executes jobs and calls getNextTime
 	p.queue = &QueueTester{
 		toProcess: make(chan amboy.Job),
 		storage:   make(map[string]amboy.Job),

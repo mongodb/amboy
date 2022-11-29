@@ -2,8 +2,6 @@ package logger
 
 import (
 	"context"
-	"io/ioutil"
-	"os"
 	"testing"
 	"time"
 
@@ -23,18 +21,11 @@ type SenderSuite struct {
 	mock     *send.InternalSender
 	queue    amboy.Queue
 	canceler context.CancelFunc
-	tempDir  string
 	suite.Suite
 }
 
 func TestSenderSuite(t *testing.T) {
 	suite.Run(t, new(SenderSuite))
-}
-
-func (s *SenderSuite) SetupSuite() {
-	var err error
-	s.tempDir, err = ioutil.TempDir("", utility.RandomString())
-	s.Require().NoError(err)
 }
 
 func (s *SenderSuite) SetupTest() {
@@ -63,7 +54,6 @@ func (s *SenderSuite) TearDownTest() {
 	defer cancel()
 	amboy.WaitInterval(ctx, s.queue, 100*time.Millisecond)
 
-	s.Require().NoError(os.RemoveAll(s.tempDir))
 	for _, sender := range s.senders {
 		s.NoError(sender.Close())
 	}

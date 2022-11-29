@@ -116,7 +116,7 @@ func (g *Group) Run(ctx context.Context) {
 
 			j.Run(ctx)
 
-			// after the jobj completes, add the issue
+			// after the job completes, add the issue
 			// back to Jobs map so that we preserve errors
 			// idiomatically for Groups.
 			jobErr := j.Error()
