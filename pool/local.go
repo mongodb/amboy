@@ -35,7 +35,7 @@ func NewLocalWorkers(numWorkers int, q amboy.Queue) amboy.Runner {
 }
 
 // localWorkers is a very minimal implementation of a worker pool, and
-// supports a configurable number of workers to process Job tasks.
+// supports a configurable number of workers to process Jobs.
 type localWorkers struct {
 	size     int
 	started  bool
@@ -59,7 +59,7 @@ func (r *localWorkers) SetQueue(q amboy.Queue) error {
 	return nil
 }
 
-// Started returns true when the Runner has begun executing tasks. For
+// Started returns true when the Runner has begun executing jobs. For
 // localWorkers this means that workers are running.
 func (r *localWorkers) Started() bool {
 	r.mu.RLock()

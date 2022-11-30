@@ -333,7 +333,7 @@ func TestDispatcherImplementations(t *testing.T) {
 					defer tcancel()
 
 					const size = 10
-					q, err := newRemoteUnordered(size)
+					q, err := newRemote(size)
 					require.NoError(t, err)
 
 					require.NoError(t, driver.getCollection().Database().Drop(tctx))

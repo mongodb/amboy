@@ -44,7 +44,7 @@ func TestRetryableQueueOptions(t *testing.T) {
 }
 
 func TestNewBasicRetryHandler(t *testing.T) {
-	q, err := newRemoteUnordered(1)
+	q, err := newRemote(1)
 	require.NoError(t, err)
 	t.Run("SucceedsWithQueue", func(t *testing.T) {
 		rh, err := NewBasicRetryHandler(q, amboy.RetryHandlerOptions{})
@@ -470,7 +470,7 @@ func TestRetryHandlerImplementations(t *testing.T) {
 					defer tcancel()
 
 					makeQueueAndRetryHandler := func(opts amboy.RetryHandlerOptions) (*mockRemoteQueue, amboy.RetryHandler, error) {
-						q, err := newRemoteUnorderedWithOptions(remoteOptions{
+						q, err := newRemoteWithOptions(remoteOptions{
 							numWorkers: 10,
 							retryable:  RetryableQueueOptions{RetryHandler: opts},
 						})
@@ -504,18 +504,8 @@ func TestRetryHandlerImplementations(t *testing.T) {
 
 func defaultRetryableQueueTestCases(d remoteQueueDriver) map[string]func(size int) (amboy.RetryableQueue, error) {
 	return map[string]func(size int) (amboy.RetryableQueue, error){
-		"RemoteUnordered": func(size int) (amboy.RetryableQueue, error) {
-			q, err := newRemoteUnordered(size)
-			if err != nil {
-				return nil, errors.WithStack(err)
-			}
-			if err := q.SetDriver(d); err != nil {
-				return nil, errors.WithStack(err)
-			}
-			return q, nil
-		},
-		"RemoteOrdered": func(size int) (amboy.RetryableQueue, error) {
-			q, err := newRemoteSimpleOrdered(size)
+		"Remote": func(size int) (amboy.RetryableQueue, error) {
+			q, err := newRemote(size)
 			if err != nil {
 				return nil, errors.WithStack(err)
 			}

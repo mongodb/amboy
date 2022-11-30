@@ -3,9 +3,6 @@ package queue
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
-	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -51,14 +48,11 @@ type QueueTestCase struct {
 	MaxSize             int
 	SingleWorker        bool
 	MultiSupported      bool
-	OrderedSupported    bool
-	OrderedStartsBefore bool
 	WaitUntilSupported  bool
 	DispatchBySupported bool
 	MaxTimeSupported    bool
 	ScopesSupported     bool
 	RetrySupported      bool
-	SkipUnordered       bool
 	IsRemote            bool
 	Skip                bool
 }
@@ -81,38 +75,6 @@ type SizeTestCase struct {
 func DefaultQueueTestCases() []QueueTestCase {
 	return []QueueTestCase{
 		{
-			Name:                "AdaptiveOrdering",
-			OrderedSupported:    true,
-			OrderedStartsBefore: true,
-			WaitUntilSupported:  true,
-			SingleWorker:        true,
-			DispatchBySupported: true,
-			MaxTimeSupported:    true,
-			MinSize:             2,
-			MaxSize:             16,
-			Constructor: func(ctx context.Context, _ string, size int) (amboy.Queue, TestCloser, error) {
-				return NewAdaptiveOrderedLocalQueue(size, defaultLocalQueueCapcity), func(ctx context.Context) error { return nil }, nil
-			},
-		},
-		{
-			Name:                "LocalOrdered",
-			OrderedStartsBefore: false,
-			OrderedSupported:    true,
-			MinSize:             2,
-			MaxSize:             8,
-			Constructor: func(ctx context.Context, _ string, size int) (amboy.Queue, TestCloser, error) {
-				return NewLocalOrdered(size), func(ctx context.Context) error { return nil }, nil
-			},
-		},
-		{
-			Name:             "Priority",
-			ScopesSupported:  true,
-			MaxTimeSupported: true,
-			Constructor: func(ctx context.Context, _ string, size int) (amboy.Queue, TestCloser, error) {
-				return NewLocalPriorityQueue(size, defaultLocalQueueCapcity), func(ctx context.Context) error { return nil }, nil
-			},
-		},
-		{
 			Name:                "LimitedSize",
 			WaitUntilSupported:  true,
 			DispatchBySupported: true,
@@ -132,25 +94,6 @@ func DefaultQueueTestCases() []QueueTestCase {
 			Constructor: func(ctx context.Context, _ string, size int) (amboy.Queue, TestCloser, error) {
 				q, err := NewLocalLimitedSizeSerializable(size, 1024*size)
 				return q, func(ctx context.Context) error { return nil }, err
-			},
-		},
-		{
-			Name:             "Shuffled",
-			SingleWorker:     true,
-			MaxTimeSupported: true,
-			ScopesSupported:  true,
-			Constructor: func(ctx context.Context, _ string, size int) (amboy.Queue, TestCloser, error) {
-				return NewLocalShuffled(size, defaultLocalQueueCapcity), func(ctx context.Context) error { return nil }, nil
-			},
-		},
-		{
-			Name:    "SQSFifo",
-			MaxSize: 4,
-			Skip:    true,
-			Constructor: func(ctx context.Context, _ string, size int) (amboy.Queue, TestCloser, error) {
-				q, err := NewSQSFifoQueue(randomString(4), size, awsTestCredentialsFromEnv())
-				closer := func(ctx context.Context) error { return nil }
-				return q, closer, err
 			},
 		},
 	}
@@ -176,7 +119,7 @@ func MergeQueueTestCases(ctx context.Context, cases ...[]QueueTestCase) <-chan Q
 func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 	return []QueueTestCase{
 		{
-			Name:               "MongoUnordered",
+			Name:               "MongoRemote",
 			IsRemote:           true,
 			WaitUntilSupported: true,
 			MaxTimeSupported:   true,
@@ -190,7 +133,6 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 				opts := MongoDBQueueOptions{
 					DB:         &mdbOpts,
 					NumWorkers: utility.ToIntPtr(size),
-					Ordered:    utility.FalsePtr(),
 				}
 				q, err := NewMongoDBQueue(ctx, opts)
 				if err != nil {
@@ -217,7 +159,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 			},
 		},
 		{
-			Name:               "MongoGroupUnordered",
+			Name:               "GroupMongoRemote",
 			IsRemote:           true,
 			WaitUntilSupported: true,
 			MaxTimeSupported:   true,
@@ -233,7 +175,6 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 				opts := MongoDBQueueOptions{
 					DB:         &mdbOpts,
 					NumWorkers: utility.ToIntPtr(size),
-					Ordered:    utility.FalsePtr(),
 				}
 				q, err := NewMongoDBQueue(ctx, opts)
 				if err != nil {
@@ -261,7 +202,7 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 			},
 		},
 		{
-			Name:               "MongoUnorderedMGOBSON",
+			Name:               "MongoRemoteMGOBSON",
 			IsRemote:           true,
 			WaitUntilSupported: true,
 			MaxTimeSupported:   true,
@@ -276,49 +217,6 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 				opts := MongoDBQueueOptions{
 					DB:         &mdbOpts,
 					NumWorkers: utility.ToIntPtr(size),
-					Ordered:    utility.FalsePtr(),
-				}
-				q, err := NewMongoDBQueue(ctx, opts)
-				if err != nil {
-					return nil, nil, err
-				}
-				rq, ok := q.(remoteQueue)
-				if !ok {
-					return nil, nil, errors.New("invalid queue constructed")
-				}
-
-				closer := func(ctx context.Context) error {
-					catcher := grip.NewBasicCatcher()
-					d := rq.Driver()
-					if d != nil {
-						catcher.Add(d.Close(ctx))
-					}
-
-					catcher.Add(client.Database(mdbOpts.DB).Collection(addJobsSuffix(name)).Drop(ctx))
-
-					return catcher.Resolve()
-				}
-
-				return q, closer, nil
-			},
-		},
-		{
-			Name:               "MongoOrdered",
-			IsRemote:           true,
-			WaitUntilSupported: true,
-			MaxTimeSupported:   true,
-			RetrySupported:     true,
-			ScopesSupported:    true,
-			OrderedSupported:   true,
-			Constructor: func(ctx context.Context, name string, size int) (amboy.Queue, TestCloser, error) {
-				mdbOpts := defaultMongoDBTestOptions()
-				mdbOpts.Client = client
-				mdbOpts.Collection = name
-				mdbOpts.Format = amboy.BSON2
-				opts := MongoDBQueueOptions{
-					DB:         &mdbOpts,
-					NumWorkers: utility.ToIntPtr(size),
-					Ordered:    utility.TruePtr(),
 				}
 				q, err := NewMongoDBQueue(ctx, opts)
 				if err != nil {
@@ -345,7 +243,6 @@ func MongoDBQueueTestCases(client *mongo.Client) []QueueTestCase {
 			},
 		},
 	}
-
 }
 
 func DefaultPoolTestCases() []PoolTestCase {
@@ -355,37 +252,9 @@ func DefaultPoolTestCases() []PoolTestCase {
 			SetPool: func(q amboy.Queue, _ int) error { return nil },
 		},
 		{
-			Name:      "Single",
-			SkipMulti: true,
-			MinSize:   1,
-			MaxSize:   1,
-			SetPool: func(q amboy.Queue, _ int) error {
-				runner := pool.NewSingle()
-				if err := runner.SetQueue(q); err != nil {
-					return err
-				}
-
-				return q.SetRunner(runner)
-			},
-		},
-		{
 			Name:    "Abortable",
 			MinSize: 4,
 			SetPool: func(q amboy.Queue, size int) error { return q.SetRunner(pool.NewAbortablePool(size, q)) },
-		},
-		{
-			Name:         "RateLimitedSimple",
-			MinSize:      4,
-			MaxSize:      16,
-			RateLimiting: true,
-			SetPool: func(q amboy.Queue, size int) error {
-				runner, err := pool.NewSimpleRateLimitedWorkers(size, 10*time.Millisecond, q)
-				if err != nil {
-					return nil
-				}
-
-				return q.SetRunner(runner)
-			},
 		},
 		{
 			Name:         "RateLimitedAverage",
@@ -471,16 +340,10 @@ func TestQueueSmoke(t *testing.T) {
 						}
 
 						t.Run("MaxSize"+size.Name, func(t *testing.T) {
-							if !test.SkipUnordered {
-								t.Run("Unordered", func(t *testing.T) {
-									unorderedTest(bctx, t, test, runner, size)
-								})
-							}
-							if test.OrderedSupported {
-								t.Run("Ordered", func(t *testing.T) {
-									orderedTest(bctx, t, test, runner, size)
-								})
-							}
+							t.Run("Basic", func(t *testing.T) {
+								basicTest(bctx, t, test, runner, size)
+							})
+
 							if test.WaitUntilSupported {
 								testWaitUntilOnce.Do(func() {
 									t.Run("WaitUntil", func(t *testing.T) {
@@ -517,7 +380,7 @@ func TestQueueSmoke(t *testing.T) {
 							})
 
 							if test.ScopesSupported {
-								if test.SingleWorker && (!test.OrderedSupported || test.OrderedStartsBefore) && size.Size >= 4 {
+								if test.SingleWorker && size.Size >= 4 {
 									testScopesOnce.Do(func() {
 										t.Run("ScopedLock", func(t *testing.T) {
 											scopedLockTest(bctx, t, test, runner, size)
@@ -546,9 +409,6 @@ func TestQueueSmoke(t *testing.T) {
 							}
 
 							t.Run("SaveLockingCheck", func(t *testing.T) {
-								if test.OrderedSupported && !test.OrderedStartsBefore {
-									t.Skip("test does not support queues where queues don't accept work after dispatching")
-								}
 								ctx, cancel := context.WithCancel(bctx)
 								defer cancel()
 								name := newDriverID()
@@ -600,7 +460,10 @@ func TestQueueSmoke(t *testing.T) {
 	}
 }
 
-func unorderedTest(bctx context.Context, t *testing.T, test QueueTestCase, runner PoolTestCase, size SizeTestCase) {
+// basicTest verifies basic queue correctness by enqueueing several jobs,
+// waiting for them to complete, and verifying that the queue interface methods
+// provide the expected data on completed jobs.
+func basicTest(bctx context.Context, t *testing.T, test QueueTestCase, runner PoolTestCase, size SizeTestCase) {
 	ctx, cancel := context.WithCancel(bctx)
 	defer cancel()
 
@@ -609,16 +472,12 @@ func unorderedTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 	defer func() { require.NoError(t, closer(ctx)) }()
 	require.NoError(t, runner.SetPool(q, size.Size))
 
-	if test.OrderedSupported && !test.OrderedStartsBefore {
-		// pass
-	} else {
-		require.NoError(t, q.Start(ctx))
-	}
-
 	testNames := []string{"test", "second", "workers", "forty-two", "true", "false", ""}
 	numJobs := size.Size * len(testNames)
 
 	wg := &sync.WaitGroup{}
+
+	require.NoError(t, q.Start(ctx))
 
 	for i := 0; i < size.Size; i++ {
 		wg.Add(1)
@@ -635,15 +494,10 @@ func unorderedTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 		}(i)
 	}
 	wg.Wait()
-	if test.OrderedSupported && !test.OrderedStartsBefore {
-		require.NoError(t, q.Start(ctx))
-	}
 
-	amboy.WaitInterval(ctx, q, 100*time.Millisecond)
+	assert.True(t, amboy.WaitInterval(ctx, q, 100*time.Millisecond))
 
 	assert.Equal(t, numJobs, q.Stats(ctx).Total, fmt.Sprintf("with %d workers", size.Size))
-
-	amboy.WaitInterval(ctx, q, 100*time.Millisecond)
 
 	grip.Infof("workers complete for %d worker smoke test", size.Size)
 	assert.Equal(t, numJobs, q.Stats(ctx).Completed, fmt.Sprintf("%+v", q.Stats(ctx)))
@@ -664,62 +518,6 @@ func unorderedTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 	assert.Equal(t, numJobs, statCounter, fmt.Sprintf("want job info for every job"))
 
 	grip.Infof("completed results check for %d worker smoke test", size.Size)
-}
-
-func orderedTest(bctx context.Context, t *testing.T, test QueueTestCase, runner PoolTestCase, size SizeTestCase) {
-	ctx, cancel := context.WithCancel(bctx)
-	defer cancel()
-
-	q, closer, err := test.Constructor(ctx, newDriverID(), size.Size)
-	require.NoError(t, err)
-	defer func() { require.NoError(t, closer(ctx)) }()
-	require.NoError(t, runner.SetPool(q, size.Size))
-
-	var lastJobName string
-
-	testNames := []string{"amboy", "cusseta", "jasper", "sardis", "dublin"}
-
-	numJobs := size.Size / 2 * len(testNames)
-
-	tempDir, err := ioutil.TempDir("", strings.Join([]string{"amboy-ordered-queue-smoke-test",
-		uuid.New().String()}, "-"))
-	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
-
-	if test.OrderedStartsBefore {
-		require.NoError(t, q.Start(ctx))
-	}
-	for i := 0; i < size.Size/2; i++ {
-		for _, name := range testNames {
-			fn := filepath.Join(tempDir, fmt.Sprintf("%s.%d", name, i))
-			cmd := fmt.Sprintf("echo %s", fn)
-			j := job.NewShellJob(cmd, fn)
-			if lastJobName != "" {
-				require.NoError(t, j.Dependency().AddEdge(lastJobName))
-			}
-			lastJobName = j.ID()
-
-			require.NoError(t, q.Put(ctx, j))
-		}
-	}
-
-	if !test.OrderedStartsBefore {
-		require.NoError(t, q.Start(ctx))
-	}
-
-	require.Equal(t, numJobs, q.Stats(ctx).Total, fmt.Sprintf("with %d workers", size.Size))
-	amboy.WaitInterval(ctx, q, 50*time.Millisecond)
-	require.Equal(t, numJobs, q.Stats(ctx).Completed, fmt.Sprintf("%+v", q.Stats(ctx)))
-	for result := range q.Results(ctx) {
-		require.True(t, result.Status().Completed, fmt.Sprintf("with %d workers", size.Size))
-	}
-
-	statCounter := 0
-	for info := range q.JobInfo(ctx) {
-		statCounter++
-		require.NotEmpty(t, info.ID)
-	}
-	require.Equal(t, statCounter, numJobs)
 }
 
 func waitUntilTest(bctx context.Context, t *testing.T, test QueueTestCase, runner PoolTestCase, size SizeTestCase) {
@@ -899,9 +697,6 @@ func maxTimeTest(bctx context.Context, t *testing.T, test QueueTestCase, runner 
 }
 
 func oneExecutionTest(bctx context.Context, t *testing.T, test QueueTestCase, runner PoolTestCase, size SizeTestCase) {
-	if test.Name == "LocalOrdered" {
-		t.Skip("topological sort deadlocks")
-	}
 	ctx, cancel := context.WithTimeout(bctx, 2*time.Minute)
 	defer cancel()
 
@@ -914,9 +709,7 @@ func oneExecutionTest(bctx context.Context, t *testing.T, test QueueTestCase, ru
 	mockJobCounters.Reset()
 	count := 40
 
-	if !test.OrderedSupported || test.OrderedStartsBefore {
-		require.NoError(t, q.Start(ctx))
-	}
+	require.NoError(t, q.Start(ctx))
 
 	for i := 0; i < count; i++ {
 		j := newMockJob()
@@ -925,11 +718,7 @@ func oneExecutionTest(bctx context.Context, t *testing.T, test QueueTestCase, ru
 		assert.NoError(t, q.Put(ctx, j))
 	}
 
-	if test.OrderedSupported && !test.OrderedStartsBefore {
-		require.NoError(t, q.Start(ctx))
-	}
-
-	amboy.WaitInterval(ctx, q, 100*time.Millisecond)
+	assert.True(t, amboy.WaitInterval(ctx, q, 100*time.Millisecond))
 	assert.Equal(t, count, mockJobCounters.Count())
 }
 
@@ -977,8 +766,8 @@ func multiExecutionTest(bctx context.Context, t *testing.T, test QueueTestCase, 
 	grip.Info("added jobs to queues")
 
 	// wait for all jobs to complete.
-	amboy.WaitInterval(ctx, qOne, 100*time.Millisecond)
-	amboy.WaitInterval(ctx, qTwo, 100*time.Millisecond)
+	assert.True(t, amboy.WaitInterval(ctx, qOne, 100*time.Millisecond))
+	assert.True(t, amboy.WaitInterval(ctx, qTwo, 100*time.Millisecond))
 
 	// check that both queues see all jobs
 	statsOne := qOne.Stats(ctx)
@@ -1068,7 +857,7 @@ func manyQueueTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 	grip.Notice("waiting to run jobs")
 
 	for _, q := range queues {
-		amboy.WaitInterval(ctx, q, 20*time.Millisecond)
+		assert.True(t, amboy.WaitInterval(ctx, q, 20*time.Millisecond))
 	}
 
 	assert.Equal(t, size.Size*inside*outside, mockJobCounters.Count())

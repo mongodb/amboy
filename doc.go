@@ -1,13 +1,13 @@
 /*
 Package amboy provides basic infrastructure for running and describing
-tasks and task workflows with, potentially, minimal overhead and
+jobs and job workflows with, potentially, minimal overhead and
 additional complexity.
 
 Overview and Motivation
 
-Amboy works with 4 basic logical objects: jobs, or descriptions of
-tasks; runnners, which are responsible for executing tasks; queues,
-that represent pipelines and offline workflows of tasks (i.e. not real
+Amboy works with 4 basic logical objects: jobs representing work;
+runners, which are responsible for executing jobs; queues,
+that represent pipelines and offline workflows of jobs (i.e. not real
 time, processes that run outside of the primary execution path of a
 program); and dependencies that represent relationships between jobs.
 
@@ -27,7 +27,7 @@ and generic job and dependency variations.
 
 Consider the following example:
 
-   queue := queue.SimpleQueue(12) // pass the number of worker threads
+   queue := queue.NewLocalLimitedSize(12, 50) // pass the number of workers and max capacity
    job := job.NewShellJob("make compile")
 
    err := queue.Put(job)
@@ -40,9 +40,9 @@ Consider the following example:
    if err != nil {
       // handle error case
    }
+   defer queue.Close() // Waits for all jobs to finish and releases all resources.
 
-   Wait(queue) // Waits for all jobs to finish.
-   queue.Close() // Waits for all jobs to finish and releases all resources.
+   amboy.Wait(ctx, queue) // Waits for all jobs to finish.
 */
 package amboy
 

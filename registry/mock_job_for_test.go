@@ -73,7 +73,7 @@ func (j *JobTest) Run(_ context.Context) {
 
 func (j *JobTest) Error() error {
 	if j.ShouldFail {
-		return errors.New("poisoned task")
+		return errors.New("poisoned job")
 	}
 
 	return nil

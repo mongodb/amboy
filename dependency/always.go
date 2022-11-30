@@ -7,7 +7,7 @@ package dependency
 const alwaysRunName = "always"
 
 // Always is a DependencyManager implementation that always reports
-// that the task is ready to run.
+// that the job is ready to run.
 type alwaysManager struct {
 	T TypeInfo `json:"type" bson:"type" yaml:"type"`
 	JobEdges

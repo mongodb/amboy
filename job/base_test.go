@@ -78,11 +78,11 @@ func (s *BaseCheckSuite) TestAddRetryableErrorsPersistsErrorsInJob() {
 	}
 }
 
-func (s *BaseCheckSuite) TestIdIsAccessorForTaskIDAttribute() {
-	s.Equal(s.base.TaskID, s.base.ID())
-	s.base.TaskID = "foo"
+func (s *BaseCheckSuite) TestIDIsAccessorForJobIDAttribute() {
+	s.Equal(s.base.Name, s.base.ID())
+	s.base.Name = "foo"
 	s.Equal("foo", s.base.ID())
-	s.Equal(s.base.TaskID, s.base.ID())
+	s.Equal(s.base.Name, s.base.ID())
 }
 
 func (s *BaseCheckSuite) TestDependencyAccessorIsCorrect() {

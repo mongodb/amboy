@@ -16,8 +16,8 @@ import (
 )
 
 // limitedSizeLocal implements the amboy.Queue interface. Unlike other
-// implementations, the size of the queue is limited for both incoming tasks and
-// completed tasks; this makes it possible to use these queues in situations as
+// implementations, the size of the queue is limited for both pending jobs and
+// completed jobs; this makes it possible to use these queues in situations as
 // parts of services and in longer-running contexts.
 //
 // Specify a capacity when constructing the queue; the queue will
@@ -48,7 +48,7 @@ func NewLocalLimitedSize(workers, capacity int) amboy.Queue {
 		pendingStorage: make(map[string]amboy.Job),
 		storage:        make(map[string]amboy.Job),
 		scopes:         NewLocalScopeManager(),
-		id:             fmt.Sprintf("queue.local.unordered.fixed.%s", uuid.New().String()),
+		id:             fmt.Sprintf("queue.local.fixed.%s", uuid.New().String()),
 	}
 	q.dispatcher = NewDispatcher(q)
 	q.runner = pool.NewLocalWorkers(workers, q)
@@ -130,7 +130,7 @@ func (q *limitedSizeLocal) Save(ctx context.Context, j amboy.Job) error {
 	return nil
 }
 
-// Get returns a job, by name. This will include all tasks currently
+// Get returns a job, by name. This will include all jobs currently
 // stored in the queue.
 func (q *limitedSizeLocal) Get(ctx context.Context, name string) (amboy.Job, bool) {
 	q.mu.RLock()
@@ -213,7 +213,7 @@ func (q *limitedSizeLocal) Info() amboy.QueueInfo {
 	}
 }
 
-// Results is a generator of all completed tasks in the queue.
+// Results is a generator of all completed jobs in the queue.
 func (q *limitedSizeLocal) Results(ctx context.Context) <-chan amboy.Job {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -330,7 +330,7 @@ func (q *limitedSizeLocal) Complete(ctx context.Context, j amboy.Job) error {
 	}
 }
 
-// Start starts the runner and initializes the pending task
+// Start starts the runner and initializes the pending job
 // storage. Only produces an error if the underlying runner fails to
 // start.
 func (q *limitedSizeLocal) Start(ctx context.Context) error {

@@ -65,7 +65,7 @@ func (s *ShellJobSuite) TestSetDependencyChangesDependencyStrategy() {
 
 func (s *ShellJobSuite) TestShellJobNameConstructedFromCommandNames() {
 	job := NewShellJob("foo", "bar")
-	s.Equal(job.ID(), job.Base.TaskID)
+	s.Equal(job.ID(), job.Base.Name)
 
 	s.True(strings.HasSuffix(job.ID(), "foo"), job.ID())
 

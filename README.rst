@@ -1,5 +1,5 @@
 ================================================
-``amboy`` -- Task and Worker Pool Infrastructure
+``amboy`` -- Job and Worker Pool Infrastructure
 ================================================
 
 Overview
@@ -8,7 +8,7 @@ Overview
 Amboy is a collection of interfaces and tools for running and managing
 asynchronous background work queues in the context of Go programs, and
 provides a number of interchangeable and robust methods for running
-tasks.
+jobs.
 
 Features
 --------
@@ -17,24 +17,13 @@ Queues
 ~~~~~~
 
 Queue implementations impose ordering and dispatching behavior, and
-describe the storage of tasks before and after work is
+describe the storage of jobs before and after work is
 complete. Current queue implementations include:
-
-- an ordered queue that dispatches tasks ordered by dependency
-  information to ensure that dependent tasks that are completed before
-  the tasks that depend on them.
-
-- an unordered queue that ignores dependency information in tasks. For
-  most basic cases these queues are ideal. (`LocalUnordered
-  <https://godoc.org/github.com/mongodb/amboy/queue#LocalUnordered>`_
-  as implementation detail this queue dispatches tasks in a FIFO order.)
 
 - a limited size queue that keep a fixed number of completed jobs in
   memory, which is ideal for long-running background processes.
 
-- priority queues that dispatch tasks according to priority order.
-
-- remote queues that store all tasks in an external storage system
+- remote queues that store all jobs in an external storage system
   (e.g. a database) to support architectures where multiple processes
   can service the same underlying queue.
 
@@ -64,7 +53,7 @@ Runners are the execution component of the worker pool, and are
 embedded within the queues, and can be injected at run time before
 starting the queue pool. The `LocalWorkers
 <https://godoc.org/github.com/mongodb/amboy/pool#LocalWorkers>`_
-implementation executes tasks in a fixed-size worker pool, which is
+implementation executes jobs in a fixed-size worker pool, which is
 the default of most queue implementations.
 
 Additional implementation provide rate limiting, and it would be possible to
@@ -76,15 +65,14 @@ Dependencies
 
 The `DependencyManager
 <https://godoc.org/github.com/mongodb/amboy/dependency#Manager>`_
-interface makes it possible for tasks to express relationships to each
+interface makes it possible for jobs to express relationships to each
 other and to their environment so that Job operations can noop or
 block if their requirements are not satisfied. The data about
-relationships between jobs can inform task ordering as in the `LocalOrdered
-<https://godoc.org/github.com/mongodb/amboy/queue#LocalOrdered>`_
-queue.
+relationships between jobs can inform job ordering.
 
 The handling of dependency information is the responsibility of the
-queue implementation.
+queue implementation. Most queue implementations do not support this, unless
+explicitly stated.
 
 Management
 ~~~~~~~~~~
@@ -134,7 +122,7 @@ Embed the `job.Base <https://godoc.org/github.com/mongodb/amboy/job/#Base>`_
 type in your Job implementations. This provides a number of helpers for
 basic job definition, in addition to implementations of all general methods in
 the interface. With the Base, you only need to implement a ``Run()`` method and
-whatever application logic is required for the task.
+whatever application logic is required for the job.
 
 The only case where embedding the Base type *may* be contraindicated is in
 conjunction with the REST interface, as the Base type may require more
@@ -179,11 +167,11 @@ All project automation is managed by a makefile, with all output captured in the
 
    make compile                 # runs a test compile
    make test                    # tests all packages
-   make lint                    # lints all packages
    make test-<package>          # runs the tests only for a specific packages
+   make lint                    # lints all packages
    make lint-<package>          # lints a specific package
-   make html-coverage-<package> # generates the HTML coverage report for a specific package
    make html-coverage           # generates the HTML coverage report for all packages
+   make html-coverage-<package> # generates the HTML coverage report for a specific package
 
 The buildsystem also has a number of flags, which may be useful for more
 iterative development workflows: ::

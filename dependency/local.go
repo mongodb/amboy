@@ -6,7 +6,7 @@ import (
 	"github.com/mongodb/grip"
 )
 
-// LocalFile describes a dependency between a task and local
+// LocalFile describes a dependency between a job and local
 // files. Has a notion of targets, and dependencies, and a la make
 // dependency resolution returns state Passed (e.g. noop) if the
 // target or targets are all newer than the dependency or
@@ -16,10 +16,10 @@ import (
 // Importantly, the edges, which amboy Jobs and Queue should always
 // assume are *not* files, are distinct from the Targets and
 // Dependencies in the context of this dependency.Manager. Add edges
-// (task names) for other amboy.Job IDs in the queue if you need to
+// (job names) for other amboy.Job IDs in the queue if you need to
 // express that kind of relationship.
 type LocalFile struct {
-	// A list of file names that the task would in theory create.
+	// A list of file names that the job would in theory create.
 	Targets []string `bson:"targets" json:"targets" yaml:"targets"`
 
 	// A list of file names that represent dependencies that the
@@ -134,7 +134,7 @@ func (d *LocalFile) State() State {
 	}
 
 	// if the last dependency check didn't return early, then the
-	// task can be a noop.
+	// job can be a noop.
 	return Passed
 
 }

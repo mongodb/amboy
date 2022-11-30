@@ -16,8 +16,8 @@ func init() {
 }
 
 // JobGroupSuite exercises the Job implementation that allows you to
-// run multiple tasks in a worker pool as part of a single isolated
-// task. This is good exercise for the JobInterchange code and
+// run multiple jobs in a worker pool as part of a single isolated
+// job. This is good exercise for the JobInterchange code and
 // requires some type fidelity of the interchange system.
 type JobGroupSuite struct {
 	job *Group

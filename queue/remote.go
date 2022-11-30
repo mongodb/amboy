@@ -21,8 +21,6 @@ type MongoDBQueueOptions struct {
 	// WorkerPoolSize returns the number of workers the queue should use. If
 	// set, this takes precedence over NumWorkers.
 	WorkerPoolSize func(string) int
-	// Ordered indicates whether the queue should obey job dependency ordering.
-	Ordered *bool
 	// Abortable indicates whether executing jobs can be aborted.
 	Abortable *bool
 	// Retryable represents options to retry jobs after they complete.
@@ -73,14 +71,8 @@ func (o *MongoDBQueueOptions) buildQueue(ctx context.Context) (remoteQueue, erro
 		numWorkers: workers,
 		retryable:  retryable,
 	}
-	if utility.FromBoolPtr(o.Ordered) {
-		if q, err = newRemoteSimpleOrderedWithOptions(qOpts); err != nil {
-			return nil, errors.Wrap(err, "initializing ordered queue")
-		}
-	} else {
-		if q, err = newRemoteUnorderedWithOptions(qOpts); err != nil {
-			return nil, errors.Wrap(err, "initializing unordered queue")
-		}
+	if q, err = newRemoteWithOptions(qOpts); err != nil {
+		return nil, errors.Wrap(err, "initializing remote queue")
 	}
 
 	if utility.FromBoolPtr(o.Abortable) {
@@ -148,9 +140,6 @@ func mergeMongoDBQueueOptions(opts ...MongoDBQueueOptions) MongoDBQueueOptions {
 		if o.WorkerPoolSize != nil {
 			merged.WorkerPoolSize = o.WorkerPoolSize
 		}
-		if o.Ordered != nil {
-			merged.Ordered = o.Ordered
-		}
 		if o.Abortable != nil {
 			merged.Abortable = o.Abortable
 		}
@@ -171,4 +160,50 @@ func NewMongoDBQueue(ctx context.Context, opts MongoDBQueueOptions) (amboy.Retry
 	}
 
 	return opts.buildQueue(ctx)
+}
+
+// remote implements the amboy.RetryableQueue interface. It uses a Driver to
+// access a backend for job storage and processing. The queue does not impose
+// any additional job ordering beyond what's provided by the driver.
+type remote struct {
+	*remoteBase
+}
+
+// newRemote returns a queue that has been initialized with a configured local
+// worker pool with the specified number of workers.
+func newRemote(size int) (remoteQueue, error) {
+	return newRemoteWithOptions(remoteOptions{numWorkers: size})
+}
+
+// newRemoteWithOptions returns a queue that has been initialized with a
+// configured runner and the given options.
+func newRemoteWithOptions(opts remoteOptions) (remoteQueue, error) {
+	b, err := newRemoteBaseWithOptions(opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "initializing remote base")
+	}
+	q := &remote{remoteBase: b}
+	q.dispatcher = NewDispatcher(q)
+	if err := q.SetRunner(pool.NewLocalWorkers(opts.numWorkers, q)); err != nil {
+		return nil, errors.Wrap(err, "configuring runner")
+	}
+	grip.Infof("creating new remote job queue with %d workers", opts.numWorkers)
+
+	return q, nil
+}
+
+// Next returns a Job from the queue. Returns a nil Job object if the context is
+// canceled. The operation is blocking until an undispatched, unlocked job is
+// available. This operation takes a job lock.
+func (q *remote) Next(ctx context.Context) amboy.Job {
+	count := 0
+	for {
+		count++
+		select {
+		case <-ctx.Done():
+			return nil
+		case job := <-q.channel:
+			return job
+		}
+	}
 }

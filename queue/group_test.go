@@ -2,8 +2,6 @@ package queue
 
 import (
 	"context"
-	"fmt"
-	"runtime"
 	"testing"
 	"time"
 
@@ -14,7 +12,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -156,40 +153,6 @@ func TestQueueGroup(t *testing.T) {
 					},
 				}
 
-				t.Run("Mongo", func(t *testing.T) {
-					for _, remoteTest := range remoteTests {
-						t.Run(remoteTest.name, func(t *testing.T) {
-							ctx, cancel := context.WithCancel(bctx)
-							defer cancel()
-							mopts := MongoDBOptions{
-								Client:       client,
-								DB:           remoteTest.db,
-								Collection:   remoteTest.prefix,
-								URI:          remoteTest.uri,
-								WaitInterval: time.Millisecond,
-							}
-
-							remoteOpts := MongoDBQueueGroupOptions{
-								DefaultQueue: MongoDBQueueOptions{
-									DB:             &mopts,
-									NumWorkers:     utility.ToIntPtr(remoteTest.workers),
-									WorkerPoolSize: remoteTest.workerFunc,
-								},
-								TTL:            test.ttl,
-								PruneFrequency: test.ttl,
-							}
-
-							g, err := NewMongoDBQueueGroup(ctx, "prefix.", remoteOpts)
-							if test.valid && remoteTest.valid {
-								require.NoError(t, err)
-								require.NotNil(t, g)
-							} else {
-								require.Error(t, err)
-								require.Nil(t, g)
-							}
-						})
-					}
-				})
 				t.Run("MongoSingle", func(t *testing.T) {
 					for _, remoteTest := range remoteTests {
 						t.Run(remoteTest.name, func(t *testing.T) {
@@ -245,42 +208,6 @@ func TestQueueGroup(t *testing.T) {
 					},
 					)
 					closer := func(_ context.Context) error { return nil }
-					return qg, closer, err
-				},
-			},
-			{
-				name: "Mongo",
-				constructor: func(ctx context.Context, ttl time.Duration) (amboy.QueueGroup, queueGroupCloser, error) {
-					mopts := defaultMongoDBTestOptions()
-					mopts.Client = client
-					mopts.DB = "amboy_group_test"
-					mopts.Collection = "prefix"
-					mopts.WaitInterval = time.Millisecond
-
-					closer := func(cctx context.Context) error {
-						catcher := grip.NewBasicCatcher()
-						catcher.Add(client.Database(mopts.DB).Drop(cctx))
-						return catcher.Resolve()
-					}
-
-					opts := MongoDBQueueGroupOptions{
-						DefaultQueue: MongoDBQueueOptions{
-							NumWorkers: utility.ToIntPtr(1),
-							DB:         &mopts,
-						},
-						TTL:            ttl,
-						PruneFrequency: ttl,
-					}
-
-					if err := client.Database(mopts.DB).Drop(ctx); err != nil {
-						return nil, closer, err
-					}
-
-					if err := client.Ping(ctx, nil); err != nil {
-						return nil, closer, errors.Wrap(err, "server not pingable")
-					}
-
-					qg, err := NewMongoDBQueueGroup(ctx, "prefix.", opts)
 					return qg, closer, err
 				},
 			},
@@ -476,20 +403,10 @@ func TestQueueGroup(t *testing.T) {
 					require.Len(t, resultsQ4, 2)
 				})
 				t.Run("Prune", func(t *testing.T) {
-					if runtime.GOOS == "windows" && group.name == "Mongo" {
-						t.Skip("legacy implementation performs poorly on Windows")
-					}
-
 					ctx, cancel := context.WithTimeout(bctx, 10*time.Second)
 					defer cancel()
 
 					ttl := time.Second
-					if group.name == "Mongo" && runtime.GOOS == "darwin" {
-						// The tests are particularly slow on MacOS, so
-						// the queues need extra time to run all the jobs before
-						// being pruned.
-						ttl = 5 * time.Second
-					}
 
 					g, closer, err := group.constructor(ctx, ttl)
 					defer func() { require.NoError(t, closer(ctx)) }()
@@ -621,37 +538,5 @@ func TestQueueGroup(t *testing.T) {
 				})
 			})
 		}
-		t.Run("PruneSmokeTest", func(t *testing.T) {
-			ctx, cancel := context.WithCancel(bctx)
-			defer cancel()
-			mopts := MongoDBOptions{
-				Client:       client,
-				DB:           "amboy_group_test",
-				WaitInterval: time.Millisecond,
-				URI:          defaultMongoDBURI,
-			}
-			collPrefix := "gen"
-
-			for i := 0; i < 10; i++ {
-				_, err := client.Database("amboy_group_test").Collection(fmt.Sprintf("%s-%d.jobs", collPrefix, i)).InsertOne(ctx, bson.M{"foo": "bar"})
-				require.NoError(t, err)
-			}
-			remoteOpts := MongoDBQueueGroupOptions{
-				DefaultQueue: MongoDBQueueOptions{
-					NumWorkers: utility.ToIntPtr(1),
-					DB:         &mopts,
-				},
-				TTL:            time.Second,
-				PruneFrequency: time.Second,
-			}
-			_, err := NewMongoDBQueueGroup(ctx, collPrefix, remoteOpts)
-			require.NoError(t, err)
-			time.Sleep(time.Second)
-			for i := 0; i < 10; i++ {
-				count, err := client.Database("amboy_group_test").Collection(fmt.Sprintf("%s-%d.jobs", collPrefix, i)).CountDocuments(ctx, bson.M{})
-				require.NoError(t, err)
-				require.Zero(t, count, fmt.Sprintf("gen-%d.jobs not dropped", i))
-			}
-		})
 	})
 }
