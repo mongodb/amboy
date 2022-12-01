@@ -45,7 +45,7 @@ func (s *limitedSizeQueueSuite) TestBufferForPendingWorkEqualToCapacityForResult
 
 	s.False(s.queue.Info().Started)
 	s.queue.Runner().Close(ctx)
-	s.Nil(s.queue.channel)
+	s.False(s.queue.Info().Started)
 	s.Error(s.queue.Put(ctx, job.NewShellJob("sleep 10", "")))
 
 	s.NoError(s.queue.Start(ctx))
@@ -73,16 +73,15 @@ func (s *limitedSizeQueueSuite) TestBufferForPendingWorkEqualToCapacityForResult
 
 func (s *limitedSizeQueueSuite) TestCallingStartMultipleTimesDoesNotImpactState() {
 	s.False(s.queue.Info().Started)
-	s.Nil(s.queue.channel)
 	ctx := context.Background()
 	s.NoError(s.queue.Start(ctx))
+	s.True(s.queue.Info().Started)
 
-	s.NotNil(s.queue.channel)
 	for i := 0; i < 100; i++ {
 		s.Error(s.queue.Start(ctx))
 	}
 
-	s.NotNil(s.queue.channel)
+	s.True(s.queue.Info().Started)
 }
 
 func (s *limitedSizeQueueSuite) TestCannotSetRunnerAfterQueueIsOpened() {

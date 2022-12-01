@@ -32,6 +32,7 @@ type limitedSizeLocal struct {
 	scopes         ScopeManager
 	dispatcher     Dispatcher
 	lifetimeCtx    context.Context
+	started        bool
 
 	deletedCount int
 	staleCount   int
@@ -47,6 +48,8 @@ func NewLocalLimitedSize(workers, capacity int) amboy.Queue {
 		capacity:       capacity,
 		pendingStorage: make(map[string]amboy.Job),
 		storage:        make(map[string]amboy.Job),
+		toDelete:       make(chan string, capacity),
+		channel:        make(chan amboy.Job, capacity),
 		scopes:         NewLocalScopeManager(),
 		id:             fmt.Sprintf("queue.local.fixed.%s", uuid.New().String()),
 	}
@@ -208,7 +211,7 @@ func (q *limitedSizeLocal) Info() amboy.QueueInfo {
 	defer q.mu.RUnlock()
 
 	return amboy.QueueInfo{
-		Started:     q.channel != nil,
+		Started:     q.started,
 		LockTimeout: amboy.LockTimeout,
 	}
 }
@@ -271,7 +274,7 @@ func (q *limitedSizeLocal) SetRunner(r amboy.Runner) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
-	if q.channel != nil {
+	if q.started {
 		return errors.New("cannot set runner on active queue")
 	}
 
@@ -337,20 +340,17 @@ func (q *limitedSizeLocal) Start(ctx context.Context) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
-	if q.channel != nil {
+	if q.started {
 		return errors.New("cannot start an already-active queue")
 	}
 
+	q.started = true
 	q.lifetimeCtx = ctx
-	q.toDelete = make(chan string, q.capacity)
-	q.channel = make(chan amboy.Job, q.capacity)
 
 	err := q.runner.Start(ctx)
 	if err != nil {
 		return err
 	}
-
-	grip.Info("job server running")
 
 	return nil
 }

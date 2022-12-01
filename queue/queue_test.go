@@ -499,7 +499,6 @@ func basicTest(bctx context.Context, t *testing.T, test QueueTestCase, runner Po
 
 	assert.Equal(t, numJobs, q.Stats(ctx).Total, fmt.Sprintf("with %d workers", size.Size))
 
-	grip.Infof("workers complete for %d worker smoke test", size.Size)
 	assert.Equal(t, numJobs, q.Stats(ctx).Completed, fmt.Sprintf("%+v", q.Stats(ctx)))
 	for result := range q.Results(ctx) {
 		assert.True(t, result.Status().Completed, fmt.Sprintf("with %d workers", size.Size))
