@@ -48,6 +48,12 @@ func TestMongoDBOptions(t *testing.T) {
 			opts.SampleSize = -50
 			assert.Error(t, opts.Validate())
 		})
+		t.Run("FailsWithSampleSizeAndPriority", func(t *testing.T) {
+			opts := defaultMongoDBTestOptions()
+			opts.SampleSize = 100
+			opts.Priority = true
+			assert.Error(t, opts.Validate())
+		})
 		t.Run("FailsWithInvalidLockTimeout", func(t *testing.T) {
 			opts := defaultMongoDBTestOptions()
 			opts.LockTimeout = -time.Minute
