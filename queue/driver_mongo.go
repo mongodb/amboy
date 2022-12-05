@@ -1309,7 +1309,7 @@ func (d *mongoDriver) getNextStaleInProgressQuery(now time.Time) bson.M {
 	staleBefore := now.Add(-d.LockTimeout())
 	qd := d.getInProgQuery(bson.M{"status.mod_ts": bson.M{"$lte": staleBefore}})
 	d.modifyQueryForGroup(qd)
-	d.modifyQueryForTimeLimits(qd, now)
+	qd = d.modifyQueryForTimeLimits(qd, now)
 
 	return qd
 }
@@ -1318,12 +1318,14 @@ func (d *mongoDriver) getNextStaleInProgressQuery(now time.Time) bson.M {
 func (d *mongoDriver) getNextPendingQuery(now time.Time) bson.M {
 	qd := d.getPendingQuery(bson.M{})
 	d.modifyQueryForGroup(qd)
-	d.modifyQueryForTimeLimits(qd, now)
+	qd = d.modifyQueryForTimeLimits(qd, now)
 
 	return qd
 }
 
-func (d *mongoDriver) modifyQueryForTimeLimits(q bson.M, now time.Time) {
+// modifyQueryForTimeLimits returns a new query that adds a check to the given query for jobs' time limits.
+// If neither CheckWaitUntil nor CheckDispatchBy are set the original query is returned.
+func (d *mongoDriver) modifyQueryForTimeLimits(q bson.M, now time.Time) bson.M {
 	var timeLimits []bson.M
 	if d.opts.CheckWaitUntil {
 		checkWaitUntil := bson.M{"$or": []bson.M{
@@ -1344,6 +1346,8 @@ func (d *mongoDriver) modifyQueryForTimeLimits(q bson.M, now time.Time) {
 	if len(timeLimits) > 0 {
 		q = bson.M{"$and": append(timeLimits, q)}
 	}
+
+	return q
 }
 
 // tryDispatchJob attempts to dispatch a job that matches the query. If sampleSize is greater than
