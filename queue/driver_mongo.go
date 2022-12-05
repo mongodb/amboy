@@ -1288,7 +1288,11 @@ func (d *mongoDriver) dispatchStaleAndPending(ctx context.Context, startAt time.
 		return job, info, nil
 	}
 
-	job, dispatchInfo, err = d.tryDispatchJob(ctx, d.getNextPendingQuery(now), d.opts.SampleSize-dispatchInfo.total, startAt)
+	pendingSampleSize := 0
+	if d.opts.SampleSize > 0 {
+		pendingSampleSize = d.opts.SampleSize - dispatchInfo.total
+	}
+	job, dispatchInfo, err = d.tryDispatchJob(ctx, d.getNextPendingQuery(now), pendingSampleSize, startAt)
 	info.misses += dispatchInfo.misses
 	info.skips += dispatchInfo.skips
 	if err != nil {
@@ -1300,7 +1304,7 @@ func (d *mongoDriver) dispatchStaleAndPending(ctx context.Context, startAt time.
 	return job, info, nil
 }
 
-// getNextQuery returns the query for the next available jobs.
+// getNextStaleInProgressQuery returns the query for the next available stale in-progress jobs.
 func (d *mongoDriver) getNextStaleInProgressQuery(now time.Time) bson.M {
 	staleBefore := now.Add(-d.LockTimeout())
 	qd := d.getInProgQuery(bson.M{"status.mod_ts": bson.M{"$lte": staleBefore}})
@@ -1310,6 +1314,7 @@ func (d *mongoDriver) getNextStaleInProgressQuery(now time.Time) bson.M {
 	return qd
 }
 
+// getNextPendingQuery returns the query for the next available pending jobs.
 func (d *mongoDriver) getNextPendingQuery(now time.Time) bson.M {
 	qd := d.getPendingQuery(bson.M{})
 	d.modifyQueryForGroup(qd)
@@ -1363,7 +1368,7 @@ func (d *mongoDriver) tryDispatchJob(ctx context.Context, query bson.M, sampleSi
 	return job, dispatchInfo, nil
 }
 
-// getNextCursor returns a cursor for the next available jobs matching nextQuery.
+// getNextCursor returns a cursor for the jobs matching nextQuery.
 // If sampleSize is greater than zero it's added as a limit and the jobs are shuffled.
 func (d *mongoDriver) getNextCursor(ctx context.Context, nextQuery bson.M, sampleSize int) (*mongo.Cursor, error) {
 	pipeline := []bson.M{{"$match": nextQuery}}
