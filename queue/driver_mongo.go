@@ -1231,7 +1231,7 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 			return nil
 		case <-timer.C:
 			misses++
-			job, dispatchInfo, err := d.dispatchStaleAndPending(ctx, startAt)
+			job, dispatchInfo, err := d.dispatchNextJob(ctx, startAt)
 			if err != nil {
 				if job != nil {
 					d.dispatcher.Release(ctx, job)
@@ -1268,37 +1268,29 @@ type dispatchAttemptInfo struct {
 	// misses is the number of times the dispatcher attempted to dispatch a job
 	// but failed.
 	misses int
-	// total is the total number of documents the cursor returned.
-	total int
 }
 
-// dispatchStaleAndPending attempts to dispatch a job. Stale in progress jobs are given precedence over pending jobs.
-func (d *mongoDriver) dispatchStaleAndPending(ctx context.Context, startAt time.Time) (amboy.Job, dispatchAttemptInfo, error) {
+// dispatchNextJob attempts to dispatch a job. Stale in progress jobs are given precedence over pending jobs.
+func (d *mongoDriver) dispatchNextJob(ctx context.Context, startAt time.Time) (amboy.Job, dispatchAttemptInfo, error) {
 	now := time.Now()
 	var info dispatchAttemptInfo
 
-	job, dispatchInfo, err := d.tryDispatchJob(ctx, d.getNextStaleInProgressQuery(now), d.opts.SampleSize, startAt)
+	job, dispatchInfo, err := d.tryDispatchWithQuery(ctx, d.getNextStaleInProgressQuery(now), startAt)
 	info.misses += dispatchInfo.misses
 	info.skips += dispatchInfo.skips
-	if err != nil {
-		return nil, info, errors.Wrap(err, "dispatching stale in progress job")
-	}
 
-	if job != nil || d.opts.SampleSize > 0 && dispatchInfo.total >= d.opts.SampleSize {
+	if err != nil {
+		return job, info, errors.Wrap(err, "dispatching stale in progress job")
+	}
+	if job != nil {
 		return job, info, nil
 	}
 
-	pendingSampleSize := 0
-	if d.opts.SampleSize > 0 {
-		pendingSampleSize = d.opts.SampleSize - dispatchInfo.total
-	}
-	job, dispatchInfo, err = d.tryDispatchJob(ctx, d.getNextPendingQuery(now), pendingSampleSize, startAt)
+	job, dispatchInfo, err = d.tryDispatchWithQuery(ctx, d.getNextPendingQuery(now), startAt)
 	info.misses += dispatchInfo.misses
 	info.skips += dispatchInfo.skips
 	if err != nil {
-		if err != nil {
-			return nil, info, errors.Wrap(err, "dispatching stale in progress job")
-		}
+		return job, info, errors.Wrap(err, "dispatching stale in progress job")
 	}
 
 	return job, info, nil
@@ -1308,8 +1300,7 @@ func (d *mongoDriver) dispatchStaleAndPending(ctx context.Context, startAt time.
 func (d *mongoDriver) getNextStaleInProgressQuery(now time.Time) bson.M {
 	staleBefore := now.Add(-d.LockTimeout())
 	qd := d.getInProgQuery(bson.M{"status.mod_ts": bson.M{"$lte": staleBefore}})
-	d.modifyQueryForGroup(qd)
-	qd = d.modifyQueryForTimeLimits(qd, now)
+	d.modifyQueryForGroup(d.modifyQueryForTimeLimits(qd, now))
 
 	return qd
 }
@@ -1350,11 +1341,11 @@ func (d *mongoDriver) modifyQueryForTimeLimits(q bson.M, now time.Time) bson.M {
 	return q
 }
 
-// tryDispatchJob attempts to dispatch a job that matches the query. If sampleSize is greater than
+// tryDispatchWithQuery attempts to dispatch a job that matches the query. If sampleSize is greater than
 // zero only that number of jobs are considered and the jobs are randomly shuffled.
 // If dispatching succeeds, the successfully dispatched job is returned.
-func (d *mongoDriver) tryDispatchJob(ctx context.Context, query bson.M, sampleSize int, startAt time.Time) (amboy.Job, dispatchAttemptInfo, error) {
-	iter, err := d.getNextCursor(ctx, query, sampleSize)
+func (d *mongoDriver) tryDispatchWithQuery(ctx context.Context, query bson.M, startAt time.Time) (amboy.Job, dispatchAttemptInfo, error) {
+	iter, err := d.getNextCursor(ctx, query)
 	if err != nil {
 		return nil, dispatchAttemptInfo{}, errors.Wrap(err, "getting next job iterator")
 	}
@@ -1362,11 +1353,10 @@ func (d *mongoDriver) tryDispatchJob(ctx context.Context, query bson.M, sampleSi
 	job, dispatchInfo := d.tryDispatchFromCursor(ctx, iter, startAt)
 
 	if err = iter.Err(); err != nil {
-		return nil, dispatchInfo, errors.Wrap(err, "iterator encountered an error")
+		return job, dispatchInfo, errors.Wrap(err, "iterator encountered an error")
 	}
-
 	if err = iter.Close(ctx); err != nil {
-		return nil, dispatchInfo, errors.Wrap(err, "closing iterator")
+		return job, dispatchInfo, errors.Wrap(err, "closing iterator")
 	}
 
 	return job, dispatchInfo, nil
@@ -1374,22 +1364,22 @@ func (d *mongoDriver) tryDispatchJob(ctx context.Context, query bson.M, sampleSi
 
 // getNextCursor returns a cursor for the jobs matching nextQuery.
 // If sampleSize is greater than zero it's added as a limit and the jobs are shuffled.
-func (d *mongoDriver) getNextCursor(ctx context.Context, nextQuery bson.M, sampleSize int) (*mongo.Cursor, error) {
+func (d *mongoDriver) getNextCursor(ctx context.Context, nextQuery bson.M) (*mongo.Cursor, error) {
 	pipeline := []bson.M{{"$match": nextQuery}}
 
 	if d.opts.Priority {
 		pipeline = append(pipeline, bson.M{"$sort": bson.E{Key: "priority", Value: -1}})
 	}
 
-	if sampleSize > 0 {
+	if d.opts.SampleSize > 0 {
 		// $limit must precede $sample for performance reasons. $sample scans all input
 		// documents to randomly select documents to return. Therefore, without a
 		// limit on the number of jobs to consider, the cost of $sample will become
 		// more expensive with the number of jobs that it must consider.
 		// Source:
 		// https://docs.mongodb.com/manual/reference/operator/aggregation/sample/#behavior
-		pipeline = append(pipeline, bson.M{"$limit": sampleSize})
-		pipeline = append(pipeline, bson.M{"$sample": bson.M{"size": sampleSize}})
+		pipeline = append(pipeline, bson.M{"$limit": d.opts.SampleSize})
+		pipeline = append(pipeline, bson.M{"$sample": bson.M{"size": d.opts.SampleSize}})
 	}
 
 	var opts *options.AggregateOptions
@@ -1406,7 +1396,6 @@ func (d *mongoDriver) getNextCursor(ctx context.Context, nextQuery bson.M, sampl
 func (d *mongoDriver) tryDispatchFromCursor(ctx context.Context, iter *mongo.Cursor, startAt time.Time) (amboy.Job, dispatchAttemptInfo) {
 	var dispatchInfo dispatchAttemptInfo
 	for iter.Next(ctx) {
-		dispatchInfo.total++
 
 		ji := &registry.JobInterchange{}
 		if err := iter.Decode(ji); err != nil {
