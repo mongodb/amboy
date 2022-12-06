@@ -83,10 +83,10 @@ type MongoDBOptions struct {
 	// lock ping, it will be considered stale and will be re-dispatched. If set,
 	// this overrides the default job lock timeout.
 	LockTimeout time.Duration
-	// SampleSize is the number of jobs that the driver will consider from the
-	// next available ones. If it samples from the available jobs, the order of
-	// next jobs are randomized. By default, the driver does not sample from the
-	// next available jobs. SampleSize cannot be used if Priority is true.
+	// SampleSize is the maximum number of jobs per set of jobs checked.
+	// If it samples from the available jobs, the order of next jobs are randomized.
+	// By default, the driver does not sample from the next available jobs.
+	// SampleSize cannot be used if Priority is true.
 	SampleSize int
 }
 
