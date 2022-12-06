@@ -83,10 +83,10 @@ type MongoDBOptions struct {
 	// lock ping, it will be considered stale and will be re-dispatched. If set,
 	// this overrides the default job lock timeout.
 	LockTimeout time.Duration
-	// SampleSize is the number of jobs that the driver will consider from the
-	// next available ones. If it samples from the available jobs, the order of
-	// next jobs are randomized. By default, the driver does not sample from the
-	// next available jobs. SampleSize cannot be used if Priority is true.
+	// SampleSize is the maximum number of jobs per set of jobs checked.
+	// If it samples from the available jobs, the order of next jobs are randomized.
+	// By default, the driver does not sample from the next available jobs.
+	// SampleSize cannot be used if Priority is true.
 	SampleSize int
 }
 
@@ -1191,108 +1191,6 @@ func (d *mongoDriver) JobInfo(ctx context.Context) <-chan amboy.JobInfo {
 	return infos
 }
 
-// getNextQuery returns the query for the next available jobs.
-func (d *mongoDriver) getNextQuery() bson.M {
-	now := time.Now()
-	staleBefore := now.Add(-d.LockTimeout())
-	qd := bson.M{
-		"$or": []bson.M{
-			d.getPendingQuery(bson.M{}),
-			d.getInProgQuery(
-				bson.M{"status.mod_ts": bson.M{"$lte": staleBefore}},
-			),
-		},
-	}
-
-	d.modifyQueryForGroup(qd)
-
-	var timeLimits []bson.M
-	if d.opts.CheckWaitUntil {
-		checkWaitUntil := bson.M{"$or": []bson.M{
-			{"time_info.wait_until": bson.M{"$lte": now}},
-			{"time_info.wait_until": bson.M{"$exists": false}},
-		}}
-		timeLimits = append(timeLimits, checkWaitUntil)
-	}
-
-	if d.opts.CheckDispatchBy {
-		checkDispatchBy := bson.M{"$or": []bson.M{
-			{"time_info.dispatch_by": bson.M{"$gt": now}},
-			{"time_info.dispatch_by": bson.M{"$exists": false}},
-		}}
-		timeLimits = append(timeLimits, checkDispatchBy)
-	}
-
-	if len(timeLimits) > 0 {
-		qd = bson.M{"$and": append(timeLimits, qd)}
-	}
-
-	return qd
-}
-
-// getNextSampledPipeline returns an aggregation pipeline to query for the next
-// available jobs, with a maximum limit (sampleSize) on the number of jobs
-// considered and returned. Jobs are returned in shuffled random order, and the
-// same job may be returned multiple times.
-func (d *mongoDriver) getNextSampledPipeline(sampleSize int) []bson.M {
-	match := bson.M{"$match": d.getNextQuery()}
-
-	// Sort before $sample to ensure that stale in progress jobs appear in the
-	// sampled set.
-	sortStatus := bson.M{
-		"$sort": d.getInProgSort(),
-	}
-
-	// $limit is necessary for performance reasons. $sample scans all input
-	// documents to randomly select documents to return. Therefore, without a
-	// limit on the number of jobs to consider, the cost of $sample will become
-	// more expensive with the number of jobs that it must consider.
-	// Source:
-	// https://docs.mongodb.com/manual/reference/operator/aggregation/sample/#behavior
-	limit := bson.M{"$limit": sampleSize}
-	sample := bson.M{"$sample": bson.M{"size": sampleSize}}
-
-	// The aggregation must sort again after $sample because $sample randomizes
-	// the document order, and stale in progress jobs should be returned before
-	// pending jobs in the final results.
-	return []bson.M{match, sortStatus, limit, sample, sortStatus}
-}
-
-func (d *mongoDriver) getNextCursor(ctx context.Context) (*mongo.Cursor, error) {
-	if d.opts.SampleSize > 0 && !d.opts.Priority {
-		p := d.getNextSampledPipeline(d.opts.SampleSize)
-		opts := options.Aggregate()
-		if d.opts.PreferredIndexes.NextJob != nil {
-			opts.SetHint(d.ensureGroupIndexPrefix(d.opts.PreferredIndexes.NextJob))
-		}
-		iter, err := d.getCollection().Aggregate(ctx, p, opts)
-		return iter, errors.Wrap(err, "sampling next jobs")
-	}
-
-	opts := options.Find()
-	// Return stale in progress jobs before pending jobs.
-	sort := d.getInProgSort()
-	if d.opts.Priority {
-		sort = append(sort, bson.E{Key: "priority", Value: -1})
-	}
-	opts.SetSort(sort)
-
-	if d.opts.PreferredIndexes.NextJob != nil {
-		opts.SetHint(d.ensureGroupIndexPrefix(d.opts.PreferredIndexes.NextJob))
-	}
-
-	q := d.getNextQuery()
-	iter, err := d.getCollection().Find(ctx, q, opts)
-	return iter, errors.Wrap(err, "getting next jobs")
-}
-
-// getInProgSort returns a sort to prioritize jobs that are in progress.
-func (d *mongoDriver) getInProgSort() bson.D {
-	return bson.D{
-		{Key: "status.in_prog", Value: -1},
-	}
-}
-
 // Next is the means by which callers can dispatch and run jobs by handing out the next job available to run. If the
 // driver finds an unowned job that is waiting to dispatch, it will dispatch the job, effectively giving the caller
 // ownership and responsibility of running it. If there is no job that can be currently dispatched to the worker, it
@@ -1333,54 +1231,24 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 			return nil
 		case <-timer.C:
 			misses++
-
-			iter, err := d.getNextCursor(ctx)
+			job, dispatchInfo, err := d.dispatchNextJob(ctx, startAt)
 			if err != nil {
+				if job != nil {
+					d.dispatcher.Release(ctx, job)
+				}
 				grip.Warning(message.WrapError(err, message.Fields{
-					"message":       "problem finding jobs ready to dispatch",
+					"message":       "problem getting next job",
 					"driver_id":     d.instanceID,
 					"service":       "amboy.queue.mdb",
-					"operation":     "retrieving next job",
+					"operation":     "dispatching job",
 					"is_group":      d.opts.UseGroups,
 					"group":         d.opts.GroupName,
 					"duration_secs": time.Since(startAt).Seconds(),
 				}))
 				return nil
 			}
-
-			job, dispatchInfo := d.tryDispatchJob(ctx, iter, startAt)
 			dispatchMisses += dispatchInfo.misses
 			dispatchSkips += dispatchInfo.skips
-			if err = iter.Err(); err != nil {
-				if job != nil {
-					d.dispatcher.Release(ctx, job)
-				}
-				grip.Warning(message.WrapError(err, message.Fields{
-					"message":       "problem reported by iterator",
-					"driver_id":     d.instanceID,
-					"service":       "amboy.queue.mdb",
-					"operation":     "retrieving next job",
-					"is_group":      d.opts.UseGroups,
-					"group":         d.opts.GroupName,
-					"duration_secs": time.Since(startAt).Seconds(),
-				}))
-				return nil
-			}
-
-			if err = iter.Close(ctx); err != nil {
-				if job != nil {
-					d.dispatcher.Release(ctx, job)
-				}
-				grip.Warning(message.WrapError(err, message.Fields{
-					"message":   "problem closing iterator",
-					"driver_id": d.instanceID,
-					"service":   "amboy.queue.mdb",
-					"operation": "retrieving next job",
-					"is_group":  d.opts.UseGroups,
-					"group":     d.opts.GroupName,
-				}))
-				return nil
-			}
 
 			if job != nil {
 				return job
@@ -1402,12 +1270,132 @@ type dispatchAttemptInfo struct {
 	misses int
 }
 
-// tryDispatchJob takes an iterator over the candidate Amboy jobs and attempts
+// dispatchNextJob attempts to dispatch a job. Stale in progress jobs are given precedence over pending jobs.
+func (d *mongoDriver) dispatchNextJob(ctx context.Context, startAt time.Time) (amboy.Job, dispatchAttemptInfo, error) {
+	now := time.Now()
+	var info dispatchAttemptInfo
+
+	job, dispatchInfo, err := d.tryDispatchWithQuery(ctx, d.getNextStaleInProgressQuery(now), startAt)
+	info.misses += dispatchInfo.misses
+	info.skips += dispatchInfo.skips
+
+	if err != nil {
+		return job, info, errors.Wrap(err, "dispatching stale in progress job")
+	}
+	if job != nil {
+		return job, info, nil
+	}
+
+	job, dispatchInfo, err = d.tryDispatchWithQuery(ctx, d.getNextPendingQuery(now), startAt)
+	info.misses += dispatchInfo.misses
+	info.skips += dispatchInfo.skips
+	if err != nil {
+		return job, info, errors.Wrap(err, "dispatching stale in progress job")
+	}
+
+	return job, info, nil
+}
+
+// getNextStaleInProgressQuery returns the query for the next available stale in-progress jobs.
+func (d *mongoDriver) getNextStaleInProgressQuery(now time.Time) bson.M {
+	staleBefore := now.Add(-d.LockTimeout())
+	qd := d.getInProgQuery(bson.M{"status.mod_ts": bson.M{"$lte": staleBefore}})
+	d.modifyQueryForGroup(d.modifyQueryForTimeLimits(qd, now))
+
+	return qd
+}
+
+// getNextPendingQuery returns the query for the next available pending jobs.
+func (d *mongoDriver) getNextPendingQuery(now time.Time) bson.M {
+	qd := d.getPendingQuery(bson.M{})
+	d.modifyQueryForGroup(d.modifyQueryForTimeLimits(qd, now))
+
+	return qd
+}
+
+// modifyQueryForTimeLimits returns a new query that adds a check to the given query for jobs' time limits.
+// If neither CheckWaitUntil nor CheckDispatchBy are set the original query is returned.
+func (d *mongoDriver) modifyQueryForTimeLimits(q bson.M, now time.Time) bson.M {
+	var timeLimits []bson.M
+	if d.opts.CheckWaitUntil {
+		checkWaitUntil := bson.M{"$or": []bson.M{
+			{"time_info.wait_until": bson.M{"$lte": now}},
+			{"time_info.wait_until": bson.M{"$exists": false}},
+		}}
+		timeLimits = append(timeLimits, checkWaitUntil)
+	}
+
+	if d.opts.CheckDispatchBy {
+		checkDispatchBy := bson.M{"$or": []bson.M{
+			{"time_info.dispatch_by": bson.M{"$gt": now}},
+			{"time_info.dispatch_by": bson.M{"$exists": false}},
+		}}
+		timeLimits = append(timeLimits, checkDispatchBy)
+	}
+
+	if len(timeLimits) > 0 {
+		q = bson.M{"$and": append(timeLimits, q)}
+	}
+
+	return q
+}
+
+// tryDispatchWithQuery attempts to dispatch a job that matches the query. If sampleSize is greater than
+// zero only that number of jobs are considered and the jobs are randomly shuffled.
+// If dispatching succeeds, the successfully dispatched job is returned.
+func (d *mongoDriver) tryDispatchWithQuery(ctx context.Context, query bson.M, startAt time.Time) (amboy.Job, dispatchAttemptInfo, error) {
+	iter, err := d.getNextCursor(ctx, query)
+	if err != nil {
+		return nil, dispatchAttemptInfo{}, errors.Wrap(err, "getting next job iterator")
+	}
+
+	job, dispatchInfo := d.tryDispatchFromCursor(ctx, iter, startAt)
+
+	if err = iter.Err(); err != nil {
+		return job, dispatchInfo, errors.Wrap(err, "iterator encountered an error")
+	}
+	if err = iter.Close(ctx); err != nil {
+		return job, dispatchInfo, errors.Wrap(err, "closing iterator")
+	}
+
+	return job, dispatchInfo, nil
+}
+
+// getNextCursor returns a cursor for the jobs matching nextQuery.
+// If sampleSize is greater than zero it's added as a limit and the jobs are shuffled.
+func (d *mongoDriver) getNextCursor(ctx context.Context, nextQuery bson.M) (*mongo.Cursor, error) {
+	pipeline := []bson.M{{"$match": nextQuery}}
+
+	if d.opts.Priority {
+		pipeline = append(pipeline, bson.M{"$sort": bson.E{Key: "priority", Value: -1}})
+	}
+
+	if d.opts.SampleSize > 0 {
+		// $limit must precede $sample for performance reasons. $sample scans all input
+		// documents to randomly select documents to return. Therefore, without a
+		// limit on the number of jobs to consider, the cost of $sample will become
+		// more expensive with the number of jobs that it must consider.
+		// Source:
+		// https://docs.mongodb.com/manual/reference/operator/aggregation/sample/#behavior
+		pipeline = append(pipeline, bson.M{"$limit": d.opts.SampleSize})
+		pipeline = append(pipeline, bson.M{"$sample": bson.M{"size": d.opts.SampleSize}})
+	}
+
+	var opts *options.AggregateOptions
+	if d.opts.PreferredIndexes.NextJob != nil {
+		opts = options.Aggregate().SetHint(d.ensureGroupIndexPrefix(d.opts.PreferredIndexes.NextJob))
+	}
+	iter, err := d.getCollection().Aggregate(ctx, pipeline, opts)
+	return iter, errors.Wrap(err, "aggregating next jobs")
+}
+
+// tryDispatchFromCursor takes an iterator over the candidate Amboy jobs and attempts
 // to dispatch one of them. If it succeeds, it returns the successfully
 // dispatched job.
-func (d *mongoDriver) tryDispatchJob(ctx context.Context, iter *mongo.Cursor, startAt time.Time) (amboy.Job, dispatchAttemptInfo) {
+func (d *mongoDriver) tryDispatchFromCursor(ctx context.Context, iter *mongo.Cursor, startAt time.Time) (amboy.Job, dispatchAttemptInfo) {
 	var dispatchInfo dispatchAttemptInfo
 	for iter.Next(ctx) {
+
 		ji := &registry.JobInterchange{}
 		if err := iter.Decode(ji); err != nil {
 			grip.Warning(message.WrapError(err, message.Fields{
