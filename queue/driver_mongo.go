@@ -1308,8 +1308,7 @@ func (d *mongoDriver) getNextStaleInProgressQuery(now time.Time) bson.M {
 // getNextPendingQuery returns the query for the next available pending jobs.
 func (d *mongoDriver) getNextPendingQuery(now time.Time) bson.M {
 	qd := d.getPendingQuery(bson.M{})
-	d.modifyQueryForGroup(qd)
-	qd = d.modifyQueryForTimeLimits(qd, now)
+	d.modifyQueryForGroup(d.modifyQueryForTimeLimits(qd, now))
 
 	return qd
 }
