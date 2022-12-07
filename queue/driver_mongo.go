@@ -559,12 +559,13 @@ func (d *mongoDriver) removeRetryFromMetadata(j *registry.JobInterchange) {
 	j.Name = deconstructCompoundID(j.Name, retryAttemptPrefix(j.RetryInfo.CurrentAttempt))
 }
 
-func (d *mongoDriver) modifyQueryForGroup(q bson.M) {
+func (d *mongoDriver) modifyQueryForGroup(q bson.M) bson.M {
 	if !d.opts.UseGroups {
-		return
+		return q
 	}
 
 	q["group"] = d.opts.GroupName
+	return q
 }
 
 func (d *mongoDriver) Get(ctx context.Context, name string) (amboy.Job, error) {
@@ -1300,17 +1301,13 @@ func (d *mongoDriver) dispatchNextJob(ctx context.Context, startAt time.Time) (a
 func (d *mongoDriver) getNextStaleInProgressQuery(now time.Time) bson.M {
 	staleBefore := now.Add(-d.LockTimeout())
 	qd := d.getInProgQuery(bson.M{"status.mod_ts": bson.M{"$lte": staleBefore}})
-	d.modifyQueryForGroup(d.modifyQueryForTimeLimits(qd, now))
-
-	return qd
+	return d.modifyQueryForGroup(d.modifyQueryForTimeLimits(qd, now))
 }
 
 // getNextPendingQuery returns the query for the next available pending jobs.
 func (d *mongoDriver) getNextPendingQuery(now time.Time) bson.M {
 	qd := d.getPendingQuery(bson.M{})
-	d.modifyQueryForGroup(d.modifyQueryForTimeLimits(qd, now))
-
-	return qd
+	return d.modifyQueryForGroup(d.modifyQueryForTimeLimits(qd, now))
 }
 
 // modifyQueryForTimeLimits returns a new query that adds a check to the given query for jobs' time limits.
