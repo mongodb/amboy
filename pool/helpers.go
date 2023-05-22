@@ -7,15 +7,29 @@ import (
 	"sync"
 	"time"
 
+	"github.com/evergreen-ci/utility"
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/grip"
 	"github.com/mongodb/grip/message"
 	"github.com/mongodb/grip/recovery"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
 	nilJobWaitIntervalMax = time.Second
 	baseJobInterval       = time.Millisecond
+
+	libraryName                     = "github.com/mongodb/amboy"
+	jobIDAttribute                  = "amboy.job.id"
+	jobNameAttribute                = "amboy.job.type.name"
+	jobDispatchMSAttribute          = "amboy.job.dispatch_ms"
+	jobRetryRetryableAttribute      = "amboy.retry.retryable"
+	jobRetryBaseIDAttribute         = "amboy.retry.base_id"
+	jobRetryCurrentAttemptAttribute = "amboy.retry.current_attempt"
+	jobRetryMaxAttemptsAttribute    = "amboy.retry.max_attempts"
 )
 
 func jitterNilJobWait() time.Duration {
@@ -24,6 +38,9 @@ func jitterNilJobWait() time.Duration {
 }
 
 func executeJob(ctx context.Context, id string, j amboy.Job, q amboy.Queue) {
+	ctx, span := jobSpan(ctx, j)
+	defer span.End()
+
 	var jobCtx context.Context
 	if maxTime := j.TimeInfo().MaxTime; maxTime > 0 {
 		var jobCancel context.CancelFunc
@@ -86,9 +103,30 @@ func executeJob(ctx context.Context, id string, j amboy.Job, q amboy.Queue) {
 
 	if err := j.Error(); err != nil {
 		grip.Error(message.WrapError(err, msg))
+		span.SetStatus(codes.Error, "job encountered error")
+		span.RecordError(err, trace.WithStackTrace(true))
 	} else {
 		grip.Info(msg)
 	}
+}
+
+func jobSpan(ctx context.Context, j amboy.Job) (context.Context, trace.Span) {
+	ti := j.TimeInfo()
+	attributes := []attribute.KeyValue{
+		attribute.String(jobIDAttribute, j.ID()),
+		attribute.String(jobNameAttribute, j.Type().Name),
+		attribute.Int64(jobDispatchMSAttribute, ti.Start.Sub(ti.Created).Milliseconds()),
+		attribute.Bool(jobRetryRetryableAttribute, j.RetryInfo().Retryable),
+	}
+	if j.RetryInfo().Retryable {
+		attributes = append(attributes,
+			attribute.String(jobRetryBaseIDAttribute, j.RetryInfo().BaseJobID),
+			attribute.Int(jobRetryCurrentAttemptAttribute, j.RetryInfo().CurrentAttempt),
+			attribute.Int(jobRetryMaxAttemptsAttribute, j.RetryInfo().MaxAttempts))
+	}
+	ctx = utility.ContextWithAttributes(ctx, attributes)
+
+	return otel.GetTracerProvider().Tracer(libraryName).Start(ctx, j.Type().Name)
 }
 
 func worker(bctx context.Context, id string, q amboy.Queue, wg *sync.WaitGroup, mu sync.Locker) {
