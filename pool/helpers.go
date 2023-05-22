@@ -23,13 +23,14 @@ const (
 	baseJobInterval       = time.Millisecond
 
 	libraryName                     = "github.com/mongodb/amboy"
+	queueIDAttribute                = "amboy.queue.id"
 	jobIDAttribute                  = "amboy.job.id"
-	jobNameAttribute                = "amboy.job.type.name"
+	jobNameAttribute                = "amboy.job.name"
 	jobDispatchMSAttribute          = "amboy.job.dispatch_ms"
-	jobRetryRetryableAttribute      = "amboy.retry.retryable"
-	jobRetryBaseIDAttribute         = "amboy.retry.base_id"
-	jobRetryCurrentAttemptAttribute = "amboy.retry.current_attempt"
-	jobRetryMaxAttemptsAttribute    = "amboy.retry.max_attempts"
+	jobRetryRetryableAttribute      = "amboy.job.retry.retryable"
+	jobRetryBaseIDAttribute         = "amboy.job.retry.base_id"
+	jobRetryCurrentAttemptAttribute = "amboy.job.retry.current_attempt"
+	jobRetryMaxAttemptsAttribute    = "amboy.job.retry.max_attempts"
 )
 
 func jitterNilJobWait() time.Duration {
@@ -38,7 +39,7 @@ func jitterNilJobWait() time.Duration {
 }
 
 func executeJob(ctx context.Context, id string, j amboy.Job, q amboy.Queue) {
-	ctx, span := jobSpan(ctx, j)
+	ctx, span := jobSpan(ctx, j, q)
 	defer span.End()
 
 	var jobCtx context.Context
@@ -110,12 +111,16 @@ func executeJob(ctx context.Context, id string, j amboy.Job, q amboy.Queue) {
 	}
 }
 
-func jobSpan(ctx context.Context, j amboy.Job) (context.Context, trace.Span) {
-	ti := j.TimeInfo()
+// jobSpan returns a span for job's execution. If the application hasn't configured
+// a TracerProvider with [SetTracerProvider] the span returned will perform no operations.
+//
+// [SetTracerProvider] https://pkg.go.dev/go.opentelemetry.io/otel#SetTracerProvider
+func jobSpan(ctx context.Context, j amboy.Job, q amboy.Queue) (context.Context, trace.Span) {
 	attributes := []attribute.KeyValue{
 		attribute.String(jobIDAttribute, j.ID()),
 		attribute.String(jobNameAttribute, j.Type().Name),
-		attribute.Int64(jobDispatchMSAttribute, ti.Start.Sub(ti.Created).Milliseconds()),
+		attribute.String(queueIDAttribute, q.ID()),
+		attribute.Int64(jobDispatchMSAttribute, j.TimeInfo().Start.Sub(j.TimeInfo().Created).Milliseconds()),
 		attribute.Bool(jobRetryRetryableAttribute, j.RetryInfo().Retryable),
 	}
 	if j.RetryInfo().Retryable {
