@@ -79,6 +79,14 @@ functions:
     - command: subprocess.exec
       type: setup
       params:
+        command: make get-mongosh
+        include_expansions_in_env: ["MONGOSH_DOWNLOAD"]
+        env:
+          DECOMPRESS: ${decompress}
+        working_dir: amboy
+    - command: subprocess.exec
+      type: setup
+      params:
         command: make start-mongod
         working_dir: amboy
         background: true
@@ -193,55 +201,48 @@ tasks:
 #           Buildvariants             #
 #######################################
 buildvariants:
-  - name: race-detector
-    display_name: Race Detector
-    expansions:
-      GOROOT: /opt/golang/go1.16
-      RACE_DETECTOR: true
-      MONGODB_URL: https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-4.0.3.tgz
-    run_on:
-      - archlinux-new-large
-    tasks:
-      - ".test"
-
   - name: lint
-    display_name: Lint (Arch Linux)
+    display_name: Lint
     run_on:
-      - archlinux-new-large
+      - ubuntu2204-small
     expansions:
-      GOROOT: /opt/golang/go1.16
-      MONGODB_URL: http://fastdl.mongodb.org/linux/mongodb-linux-x86_64-4.0.3.tgz
+      GOROOT: /opt/golang/go1.20
+      MONGODB_URL: https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-ubuntu2204-6.0.6.tgz
+      MONGOSH_DOWNLOAD: curl https://downloads.mongodb.com/compass/mongosh-1.9.0-linux-x64.tgz -o mongosh.tgz && tar -xzvf mongosh.tgz 
     tasks:
       - name: ".report"
         stepback: false
 
   - name: ubuntu
-    display_name: Ubuntu 18.04
+    display_name: Ubuntu 22.04
     run_on:
-      - ubuntu1804-large
+      - ubuntu2204-small
     expansions:
-      GOROOT: /opt/golang/go1.16
-      MONGODB_URL: https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-ubuntu1804-4.0.3.tgz
+      GOROOT: /opt/golang/go1.20
+      RACE_DETECTOR: true
+      MONGODB_URL: https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-ubuntu2204-6.0.6.tgz
+      MONGOSH_DOWNLOAD: curl https://downloads.mongodb.com/compass/mongosh-1.9.0-linux-x64.tgz -o mongosh.tgz && ${DECOMPRESS} mongosh.tgz 
     tasks:
       - ".test"
 
   - name: macos
-    display_name: macOS 10.14
+    display_name: macOS 11.00
     expansions:
-      GOROOT: /opt/golang/go1.16
-      MONGODB_URL: https://fastdl.mongodb.org/osx/mongodb-osx-ssl-x86_64-4.0.3.tgz
+      GOROOT: /opt/golang/go1.20
+      MONGODB_URL: https://fastdl.mongodb.org/osx/mongodb-macos-arm64-6.0.6.tgz
+      MONGOSH_DOWNLOAD: curl https://downloads.mongodb.com/compass/mongosh-1.9.0-darwin-arm64.zip -o mongosh.zip && unzip mongosh.zip 
     run_on:
-      - macos-1014
+      - macos-1100-arm64
     tasks:
       - ".test"
 
   - name: windows
     display_name: Windows
     run_on:
-      - windows-64-vs2019-large
-      - windows-64-vs2017-large
+      - windows-vsCurrent-large
     expansions:
-      GOROOT: C:/golang/go1.16
-      MONGODB_URL: https://fastdl.mongodb.org/win32/mongodb-win32-x86_64-2008plus-ssl-4.0.3.zip
+      GOROOT: C:/golang/go1.20
+      MONGODB_URL: https://fastdl.mongodb.org/windows/mongodb-windows-x86_64-6.0.6.zip
+      MONGOSH_DOWNLOAD: curl https://downloads.mongodb.com/compass/mongosh-1.9.0-win32-x64.zip -o mongosh.zip && ${DECOMPRESS} mongosh.zip 
     tasks:
       - ".test"
