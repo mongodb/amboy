@@ -153,7 +153,7 @@ start-mongod: mongodb/.get-mongodb
 	./mongodb/mongod --dbpath ./mongodb/db_files --port 27017 --replSet amboy
 	@echo "waiting for mongod to start up"
 check-mongod: mongodb/.get-mongodb mongodb/.get-mongosh
-	./mongosh/mongosh --nodb ./waitForMongo.js
+	./mongosh/mongosh --nodb ./scripts/waitForMongo.js
 	@echo "mongod is up"
 init-rs: mongodb/.get-mongodb mongodb/.get-mongosh
 	./mongosh/mongosh --eval 'rs.initiate()'
