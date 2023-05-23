@@ -1,7 +1,8 @@
-/*Package job provides tools and generic implementations of jobs for
+/*
+Package job provides tools and generic implementations of jobs for
 amboy Queues.
 
-Base Metadata
+# Base Metadata
 
 The Base type provides an implementation of the amboy.Job interface
 that does *not* have a Run method, and can be embedded in your own job

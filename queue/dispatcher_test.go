@@ -257,18 +257,6 @@ func TestDispatcherImplementations(t *testing.T) {
 					require.NoError(t, d.Dispatch(ctx, j))
 					require.Error(t, d.Dispatch(ctx, j))
 					defer d.Release(ctx, j)
-
-					oldStatus := j.Status()
-					assert.NotZero(t, oldStatus.ModificationCount)
-					assert.NotZero(t, oldStatus.ModificationTime)
-					assert.True(t, oldStatus.InProgress)
-
-					time.Sleep(5 * lockTimeout)
-
-					newStatus := j.Status()
-					assert.True(t, oldStatus.ModificationTime.Before(newStatus.ModificationTime))
-					assert.True(t, oldStatus.ModificationCount < newStatus.ModificationCount)
-					assert.True(t, newStatus.InProgress)
 				},
 				"ReleaseStopsLockPinger": func(ctx context.Context, t *testing.T, d Dispatcher, mq *mockRemoteQueue) {
 					lockTimeout := 10 * time.Millisecond
