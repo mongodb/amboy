@@ -59,7 +59,7 @@ $(shell mkdir -p $(buildDir))
 
 # start lint setup targets
 $(buildDir)/golangci-lint:
-	@curl --retry 10 --retry-max-time 60 -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(buildDir) v1.40.0 >/dev/null 2>&1
+	@curl --retry 10 --retry-max-time 60 -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(buildDir) v1.51.2 >/dev/null 2>&1
 $(buildDir)/run-linter: cmd/run-linter/run-linter.go $(buildDir)/golangci-lint
 	@$(gobin) build -o $@ $<
 # end lint setup targets
@@ -140,17 +140,24 @@ mongodb/.get-mongodb:
 	mkdir -p mongodb
 	cd mongodb && curl "$(MONGODB_URL)" -o mongodb.tgz && $(DECOMPRESS) mongodb.tgz && chmod +x ./mongodb-*/bin/*
 	cd mongodb && mv ./mongodb-*/bin/* . && rm -rf db_files && rm -rf db_logs && mkdir -p db_files && mkdir -p db_logs
+mongodb/.get-mongosh:
+	rm -rf mongosh
+	mkdir -p mongosh
+	cd mongosh && ${MONGOSH_DOWNLOAD} && chmod +x ./mongosh-*/bin/*
+	cd mongosh && mv ./mongosh-*/bin/* . 
 get-mongodb: mongodb/.get-mongodb
+	@touch $<
+get-mongosh: mongodb/.get-mongosh
 	@touch $<
 start-mongod: mongodb/.get-mongodb
 	./mongodb/mongod --dbpath ./mongodb/db_files --port 27017 --replSet amboy
 	@echo "waiting for mongod to start up"
-check-mongod: mongodb/.get-mongodb
-	./mongodb/mongo --nodb --eval "assert.soon(function(x){try{var d = new Mongo(\"localhost:27017\"); return true}catch(e){return false}}, \"timed out connecting\")"
+check-mongod: mongodb/.get-mongodb mongodb/.get-mongosh
+	./mongosh/mongosh --nodb ./scripts/waitForMongo.js
 	@echo "mongod is up"
-init-rs: mongodb/.get-mongodb
-	./mongodb/mongo --eval 'rs.initiate()'
-phony += get-mongodb start-mongod check-mongod init-rs
+init-rs: mongodb/.get-mongodb mongodb/.get-mongosh
+	./mongosh/mongosh --eval 'rs.initiate()'
+phony += get-mongodb get-mongosh start-mongod check-mongod init-rs
 # end mongodb targets
 
 # start module management targets
