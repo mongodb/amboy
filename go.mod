@@ -14,7 +14,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.8.2
 	github.com/urfave/cli v1.22.10
-	go.mongodb.org/mongo-driver v1.11.1
+	go.mongodb.org/mongo-driver v1.11.6
 	go.opentelemetry.io/otel v1.15.1
 	go.opentelemetry.io/otel/trace v1.15.1
 	golang.org/x/oauth2 v0.0.0-20211028175245-ba495a64dcb5 // indirect
