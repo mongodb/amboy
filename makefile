@@ -138,13 +138,13 @@ $(buildDir)/output.%.lint: $(buildDir)/run-linter .FORCE
 mongodb/.get-mongodb:
 	rm -rf mongodb
 	mkdir -p mongodb
-	cd mongodb && curl "$(MONGODB_URL)" -o mongodb.tgz && $(DECOMPRESS) mongodb.tgz && chmod +x ./mongodb-*/bin/*
+	cd mongodb && curl "$(MONGODB_URL)" -o mongodb.tgz && $(MONGODB_DECOMPRESS) mongodb.tgz && chmod +x ./mongodb-*/bin/*
 	cd mongodb && mv ./mongodb-*/bin/* . && rm -rf db_files && rm -rf db_logs && mkdir -p db_files && mkdir -p db_logs
 mongodb/.get-mongosh:
 	rm -rf mongosh
 	mkdir -p mongosh
-	cd mongosh && ${MONGOSH_DOWNLOAD} && chmod +x ./mongosh-*/bin/*
-	cd mongosh && mv ./mongosh-*/bin/* . 
+	cd mongosh && curl "$(MONGOSH_URL)" -o mongosh.tgz && $(MONGOSH_DECOMPRESS) mongosh.tgz && chmod +x ./mongosh-*/bin/*
+	cd mongosh && mv ./mongosh-*/bin/* .
 get-mongodb: mongodb/.get-mongodb
 	@touch $<
 get-mongosh: mongodb/.get-mongosh
