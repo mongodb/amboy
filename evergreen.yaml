@@ -74,15 +74,15 @@ functions:
         command: make get-mongodb
         include_expansions_in_env: ["MONGODB_URL"]
         env:
-          DECOMPRESS: ${decompress}
+          MONGODB_DECOMPRESS: ${decompress}
         working_dir: amboy
     - command: subprocess.exec
       type: setup
       params:
         command: make get-mongosh
-        include_expansions_in_env: ["MONGOSH_DOWNLOAD"]
+        include_expansions_in_env: ["MONGOSH_URL"]
         env:
-          DECOMPRESS: ${decompress}
+          MONGOSH_DECOMPRESS: ${MONGOSH_DECOMPRESS|*decompress}
         working_dir: amboy
     - command: subprocess.exec
       type: setup
@@ -221,7 +221,7 @@ buildvariants:
       GOROOT: /opt/golang/go1.20
       RACE_DETECTOR: true
       MONGODB_URL: https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-ubuntu2204-6.0.6.tgz
-      MONGOSH_DOWNLOAD: curl https://downloads.mongodb.com/compass/mongosh-1.9.0-linux-x64.tgz -o mongosh.tgz && ${DECOMPRESS} mongosh.tgz 
+      MONGOSH_URL: https://downloads.mongodb.com/compass/mongosh-1.9.0-linux-x64.tgz
     tasks:
       - ".test"
 
@@ -230,7 +230,8 @@ buildvariants:
     expansions:
       GOROOT: /opt/golang/go1.20
       MONGODB_URL: https://fastdl.mongodb.org/osx/mongodb-macos-arm64-6.0.6.tgz
-      MONGOSH_DOWNLOAD: curl https://downloads.mongodb.com/compass/mongosh-1.9.0-darwin-arm64.zip -o mongosh.zip && unzip mongosh.zip 
+      MONGOSH_URL: https://downloads.mongodb.com/compass/mongosh-1.9.0-darwin-arm64.zip
+      MONGOSH_DECOMPRESS: unzip
     run_on:
       - macos-1100-arm64
     tasks:
@@ -243,6 +244,6 @@ buildvariants:
     expansions:
       GOROOT: C:/golang/go1.20
       MONGODB_URL: https://fastdl.mongodb.org/windows/mongodb-windows-x86_64-6.0.6.zip
-      MONGOSH_DOWNLOAD: curl https://downloads.mongodb.com/compass/mongosh-1.9.0-win32-x64.zip -o mongosh.zip && ${DECOMPRESS} mongosh.zip 
+      MONGOSH_URL: https://downloads.mongodb.com/compass/mongosh-1.9.0-win32-x64.zip
     tasks:
       - ".test"
