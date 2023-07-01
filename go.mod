@@ -12,7 +12,7 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/mongodb/grip v0.0.0-20220401165023-6a1d9bb90c21
 	github.com/pkg/errors v0.9.1
-	github.com/stretchr/testify v1.8.2
+	github.com/stretchr/testify v1.8.4
 	github.com/urfave/cli v1.22.10
 	go.mongodb.org/mongo-driver v1.11.1
 	go.opentelemetry.io/otel v1.15.1
