@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/job"
+	"github.com/mongodb/grip"
 	"github.com/pkg/errors"
 )
 
@@ -53,6 +54,14 @@ func (q *QueueTester) Put(ctx context.Context, j amboy.Job) error {
 		q.storage[j.ID()] = j
 		return nil
 	}
+}
+
+func (q *QueueTester) PutMany(ctx context.Context, jobs []amboy.Job) error {
+	catcher := grip.NewBasicCatcher()
+	for _, j := range jobs {
+		catcher.Add(q.Put(ctx, j))
+	}
+	return catcher.Resolve()
 }
 
 func (q *QueueTester) Save(ctx context.Context, j amboy.Job) error {
