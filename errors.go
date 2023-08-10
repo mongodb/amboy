@@ -60,6 +60,18 @@ func EnqueueUniqueJob(ctx context.Context, queue Queue, job Job) error {
 	return errors.WithStack(err)
 }
 
+// EnqueueUniqueJobs is a generic wrapper for adding jobs to queues (using the
+// PutMany() method), but that ignores duplicate job errors.
+func EnqueueUniqueJobs(ctx context.Context, queue Queue, jobs []Job) error {
+	err := queue.PutMany(ctx, jobs)
+
+	if IsDuplicateJobError(err) {
+		return nil
+	}
+
+	return errors.WithStack(err)
+}
+
 type duplJobError struct {
 	msg string
 }

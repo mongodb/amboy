@@ -677,24 +677,30 @@ func (d *mongoDriver) GetAllAttempts(ctx context.Context, id string) ([]amboy.Jo
 }
 
 func (d *mongoDriver) Put(ctx context.Context, j amboy.Job) error {
-	ji, err := registry.MakeJobInterchange(j, d.opts.Format)
-	if err != nil {
-		return errors.Wrap(err, "converting in-memory job to interchange job")
+	return d.PutMany(ctx, []amboy.Job{j})
+}
+
+func (d *mongoDriver) PutMany(ctx context.Context, jobs []amboy.Job) error {
+	var jobInterchanges []any
+	for _, j := range jobs {
+		ji, err := registry.MakeJobInterchange(j, d.opts.Format)
+		if err != nil {
+			return errors.Wrap(err, "converting in-memory job to interchange job")
+		}
+		ji.Scopes = j.EnqueueScopes()
+		d.addMetadata(ji)
+		jobInterchanges = append(jobInterchanges, ji)
 	}
 
-	ji.Scopes = j.EnqueueScopes()
-
-	d.addMetadata(ji)
-
-	if _, err = d.getCollection().InsertOne(ctx, ji); err != nil {
+	if _, err := d.getCollection().InsertMany(ctx, jobInterchanges, options.InsertMany().SetOrdered(false)); err != nil {
 		if d.isMongoDupScope(err) {
-			return amboy.NewDuplicateJobScopeErrorf("job scopes '%s' conflict", j.Scopes())
+			return amboy.NewDuplicateJobScopeErrorf("job scopes conflict")
 		}
 		if isMongoDupKey(err) {
-			return amboy.NewDuplicateJobErrorf("job '%s' already exists", j.ID())
+			return amboy.NewDuplicateJobError("job already exists")
 		}
 
-		return errors.Wrapf(err, "inserting new job '%s'", j.ID())
+		return errors.Wrap(err, "inserting new jobs")
 	}
 
 	return nil
@@ -740,11 +746,9 @@ func (d *mongoDriver) getAtomicQuery(jobName string, stat amboy.JobStatusInfo) b
 	}
 }
 
-var errMongoNoDocumentsMatched = errors.New("no documents matched")
-
 func isMongoDupKey(err error) bool {
 	dupKeyErrs := getMongoDupKeyErrors(err)
-	return dupKeyErrs.writeConcernError != nil || len(dupKeyErrs.writeErrors) != 0 || dupKeyErrs.commandError != nil
+	return dupKeyErrs.writeConcernError != nil || len(dupKeyErrs.writeErrors) == dupKeyErrs.totalErrorCount || dupKeyErrs.commandError != nil
 }
 
 func (d *mongoDriver) isMongoDupScope(err error) bool {
@@ -779,6 +783,7 @@ func (d *mongoDriver) isMongoDupScope(err error) bool {
 type mongoDupKeyErrors struct {
 	writeConcernError *mongo.WriteConcernError
 	writeErrors       []mongo.WriteError
+	totalErrorCount   int
 	commandError      *mongo.CommandError
 }
 
@@ -786,8 +791,18 @@ func getMongoDupKeyErrors(err error) mongoDupKeyErrors {
 	var dupKeyErrs mongoDupKeyErrors
 
 	if we, ok := errors.Cause(err).(mongo.WriteException); ok {
-		dupKeyErrs.writeConcernError = getMongoDupKeyWriteConcernError(we)
-		dupKeyErrs.writeErrors = getMongoDupKeyWriteErrors(we)
+		dupKeyErrs.writeConcernError = getMongoDupKeyWriteConcernError(we.WriteConcernError)
+		dupKeyErrs.writeErrors = getMongoDupKeyWriteErrors(we.WriteErrors)
+	}
+
+	if we, ok := errors.Cause(err).(mongo.BulkWriteException); ok {
+		dupKeyErrs.writeConcernError = getMongoDupKeyWriteConcernError(we.WriteConcernError)
+		var writeErrors mongo.WriteErrors
+		for _, err := range we.WriteErrors {
+			writeErrors = append(writeErrors, err.WriteError)
+		}
+		dupKeyErrs.writeErrors = getMongoDupKeyWriteErrors(writeErrors)
+		dupKeyErrs.totalErrorCount = len(writeErrors)
 	}
 
 	if ce, ok := errors.Cause(err).(mongo.CommandError); ok {
@@ -797,8 +812,7 @@ func getMongoDupKeyErrors(err error) mongoDupKeyErrors {
 	return dupKeyErrs
 }
 
-func getMongoDupKeyWriteConcernError(err mongo.WriteException) *mongo.WriteConcernError {
-	wce := err.WriteConcernError
+func getMongoDupKeyWriteConcernError(wce *mongo.WriteConcernError) *mongo.WriteConcernError {
 	if wce == nil {
 		return nil
 	}
@@ -816,13 +830,13 @@ func getMongoDupKeyWriteConcernError(err mongo.WriteException) *mongo.WriteConce
 	}
 }
 
-func getMongoDupKeyWriteErrors(err mongo.WriteException) []mongo.WriteError {
-	if len(err.WriteErrors) == 0 {
+func getMongoDupKeyWriteErrors(writeErrors mongo.WriteErrors) []mongo.WriteError {
+	if len(writeErrors) == 0 {
 		return nil
 	}
 
 	var werrs []mongo.WriteError
-	for _, werr := range err.WriteErrors {
+	for _, werr := range writeErrors {
 		if werr.Code == 11000 {
 			werrs = append(werrs, werr)
 		}
