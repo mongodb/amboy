@@ -748,7 +748,7 @@ func (d *mongoDriver) getAtomicQuery(jobName string, stat amboy.JobStatusInfo) b
 
 func isMongoDupKey(err error) bool {
 	dupKeyErrs := getMongoDupKeyErrors(err)
-	return dupKeyErrs.writeConcernError != nil || len(dupKeyErrs.writeErrors) == dupKeyErrs.totalErrorCount || dupKeyErrs.commandError != nil
+	return dupKeyErrs.writeConcernError != nil || (len(dupKeyErrs.writeErrors) > 0 && len(dupKeyErrs.writeErrors) == dupKeyErrs.totalErrorCount) || dupKeyErrs.commandError != nil
 }
 
 func (d *mongoDriver) isMongoDupScope(err error) bool {

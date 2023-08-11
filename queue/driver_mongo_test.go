@@ -1,14 +1,18 @@
 package queue
 
 import (
+	"context"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/mongodb/amboy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/x/bsonx"
 )
 
 func TestMongoDBOptions(t *testing.T) {
@@ -72,4 +76,127 @@ func TestMongoDBOptions(t *testing.T) {
 			assert.Error(t, opts.Validate())
 		})
 	})
+}
+
+func TestPutMany(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	opts := defaultMongoDBTestOptions()
+	opts.SkipQueueIndexBuilds = true
+	opts.SkipReportingIndexBuilds = true
+	opts.Collection = "jobs.jobs"
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(opts.URI))
+	require.NoError(t, err)
+	defer func() {
+		assert.NoError(t, client.Disconnect(ctx))
+	}()
+	opts.Client = client
+	defer func() {
+		client.Database(opts.DB).Drop(ctx)
+	}()
+
+	driver, err := openNewMongoDriver(ctx, opts)
+	require.NoError(t, err)
+	defer func() {
+		assert.NoError(t, driver.Close(ctx))
+	}()
+
+	for testName, test := range map[string]func(*testing.T){
+		"DistinctJobs": func(t *testing.T) {
+			j0 := newMockJob()
+			j0.SetID("j0")
+			j1 := newMockJob()
+			j1.SetID("j1")
+			err = driver.PutMany(ctx, []amboy.Job{j0, j1})
+			assert.NoError(t, err)
+		},
+		"DuplicateJob": func(t *testing.T) {
+			j0 := newMockJob()
+			j0.SetID("j0")
+			j0Dup := newMockJob()
+			j0Dup.SetID("j0")
+			err = driver.PutMany(ctx, []amboy.Job{j0, j0Dup})
+			assert.Error(t, err)
+			assert.True(t, amboy.IsDuplicateJobError(err))
+		},
+		"OtherError": func(t *testing.T) {
+			var sb strings.Builder
+			for i := 0; i < 16000000; i++ {
+				sb.WriteString("a")
+			}
+			t.Log(len(sb.String()))
+			j0 := newMockJob()
+			j0.SetID(sb.String())
+			err = driver.PutMany(ctx, []amboy.Job{j0})
+			assert.Error(t, err)
+			assert.False(t, amboy.IsDuplicateJobError(err))
+		},
+		"MixOfErrors": func(t *testing.T) {
+			var sb strings.Builder
+			for i := 0; i < 16000000; i++ {
+				sb.WriteString("a")
+			}
+			j0 := newMockJob()
+			j0.SetID(sb.String())
+			j1 := newMockJob()
+			j1.SetID("j1")
+			j1Dup := newMockJob()
+			j1Dup.SetID("j1")
+			err = driver.PutMany(ctx, []amboy.Job{j0, j1, j1Dup})
+			assert.Error(t, err)
+			assert.False(t, amboy.IsDuplicateJobError(err))
+		},
+		"DuplicateScopes": func(t *testing.T) {
+			client.Database(opts.DB).Collection(opts.Collection).Indexes().CreateOne(ctx, mongo.IndexModel{
+				Keys: bson.D{
+					bson.E{
+						Key:   "scopes",
+						Value: bsonx.Int32(1),
+					},
+				},
+				Options: options.Index().SetUnique(true).SetPartialFilterExpression(bson.M{"scopes": bson.M{"$exists": true}}),
+			})
+			j0 := newMockJob()
+			j0.SetID("j0")
+			j0.SetScopes([]string{"scope"})
+			j0.SetEnqueueAllScopes(true)
+			j1 := newMockJob()
+			j1.SetID("j1")
+			j1.SetScopes([]string{"scope"})
+			j1.SetEnqueueAllScopes(true)
+			err = driver.PutMany(ctx, []amboy.Job{j0, j1})
+			assert.Error(t, err)
+			assert.True(t, amboy.IsDuplicateJobError(err))
+			assert.True(t, amboy.IsDuplicateJobScopeError(err))
+		},
+		"DuplicateAndDuplicateScopes": func(t *testing.T) {
+			client.Database(opts.DB).Collection(opts.Collection).Indexes().CreateOne(ctx, mongo.IndexModel{
+				Keys: bson.D{
+					bson.E{
+						Key:   "scopes",
+						Value: bsonx.Int32(1),
+					},
+				},
+				Options: options.Index().SetUnique(true).SetPartialFilterExpression(bson.M{"scopes": bson.M{"$exists": true}}),
+			})
+			j0 := newMockJob()
+			j0.SetID("j0")
+			j0.SetScopes([]string{"scope"})
+			j0.SetEnqueueAllScopes(true)
+			j1 := newMockJob()
+			j1.SetID("j1")
+			j1.SetScopes([]string{"scope"})
+			j1.SetEnqueueAllScopes(true)
+			j1Dup := newMockJob()
+			j1Dup.SetID("j1")
+			err = driver.PutMany(ctx, []amboy.Job{j0, j1, j1Dup})
+			assert.Error(t, err)
+			assert.True(t, amboy.IsDuplicateJobError(err))
+			assert.True(t, amboy.IsDuplicateJobScopeError(err))
+		},
+	} {
+		client.Database(opts.DB).Collection(opts.Collection).Drop(ctx)
+		t.Run(testName, test)
+	}
 }
