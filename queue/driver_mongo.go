@@ -748,7 +748,7 @@ func (d *mongoDriver) getAtomicQuery(jobName string, stat amboy.JobStatusInfo) b
 
 func isMongoDupKey(err error) bool {
 	dupKeyErrs := getMongoDupKeyErrors(err)
-	return dupKeyErrs.writeConcernError != nil || (len(dupKeyErrs.writeErrors) > 0 && len(dupKeyErrs.writeErrors) == dupKeyErrs.totalErrorCount) || dupKeyErrs.commandError != nil
+	return dupKeyErrs.writeConcernError != nil || (len(dupKeyErrs.writeErrors) != 0 && !dupKeyErrs.hasOtherWriteErrors) || dupKeyErrs.commandError != nil
 }
 
 func (d *mongoDriver) isMongoDupScope(err error) bool {
@@ -781,10 +781,10 @@ func (d *mongoDriver) isMongoDupScope(err error) bool {
 }
 
 type mongoDupKeyErrors struct {
-	writeConcernError *mongo.WriteConcernError
-	writeErrors       []mongo.WriteError
-	totalErrorCount   int
-	commandError      *mongo.CommandError
+	writeConcernError   *mongo.WriteConcernError
+	writeErrors         []mongo.WriteError
+	hasOtherWriteErrors bool
+	commandError        *mongo.CommandError
 }
 
 func getMongoDupKeyErrors(err error) mongoDupKeyErrors {
@@ -793,6 +793,7 @@ func getMongoDupKeyErrors(err error) mongoDupKeyErrors {
 	if we, ok := errors.Cause(err).(mongo.WriteException); ok {
 		dupKeyErrs.writeConcernError = getMongoDupKeyWriteConcernError(we.WriteConcernError)
 		dupKeyErrs.writeErrors = getMongoDupKeyWriteErrors(we.WriteErrors)
+		dupKeyErrs.hasOtherWriteErrors = len(we.WriteErrors) > len(dupKeyErrs.writeErrors)
 	}
 
 	if we, ok := errors.Cause(err).(mongo.BulkWriteException); ok {
@@ -802,7 +803,7 @@ func getMongoDupKeyErrors(err error) mongoDupKeyErrors {
 			writeErrors = append(writeErrors, err.WriteError)
 		}
 		dupKeyErrs.writeErrors = getMongoDupKeyWriteErrors(writeErrors)
-		dupKeyErrs.totalErrorCount = len(writeErrors)
+		dupKeyErrs.hasOtherWriteErrors = len(writeErrors) > len(we.WriteErrors)
 	}
 
 	if ce, ok := errors.Cause(err).(mongo.CommandError); ok {
