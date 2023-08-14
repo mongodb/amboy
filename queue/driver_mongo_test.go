@@ -93,7 +93,7 @@ func TestPutMany(t *testing.T) {
 	}()
 	opts.Client = client
 	defer func() {
-		client.Database(opts.DB).Drop(ctx)
+		assert.NoError(t, client.Database(opts.DB).Drop(ctx))
 	}()
 
 	driver, err := openNewMongoDriver(ctx, opts)
@@ -148,7 +148,7 @@ func TestPutMany(t *testing.T) {
 			assert.False(t, amboy.IsDuplicateJobError(err))
 		},
 		"DuplicateScopes": func(t *testing.T) {
-			client.Database(opts.DB).Collection(opts.Collection).Indexes().CreateOne(ctx, mongo.IndexModel{
+			_, err := client.Database(opts.DB).Collection(opts.Collection).Indexes().CreateOne(ctx, mongo.IndexModel{
 				Keys: bson.D{
 					bson.E{
 						Key:   "scopes",
@@ -157,6 +157,8 @@ func TestPutMany(t *testing.T) {
 				},
 				Options: options.Index().SetUnique(true).SetPartialFilterExpression(bson.M{"scopes": bson.M{"$exists": true}}),
 			})
+			require.NoError(t, err)
+
 			j0 := newMockJob()
 			j0.SetID("j0")
 			j0.SetScopes([]string{"scope"})
@@ -171,7 +173,7 @@ func TestPutMany(t *testing.T) {
 			assert.True(t, amboy.IsDuplicateJobScopeError(err))
 		},
 		"DuplicateAndDuplicateScopes": func(t *testing.T) {
-			client.Database(opts.DB).Collection(opts.Collection).Indexes().CreateOne(ctx, mongo.IndexModel{
+			_, err := client.Database(opts.DB).Collection(opts.Collection).Indexes().CreateOne(ctx, mongo.IndexModel{
 				Keys: bson.D{
 					bson.E{
 						Key:   "scopes",
@@ -180,6 +182,8 @@ func TestPutMany(t *testing.T) {
 				},
 				Options: options.Index().SetUnique(true).SetPartialFilterExpression(bson.M{"scopes": bson.M{"$exists": true}}),
 			})
+			require.NoError(t, err)
+
 			j0 := newMockJob()
 			j0.SetID("j0")
 			j0.SetScopes([]string{"scope"})
@@ -196,7 +200,7 @@ func TestPutMany(t *testing.T) {
 			assert.True(t, amboy.IsDuplicateJobScopeError(err))
 		},
 	} {
-		client.Database(opts.DB).Collection(opts.Collection).Drop(ctx)
+		require.NoError(t, client.Database(opts.DB).Collection(opts.Collection).Drop(ctx))
 		t.Run(testName, test)
 	}
 }
