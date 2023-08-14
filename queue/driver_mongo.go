@@ -699,14 +699,18 @@ func (d *mongoDriver) PutMany(ctx context.Context, jobs []amboy.Job) error {
 	}
 
 	if _, err := d.getCollection().InsertMany(ctx, jobInterchanges, options.InsertMany().SetOrdered(false)); err != nil {
+		jobIDs := make([]string, 0, len(jobs))
+		for _, j := range jobs {
+			jobIDs = append(jobIDs, j.ID())
+		}
 		if d.isMongoDupScope(err) {
-			return amboy.NewDuplicateJobScopeErrorf("job scopes conflict")
+			return amboy.NewDuplicateJobScopeErrorf("job scopes conflict inserting '%v'", jobIDs)
 		}
 		if isMongoDupKey(err) {
-			return amboy.NewDuplicateJobError("job already exists")
+			return amboy.NewDuplicateJobErrorf("job already exists inserting '%v'", jobIDs)
 		}
 
-		return errors.Wrap(err, "inserting new jobs")
+		return errors.Wrapf(err, "inserting new jobs '%v'", jobIDs)
 	}
 
 	return nil
