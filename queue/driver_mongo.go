@@ -680,6 +680,12 @@ func (d *mongoDriver) Put(ctx context.Context, j amboy.Job) error {
 	return d.PutMany(ctx, []amboy.Job{j})
 }
 
+// PutMany enqueues multiple jobs on the queue.
+// Returns an error if any of the jobs cannot be inserted. If a non-duplicate-job error
+// is encountered it is returned. If every job is a duplicate job error then if any
+// of them is a duplicate scope error a duplicate scope error is returned.
+// If none of them is a duplicate scope error then a duplicate job error
+// is returned.
 func (d *mongoDriver) PutMany(ctx context.Context, jobs []amboy.Job) error {
 	var jobInterchanges []any
 	for _, j := range jobs {
