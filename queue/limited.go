@@ -120,7 +120,7 @@ func (q *limitedSizeLocal) Put(ctx context.Context, j amboy.Job) error {
 func (q *limitedSizeLocal) PutMany(ctx context.Context, jobs []amboy.Job) error {
 	catcher := grip.NewBasicCatcher()
 	for _, j := range jobs {
-		catcher.Add(q.Put(ctx, j))
+		catcher.Wrapf(q.Put(ctx, j), "putting job '%s'", j.ID())
 	}
 	return catcher.Resolve()
 }
