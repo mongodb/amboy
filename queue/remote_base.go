@@ -269,7 +269,7 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) error {
 						"retry_count": count,
 						"message":     "after 10 retries, aborting marking job complete",
 					}))
-				} else if isMongoDupKey(err) || amboy.IsJobNotFoundError(err) {
+				} else if amboy.IsDuplicateJobError(err) || amboy.IsJobNotFoundError(err) {
 					grip.Warning(message.WrapError(err, message.Fields{
 						"job_id":      id,
 						"driver_type": q.driverType,

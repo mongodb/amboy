@@ -122,7 +122,7 @@ func (q *limitedSizeLocal) PutMany(ctx context.Context, jobs []amboy.Job) error 
 	for _, j := range jobs {
 		catcher.Wrapf(q.Put(ctx, j), "putting job '%s'", j.ID())
 	}
-	return catcher.Resolve()
+	return amboy.CollateWriteErrors(catcher.Errors())
 }
 
 func (q *limitedSizeLocal) Save(ctx context.Context, j amboy.Job) error {

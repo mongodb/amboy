@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/mongodb/grip"
 	"github.com/pkg/errors"
 )
 
@@ -70,6 +71,51 @@ func EnqueueManyUniqueJobs(ctx context.Context, queue Queue, jobs []Job) error {
 	}
 
 	return errors.WithStack(err)
+}
+
+type WriteErrors struct {
+	DuplicateJobErrors   []error
+	DuplicateScopeErrors []error
+	OtherErrors          []error
+}
+
+func (w WriteErrors) Error() string {
+	catcher := grip.NewBasicCatcher()
+	catcher.Extend(w.DuplicateScopeErrors)
+	catcher.Extend(w.DuplicateJobErrors)
+	catcher.Extend(w.OtherErrors)
+
+	return catcher.String()
+}
+
+func (w WriteErrors) Cause() error {
+	if len(w.OtherErrors) > 0 {
+		return w
+	}
+
+	var duplicateError error
+	if len(w.DuplicateScopeErrors) > 0 {
+		duplicateError = MakeDuplicateJobScopeError(w)
+	}
+	if len(w.DuplicateJobErrors) > 0 {
+		duplicateError = MakeDuplicateJobError(w)
+	}
+
+	return duplicateError
+}
+
+func CollateWriteErrors(errs []error) error {
+	var writeErrs WriteErrors
+	for _, err := range errs {
+		if IsDuplicateJobScopeError(err) {
+			writeErrs.DuplicateScopeErrors = append(writeErrs.DuplicateScopeErrors, err)
+		} else if IsDuplicateJobError(err) {
+			writeErrs.DuplicateJobErrors = append(writeErrs.DuplicateJobErrors, err)
+		} else {
+			writeErrs.OtherErrors = append(writeErrs.OtherErrors, err)
+		}
+	}
+	return writeErrs
 }
 
 type duplJobError struct {
