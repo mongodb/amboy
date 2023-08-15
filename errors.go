@@ -73,19 +73,17 @@ func EnqueueManyUniqueJobs(ctx context.Context, queue Queue, jobs []Job) error {
 	return errors.WithStack(err)
 }
 
-// WriteErrors collates errors by error type.
-type WriteErrors struct {
-	DuplicateJobErrors   []error
-	DuplicateScopeErrors []error
-	OtherErrors          []error
+type writeErrors struct {
+	duplicateJobErrors   []error
+	duplicateScopeErrors []error
+	otherErrors          []error
 }
 
-// Error returns the string representation of the error.
-func (w WriteErrors) Error() string {
+func (w *writeErrors) Error() string {
 	catcher := grip.NewBasicCatcher()
-	catcher.Extend(w.DuplicateScopeErrors)
-	catcher.Extend(w.DuplicateJobErrors)
-	catcher.Extend(w.OtherErrors)
+	catcher.Extend(w.duplicateScopeErrors)
+	catcher.Extend(w.duplicateJobErrors)
+	catcher.Extend(w.otherErrors)
 
 	return catcher.String()
 }
@@ -94,36 +92,34 @@ func (w WriteErrors) Error() string {
 //   - If a non-duplicate-job error is encountered it is returned.
 //   - If every error is a duplicate job error and at least one of them is a duplicate scope error a duplicate scope error is returned.
 //   - If every error is a duplicate job error and none of them is a duplicate scope error a duplicate job error is returned.
-func (w WriteErrors) Cause() error {
-	if len(w.OtherErrors) > 0 {
+func (w *writeErrors) Cause() error {
+	if len(w.otherErrors) > 0 {
 		return w
 	}
-
-	var duplicateError error
-	if len(w.DuplicateScopeErrors) > 0 {
-		duplicateError = MakeDuplicateJobScopeError(w)
+	if len(w.duplicateScopeErrors) > 0 {
+		return MakeDuplicateJobScopeError(w)
 	}
-	if len(w.DuplicateJobErrors) > 0 {
-		duplicateError = MakeDuplicateJobError(w)
+	if len(w.duplicateJobErrors) > 0 {
+		return MakeDuplicateJobError(w)
 	}
 
-	return duplicateError
+	return nil
 }
 
-// CollateWriteErrors collates errors into a [WriteErrors].
-func CollateWriteErrors(errs []error) *WriteErrors {
+// CollateWriteErrors collates errors into a [writeErrors].
+func CollateWriteErrors(errs []error) *writeErrors {
 	if len(errs) == 0 {
 		return nil
 	}
 
-	var writeErrs WriteErrors
+	var writeErrs writeErrors
 	for _, err := range errs {
 		if IsDuplicateJobScopeError(err) {
-			writeErrs.DuplicateScopeErrors = append(writeErrs.DuplicateScopeErrors, err)
+			writeErrs.duplicateScopeErrors = append(writeErrs.duplicateScopeErrors, err)
 		} else if IsDuplicateJobError(err) {
-			writeErrs.DuplicateJobErrors = append(writeErrs.DuplicateJobErrors, err)
+			writeErrs.duplicateJobErrors = append(writeErrs.duplicateJobErrors, err)
 		} else {
-			writeErrs.OtherErrors = append(writeErrs.OtherErrors, err)
+			writeErrs.otherErrors = append(writeErrs.otherErrors, err)
 		}
 	}
 	return &writeErrs
