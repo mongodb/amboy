@@ -73,6 +73,7 @@ func EnqueueManyUniqueJobs(ctx context.Context, queue Queue, jobs []Job) error {
 	return errors.WithStack(err)
 }
 
+// writeErrors contains errors encountered while writing jobs to a queue.
 type writeErrors struct {
 	duplicateJobErrors   []error
 	duplicateScopeErrors []error
