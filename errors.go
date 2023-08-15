@@ -73,12 +73,14 @@ func EnqueueManyUniqueJobs(ctx context.Context, queue Queue, jobs []Job) error {
 	return errors.WithStack(err)
 }
 
+// WriteErrors collates errors by error type.
 type WriteErrors struct {
 	DuplicateJobErrors   []error
 	DuplicateScopeErrors []error
 	OtherErrors          []error
 }
 
+// Error returns the string representation of the error.
 func (w WriteErrors) Error() string {
 	catcher := grip.NewBasicCatcher()
 	catcher.Extend(w.DuplicateScopeErrors)
@@ -109,7 +111,11 @@ func (w WriteErrors) Cause() error {
 }
 
 // CollateWriteErrors collates errors into a [WriteErrors].
-func CollateWriteErrors(errs []error) WriteErrors {
+func CollateWriteErrors(errs []error) *WriteErrors {
+	if len(errs) == 0 {
+		return nil
+	}
+
 	var writeErrs WriteErrors
 	for _, err := range errs {
 		if IsDuplicateJobScopeError(err) {
@@ -120,7 +126,7 @@ func CollateWriteErrors(errs []error) WriteErrors {
 			writeErrs.OtherErrors = append(writeErrs.OtherErrors, err)
 		}
 	}
-	return writeErrs
+	return &writeErrs
 }
 
 type duplJobError struct {

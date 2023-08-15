@@ -753,6 +753,7 @@ func (d *mongoDriver) getAtomicQuery(jobName string, stat amboy.JobStatusInfo) b
 	}
 }
 
+// toWriteError tries to convert the error to a WriteError if possible, but may simply return the error as-is if it's unable.
 func (d *mongoDriver) toWriteError(err error) error {
 	if we, ok := errors.Cause(err).(mongo.WriteException); ok {
 		var errs []error
