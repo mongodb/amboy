@@ -108,7 +108,8 @@ func (w WriteErrors) Cause() error {
 	return duplicateError
 }
 
-func CollateWriteErrors(errs []error) error {
+// CollateWriteErrors collates errors into a [WriteErrors].
+func CollateWriteErrors(errs []error) WriteErrors {
 	var writeErrs WriteErrors
 	for _, err := range errs {
 		if IsDuplicateJobScopeError(err) {
