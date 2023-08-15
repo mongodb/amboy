@@ -125,7 +125,6 @@ func TestPutMany(t *testing.T) {
 			for i := 0; i < 16000000; i++ {
 				sb.WriteString("a")
 			}
-			t.Log(len(sb.String()))
 			j0 := newMockJob()
 			j0.SetID(sb.String())
 			err = driver.PutMany(ctx, []amboy.Job{j0})

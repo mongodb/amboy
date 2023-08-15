@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/evergreen-ci/utility"
 	"github.com/google/uuid"
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/registry"
@@ -681,11 +682,7 @@ func (d *mongoDriver) Put(ctx context.Context, j amboy.Job) error {
 }
 
 // PutMany enqueues multiple jobs on the queue.
-// Returns an error if any of the jobs cannot be inserted. If a non-duplicate-job error
-// is encountered it is returned. If every error is a duplicate job error then if any
-// of them is a duplicate scope error a duplicate scope error is returned.
-// If none of them is a duplicate scope error then a duplicate job error
-// is returned.
+// Returns an [amboy.WriteError] if any of the jobs cannot be inserted.
 func (d *mongoDriver) PutMany(ctx context.Context, jobs []amboy.Job) error {
 	var jobInterchanges []any
 	for _, j := range jobs {
@@ -698,8 +695,22 @@ func (d *mongoDriver) PutMany(ctx context.Context, jobs []amboy.Job) error {
 		jobInterchanges = append(jobInterchanges, ji)
 	}
 
-	_, err := d.getCollection().InsertMany(ctx, jobInterchanges, options.InsertMany().SetOrdered(false))
-	return d.toWriteError(err)
+	res, err := d.getCollection().InsertMany(ctx, jobInterchanges, options.InsertMany().SetOrdered(false))
+	if err != nil {
+		var insertedIDs []string
+		if res != nil {
+			for _, id := range res.InsertedIDs {
+				insertedIDs = append(insertedIDs, id.(string))
+			}
+		}
+		jobIDs := make([]string, 0, len(jobs))
+		for _, j := range jobs {
+			jobIDs = append(jobIDs, j.ID())
+		}
+		missedIDs := utility.GetSetDifference(jobIDs, insertedIDs)
+		return errors.Wrapf(d.toWriteError(err), "inserting new jobs '%v'", missedIDs)
+	}
+	return nil
 }
 
 func (d *mongoDriver) getAtomicQuery(jobName string, stat amboy.JobStatusInfo) bson.M {

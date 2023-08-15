@@ -88,6 +88,10 @@ func (w WriteErrors) Error() string {
 	return catcher.String()
 }
 
+// Cause returns the primary cause of the WriteError. The primary cause is defined as follows:
+//   - If a non-duplicate-job error is encountered it is returned.
+//   - If every error is a duplicate job error and at least one of them is a duplicate scope error a duplicate scope error is returned.
+//   - If every error is a duplicate job error and none of them is a duplicate scope error a duplicate job error is returned.
 func (w WriteErrors) Cause() error {
 	if len(w.OtherErrors) > 0 {
 		return w
