@@ -108,7 +108,7 @@ func (w *writeErrors) Cause() error {
 }
 
 // CollateWriteErrors collates errors into a [writeErrors].
-func CollateWriteErrors(errs []error) *writeErrors {
+func CollateWriteErrors(errs []error) error {
 	if len(errs) == 0 {
 		return nil
 	}
