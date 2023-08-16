@@ -315,6 +315,9 @@ type Queue interface {
 	// Put adds a job to the queue.
 	Put(context.Context, Job) error
 
+	// PutMany adds jobs to the queue.
+	PutMany(context.Context, []Job) error
+
 	// Get finds a Job by ID. The boolean return value indicates if the Job was
 	// found or not.
 	Get(context.Context, string) (Job, bool)

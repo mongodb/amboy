@@ -82,13 +82,24 @@ func (q *remoteBase) ID() string {
 // same job to a queue more than once, but this depends on the
 // implementation of the underlying driver.
 func (q *remoteBase) Put(ctx context.Context, j amboy.Job) error {
+	return q.PutMany(ctx, []amboy.Job{j})
+}
+
+// PutMany adds Jobs to the queue. It is generally an error to add the
+// same job to a queue more than once, but this depends on the
+// implementation of the underlying driver.
+func (q *remoteBase) PutMany(ctx context.Context, jobs []amboy.Job) error {
 	if q.driver == nil {
 		return errors.New("driver is not set")
 	}
-	if err := q.validateAndPreparePut(j); err != nil {
-		return err
+
+	for _, j := range jobs {
+		if err := q.validateAndPreparePut(j); err != nil {
+			return err
+		}
 	}
-	return q.driver.Put(ctx, j)
+
+	return q.driver.PutMany(ctx, jobs)
 }
 
 func (q *remoteBase) validateAndPreparePut(j amboy.Job) error {
@@ -258,7 +269,7 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) error {
 						"retry_count": count,
 						"message":     "after 10 retries, aborting marking job complete",
 					}))
-				} else if isMongoDupKey(err) || amboy.IsJobNotFoundError(err) {
+				} else if amboy.IsDuplicateJobError(err) || amboy.IsJobNotFoundError(err) {
 					grip.Warning(message.WrapError(err, message.Fields{
 						"job_id":      id,
 						"driver_type": q.driverType,

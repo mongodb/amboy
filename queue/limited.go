@@ -112,6 +112,19 @@ func (q *limitedSizeLocal) Put(ctx context.Context, j amboy.Job) error {
 	}
 }
 
+// PutMany adds jobs to the queue. It returns an error if the queue is not yet
+// opened or if any job of the same name already exists in the queue. If the queue is
+// at capacity, it will block until it can be added or the context is done;
+// waiting for these conditions can cause the other queue operations to also
+// block, so it is not recommended to pass a long-lived context to PutMany.
+func (q *limitedSizeLocal) PutMany(ctx context.Context, jobs []amboy.Job) error {
+	catcher := grip.NewBasicCatcher()
+	for _, j := range jobs {
+		catcher.Wrapf(q.Put(ctx, j), "putting job '%s'", j.ID())
+	}
+	return amboy.CollateWriteErrors(catcher.Errors())
+}
+
 func (q *limitedSizeLocal) Save(ctx context.Context, j amboy.Job) error {
 	if !q.Info().Started {
 		return errors.New("queue is not active")

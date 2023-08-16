@@ -147,6 +147,17 @@ func (q *limitedSizeSerializableLocal) Put(ctx context.Context, j amboy.Job) err
 	return nil
 }
 
+// PutMany adds jobs to the queue, returning an error if the queue is not yet
+// opened or if the job already exists in the queue. If the queue is at
+// capacity, PutMany will fail.
+func (q *limitedSizeSerializableLocal) PutMany(ctx context.Context, jobs []amboy.Job) error {
+	catcher := grip.NewBasicCatcher()
+	for _, j := range jobs {
+		catcher.Wrapf(q.Put(ctx, j), "putting job '%s'", j.ID())
+	}
+	return amboy.CollateWriteErrors(catcher.Errors())
+}
+
 func (q *limitedSizeSerializableLocal) validateAndPreparePut(j amboy.Job) error {
 	j.UpdateTimeInfo(amboy.JobTimeInfo{
 		Created: time.Now(),

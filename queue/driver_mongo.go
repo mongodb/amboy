@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/evergreen-ci/utility"
 	"github.com/google/uuid"
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/registry"
@@ -677,26 +678,38 @@ func (d *mongoDriver) GetAllAttempts(ctx context.Context, id string) ([]amboy.Jo
 }
 
 func (d *mongoDriver) Put(ctx context.Context, j amboy.Job) error {
-	ji, err := registry.MakeJobInterchange(j, d.opts.Format)
+	return d.PutMany(ctx, []amboy.Job{j})
+}
+
+// PutMany enqueues multiple jobs on the queue.
+// Returns an [amboy.WriteError] if any of the jobs cannot be inserted.
+func (d *mongoDriver) PutMany(ctx context.Context, jobs []amboy.Job) error {
+	var jobInterchanges []any
+	for _, j := range jobs {
+		ji, err := registry.MakeJobInterchange(j, d.opts.Format)
+		if err != nil {
+			return errors.Wrap(err, "converting in-memory job to interchange job")
+		}
+		ji.Scopes = j.EnqueueScopes()
+		d.addMetadata(ji)
+		jobInterchanges = append(jobInterchanges, ji)
+	}
+
+	res, err := d.getCollection().InsertMany(ctx, jobInterchanges, options.InsertMany().SetOrdered(false))
 	if err != nil {
-		return errors.Wrap(err, "converting in-memory job to interchange job")
-	}
-
-	ji.Scopes = j.EnqueueScopes()
-
-	d.addMetadata(ji)
-
-	if _, err = d.getCollection().InsertOne(ctx, ji); err != nil {
-		if d.isMongoDupScope(err) {
-			return amboy.NewDuplicateJobScopeErrorf("job scopes '%s' conflict", j.Scopes())
+		var insertedIDs []string
+		if res != nil {
+			for _, id := range res.InsertedIDs {
+				insertedIDs = append(insertedIDs, id.(string))
+			}
 		}
-		if isMongoDupKey(err) {
-			return amboy.NewDuplicateJobErrorf("job '%s' already exists", j.ID())
+		jobIDs := make([]string, 0, len(jobs))
+		for _, j := range jobs {
+			jobIDs = append(jobIDs, j.ID())
 		}
-
-		return errors.Wrapf(err, "inserting new job '%s'", j.ID())
+		missedIDs := utility.GetSetDifference(jobIDs, insertedIDs)
+		return errors.Wrapf(d.toWriteError(err), "inserting new jobs '%v'", missedIDs)
 	}
-
 	return nil
 }
 
@@ -740,108 +753,84 @@ func (d *mongoDriver) getAtomicQuery(jobName string, stat amboy.JobStatusInfo) b
 	}
 }
 
-var errMongoNoDocumentsMatched = errors.New("no documents matched")
+// toWriteError tries to convert the error to a WriteError if possible, but may simply return the error as-is if it's unable.
+func (d *mongoDriver) toWriteError(err error) error {
+	if we, ok := errors.Cause(err).(mongo.WriteException); ok {
+		var errs []error
+		if we.WriteConcernError != nil {
+			errs = []error{we.WriteConcernError}
+		}
+		for _, err := range we.WriteErrors {
+			errs = append(errs, err)
+		}
+		return amboy.CollateWriteErrors(d.convertErrors(errs))
+	}
 
-func isMongoDupKey(err error) bool {
-	dupKeyErrs := getMongoDupKeyErrors(err)
-	return dupKeyErrs.writeConcernError != nil || len(dupKeyErrs.writeErrors) != 0 || dupKeyErrs.commandError != nil
+	if we, ok := errors.Cause(err).(mongo.BulkWriteException); ok {
+		var errs []error
+		if we.WriteConcernError != nil {
+			errs = []error{we.WriteConcernError}
+		}
+		for _, err := range we.WriteErrors {
+			errs = append(errs, err.WriteError)
+		}
+		return amboy.CollateWriteErrors(d.convertErrors(errs))
+	}
+
+	if ce, ok := errors.Cause(err).(mongo.CommandError); ok {
+		return amboy.CollateWriteErrors(d.convertErrors([]error{ce}))
+	}
+
+	return err
 }
 
-func (d *mongoDriver) isMongoDupScope(err error) bool {
-	dupKeyErrs := getMongoDupKeyErrors(err)
+func (d *mongoDriver) convertErrors(mongoErrs []error) []error {
+	errs := make([]error, 0, len(mongoErrs))
+	for _, err := range mongoErrs {
+		if d.isMongoDupScopeError(err) {
+			errs = append(errs, amboy.MakeDuplicateJobScopeError(err))
+		} else if isMongoDuplicateKeyError(err) {
+			errs = append(errs, amboy.MakeDuplicateJobError(err))
+		} else {
+			errs = append(errs, err)
+		}
+	}
+
+	return errs
+}
+
+func isMongoDuplicateKeyError(err error) bool {
+	switch e := err.(type) {
+	case *mongo.WriteConcernError:
+		return e.Code == 11000 || e.Code == 11001 || e.Code == 12582 ||
+			(e.Code == 16460 && strings.Contains(e.Message, " E11000 "))
+	case mongo.WriteError, mongo.CommandError:
+		return mongo.IsDuplicateKeyError(err)
+	default:
+		return false
+	}
+}
+
+func (d *mongoDriver) isMongoDupScopeError(err error) bool {
+	if !isMongoDuplicateKeyError(err) {
+		return false
+	}
+
 	var index string
 	if d.opts.UseGroups {
 		index = " group_1_scopes_1 "
 	} else {
 		index = " scopes_1 "
 	}
-	if wce := dupKeyErrs.writeConcernError; wce != nil {
-		if strings.Contains(wce.Message, index) {
-			return true
-		}
-	}
-
-	for _, werr := range dupKeyErrs.writeErrors {
-		if strings.Contains(werr.Message, index) {
-			return true
-		}
-	}
-
-	if ce := dupKeyErrs.commandError; ce != nil {
-		if strings.Contains(ce.Message, index) {
-			return true
-		}
-	}
-
-	return false
-}
-
-type mongoDupKeyErrors struct {
-	writeConcernError *mongo.WriteConcernError
-	writeErrors       []mongo.WriteError
-	commandError      *mongo.CommandError
-}
-
-func getMongoDupKeyErrors(err error) mongoDupKeyErrors {
-	var dupKeyErrs mongoDupKeyErrors
-
-	if we, ok := errors.Cause(err).(mongo.WriteException); ok {
-		dupKeyErrs.writeConcernError = getMongoDupKeyWriteConcernError(we)
-		dupKeyErrs.writeErrors = getMongoDupKeyWriteErrors(we)
-	}
-
-	if ce, ok := errors.Cause(err).(mongo.CommandError); ok {
-		dupKeyErrs.commandError = getMongoDupKeyCommandError(ce)
-	}
-
-	return dupKeyErrs
-}
-
-func getMongoDupKeyWriteConcernError(err mongo.WriteException) *mongo.WriteConcernError {
-	wce := err.WriteConcernError
-	if wce == nil {
-		return nil
-	}
-
-	switch wce.Code {
-	case 11000, 11001, 12582:
-		return wce
-	case 16460:
-		if strings.Contains(wce.Message, " E11000 ") {
-			return wce
-		}
-		return nil
+	switch e := err.(type) {
+	case *mongo.WriteConcernError:
+		return strings.Contains(e.Message, index)
+	case mongo.WriteError:
+		return e.HasErrorMessage(index)
+	case mongo.CommandError:
+		return e.HasErrorMessage(index)
 	default:
-		return nil
-	}
-}
-
-func getMongoDupKeyWriteErrors(err mongo.WriteException) []mongo.WriteError {
-	if len(err.WriteErrors) == 0 {
-		return nil
-	}
-
-	var werrs []mongo.WriteError
-	for _, werr := range err.WriteErrors {
-		if werr.Code == 11000 {
-			werrs = append(werrs, werr)
-		}
-	}
-
-	return werrs
-}
-
-func getMongoDupKeyCommandError(err mongo.CommandError) *mongo.CommandError {
-	switch err.Code {
-	case 11000, 11001:
-		return &err
-	case 16460:
-		if strings.Contains(err.Message, " E11000 ") {
-			return &err
-		}
-		return nil
-	default:
-		return nil
+		return false
 	}
 }
 
@@ -932,10 +921,7 @@ func (d *mongoDriver) doUpdate(ctx context.Context, ji *registry.JobInterchange)
 
 	res, err := d.getCollection().ReplaceOne(ctx, query, ji)
 	if err != nil {
-		if d.isMongoDupScope(err) {
-			return amboy.NewDuplicateJobScopeErrorf("job scopes '%s' conflict", ji.Scopes)
-		}
-		return errors.Wrapf(err, "saving job '%s': %+v", ji.Name, res)
+		return errors.Wrapf(d.toWriteError(err), "saving job '%s': %+v", ji.Name, res)
 	}
 
 	if res.MatchedCount == 0 {
@@ -1478,7 +1464,7 @@ func (d *mongoDriver) tryDispatchFromCursor(ctx context.Context, iter *mongo.Cur
 					"stat":          j.Status(),
 					"is_group":      d.opts.UseGroups,
 					"group":         d.opts.GroupName,
-					"dup_key":       isMongoDupKey(err),
+					"dup_key":       amboy.IsDuplicateJobError(err),
 					"duration_secs": time.Since(startAt).Seconds(),
 				}),
 			)

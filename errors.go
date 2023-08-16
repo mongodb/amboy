@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/mongodb/grip"
 	"github.com/pkg/errors"
 )
 
@@ -58,6 +59,71 @@ func EnqueueUniqueJob(ctx context.Context, queue Queue, job Job) error {
 	}
 
 	return errors.WithStack(err)
+}
+
+// EnqueueManyUniqueJobs is a generic wrapper for adding jobs to a queue (using the
+// PutMany() method) ignoring duplicate job errors.
+func EnqueueManyUniqueJobs(ctx context.Context, queue Queue, jobs []Job) error {
+	err := queue.PutMany(ctx, jobs)
+
+	if IsDuplicateJobError(err) {
+		return nil
+	}
+
+	return errors.WithStack(err)
+}
+
+// writeErrors contains errors encountered while writing jobs to a queue.
+type writeErrors struct {
+	duplicateJobErrors   []error
+	duplicateScopeErrors []error
+	otherErrors          []error
+}
+
+func (w *writeErrors) Error() string {
+	catcher := grip.NewBasicCatcher()
+	catcher.Extend(w.duplicateScopeErrors)
+	catcher.Extend(w.duplicateJobErrors)
+	catcher.Extend(w.otherErrors)
+
+	return catcher.String()
+}
+
+// Cause returns the primary cause of the WriteError. The primary cause is defined as follows:
+//   - If a non-duplicate-job error is encountered it is returned.
+//   - If every error is a duplicate job error and at least one of them is a duplicate scope error a duplicate scope error is returned.
+//   - If every error is a duplicate job error and none of them is a duplicate scope error a duplicate job error is returned.
+func (w *writeErrors) Cause() error {
+	if len(w.otherErrors) > 0 {
+		return w
+	}
+	if len(w.duplicateScopeErrors) > 0 {
+		return MakeDuplicateJobScopeError(w)
+	}
+	if len(w.duplicateJobErrors) > 0 {
+		return MakeDuplicateJobError(w)
+	}
+
+	return nil
+}
+
+// CollateWriteErrors collates errors into a [writeErrors].
+func CollateWriteErrors(errs []error) error {
+	if len(errs) == 0 {
+		return nil
+	}
+
+	var writeErrs writeErrors
+	for _, err := range errs {
+		if IsDuplicateJobScopeError(err) {
+			writeErrs.duplicateScopeErrors = append(writeErrs.duplicateScopeErrors, err)
+		} else if IsDuplicateJobError(err) {
+			writeErrs.duplicateJobErrors = append(writeErrs.duplicateJobErrors, err)
+		} else {
+			writeErrs.otherErrors = append(writeErrs.otherErrors, err)
+		}
+	}
+	return &writeErrs
 }
 
 type duplJobError struct {

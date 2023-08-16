@@ -25,6 +25,9 @@ type remoteQueueDriver interface {
 	GetAllAttempts(ctx context.Context, id string) ([]amboy.Job, error)
 	// Put inserts a new job in the backing storage.
 	Put(context.Context, amboy.Job) error
+	// PutMany inserts new jobs in the backing storage. Each implementation can
+	// decide how to handle a mixture of errors.
+	PutMany(context.Context, []amboy.Job) error
 	// Save updates an existing job in the backing storage. Implementations may
 	// not allow calls to Save to run concurrently.
 	Save(context.Context, amboy.Job) error
