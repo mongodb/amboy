@@ -20,7 +20,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.mongodb.org/mongo-driver/x/bsonx"
 )
 
 // MongoDBOptions represents options for creating a MongoDB driver to
@@ -298,19 +297,19 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 	retrying := d.ensureGroupIndexPrefix(bson.D{
 		bson.E{
 			Key:   "status.completed",
-			Value: bsonx.Int32(1),
+			Value: 1,
 		},
 		bson.E{
 			Key:   "retry_info.retryable",
-			Value: bsonx.Int32(1),
+			Value: 1,
 		},
 		bson.E{
 			Key:   "retry_info.needs_retry",
-			Value: bsonx.Int32(1),
+			Value: 1,
 		},
 		bson.E{
 			Key:   "status.mod_ts",
-			Value: bsonx.Int32(-1),
+			Value: -1,
 		},
 	})
 	indexes = append(indexes, mongo.IndexModel{
@@ -326,11 +325,11 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 	retryableJobIDAndAttempt := d.ensureGroupIndexPrefix(bson.D{
 		bson.E{
 			Key:   "retry_info.base_job_id",
-			Value: bsonx.Int32(1),
+			Value: 1,
 		},
 		bson.E{
 			Key:   "retry_info.current_attempt",
-			Value: bsonx.Int32(-1),
+			Value: -1,
 		},
 	})
 	indexes = append(indexes, mongo.IndexModel{Keys: retryableJobIDAndAttempt})
@@ -338,7 +337,7 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 	scopes := d.ensureGroupIndexPrefix(bson.D{
 		bson.E{
 			Key:   "scopes",
-			Value: bsonx.Int32(1),
+			Value: 1,
 		},
 	})
 	indexes = append(indexes, mongo.IndexModel{
@@ -352,7 +351,7 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 			Keys: bson.D{
 				{
 					Key:   "time_info.created",
-					Value: bsonx.Int32(1),
+					Value: 1,
 				},
 			},
 			Options: options.Index().SetExpireAfterSeconds(ttl),
@@ -363,17 +362,17 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 		primary := d.ensureGroupIndexPrefix(bson.D{
 			bson.E{
 				Key:   "status.completed",
-				Value: bsonx.Int32(1),
+				Value: 1,
 			},
 			bson.E{
 				Key:   "status.in_prog",
-				Value: bsonx.Int32(1),
+				Value: 1,
 			},
 		})
 		if d.opts.Priority {
 			primary = append(primary, bson.E{
 				Key:   "priority",
-				Value: bsonx.Int32(1),
+				Value: 1,
 			})
 		}
 		return primary
@@ -382,14 +381,14 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 	if d.opts.CheckWaitUntil {
 		waitUntil := append(makePrimary(), bson.E{
 			Key:   "time_info.wait_until",
-			Value: bsonx.Int32(1),
+			Value: 1,
 		})
 		indexes = append(indexes, mongo.IndexModel{Keys: waitUntil})
 	}
 	if d.opts.CheckDispatchBy {
 		dispatchBy := append(makePrimary(), bson.E{
 			Key:   "time_info.dispatch_by",
-			Value: bsonx.Int32(1),
+			Value: 1,
 		})
 		indexes = append(indexes, mongo.IndexModel{Keys: dispatchBy})
 	}
@@ -404,67 +403,67 @@ func (d *mongoDriver) reportingIndexes() []mongo.IndexModel {
 	completedInProgModTs := d.ensureGroupIndexPrefix(bson.D{
 		bson.E{
 			Key:   "status.completed",
-			Value: bsonx.Int32(1),
+			Value: 1,
 		},
 		bson.E{
 			Key:   "status.in_prog",
-			Value: bsonx.Int32(1),
+			Value: 1,
 		},
 		bson.E{
 			Key:   "status.mod_ts",
-			Value: bsonx.Int32(1),
+			Value: 1,
 		},
 	})
 	completedEnd := d.ensureGroupIndexPrefix(bson.D{
 		bson.E{
 			Key:   "status.completed",
-			Value: bsonx.Int32(1),
+			Value: 1,
 		},
 		bson.E{
 			Key:   "time_info.end",
-			Value: bsonx.Int32(1),
+			Value: 1,
 		},
 	})
 	completedCreated := d.ensureGroupIndexPrefix(bson.D{
 		bson.E{
 			Key:   "status.completed",
-			Value: bsonx.Int32(1),
+			Value: 1,
 		},
 		bson.E{
 			Key:   "time_info.created",
-			Value: bsonx.Int32(1),
+			Value: 1,
 		},
 	})
 	typeCompletedInProgModTs := d.ensureGroupIndexPrefix(bson.D{
 		bson.E{
 			Key:   "type",
-			Value: bsonx.Int32(1),
+			Value: 1,
 		},
 		bson.E{
 			Key:   "status.completed",
-			Value: bsonx.Int32(1),
+			Value: 1,
 		},
 		bson.E{
 			Key:   "status.in_prog",
-			Value: bsonx.Int32(1),
+			Value: 1,
 		},
 		bson.E{
 			Key:   "status.mod_ts",
-			Value: bsonx.Int32(1),
+			Value: 1,
 		},
 	})
 	typeCompletedEnd := d.ensureGroupIndexPrefix(bson.D{
 		bson.E{
 			Key:   "type",
-			Value: bsonx.Int32(1),
+			Value: 1,
 		},
 		bson.E{
 			Key:   "status.completed",
-			Value: bsonx.Int32(1),
+			Value: 1,
 		},
 		bson.E{
 			Key:   "time_info.end",
-			Value: bsonx.Int32(1),
+			Value: 1,
 		},
 	})
 
@@ -1655,7 +1654,7 @@ func (d *mongoDriver) ensureGroupIndexPrefix(doc bson.D) bson.D {
 	if len(doc) > 0 && doc[0].Key == "group" {
 		return doc
 	}
-	doc = append([]bson.E{{Key: "group", Value: bsonx.Int32(1)}}, doc...)
+	doc = append([]bson.E{{Key: "group", Value: 1}}, doc...)
 
 	return doc
 }
