@@ -12,7 +12,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.mongodb.org/mongo-driver/x/bsonx"
 )
 
 func TestMongoDBOptions(t *testing.T) {
@@ -151,7 +150,7 @@ func TestPutMany(t *testing.T) {
 				Keys: bson.D{
 					bson.E{
 						Key:   "scopes",
-						Value: bsonx.Int32(1),
+						Value: 1,
 					},
 				},
 				Options: options.Index().SetUnique(true).SetPartialFilterExpression(bson.M{"scopes": bson.M{"$exists": true}}),
@@ -176,7 +175,7 @@ func TestPutMany(t *testing.T) {
 				Keys: bson.D{
 					bson.E{
 						Key:   "scopes",
-						Value: bsonx.Int32(1),
+						Value: 1,
 					},
 				},
 				Options: options.Index().SetUnique(true).SetPartialFilterExpression(bson.M{"scopes": bson.M{"$exists": true}}),
