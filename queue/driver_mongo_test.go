@@ -102,6 +102,14 @@ func TestPutMany(t *testing.T) {
 	}()
 
 	for testName, test := range map[string]func(*testing.T){
+		"NoJobs": func(t *testing.T) {
+			err = driver.PutMany(ctx, []amboy.Job{})
+			assert.NoError(t, err)
+		},
+		"NilJobs": func(t *testing.T) {
+			err = driver.PutMany(ctx, nil)
+			assert.NoError(t, err)
+		},
 		"DistinctJobs": func(t *testing.T) {
 			j0 := newMockJob()
 			j0.SetID("j0")
