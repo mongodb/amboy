@@ -683,6 +683,10 @@ func (d *mongoDriver) Put(ctx context.Context, j amboy.Job) error {
 // PutMany enqueues multiple jobs on the queue.
 // Returns an [amboy.WriteError] if any of the jobs cannot be inserted.
 func (d *mongoDriver) PutMany(ctx context.Context, jobs []amboy.Job) error {
+	if len(jobs) == 0 {
+		return nil
+	}
+
 	var jobInterchanges []any
 	for _, j := range jobs {
 		ji, err := registry.MakeJobInterchange(j, d.opts.Format)
