@@ -207,8 +207,6 @@ buildvariants:
       - ubuntu2204-small
     expansions:
       GOROOT: /opt/golang/go1.20
-      MONGODB_URL: https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-ubuntu2204-6.0.6.tgz
-      MONGOSH_DOWNLOAD: curl https://downloads.mongodb.com/compass/mongosh-1.9.0-linux-x64.tgz -o mongosh.tgz && tar -xzvf mongosh.tgz 
     tasks:
       - name: ".report"
         stepback: false
@@ -220,8 +218,8 @@ buildvariants:
     expansions:
       GOROOT: /opt/golang/go1.20
       RACE_DETECTOR: true
-      MONGODB_URL: https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-ubuntu2204-6.0.6.tgz
-      MONGOSH_URL: https://downloads.mongodb.com/compass/mongosh-1.9.0-linux-x64.tgz
+      MONGODB_URL: https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-ubuntu2204-7.0.2.tgz
+      MONGOSH_URL: https://downloads.mongodb.com/compass/mongosh-2.0.2-linux-x64.tgz
     tasks:
       - ".test"
 
@@ -229,8 +227,8 @@ buildvariants:
     display_name: macOS 11.00
     expansions:
       GOROOT: /opt/golang/go1.20
-      MONGODB_URL: https://fastdl.mongodb.org/osx/mongodb-macos-arm64-6.0.6.tgz
-      MONGOSH_URL: https://downloads.mongodb.com/compass/mongosh-1.9.0-darwin-arm64.zip
+      MONGODB_URL: https://fastdl.mongodb.org/osx/mongodb-macos-arm64-7.0.2.tgz
+      MONGOSH_URL: https://downloads.mongodb.com/compass/mongosh-2.0.2-darwin-arm64.zip
       MONGOSH_DECOMPRESS: unzip
     run_on:
       - macos-1100-arm64
@@ -243,7 +241,7 @@ buildvariants:
       - windows-vsCurrent-large
     expansions:
       GOROOT: C:/golang/go1.20
-      MONGODB_URL: https://fastdl.mongodb.org/windows/mongodb-windows-x86_64-6.0.6.zip
-      MONGOSH_URL: https://downloads.mongodb.com/compass/mongosh-1.9.0-win32-x64.zip
+      MONGODB_URL: https://fastdl.mongodb.org/windows/mongodb-windows-x86_64-7.0.2.zip
+      MONGOSH_URL: https://downloads.mongodb.com/compass/mongosh-2.0.2-win32-x64.zip
     tasks:
       - ".test"
