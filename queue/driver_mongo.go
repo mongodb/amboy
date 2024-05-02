@@ -1489,7 +1489,7 @@ func (d *mongoDriver) isOtherJobHoldingScopes(ctx context.Context, j amboy.Job) 
 
 	query := bson.M{
 		"scopes": bson.M{"$in": j.Scopes()},
-		"$not":   d.getIDQuery(j.ID()),
+		"$nor":   d.getIDQuery(j.ID()),
 	}
 	d.modifyQueryForGroup(query)
 	num, err := d.getCollection().CountDocuments(ctx, query)
