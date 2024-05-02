@@ -15,7 +15,6 @@ type JobInterchange struct {
 	Type             string                 `json:"type" bson:"type" yaml:"type"`
 	Group            string                 `bson:"group,omitempty" json:"group,omitempty" yaml:"group,omitempty"`
 	Version          int                    `json:"version" bson:"version" yaml:"version"`
-	Priority         int                    `json:"priority" bson:"priority" yaml:"priority"`
 	Status           amboy.JobStatusInfo    `bson:"status" json:"status" yaml:"status"`
 	Scopes           []string               `bson:"scopes,omitempty" json:"scopes,omitempty" yaml:"scopes,omitempty"`
 	EnqueueScopes    []string               `bson:"enqueue_scopes,omitempty" json:"enqueue_scopes,omitempty" yaml:"enqueue_scopes,omitempty"`
@@ -49,7 +48,6 @@ func MakeJobInterchange(j amboy.Job, f amboy.Format) (*JobInterchange, error) {
 		Name:             j.ID(),
 		Type:             typeInfo.Name,
 		Version:          typeInfo.Version,
-		Priority:         j.Priority(),
 		Status:           j.Status(),
 		TimeInfo:         j.TimeInfo(),
 		EnqueueScopes:    j.EnqueueScopes(),
@@ -92,7 +90,6 @@ func (j *JobInterchange) Resolve(f amboy.Format) (amboy.Job, error) {
 	}
 
 	job.SetDependency(dep)
-	job.SetPriority(j.Priority)
 	job.SetStatus(j.Status)
 	job.SetEnqueueScopes(j.EnqueueScopes...)
 	job.SetEnqueueAllScopes(j.EnqueueAllScopes)
