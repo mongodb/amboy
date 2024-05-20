@@ -236,7 +236,8 @@ func (d *dispatcherImpl) waitForPing(ctx context.Context, info dispatcherInfo) e
 func pingJobLock(ctx context.Context, q amboy.Queue, j amboy.Job) error {
 	var iters int
 	lockTimeout := q.Info().LockTimeout
-	ticker := time.NewTicker(lockTimeout / 4)
+	pingInterval := lockTimeout / 4
+	ticker := time.NewTicker(pingInterval)
 	defer ticker.Stop()
 
 	for {
@@ -257,11 +258,13 @@ func pingJobLock(ctx context.Context, q amboy.Queue, j amboy.Job) error {
 			}
 
 			grip.Debug(message.Fields{
-				"queue_id":  q.ID(),
-				"job_id":    j.ID(),
-				"service":   "amboy.queue.dispatcher",
-				"ping_iter": iters,
-				"stat":      j.Status(),
+				"queue_id":      q.ID(),
+				"job_id":        j.ID(),
+				"service":       "amboy.queue.dispatcher",
+				"ping_iter":     iters,
+				"ping_interval": pingInterval,
+				"lock_timeout":  q.Info().LockTimeout,
+				"stat":          j.Status(),
 			})
 
 			iters++
