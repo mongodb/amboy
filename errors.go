@@ -95,7 +95,12 @@ func (w *writeErrors) Error() string {
 //   - If every error is a duplicate job error and none of them is a duplicate scope error a duplicate job error is returned.
 func (w *writeErrors) Cause() error {
 	if len(w.otherErrors) > 0 {
-		return w
+		catcher := grip.NewBasicCatcher()
+		catcher.Extend(w.duplicateScopeErrors)
+		catcher.Extend(w.duplicateJobErrors)
+		catcher.Extend(w.otherErrors)
+
+		return catcher.Resolve()
 	}
 	if len(w.duplicateScopeErrors) > 0 {
 		return MakeDuplicateJobScopeError(w)
