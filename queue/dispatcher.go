@@ -240,6 +240,7 @@ func pingJobLock(ctx context.Context, q amboy.Queue, j amboy.Job) error {
 	ticker := time.NewTicker(pingInterval)
 	defer ticker.Stop()
 
+	pingStartedAt := time.Now()
 	for {
 		select {
 		case <-ctx.Done():
@@ -263,6 +264,7 @@ func pingJobLock(ctx context.Context, q amboy.Queue, j amboy.Job) error {
 				"service":       "amboy.queue.dispatcher",
 				"ping_iter":     iters,
 				"ping_interval": pingInterval,
+				"ping_secs":     time.Since(pingStartedAt).Seconds(),
 				"lock_timeout":  q.Info().LockTimeout,
 				"stat":          j.Status(),
 			})
