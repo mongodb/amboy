@@ -78,6 +78,50 @@ func (s *BaseCheckSuite) TestAddRetryableErrorsPersistsErrorsInJob() {
 	}
 }
 
+func (s *BaseCheckSuite) TestNonretryableJobIsAlwaysLastAttempt() {
+	s.True(s.base.IsLastAttempt())
+}
+
+func (s *BaseCheckSuite) TestRetryableJobThatIsExplicitlySetToRetryIsNotLastAttempt() {
+	s.base.UpdateRetryInfo(amboy.JobRetryOptions{
+		Retryable:      utility.TruePtr(),
+		CurrentAttempt: utility.ToIntPtr(0),
+		MaxAttempts:    utility.ToIntPtr(10),
+		NeedsRetry:     utility.TruePtr(),
+	})
+	s.False(s.base.IsLastAttempt())
+}
+
+func (s *BaseCheckSuite) TestRetryableJobThatIsExplicitlySetToRetryButHitsMaxAttemptsIsLastAttempt() {
+	s.base.UpdateRetryInfo(amboy.JobRetryOptions{
+		Retryable:      utility.TruePtr(),
+		CurrentAttempt: utility.ToIntPtr(10),
+		MaxAttempts:    utility.ToIntPtr(10),
+		NeedsRetry:     utility.TruePtr(),
+	})
+	s.True(s.base.IsLastAttempt())
+}
+
+func (s *BaseCheckSuite) TestRetryableJobThatAddsRetryableErrorIsNotLastAttempt() {
+	s.base.UpdateRetryInfo(amboy.JobRetryOptions{
+		Retryable:      utility.TruePtr(),
+		CurrentAttempt: utility.ToIntPtr(0),
+		MaxAttempts:    utility.ToIntPtr(10),
+	})
+	s.base.AddRetryableError(errors.New("retry on this error"))
+	s.False(s.base.IsLastAttempt())
+}
+
+func (s *BaseCheckSuite) TestRetryableJobThatAddsRetryableErrorButHitsMaxAttemptsIsLastAttempt() {
+	s.base.UpdateRetryInfo(amboy.JobRetryOptions{
+		Retryable:      utility.TruePtr(),
+		CurrentAttempt: utility.ToIntPtr(10),
+		MaxAttempts:    utility.ToIntPtr(10),
+	})
+	s.base.AddRetryableError(errors.New("retry on this error"))
+	s.True(s.base.IsLastAttempt())
+}
+
 func (s *BaseCheckSuite) TestIDIsAccessorForJobIDAttribute() {
 	s.Equal(s.base.Name, s.base.ID())
 	s.base.Name = "foo"

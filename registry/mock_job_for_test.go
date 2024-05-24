@@ -118,6 +118,19 @@ func (j *JobTest) AddRetryableError(err error) {
 	j.Retry.NeedsRetry = true
 }
 
+func (j *JobTest) IsLastAttempt() bool {
+	if !j.Retry.Retryable {
+		return true
+	}
+	if j.Retry.Retryable && j.Retry.GetRemainingAttempts() == 0 {
+		return true
+	}
+	if !j.Retry.ShouldRetry() {
+		return true
+	}
+	return false
+}
+
 func (j *JobTest) Type() amboy.JobType {
 	return j.T
 }
