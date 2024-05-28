@@ -924,7 +924,7 @@ func (d *mongoDriver) doUpdate(ctx context.Context, ji *registry.JobInterchange)
 
 	res, err := d.getCollection().ReplaceOne(ctx, query, ji)
 	if err != nil {
-		return errors.Wrapf(d.toWriteError(err), "saving job '%s': %+v", ji.Name, res)
+		return errors.Wrapf(d.toWriteError(err), "saving job '%s'", ji.Name)
 	}
 
 	if res.MatchedCount == 0 {
