@@ -27,7 +27,8 @@ type JobInterchange struct {
 }
 
 // MakeJobInterchange changes a Job interface into a JobInterchange
-// structure, for easier serialization.
+// structure, for easier serialization. This will truncate job errors if they
+// will take up an unreasonably large amount of space in its serialized form.
 func MakeJobInterchange(j amboy.Job, f amboy.Format) (*JobInterchange, error) {
 	typeInfo := j.Type()
 
@@ -46,9 +47,6 @@ func MakeJobInterchange(j amboy.Job, f amboy.Format) (*JobInterchange, error) {
 	}
 
 	status := j.Status()
-	// Since the job can accumulate an arbitrarly large number of errors and
-	// those errors can also be arbitrarily long, ensure that the errors are a
-	// reasonable length.
 	status.Errors = truncateJobErrors(status.Errors)
 
 	output := &JobInterchange{
