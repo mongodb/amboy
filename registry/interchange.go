@@ -45,16 +45,18 @@ func MakeJobInterchange(j amboy.Job, f amboy.Format) (*JobInterchange, error) {
 		return nil, err
 	}
 
+	status := j.Status()
+	// Since the job can accumulate an arbitrarly large number of errors and
+	// those errors can also be arbitrarily long, ensure that the errors are a
+	// reasonable length.
+	status.Errors = truncateJobErrors(status.Errors)
+
 	output := &JobInterchange{
-		Name:     j.ID(),
-		Type:     typeInfo.Name,
-		Version:  typeInfo.Version,
-		Priority: j.Priority(),
-		// kim: TODO: truncate errors in the status here (by checking total
-		// length). If we can't save the document, we should log some kind of
-		// warning that the job's errors had to be truncated due to excessive
-		// length and otherwise call it quits.
-		Status:           j.Status(),
+		Name:             j.ID(),
+		Type:             typeInfo.Name,
+		Version:          typeInfo.Version,
+		Priority:         j.Priority(),
+		Status:           status,
 		TimeInfo:         j.TimeInfo(),
 		EnqueueScopes:    j.EnqueueScopes(),
 		EnqueueAllScopes: j.EnqueueAllScopes(),
@@ -64,6 +66,30 @@ func MakeJobInterchange(j amboy.Job, f amboy.Format) (*JobInterchange, error) {
 	}
 
 	return output, nil
+}
+
+// truncateJobErrors truncates the errors in the job status if the total size of
+// the errors is too large.
+func truncateJobErrors(errs []string) []string {
+	totalLength := 0
+	for _, err := range errs {
+		totalLength += len(err)
+	}
+
+	const maxLengthPerError = 10000
+	const maxNumErrors = 100
+	const maxTotalErrorLength = maxNumErrors * maxLengthPerError
+
+	if totalLength <= maxTotalErrorLength {
+		return errs
+	}
+
+	truncatedErrs := errs[:maxNumErrors]
+	for i := range errs {
+		truncatedErrs[i] = truncatedErrs[i][:maxLengthPerError]
+	}
+
+	return truncatedErrs
 }
 
 // Resolve reverses the process of ConvertToInterchange and
