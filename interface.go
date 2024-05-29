@@ -138,7 +138,9 @@ type JobStatusInfo struct {
 	ModificationTime  time.Time `bson:"mod_ts" json:"mod_time" yaml:"mod_time"`
 	ModificationCount int       `bson:"mod_count" json:"mod_count" yaml:"mod_count"`
 	ErrorCount        int       `bson:"err_count" json:"err_count" yaml:"err_count"`
-	Errors            []string  `bson:"errors,omitempty" json:"errors,omitempty" yaml:"errors,omitempty"`
+	// kim: NOTE: could be that there were a ton of errors and those errors were
+	// too long, which would require truncating/reducing errors.
+	Errors []string `bson:"errors,omitempty" json:"errors,omitempty" yaml:"errors,omitempty"`
 }
 
 // JobTimeInfo stores timing information for a job and is used by both the

@@ -46,10 +46,14 @@ func MakeJobInterchange(j amboy.Job, f amboy.Format) (*JobInterchange, error) {
 	}
 
 	output := &JobInterchange{
-		Name:             j.ID(),
-		Type:             typeInfo.Name,
-		Version:          typeInfo.Version,
-		Priority:         j.Priority(),
+		Name:     j.ID(),
+		Type:     typeInfo.Name,
+		Version:  typeInfo.Version,
+		Priority: j.Priority(),
+		// kim: TODO: truncate errors in the status here (by checking total
+		// length). If we can't save the document, we should log some kind of
+		// warning that the job's errors had to be truncated due to excessive
+		// length and otherwise call it quits.
 		Status:           j.Status(),
 		TimeInfo:         j.TimeInfo(),
 		EnqueueScopes:    j.EnqueueScopes(),
