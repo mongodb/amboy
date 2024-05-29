@@ -77,6 +77,9 @@ type Job interface {
 	// Error returns an error object if the job encountered an
 	// error. Typically if the job has not run, this is nil.
 	Error() error
+	// IsLastAttempt returns whether or not the job is on its final attempt. if
+	// true, the job will not retry.
+	IsLastAttempt() bool
 
 	// Lock and Unlock are responsible for handling the locking
 	// behavor for the job. Lock is responsible for setting the

@@ -102,6 +102,25 @@ func (b *Base) HasErrors() bool {
 	return len(b.status.Errors) > 0
 }
 
+// IsLastAttempt determines if this is the final attempt of a retryable job. If
+// it's not retryable, this always return true.
+func (b *Base) IsLastAttempt() bool {
+	b.mutex.RLock()
+	defer b.mutex.RUnlock()
+
+	if !b.retryInfo.Retryable {
+		return true
+	}
+	if b.retryInfo.Retryable && b.retryInfo.GetRemainingAttempts() == 0 {
+		return true
+	}
+	if !b.retryInfo.ShouldRetry() {
+		return true
+	}
+
+	return false
+}
+
 // SetID makes it possible to change the ID of an amboy.Job.
 func (b *Base) SetID(n string) {
 	b.mutex.Lock()
