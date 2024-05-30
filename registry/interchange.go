@@ -3,6 +3,8 @@ package registry
 import (
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/dependency"
+	"github.com/mongodb/grip"
+	"github.com/mongodb/grip/message"
 	"github.com/pkg/errors"
 )
 
@@ -47,7 +49,12 @@ func MakeJobInterchange(j amboy.Job, f amboy.Format) (*JobInterchange, error) {
 	}
 
 	status := j.Status()
-	status.Errors = truncateJobErrors(status.Errors)
+	truncatedErrs, isTruncated := truncateJobErrors(status.Errors)
+	status.Errors = truncatedErrs
+	grip.WarningWhen(isTruncated, message.Fields{
+		"message": "job errors were too large and had to be truncated to reduce job interchange to a reasonable size",
+		"job_id":  j.ID(),
+	})
 
 	output := &JobInterchange{
 		Name:             j.ID(),
@@ -68,7 +75,7 @@ func MakeJobInterchange(j amboy.Job, f amboy.Format) (*JobInterchange, error) {
 
 // truncateJobErrors truncates the errors in the job status if the total size of
 // the errors is too large.
-func truncateJobErrors(errs []string) []string {
+func truncateJobErrors(errs []string) (truncated []string, isTruncated bool) {
 	totalLength := 0
 	for _, err := range errs {
 		totalLength += len(err)
@@ -79,7 +86,7 @@ func truncateJobErrors(errs []string) []string {
 	const maxTotalErrorLength = maxNumErrors * maxLengthPerError
 
 	if totalLength <= maxTotalErrorLength {
-		return errs
+		return errs, false
 	}
 
 	truncatedErrs := errs[:maxNumErrors]
@@ -87,7 +94,7 @@ func truncateJobErrors(errs []string) []string {
 		truncatedErrs[i] = truncatedErrs[i][:maxLengthPerError]
 	}
 
-	return truncatedErrs
+	return truncatedErrs, true
 }
 
 // Resolve reverses the process of ConvertToInterchange and

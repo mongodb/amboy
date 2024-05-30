@@ -252,23 +252,14 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) error {
 
 			err = q.driver.Complete(ctx, j)
 			if err != nil {
-				if time.Since(startAt) > time.Minute+q.Info().LockTimeout {
-					grip.Warning(message.WrapError(err, message.Fields{
-						"job_id":       id,
-						"job_type":     j.Type().Name,
-						"driver_type":  q.driverType,
-						"num_attempts": attempt,
-						"driver_id":    q.driver.ID(),
-						"message":      "job took too long to mark complete",
-					}))
-				} else if attempt > maxAttempts {
+				if attempt > maxAttempts {
 					grip.Warning(message.WrapError(err, message.Fields{
 						"job_id":       id,
 						"driver_type":  q.driverType,
 						"job_type":     j.Type().Name,
 						"driver_id":    q.driver.ID(),
 						"num_attempts": attempt,
-						"message":      fmt.Sprintf("after %d retries, aborting marking job complete", attempt),
+						"message":      fmt.Sprintf("after %d attempts, aborting marking job complete", attempt),
 					}))
 				} else if amboy.IsDuplicateJobError(err) || amboy.IsJobNotFoundError(err) {
 					grip.Warning(message.WrapError(err, message.Fields{
