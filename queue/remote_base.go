@@ -252,7 +252,7 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) error {
 
 			err = q.driver.Complete(ctx, j)
 			if err != nil {
-				if attempt > maxAttempts {
+				if attempt >= maxAttempts {
 					grip.Warning(message.WrapError(err, message.Fields{
 						"job_id":       id,
 						"driver_type":  q.driverType,
