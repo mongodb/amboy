@@ -80,7 +80,7 @@ func (s *JobInterchangeSuite) TestConversionToInterchangeMaintainsMetaDataFideli
 }
 
 func (s *JobInterchangeSuite) TestConversionToInterchangeTruncatesUnreasonablyLongErrorsInMetaData() {
-	const numErrs = 1000
+	const numErrs = 5000
 	allErrors := make([]string, 0, numErrs)
 	for i := 0; i < numErrs; i++ {
 		allErrors = append(allErrors, utility.MakeRandomString(10000))
@@ -92,9 +92,11 @@ func (s *JobInterchangeSuite) TestConversionToInterchangeTruncatesUnreasonablyLo
 	s.NoError(err)
 	s.Greater(len(allErrors), len(i.Status.Errors), "if jobs has too many errors, it should truncate some of them down to a reasonable amount")
 
-	statusWithAllErrs := i.Status
-	statusWithAllErrs.Errors = allErrors
-	s.Equal(s.job.Status(), statusWithAllErrs, "all other status fields except long errors should be maintained")
+	interchangeStatusWithoutErrs := i.Status
+	interchangeStatusWithoutErrs.Errors = nil
+	jobStatusWithoutErrs := s.job.Status()
+	jobStatusWithoutErrs.Errors = nil
+	s.Equal(jobStatusWithoutErrs, interchangeStatusWithoutErrs, "all other status fields except long errors should be maintained")
 }
 
 func (s *JobInterchangeSuite) TestConversionFromInterchangeMaintainsFidelity() {
