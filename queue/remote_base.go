@@ -254,21 +254,23 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) error {
 			if err != nil {
 				if attempt >= maxAttempts {
 					grip.Warning(message.WrapError(err, message.Fields{
-						"job_id":       id,
-						"driver_type":  q.driverType,
-						"job_type":     j.Type().Name,
-						"driver_id":    q.driver.ID(),
-						"num_attempts": attempt,
-						"message":      fmt.Sprintf("after %d attempts, aborting marking job complete", attempt),
+						"message":       fmt.Sprintf("after %d attempts, aborting marking job complete", attempt),
+						"job_id":        id,
+						"driver_type":   q.driverType,
+						"job_type":      j.Type().Name,
+						"driver_id":     q.driver.ID(),
+						"num_attempts":  attempt,
+						"duration_secs": time.Since(startAt).Seconds(),
 					}))
 				} else if amboy.IsDuplicateJobError(err) || amboy.IsJobNotFoundError(err) {
 					grip.Warning(message.WrapError(err, message.Fields{
-						"job_id":       id,
-						"driver_type":  q.driverType,
-						"job_type":     j.Type().Name,
-						"driver_id":    q.driver.ID(),
-						"num_attempts": attempt,
-						"message":      "attempting to complete job without lock",
+						"message":       "attempting to complete job without lock",
+						"job_id":        id,
+						"driver_type":   q.driverType,
+						"job_type":      j.Type().Name,
+						"driver_id":     q.driver.ID(),
+						"num_attempts":  attempt,
+						"duration_secs": time.Since(startAt).Seconds(),
 					}))
 				} else {
 					timer.Reset(retryInterval)
