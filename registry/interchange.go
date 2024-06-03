@@ -1,8 +1,12 @@
 package registry
 
 import (
+	"runtime/debug"
+
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/dependency"
+	"github.com/mongodb/grip"
+	"github.com/mongodb/grip/message"
 	"github.com/pkg/errors"
 )
 
@@ -27,7 +31,8 @@ type JobInterchange struct {
 }
 
 // MakeJobInterchange changes a Job interface into a JobInterchange
-// structure, for easier serialization.
+// structure, for easier serialization. This will truncate job errors if they
+// will take up an unreasonably large amount of space in its serialized form.
 func MakeJobInterchange(j amboy.Job, f amboy.Format) (*JobInterchange, error) {
 	typeInfo := j.Type()
 
@@ -45,12 +50,22 @@ func MakeJobInterchange(j amboy.Job, f amboy.Format) (*JobInterchange, error) {
 		return nil, err
 	}
 
+	status := j.Status()
+	truncatedErrs, isTruncated := truncateJobErrors(status.Errors)
+	status.Errors = truncatedErrs
+	grip.WarningWhen(isTruncated, message.Fields{
+		"message":        "job errors were too large and had to be truncated to reduce job interchange to a reasonable size",
+		"job_id":         j.ID(),
+		"truncated_errs": truncatedErrs,
+		"stack":          string(debug.Stack()),
+	})
+
 	output := &JobInterchange{
 		Name:             j.ID(),
 		Type:             typeInfo.Name,
 		Version:          typeInfo.Version,
 		Priority:         j.Priority(),
-		Status:           j.Status(),
+		Status:           status,
 		TimeInfo:         j.TimeInfo(),
 		EnqueueScopes:    j.EnqueueScopes(),
 		EnqueueAllScopes: j.EnqueueAllScopes(),
@@ -60,6 +75,30 @@ func MakeJobInterchange(j amboy.Job, f amboy.Format) (*JobInterchange, error) {
 	}
 
 	return output, nil
+}
+
+// truncateJobErrors truncates the errors in the job status if the total size of
+// the errors is too large.
+func truncateJobErrors(errs []string) (truncated []string, isTruncated bool) {
+	totalLength := 0
+	for _, err := range errs {
+		totalLength += len(err)
+	}
+
+	const maxLengthPerError = 1000
+	const maxNumErrors = 100
+	const maxTotalErrorLength = maxNumErrors * maxLengthPerError
+
+	if totalLength <= maxTotalErrorLength {
+		return errs, false
+	}
+
+	truncatedErrs := errs[:maxNumErrors]
+	for i := range errs {
+		truncatedErrs[i] = truncatedErrs[i][:maxLengthPerError]
+	}
+
+	return truncatedErrs, true
 }
 
 // Resolve reverses the process of ConvertToInterchange and

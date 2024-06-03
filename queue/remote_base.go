@@ -229,12 +229,13 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) error {
 
 	startAt := time.Now()
 	id := j.ID()
-	count := 0
+	attempt := 0
+	const maxAttempts = 10
 
 	catcher := grip.NewBasicCatcher()
 	var err error
 	for {
-		count++
+		attempt++
 		select {
 		case <-ctx.Done():
 			catcher.Add(ctx.Err())
@@ -251,32 +252,25 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) error {
 
 			err = q.driver.Complete(ctx, j)
 			if err != nil {
-				if time.Since(startAt) > time.Minute+q.Info().LockTimeout {
+				if attempt >= maxAttempts {
 					grip.Warning(message.WrapError(err, message.Fields{
-						"job_id":      id,
-						"job_type":    j.Type().Name,
-						"driver_type": q.driverType,
-						"retry_count": count,
-						"driver_id":   q.driver.ID(),
-						"message":     "job took too long to mark complete",
-					}))
-				} else if count > 10 {
-					grip.Warning(message.WrapError(err, message.Fields{
-						"job_id":      id,
-						"driver_type": q.driverType,
-						"job_type":    j.Type().Name,
-						"driver_id":   q.driver.ID(),
-						"retry_count": count,
-						"message":     "after 10 retries, aborting marking job complete",
+						"message":       fmt.Sprintf("after %d attempts, aborting marking job complete", attempt),
+						"job_id":        id,
+						"driver_type":   q.driverType,
+						"job_type":      j.Type().Name,
+						"driver_id":     q.driver.ID(),
+						"num_attempts":  attempt,
+						"duration_secs": time.Since(startAt).Seconds(),
 					}))
 				} else if amboy.IsDuplicateJobError(err) || amboy.IsJobNotFoundError(err) {
 					grip.Warning(message.WrapError(err, message.Fields{
-						"job_id":      id,
-						"driver_type": q.driverType,
-						"job_type":    j.Type().Name,
-						"driver_id":   q.driver.ID(),
-						"retry_count": count,
-						"message":     "attempting to complete job without lock",
+						"message":       "attempting to complete job without lock",
+						"job_id":        id,
+						"driver_type":   q.driverType,
+						"job_type":      j.Type().Name,
+						"driver_id":     q.driver.ID(),
+						"num_attempts":  attempt,
+						"duration_secs": time.Since(startAt).Seconds(),
 					}))
 				} else {
 					timer.Reset(retryInterval)
@@ -284,7 +278,7 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) error {
 				}
 			}
 
-			catcher.Wrapf(err, "attempt %d", count)
+			catcher.Wrapf(err, "attempt %d", attempt)
 			j.AddError(err)
 
 			q.mutex.Lock()
