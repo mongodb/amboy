@@ -93,9 +93,14 @@ func truncateJobErrors(errs []string) (truncated []string, isTruncated bool) {
 		return errs, false
 	}
 
-	truncatedErrs := errs[:maxNumErrors]
-	for i := range errs {
-		truncatedErrs[i] = truncatedErrs[i][:maxLengthPerError]
+	truncatedErrs := errs
+	if len(errs) > maxNumErrors {
+		truncatedErrs = errs[:maxNumErrors]
+	}
+	for i := range truncatedErrs {
+		if len(truncatedErrs[i]) > maxLengthPerError {
+			truncatedErrs[i] = truncatedErrs[i][:maxLengthPerError]
+		}
 	}
 
 	return truncatedErrs, true
