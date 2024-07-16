@@ -276,6 +276,7 @@ func TestRetryHandlerImplementations(t *testing.T) {
 
 					j := newMockRetryableJob("id")
 					j.UpdateRetryInfo(amboy.JobRetryOptions{
+						NeedsRetry:     utility.TruePtr(),
 						CurrentAttempt: utility.ToIntPtr(9),
 						MaxAttempts:    utility.ToIntPtr(10),
 					})
