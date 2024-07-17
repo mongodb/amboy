@@ -246,7 +246,7 @@ func (rh *BasicRetryHandler) waitForJob(ctx context.Context) {
 
 			if err := rh.handleJob(ctx, j); err != nil && ctx.Err() == nil {
 				logLevel := level.Error
-				if strings.Contains(err.Error(), maxAttemptsError.Error()) {
+				if strings.Contains(err.Error(), errMaxAttempts.Error()) {
 					logLevel = level.Warning
 				}
 				grip.Log(logLevel, message.WrapError(err, message.Fields{
@@ -370,7 +370,7 @@ func (rh *BasicRetryHandler) handleJob(ctx context.Context, j amboy.Job) error {
 	return errors.Errorf("exhausted all %d attempts to enqueue retry job without success", rh.opts.MaxRetryAttempts)
 }
 
-var maxAttemptsError = errors.New("job has reached its maximum attempt limit")
+var errMaxAttempts = errors.New("job has reached its maximum attempt limit")
 
 func (rh *BasicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Job) (canRetryOnErr bool, err error) {
 	originalInfo := j.RetryInfo()
@@ -388,7 +388,7 @@ func (rh *BasicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Job) (ca
 			return false, errors.New("job in the queue indicates the job does not need to retry anymore")
 		}
 		if originalInfo.CurrentAttempt+1 >= newInfo.GetMaxAttempts() {
-			return false, maxAttemptsError
+			return false, errMaxAttempts
 		}
 
 		lockTimeout := rh.queue.Info().LockTimeout
