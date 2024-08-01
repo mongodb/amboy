@@ -44,7 +44,7 @@ func TestRetryableQueueOptions(t *testing.T) {
 }
 
 func TestNewBasicRetryHandler(t *testing.T) {
-	q, err := newRemote(1)
+	q, err := newRemote(1, 0)
 	require.NoError(t, err)
 	t.Run("SucceedsWithQueue", func(t *testing.T) {
 		rh, err := NewBasicRetryHandler(q, amboy.RetryHandlerOptions{})
@@ -506,7 +506,7 @@ func TestRetryHandlerImplementations(t *testing.T) {
 func defaultRetryableQueueTestCases(d remoteQueueDriver) map[string]func(size int) (amboy.RetryableQueue, error) {
 	return map[string]func(size int) (amboy.RetryableQueue, error){
 		"Remote": func(size int) (amboy.RetryableQueue, error) {
-			q, err := newRemote(size)
+			q, err := newRemote(size, 0)
 			if err != nil {
 				return nil, errors.WithStack(err)
 			}

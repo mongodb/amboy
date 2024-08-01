@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"time"
 
 	"github.com/evergreen-ci/utility"
 	"github.com/mongodb/amboy"
@@ -25,6 +26,9 @@ type MongoDBQueueOptions struct {
 	Abortable *bool
 	// Retryable represents options to retry jobs after they complete.
 	Retryable *RetryableQueueOptions
+	// DefaultMaxTime is the default value for the maximum time that jobs in the
+	// queue can run before the queue aborts them.
+	DefaultMaxTime time.Duration
 }
 
 // Validate checks that the given queue options are valid.
@@ -32,6 +36,7 @@ func (o *MongoDBQueueOptions) Validate() error {
 	catcher := grip.NewBasicCatcher()
 	catcher.NewWhen(utility.FromIntPtr(o.NumWorkers) == 0 && o.WorkerPoolSize == nil, "must specify either a static, positive number of workers or a worker pool size")
 	catcher.NewWhen(utility.FromIntPtr(o.NumWorkers) < 0, "cannot specify a negative number of workers")
+	catcher.NewWhen(o.DefaultMaxTime < 0, "cannot specify a negative default max time")
 	if o.Retryable != nil {
 		catcher.Wrap(o.Retryable.Validate(), "invalid retryable queue options")
 	}
@@ -68,8 +73,9 @@ func (o *MongoDBQueueOptions) buildQueue(ctx context.Context) (remoteQueue, erro
 		retryable = *o.Retryable
 	}
 	qOpts := remoteOptions{
-		numWorkers: workers,
-		retryable:  retryable,
+		numWorkers:     workers,
+		retryable:      retryable,
+		defaultMaxTime: o.DefaultMaxTime,
 	}
 	if q, err = newRemoteWithOptions(qOpts); err != nil {
 		return nil, errors.Wrap(err, "initializing remote queue")
@@ -171,8 +177,8 @@ type remote struct {
 
 // newRemote returns a queue that has been initialized with a configured local
 // worker pool with the specified number of workers.
-func newRemote(size int) (remoteQueue, error) {
-	return newRemoteWithOptions(remoteOptions{numWorkers: size})
+func newRemote(size int, maxTime time.Duration) (remoteQueue, error) {
+	return newRemoteWithOptions(remoteOptions{numWorkers: size, defaultMaxTime: maxTime})
 }
 
 // newRemoteWithOptions returns a queue that has been initialized with a

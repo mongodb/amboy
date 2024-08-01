@@ -59,12 +59,19 @@ func TestMongoDBQueueOptions(t *testing.T) {
 					MaxRetryTime:     time.Minute,
 				},
 			}
+			assert.NoError(t, opts.Validate())
 		})
 		t.Run("FailsWithInvalidRetryableQueueOptions", func(t *testing.T) {
 			opts := defaultMongoDBQueueTestOptions()
 			opts.Retryable = &RetryableQueueOptions{
 				StaleRetryingMonitorInterval: -time.Second,
 			}
+			assert.Error(t, opts.Validate())
+		})
+		t.Run("FailsWithInvalidDefaultMaxTime", func(t *testing.T) {
+			opts := defaultMongoDBQueueTestOptions()
+			opts.DefaultMaxTime = time.Duration(-1)
+			assert.Error(t, opts.Validate())
 		})
 		t.Run("FailsWithoutDBOptions", func(t *testing.T) {
 			opts := defaultMongoDBQueueTestOptions()
@@ -179,7 +186,7 @@ func (s *remoteSuite) SetupTest() {
 	s.driver, err = s.driverConstructor()
 	s.Require().NoError(err)
 	s.Require().NoError(s.driver.Open(s.ctx))
-	rq, err := newRemote(2)
+	rq, err := newRemote(2, time.Minute)
 	s.Require().NoError(err)
 	q, ok := rq.(*remote)
 	s.Require().True(ok)
@@ -217,6 +224,7 @@ func (s *remoteSuite) TestJobPutIntoQueueFetchableViaGetMethod() {
 	s.IsType(j.Dependency(), fetchedJob.Dependency())
 	s.Equal(j.ID(), fetchedJob.ID())
 	s.Equal(j.Type(), fetchedJob.Type())
+	s.Equal(j.TimeInfo().MaxTime, time.Minute)
 
 	nj := fetchedJob.(*job.ShellJob)
 	s.Equal(j.ID(), nj.ID())
@@ -225,6 +233,7 @@ func (s *remoteSuite) TestJobPutIntoQueueFetchableViaGetMethod() {
 	s.Equal(j.Output, nj.Output)
 	s.Equal(j.WorkingDir, nj.WorkingDir)
 	s.Equal(j.Type(), nj.Type())
+	s.Equal(j.TimeInfo().MaxTime, time.Minute)
 }
 
 func (s *remoteSuite) TestGetMethodHandlesMissingJobs() {

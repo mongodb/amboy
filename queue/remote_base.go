@@ -44,13 +44,15 @@ type remoteBase struct {
 }
 
 type remoteOptions struct {
-	numWorkers int
-	retryable  RetryableQueueOptions
+	numWorkers     int
+	retryable      RetryableQueueOptions
+	defaultMaxTime time.Duration
 }
 
 func (opts *remoteOptions) validate() error {
 	catcher := grip.NewBasicCatcher()
 	catcher.NewWhen(opts.numWorkers <= 0, "number of workers must be a positive non-zero number")
+	catcher.NewWhen(opts.defaultMaxTime < 0, "default max time cannot be negative")
 	catcher.Wrap(opts.retryable.Validate(), "invalid retryable queue options")
 	return catcher.Resolve()
 }
@@ -106,9 +108,13 @@ func (q *remoteBase) validateAndPreparePut(j amboy.Job) error {
 	if j.Type().Version < 0 {
 		return errors.New("cannot add jobs with versions less than 0")
 	}
-	j.UpdateTimeInfo(amboy.JobTimeInfo{
+	ti := amboy.JobTimeInfo{
 		Created: time.Now(),
-	})
+	}
+	if q.opts.defaultMaxTime > 0 {
+		ti.MaxTime = q.opts.defaultMaxTime
+	}
+	j.UpdateTimeInfo(ti)
 	if err := j.TimeInfo().Validate(); err != nil {
 		return errors.Wrap(err, "invalid job time info")
 	}
