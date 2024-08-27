@@ -16,8 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 // All drivers should be able to pass this suite of tests which
@@ -881,7 +881,7 @@ func TestDriverNextJob(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(defaultMongoDBURI).SetConnectTimeout(time.Second))
+	client, err := mongo.Connect(options.Client().ApplyURI(defaultMongoDBURI).SetConnectTimeout(time.Second))
 	require.NoError(t, err)
 	defer func() {
 		assert.NoError(t, client.Disconnect(ctx))
