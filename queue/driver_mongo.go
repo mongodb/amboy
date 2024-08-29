@@ -46,8 +46,6 @@ type MongoDBOptions struct {
 	// queues. If true, the driver will ensure that jobs are isolated between
 	// the different queues using GroupName, and GroupName must be set.
 	UseGroups bool
-	// Priority determines if the queue obeys priority ordering of jobs.
-	Priority bool
 	// CheckWaitUntil determines if jobs that have not met their wait until time
 	// yet should be filtered from consideration for dispatch. If true, any job
 	// whose wait until constraint has not been reached yet will be filtered.
@@ -111,7 +109,6 @@ func DefaultMongoDBOptions() MongoDBOptions {
 	return MongoDBOptions{
 		URI:                      defaultMongoDBURI,
 		DB:                       "amboy",
-		Priority:                 false,
 		UseGroups:                false,
 		CheckWaitUntil:           true,
 		CheckDispatchBy:          false,
@@ -133,7 +130,6 @@ func (opts *MongoDBOptions) Validate() error {
 	catcher.NewWhen(opts.DB == "", "must specify database")
 	catcher.NewWhen(opts.Collection == "", "must specify collection")
 	catcher.NewWhen(opts.SampleSize < 0, "sample rate cannot be negative")
-	catcher.NewWhen(opts.Priority && opts.SampleSize > 0, "cannot sample next jobs when ordering them by priority")
 	catcher.NewWhen(opts.LockTimeout < 0, "lock timeout cannot be negative")
 	catcher.NewWhen(opts.GroupName == "" && opts.UseGroups, "cannot use groups without a group name")
 	if opts.LockTimeout == 0 {
@@ -369,12 +365,6 @@ func (d *mongoDriver) queueIndexes() []mongo.IndexModel {
 				Value: 1,
 			},
 		})
-		if d.opts.Priority {
-			primary = append(primary, bson.E{
-				Key:   "priority",
-				Value: 1,
-			})
-		}
 		return primary
 	}
 
@@ -1348,10 +1338,6 @@ func (d *mongoDriver) tryDispatchWithQuery(ctx context.Context, query bson.M, st
 // If sampleSize is greater than zero it's added as a limit and the jobs are shuffled.
 func (d *mongoDriver) getNextCursor(ctx context.Context, nextQuery bson.M) (*mongo.Cursor, error) {
 	pipeline := []bson.M{{"$match": nextQuery}}
-
-	if d.opts.Priority {
-		pipeline = append(pipeline, bson.M{"$sort": bson.E{Key: "priority", Value: -1}})
-	}
 
 	if d.opts.SampleSize > 0 {
 		// $limit must precede $sample for performance reasons. $sample scans all input
