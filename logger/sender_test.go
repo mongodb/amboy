@@ -92,6 +92,7 @@ func (s *SenderSuite) TestNameSetterRoundTrip() {
 func (s *SenderSuite) TestLevelSetterRejectsInvalidSettings() {
 	levels := []send.LevelInfo{
 		{Default: level.Invalid, Threshold: level.Invalid},
+		{Default: level.Priority(-10), Threshold: level.Priority(-1)},
 		{Default: level.Debug, Threshold: level.Priority(-1)},
 		{Default: level.Priority(800), Threshold: level.Priority(-2)},
 	}
