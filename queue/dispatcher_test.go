@@ -13,8 +13,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 // mockDispatcher provides a mock implementation of a Dispatcher whose behavior
@@ -174,7 +174,7 @@ func TestDispatcherImplementations(t *testing.T) {
 	}
 
 	opts := defaultMongoDBTestOptions()
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(opts.URI))
+	client, err := mongo.Connect(options.Client().ApplyURI(opts.URI))
 	require.NoError(t, err)
 	defer func() {
 		assert.NoError(t, client.Disconnect(ctx))

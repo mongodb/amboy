@@ -4,8 +4,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/evergreen-ci/utility"
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/amboy/dependency"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
@@ -75,6 +77,26 @@ func (s *JobInterchangeSuite) TestConversionToInterchangeMaintainsMetaDataFideli
 		s.Equal(s.job.Type().Version, i.Version)
 		s.Equal(s.job.Status(), i.Status)
 	}
+}
+
+func (s *JobInterchangeSuite) TestConversionToInterchangeTruncatesUnreasonablyLongErrorsInMetaData() {
+	const numErrs = 5000
+	allErrors := make([]string, 0, numErrs)
+	for i := 0; i < numErrs; i++ {
+		allErrors = append(allErrors, utility.MakeRandomString(10000))
+	}
+	for _, err := range allErrors {
+		s.job.AddError(errors.New(err))
+	}
+	i, err := MakeJobInterchange(s.job, s.format)
+	s.NoError(err)
+	s.Greater(len(allErrors), len(i.Status.Errors), "if jobs has too many errors, it should truncate some of them down to a reasonable amount")
+
+	interchangeStatusWithoutErrs := i.Status
+	interchangeStatusWithoutErrs.Errors = nil
+	jobStatusWithoutErrs := s.job.Status()
+	jobStatusWithoutErrs.Errors = nil
+	s.Equal(jobStatusWithoutErrs, interchangeStatusWithoutErrs, "all other status fields except long errors should be maintained")
 }
 
 func (s *JobInterchangeSuite) TestConversionFromInterchangeMaintainsFidelity() {

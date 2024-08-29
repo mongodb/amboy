@@ -3,12 +3,14 @@ package queue
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/evergreen-ci/utility"
 	"github.com/mongodb/amboy"
 	"github.com/mongodb/grip"
+	"github.com/mongodb/grip/level"
 	"github.com/mongodb/grip/message"
 	"github.com/mongodb/grip/recovery"
 	"github.com/pkg/errors"
@@ -243,7 +245,11 @@ func (rh *BasicRetryHandler) waitForJob(ctx context.Context) {
 			}()
 
 			if err := rh.handleJob(ctx, j); err != nil && ctx.Err() == nil {
-				grip.Error(message.WrapError(err, message.Fields{
+				logLevel := level.Error
+				if strings.Contains(err.Error(), errMaxAttempts.Error()) {
+					logLevel = level.Warning
+				}
+				grip.Log(logLevel, message.WrapError(err, message.Fields{
 					"message":     "could not retry job",
 					"queue_id":    rh.queue.ID(),
 					"job_id":      j.ID(),
@@ -364,6 +370,8 @@ func (rh *BasicRetryHandler) handleJob(ctx context.Context, j amboy.Job) error {
 	return errors.Errorf("exhausted all %d attempts to enqueue retry job without success", rh.opts.MaxRetryAttempts)
 }
 
+var errMaxAttempts = errors.New("job has reached its maximum attempt limit")
+
 func (rh *BasicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Job) (canRetryOnErr bool, err error) {
 	originalInfo := j.RetryInfo()
 
@@ -380,7 +388,7 @@ func (rh *BasicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Job) (ca
 			return false, errors.New("job in the queue indicates the job does not need to retry anymore")
 		}
 		if originalInfo.CurrentAttempt+1 >= newInfo.GetMaxAttempts() {
-			return false, errors.New("job has reached its maximum attempt limit")
+			return false, errMaxAttempts
 		}
 
 		lockTimeout := rh.queue.Info().LockTimeout
