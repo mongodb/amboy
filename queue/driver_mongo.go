@@ -84,7 +84,6 @@ type MongoDBOptions struct {
 	// SampleSize is the maximum number of jobs per set of jobs checked.
 	// If it samples from the available jobs, the order of next jobs are randomized.
 	// By default, the driver does not sample from the next available jobs.
-	// SampleSize cannot be used if Priority is true.
 	SampleSize int
 }
 
@@ -104,7 +103,7 @@ const defaultMongoDBURI = "mongodb://localhost:27017"
 
 // DefaultMongoDBOptions constructs a new options object with default
 // values: connecting to a MongoDB instance on localhost, using the
-// "amboy" database, and *not* using priority ordering of jobs.
+// "amboy" database.
 func DefaultMongoDBOptions() MongoDBOptions {
 	return MongoDBOptions{
 		URI:                      defaultMongoDBURI,
