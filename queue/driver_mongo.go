@@ -17,9 +17,9 @@ import (
 	"github.com/mongodb/grip/message"
 	"github.com/mongodb/grip/recovery"
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // MongoDBOptions represents options for creating a MongoDB driver to
@@ -215,7 +215,7 @@ func (d *mongoDriver) Open(ctx context.Context) error {
 	}
 	d.mu.RUnlock()
 
-	client, err := mongo.Connect(options.Client().ApplyURI(d.opts.URI))
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(d.opts.URI))
 	if err != nil {
 		return errors.Wrapf(err, "opening connection to DB at URI '%s", d.opts.URI)
 	}
@@ -855,7 +855,7 @@ func (d *mongoDriver) CompleteAndPut(ctx context.Context, toComplete amboy.Job, 
 	}
 	defer sess.EndSession(ctx)
 
-	atomicCompleteAndPut := func(sessCtx context.Context) (interface{}, error) {
+	atomicCompleteAndPut := func(sessCtx mongo.SessionContext) (interface{}, error) {
 		if err = d.Complete(sessCtx, toComplete); err != nil {
 			return nil, errors.Wrap(err, "completing old job")
 		}
@@ -1120,14 +1120,17 @@ func (d *mongoDriver) JobInfo(ctx context.Context) <-chan amboy.JobInfo {
 
 		iter, err := d.getCollection().Find(ctx,
 			q,
-			options.Find().SetSort(bson.M{"status.mod_ts": -1}).SetProjection(bson.M{
-				"_id":        1,
-				"status":     1,
-				"retry_info": 1,
-				"time_info":  1,
-				"type":       1,
-				"version":    1,
-			}))
+			&options.FindOptions{
+				Sort: bson.M{"status.mod_ts": -1},
+				Projection: bson.M{
+					"_id":        1,
+					"status":     1,
+					"retry_info": 1,
+					"time_info":  1,
+					"type":       1,
+					"version":    1,
+				},
+			})
 		if err != nil {
 			grip.Warning(message.WrapError(err, message.Fields{
 				"message":   "problem with query",
@@ -1364,9 +1367,9 @@ func (d *mongoDriver) getNextCursor(ctx context.Context, nextQuery bson.M) (*mon
 		pipeline = append(pipeline, bson.M{"$sample": bson.M{"size": d.opts.SampleSize}})
 	}
 
-	opts := options.Aggregate()
+	var opts *options.AggregateOptions
 	if d.opts.PreferredIndexes.NextJob != nil {
-		opts.SetHint(d.ensureGroupIndexPrefix(d.opts.PreferredIndexes.NextJob))
+		opts = options.Aggregate().SetHint(d.ensureGroupIndexPrefix(d.opts.PreferredIndexes.NextJob))
 	}
 	iter, err := d.getCollection().Aggregate(ctx, pipeline, opts)
 	return iter, errors.Wrap(err, "aggregating next jobs")

@@ -20,8 +20,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 const defaultLocalQueueCapcity = 10000
@@ -295,8 +295,9 @@ func TestQueueSmoke(t *testing.T) {
 	bctx, bcancel := context.WithCancel(context.Background())
 	defer bcancel()
 
-	client, err := mongo.Connect(options.Client().ApplyURI(defaultMongoDBURI).SetConnectTimeout(time.Second))
+	client, err := mongo.NewClient(options.Client().ApplyURI(defaultMongoDBURI).SetConnectTimeout(time.Second))
 	require.NoError(t, err)
+	require.NoError(t, client.Connect(bctx))
 
 	defer func() { require.NoError(t, client.Disconnect(bctx)) }()
 
