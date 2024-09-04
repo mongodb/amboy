@@ -16,7 +16,7 @@ are some situations where jobs may want independent implementation of
 the Job interface, including: easier construction for use from the
 REST interface, needing or wanting a more constrained public
 interface, or needing more constrained options for some values
-(e.g. Dependency).
+(e.g. Dependency, Priority).
 */
 package job
 
@@ -42,6 +42,7 @@ type Base struct {
 	enqueueScopes    []string
 	enqueueAllScopes bool
 	retryInfo        amboy.JobRetryInfo
+	priority         int
 	timeInfo         amboy.JobTimeInfo
 	status           amboy.JobStatusInfo
 	dep              dependency.Manager
@@ -221,6 +222,24 @@ func (b *Base) Error() error {
 	}
 
 	return errors.New(strings.Join(b.status.Errors, "\n"))
+}
+
+// Priority returns the priority value, and is part of the amboy.Job
+// interface.
+func (b *Base) Priority() int {
+	b.mutex.RLock()
+	defer b.mutex.RUnlock()
+
+	return b.priority
+}
+
+// SetPriority allows users to set the priority of a job, and is part
+// of the amboy.Job interface.
+func (b *Base) SetPriority(p int) {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	b.priority = p
 }
 
 // Status returns the current state of the job including information

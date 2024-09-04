@@ -61,6 +61,13 @@ type Job interface {
 	// UpdateRetryInfo method modifies all set fields from the given options.
 	UpdateRetryInfo(JobRetryOptions)
 
+	// Provides access to the job's priority value, which some
+	// queues may use to order job dispatching. Most Jobs
+	// implement these values by composing the
+	// amboy/priority.Value type.
+	Priority() int
+	SetPriority(int)
+
 	// AddError allows another actor to annotate the job with an
 	// error.
 	AddError(error)

@@ -23,6 +23,7 @@ type JobTest struct {
 	ShouldFail           bool                `bson:"should_fail" json:"should_fail" yaml:"should_fail"`
 	HadError             bool                `bson:"has_error" json:"has_error" yaml:"has_error"`
 	IsLocked             bool                `bson:"is_locked" json:"is_locked" yaml:"is_locked"`
+	JobPriority          int                 `bson:"priority" json:"priority" yaml:"priority"`
 	T                    amboy.JobType       `bson:"type" json:"type" yaml:"type"`
 	Stat                 amboy.JobStatusInfo `bson:"status" json:"status" yaml:"status"`
 	TimingInfo           amboy.JobTimeInfo   `bson:"time_info" json:"time_info" yaml:"time_info"`
@@ -140,6 +141,14 @@ func (j *JobTest) Dependency() dependency.Manager {
 
 func (j *JobTest) SetDependency(d dependency.Manager) {
 	j.dep = d
+}
+
+func (j *JobTest) Priority() int {
+	return j.JobPriority
+}
+
+func (j *JobTest) SetPriority(p int) {
+	j.JobPriority = p
 }
 
 func (j *JobTest) Status() amboy.JobStatusInfo {
