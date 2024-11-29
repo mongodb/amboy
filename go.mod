@@ -9,7 +9,7 @@ require (
 	github.com/evergreen-ci/poplar v0.0.0-20240809150814-63d58cd28568
 	github.com/evergreen-ci/utility v0.0.0-20230519193518-4d91d64f59fb
 	github.com/fuyufjh/splunk-hec-go v0.3.4-0.20210909061418-feecd03924b7 // indirect
-	github.com/google/uuid v1.3.0
+	github.com/google/uuid v1.3.1
 	github.com/mongodb/grip v0.0.0-20220401165023-6a1d9bb90c21
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.8.2
