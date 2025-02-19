@@ -206,7 +206,7 @@ buildvariants:
     run_on:
       - ubuntu2204-small
     expansions:
-      GOROOT: /opt/golang/go1.20
+      GOROOT: /opt/golang/go1.24
     tasks:
       - name: ".report"
         stepback: false
@@ -216,7 +216,7 @@ buildvariants:
     run_on:
       - ubuntu2204-small
     expansions:
-      GOROOT: /opt/golang/go1.20
+      GOROOT: /opt/golang/go1.24
       RACE_DETECTOR: true
       MONGODB_URL: https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-ubuntu2204-7.0.2.tgz
       MONGOSH_URL: https://downloads.mongodb.com/compass/mongosh-2.0.2-linux-x64.tgz
@@ -226,7 +226,7 @@ buildvariants:
   - name: macos
     display_name: macOS 11.00
     expansions:
-      GOROOT: /opt/golang/go1.20
+      GOROOT: /opt/golang/go1.24
       MONGODB_URL: https://fastdl.mongodb.org/osx/mongodb-macos-arm64-7.0.2.tgz
       MONGOSH_URL: https://downloads.mongodb.com/compass/mongosh-2.0.2-darwin-arm64.zip
       MONGOSH_DECOMPRESS: unzip
@@ -240,7 +240,7 @@ buildvariants:
     run_on:
       - windows-vsCurrent-large
     expansions:
-      GOROOT: C:/golang/go1.20
+      GOROOT: C:/golang/go1.24
       MONGODB_URL: https://fastdl.mongodb.org/windows/mongodb-windows-x86_64-7.0.2.zip
       MONGOSH_URL: https://downloads.mongodb.com/compass/mongosh-2.0.2-win32-x64.zip
     tasks:

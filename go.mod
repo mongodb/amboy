@@ -1,6 +1,6 @@
 module github.com/mongodb/amboy
 
-go 1.20
+go 1.24
 
 require (
 	github.com/VividCortex/ewma v1.2.0
