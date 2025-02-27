@@ -183,7 +183,7 @@ func makeMongoDBQueue(ctx context.Context) (amboy.Queue, closeFunc, error) {
 			return errors.Wrap(err, "creating mongo client")
 		}
 		defer func() {
-			grip.Error(errors.Wrap(client.Disconnect(ctx), "disconnecting client"))
+			grip.Error(errors.Wrap(client.Disconnect(cctx), "disconnecting client"))
 		}()
 		if err := client.Database(mdbOpts.DB).Drop(cctx); err != nil {
 			return errors.Wrap(err, "cleaning up benchmark database")
