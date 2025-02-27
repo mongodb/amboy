@@ -42,7 +42,7 @@ func TestManagerImplementations(t *testing.T) {
 	defer cancel()
 
 	mdbOpts := defaultMongoDBTestOptions()
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(mdbOpts.URI))
+	client, err := mongo.Connect(options.Client().ApplyURI(mdbOpts.URI))
 	require.NoError(t, err)
 	defer func() {
 		assert.NoError(t, client.Disconnect(ctx))

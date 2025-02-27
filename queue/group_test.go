@@ -27,7 +27,7 @@ func TestQueueGroup(t *testing.T) {
 	bctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client, err := mongo.Connect(bctx, options.Client().ApplyURI(defaultMongoDBURI).SetConnectTimeout(2*time.Second))
+	client, err := mongo.Connect(options.Client().ApplyURI(defaultMongoDBURI).SetConnectTimeout(2 * time.Second))
 	require.NoError(t, err)
 	defer func() { require.NoError(t, client.Disconnect(bctx)) }()
 
