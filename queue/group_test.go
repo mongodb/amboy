@@ -12,8 +12,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 type queueGroupCloser func(context.Context) error
@@ -27,7 +27,7 @@ func TestQueueGroup(t *testing.T) {
 	bctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client, err := mongo.Connect(bctx, options.Client().ApplyURI(defaultMongoDBURI).SetConnectTimeout(2*time.Second))
+	client, err := mongo.Connect(options.Client().ApplyURI(defaultMongoDBURI).SetConnectTimeout(2 * time.Second))
 	require.NoError(t, err)
 	defer func() { require.NoError(t, client.Disconnect(bctx)) }()
 
