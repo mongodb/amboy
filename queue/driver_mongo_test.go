@@ -9,13 +9,13 @@ import (
 	"github.com/mongodb/amboy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func TestMongoDBOptions(t *testing.T) {
-	client, err := mongo.Connect(options.Client().ApplyURI(defaultMongoDBURI))
+	client, err := mongo.Connect(t.Context(), options.Client().ApplyURI(defaultMongoDBURI))
 	require.NoError(t, err)
 
 	t.Run("Validate", func(t *testing.T) {
@@ -79,7 +79,7 @@ func TestPutMany(t *testing.T) {
 	opts.SkipQueueIndexBuilds = true
 	opts.SkipReportingIndexBuilds = true
 	opts.Collection = "jobs.jobs"
-	client, err := mongo.Connect(options.Client().ApplyURI(opts.URI))
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(opts.URI))
 	require.NoError(t, err)
 	defer func() {
 		assert.NoError(t, client.Disconnect(ctx))

@@ -9,9 +9,9 @@ import (
 	"github.com/mongodb/grip"
 	"github.com/mongodb/grip/message"
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type dbQueueManager struct {
@@ -60,7 +60,7 @@ func NewDBQueueManager(ctx context.Context, opts DBQueueManagerOptions) (Manager
 		return nil, errors.Wrap(err, "invalid options")
 	}
 
-	client, err := mongo.Connect(options.Client().ApplyURI(opts.Options.URI).SetConnectTimeout(time.Second))
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(opts.Options.URI).SetConnectTimeout(time.Second))
 	if err != nil {
 		return nil, errors.Wrap(err, "constructing DB client")
 	}

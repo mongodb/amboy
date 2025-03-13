@@ -20,8 +20,8 @@ import (
 	"github.com/mongodb/grip/level"
 	"github.com/mongodb/grip/send"
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // RunQueue runs the queue benchmark suite.
@@ -178,7 +178,7 @@ func makeMongoDBQueue(ctx context.Context) (amboy.Queue, closeFunc, error) {
 	cleanupDB := func() error {
 		cctx, cancel := context.WithCancel(ctx)
 		defer cancel()
-		client, err := mongo.Connect(options.Client().ApplyURI(mdbOpts.URI).SetConnectTimeout(time.Second))
+		client, err := mongo.Connect(ctx, options.Client().ApplyURI(mdbOpts.URI).SetConnectTimeout(time.Second))
 		if err != nil {
 			return errors.Wrap(err, "creating mongo client")
 		}
