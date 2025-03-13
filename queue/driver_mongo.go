@@ -17,9 +17,9 @@ import (
 	"github.com/mongodb/grip/message"
 	"github.com/mongodb/grip/recovery"
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // MongoDBOptions represents options for creating a MongoDB driver to
@@ -210,7 +210,7 @@ func (d *mongoDriver) Open(ctx context.Context) error {
 	}
 	d.mu.RUnlock()
 
-	client, err := mongo.Connect(options.Client().ApplyURI(d.opts.URI))
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(d.opts.URI))
 	if err != nil {
 		return errors.Wrapf(err, "opening connection to DB at URI '%s", d.opts.URI)
 	}
@@ -844,7 +844,7 @@ func (d *mongoDriver) CompleteAndPut(ctx context.Context, toComplete amboy.Job, 
 	}
 	defer sess.EndSession(ctx)
 
-	atomicCompleteAndPut := func(sessCtx context.Context) (interface{}, error) {
+	atomicCompleteAndPut := func(sessCtx mongo.SessionContext) (interface{}, error) {
 		if err = d.Complete(sessCtx, toComplete); err != nil {
 			return nil, errors.Wrap(err, "completing old job")
 		}

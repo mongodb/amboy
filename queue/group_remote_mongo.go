@@ -10,7 +10,7 @@ import (
 	"github.com/mongodb/grip/message"
 	"github.com/mongodb/grip/recovery"
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 // MongoDBQueueGroupOptions describe options to create a queue group backed by
