@@ -64,13 +64,6 @@ $(buildDir)/run-linter: cmd/run-linter/run-linter.go $(buildDir)/golangci-lint
 	@$(gobin) build -o $@ $<
 # end lint setup targets
 
-# start benchmark targets
-benchmarks: $(buildDir)/run-benchmarks .FORCE
-	./$(buildDir)/run-benchmarks $(run-benchmark)
-$(buildDir)/run-benchmarks: cmd/run-benchmarks/run-benchmarks.go
-	$(gobin) build -o $@ $<
-# end benchmark targets
-
 # start output files
 testOutput := $(foreach target,$(packages),$(buildDir)/output.$(target).test)
 testOutput := $(foreach target,$(packages),$(buildDir)/output.$(target).lint)
