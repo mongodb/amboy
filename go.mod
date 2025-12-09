@@ -5,15 +5,15 @@ go 1.24.0
 require (
 	github.com/VividCortex/ewma v1.2.0
 	github.com/cheynewallace/tabby v1.1.1
-	github.com/evergreen-ci/gimlet v0.0.0-20250224224034-b5040d5f7d06
+	github.com/evergreen-ci/gimlet v0.0.0-20251205151908-163517996b82
 	github.com/evergreen-ci/utility v0.0.0-20251203163234-8a1c0ea8b717
 	github.com/fuyufjh/splunk-hec-go v0.3.4-0.20210909061418-feecd03924b7 // indirect
-	github.com/google/uuid v1.3.0
+	github.com/google/uuid v1.6.0
 	github.com/mongodb/grip v0.0.0-20251203205830-b5c5c666ab94
 	github.com/pkg/errors v0.9.1
-	github.com/stretchr/testify v1.8.3
+	github.com/stretchr/testify v1.10.0
 	github.com/urfave/cli v1.22.10
-	go.mongodb.org/mongo-driver v1.17.3
+	go.mongodb.org/mongo-driver v1.17.6
 	go.opentelemetry.io/otel v1.16.0
 	go.opentelemetry.io/otel/trace v1.16.0
 	golang.org/x/oauth2 v0.33.0 // indirect
