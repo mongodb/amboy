@@ -33,8 +33,8 @@ github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSs
 github.com/dghubble/oauth1 v0.7.2 h1:pwcinOZy8z6XkNxvPmUDY52M7RDPxt0Xw1zgZ6Cl5JA=
 github.com/dghubble/oauth1 v0.7.2/go.mod h1:9erQdIhqhOHG/7K9s/tgh9Ks/AfoyrO5mW/43Lu2+kE=
 github.com/dustin/go-humanize v1.0.0/go.mod h1:HtrtbFcZ19U5GC7JDqmcUSB87Iq5E25KnS6fMYU6eOk=
-github.com/evergreen-ci/gimlet v0.0.0-20251205151908-163517996b82 h1:BuxBEXRzwGO4FXwOskW3kjBFzfDx2+jxQYYpRxNYsGE=
-github.com/evergreen-ci/gimlet v0.0.0-20251205151908-163517996b82/go.mod h1:Xiaegoek6n6GQnEt7pFMByuME0vw4sGcqD7KA7ilK7c=
+github.com/evergreen-ci/gimlet v0.0.0-20260325201542-0eb4bfb95c82 h1:svPTW+k/CGabHiiGoFoRkC6N20fuud+7XRuo8ac+4mA=
+github.com/evergreen-ci/gimlet v0.0.0-20260325201542-0eb4bfb95c82/go.mod h1:tRjfOj0/370IbRn90VUSW0n3N6SsiSGheXoBabCWwos=
 github.com/evergreen-ci/negroni v1.0.1-0.20211028183800-67b6d7c2c035 h1:oVU/ni/sRq+GAogUMLa7LBGtvVHMVLbisuytxBC5KaY=
 github.com/evergreen-ci/negroni v1.0.1-0.20211028183800-67b6d7c2c035/go.mod h1:pvK7NM0ZC+sfTLuIiJN4BgM1S9S5Oo79PJReAFFph18=
 github.com/evergreen-ci/utility v0.0.0-20251203163234-8a1c0ea8b717 h1:g9yGrjUNAvxL6HFriXObL2jixogWc0dsJyWCJCvpzPQ=
