@@ -57,7 +57,7 @@ func (s *QueueService) Create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		resp.Error = err.Error()
 		grip.Error(ctx, err)
-		gimlet.WriteJSONError(w, resp)
+		gimlet.WriteJSONError(ctx, w, resp)
 		return
 	}
 
@@ -65,9 +65,9 @@ func (s *QueueService) Create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		resp.Error = err.Error()
 		grip.Error(ctx, err)
-		gimlet.WriteJSONError(w, resp)
+		gimlet.WriteJSONError(ctx, w, resp)
 		return
 	}
 
-	gimlet.WriteJSON(w, resp)
+	gimlet.WriteJSON(ctx, w, resp)
 }

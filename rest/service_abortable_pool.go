@@ -37,9 +37,10 @@ func (s *AbortablePoolManagementService) App() *gimlet.APIApp {
 // ListJobs is an http.HandlerFunc that returns a list of all running
 // jobs in the pool.
 func (s *AbortablePoolManagementService) ListJobs(rw http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	jobs := s.pool.RunningJobs()
 
-	gimlet.WriteJSON(rw, jobs)
+	gimlet.WriteJSON(ctx, rw, jobs)
 }
 
 // AbortAllJobs is an http.HandlerFunc that sends the signal to abort
@@ -52,14 +53,14 @@ func (s *AbortablePoolManagementService) AbortAllJobs(rw http.ResponseWriter, r 
 
 	if err := s.pool.AbortAll(ctx); err != nil {
 		if ctx.Err() != nil {
-			gimlet.WriteJSONResponse(rw, http.StatusRequestTimeout, struct{}{})
+			gimlet.WriteJSONResponse(ctx, rw, http.StatusRequestTimeout, struct{}{})
 			return
 		}
-		gimlet.WriteJSONInternalError(rw, err.Error())
+		gimlet.WriteJSONInternalError(ctx, rw, err.Error())
 		return
 	}
 
-	gimlet.WriteJSON(rw, struct{}{})
+	gimlet.WriteJSON(ctx, rw, struct{}{})
 }
 
 // GetJobStatus is an http.HandlerFunc reports on the status (running
@@ -68,7 +69,7 @@ func (s *AbortablePoolManagementService) GetJobStatus(rw http.ResponseWriter, r 
 	name := gimlet.GetVars(r)["name"]
 
 	if !s.pool.IsRunning(name) {
-		gimlet.WriteJSONResponse(rw, http.StatusNotFound,
+		gimlet.WriteJSONResponse(r.Context(), rw, http.StatusNotFound,
 			map[string]string{
 				"name":   name,
 				"status": "not running",
@@ -76,7 +77,7 @@ func (s *AbortablePoolManagementService) GetJobStatus(rw http.ResponseWriter, r 
 		return
 	}
 
-	gimlet.WriteJSON(rw, map[string]string{
+	gimlet.WriteJSON(r.Context(), rw, map[string]string{
 		"name":   name,
 		"status": "running",
 	})
@@ -90,11 +91,11 @@ func (s *AbortablePoolManagementService) AbortRunningJob(rw http.ResponseWriter,
 	ctx := r.Context()
 	err := s.pool.Abort(ctx, name)
 	if err != nil {
-		gimlet.WriteResponse(rw, gimlet.MakeJSONErrorResponder(errors.Wrapf(err,
+		gimlet.WriteResponse(ctx, rw, gimlet.MakeJSONErrorResponder(errors.Wrapf(err,
 			"problem aborting job '%s'", name)))
 	}
 
-	gimlet.WriteJSON(rw, map[string]string{
+	gimlet.WriteJSON(ctx, rw, map[string]string{
 		"name":   name,
 		"status": "aborted",
 	})

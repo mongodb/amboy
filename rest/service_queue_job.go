@@ -65,11 +65,11 @@ func (s *QueueService) JobStatus(w http.ResponseWriter, r *http.Request) {
 	response, err := s.getJobStatusResponse(r.Context(), name)
 	if err != nil {
 		grip.Error(r.Context(), err)
-		gimlet.WriteJSONError(w, response)
+		gimlet.WriteJSONError(r.Context(), w, response)
 		return
 	}
 
-	gimlet.WriteJSON(w, response)
+	gimlet.WriteJSON(r.Context(), w, response)
 }
 
 // WaitJob waits for a single job to be complete. It takes a timeout
@@ -81,7 +81,7 @@ func (s *QueueService) WaitJob(w http.ResponseWriter, r *http.Request) {
 	response, err := s.getJobStatusResponse(ctx, name)
 	if err != nil {
 		grip.Error(ctx, err)
-		gimlet.WriteJSONError(w, response)
+		gimlet.WriteJSONError(ctx, w, response)
 	}
 
 	timeout, err := parseTimeout(r)
@@ -98,7 +98,7 @@ func (s *QueueService) WaitJob(w http.ResponseWriter, r *http.Request) {
 
 	response, code, err := s.waitForJob(ctx, name)
 	grip.Error(ctx, err)
-	gimlet.WriteJSONResponse(w, code, response)
+	gimlet.WriteJSONResponse(ctx, w, code, response)
 }
 
 func parseTimeout(r *http.Request) (time.Duration, error) {
