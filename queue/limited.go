@@ -176,7 +176,7 @@ func (q *limitedSizeLocal) Next(ctx context.Context) amboy.Job {
 				q.staleCount++
 				q.mu.Unlock()
 
-				grip.Notice(message.Fields{
+				grip.Notice(ctx, message.Fields{
 					"state":    "stale",
 					"job_id":   job.ID(),
 					"job_type": job.Type().Name,

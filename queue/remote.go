@@ -187,7 +187,7 @@ func newRemoteWithOptions(opts remoteOptions) (remoteQueue, error) {
 	if err := q.SetRunner(pool.NewLocalWorkers(opts.numWorkers, q)); err != nil {
 		return nil, errors.Wrap(err, "configuring runner")
 	}
-	grip.Infof("creating new remote job queue with %d workers", opts.numWorkers)
+	grip.Infof(context.Background(), "creating new remote job queue with %d workers", opts.numWorkers)
 
 	return q, nil
 }

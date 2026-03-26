@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"context"
 	"runtime/debug"
 
 	"github.com/mongodb/amboy"
@@ -52,7 +53,7 @@ func MakeJobInterchange(j amboy.Job, f amboy.Format) (*JobInterchange, error) {
 	status := j.Status()
 	truncatedErrs, isTruncated := truncateJobErrors(status.Errors)
 	status.Errors = truncatedErrs
-	grip.WarningWhen(isTruncated, message.Fields{
+	grip.WarningWhen(context.Background(), isTruncated, message.Fields{
 		"message":        "job errors were too large and had to be truncated to reduce job interchange to a reasonable size",
 		"job_id":         j.ID(),
 		"truncated_errs": truncatedErrs,

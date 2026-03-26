@@ -34,7 +34,7 @@ func NewAbortablePool(size int, q amboy.Queue) amboy.AbortableRunner {
 	}
 
 	if p.size <= 0 {
-		grip.Infof("minimum pool size is 1, overriding invalid setting of %d", p.size)
+		grip.Infof(context.Background(), "minimum pool size is 1, overriding invalid setting of %d", p.size)
 		p.size = 1
 	}
 
@@ -110,7 +110,7 @@ func (p *abortablePool) Start(ctx context.Context) error {
 
 	for w := 1; w <= p.size; w++ {
 		go p.worker(workerCtx)
-		grip.Debugf("started worker %d of %d waiting for jobs", w, p.size)
+		grip.Debugf(ctx, "started worker %d of %d waiting for jobs", w, p.size)
 	}
 
 	return nil
@@ -135,7 +135,7 @@ func (p *abortablePool) worker(bctx context.Context) {
 		if err != nil {
 			if job != nil {
 				job.AddError(err)
-				grip.Warning(message.WrapError(p.queue.Complete(bctx, job), message.Fields{
+				grip.Warning(bctx, message.WrapError(p.queue.Complete(bctx, job), message.Fields{
 					"message":  "could not mark job complete",
 					"job_id":   job.ID(),
 					"queue_id": p.queue.ID(),

@@ -103,11 +103,11 @@ func (s *QueueService) OpenWithOptions(ctx context.Context, opts QueueServiceOpt
 	if s.closer != nil {
 		if opts.ForceTimeout != 0 {
 			waiterCtx, cancel := context.WithTimeout(ctx, opts.ForceTimeout)
-			grip.Info("waiting for jobs to complete")
+			grip.Info(ctx, "waiting for jobs to complete")
 			amboy.Wait(waiterCtx, s.queue)
 			cancel()
 		}
-		grip.Info("releasing remaining queue resources")
+		grip.Info(ctx, "releasing remaining queue resources")
 		s.closer()
 	}
 
@@ -115,7 +115,7 @@ func (s *QueueService) OpenWithOptions(ctx context.Context, opts QueueServiceOpt
 	s.closer = cancel
 
 	s.queue = queue.NewLocalLimitedSize(opts.NumWorkers, opts.QueueSize)
-	grip.Alert(s.queue.Start(ctx))
+	grip.Alert(ctx, s.queue.Start(ctx))
 
 	return nil
 }

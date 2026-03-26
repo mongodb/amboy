@@ -82,7 +82,7 @@ func (d *mockDispatcher) Dispatch(ctx context.Context, j amboy.Job) error {
 		go func() {
 			defer close(pingCompleted)
 			defer recovery.LogStackTraceAndContinue("mock background job lock ping", j.ID())
-			grip.Debug(message.WrapError(pingJobLock(pingCtx, d.queue, j), message.Fields{
+			grip.Debug(pingCtx, message.WrapError(pingJobLock(pingCtx, d.queue, j), message.Fields{
 				"message":  "could not ping job lock",
 				"job_id":   j.ID(),
 				"queue_id": d.queue.ID(),
@@ -104,7 +104,7 @@ func (d *mockDispatcher) Release(ctx context.Context, j amboy.Job) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	grip.Debug(message.WrapError(d.release(ctx, j.ID()), message.Fields{
+	grip.Debug(ctx, message.WrapError(d.release(ctx, j.ID()), message.Fields{
 		"service":  "mock dispatcher",
 		"queue_id": d.queue.ID(),
 		"job_id":   j.ID(),
@@ -134,7 +134,7 @@ func (d *mockDispatcher) Complete(ctx context.Context, j amboy.Job) {
 	defer d.mu.Unlock()
 
 	if err := d.release(ctx, j.ID()); err != nil {
-		grip.Debug(message.WrapError(err, message.Fields{
+		grip.Debug(ctx, message.WrapError(err, message.Fields{
 			"service":  "mock dispatcher",
 			"queue_id": d.queue.ID(),
 			"job_id":   j.ID(),

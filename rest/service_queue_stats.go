@@ -36,7 +36,7 @@ func (s *QueueService) getStatus(ctx context.Context) status {
 // Status defines an http.HandlerFunc that returns health check and
 // current staus status information for the entire service.
 func (s *QueueService) Status(w http.ResponseWriter, r *http.Request) {
-	gimlet.WriteJSON(w, s.getStatus(r.Context()))
+	gimlet.WriteJSON(r.Context(), w, s.getStatus(r.Context()))
 }
 
 // WaitAll blocks waiting for all pending jobs in the queue to
@@ -45,7 +45,7 @@ func (s *QueueService) Status(w http.ResponseWriter, r *http.Request) {
 func (s *QueueService) WaitAll(w http.ResponseWriter, r *http.Request) {
 	timeout, err := parseTimeout(r)
 	if err != nil {
-		grip.Infof("problem parsing timeout for wait-all operation: %v", err)
+		grip.Infof(r.Context(), "problem parsing timeout for wait-all operation: %v", err)
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), timeout)
 	defer cancel()
@@ -53,9 +53,9 @@ func (s *QueueService) WaitAll(w http.ResponseWriter, r *http.Request) {
 	ok := amboy.WaitInterval(ctx, s.queue, 100*time.Millisecond)
 	st := s.getStatus(ctx)
 	if !ok {
-		gimlet.WriteJSONResponse(w, http.StatusRequestTimeout, st)
+		gimlet.WriteJSONResponse(ctx, w, http.StatusRequestTimeout, st)
 		return
 	}
 
-	gimlet.WriteJSON(w, st)
+	gimlet.WriteJSON(ctx, w, st)
 }

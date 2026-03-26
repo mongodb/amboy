@@ -231,7 +231,7 @@ func (p *ewmaRateLimiting) Close(ctx context.Context) {
 
 	p.canceler()
 	p.canceler = nil
-	grip.Debug("pool's context canceled, waiting for running jobs to complete")
+	grip.Debug(ctx, "pool's context canceled, waiting for running jobs to complete")
 
 	// Because of the timer+2 contexts in the worker
 	// implementation, we can end up returning earlier and because

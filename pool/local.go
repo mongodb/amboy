@@ -27,7 +27,7 @@ func NewLocalWorkers(numWorkers int, q amboy.Queue) amboy.Runner {
 	}
 
 	if r.size <= 0 {
-		grip.Infof("minimum pool size is 1, overriding invalid setting of %d", r.size)
+		grip.Infof(context.Background(), "minimum pool size is 1, overriding invalid setting of %d", r.size)
 		r.size = 1
 	}
 
@@ -86,11 +86,11 @@ func (r *localWorkers) Start(ctx context.Context) error {
 
 	for w := 1; w <= r.size; w++ {
 		go worker(workerCtx, "local", r.queue, &r.wg, &r.mu)
-		grip.Debugf("started worker %d of %d waiting for jobs", w, r.size)
+		grip.Debugf(ctx, "started worker %d of %d waiting for jobs", w, r.size)
 	}
 
 	r.started = true
-	grip.Debugf("running %d workers", r.size)
+	grip.Debugf(ctx, "running %d workers", r.size)
 
 	return nil
 }

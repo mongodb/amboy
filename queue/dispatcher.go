@@ -71,13 +71,13 @@ func (d *dispatcherImpl) Dispatch(ctx context.Context, j amboy.Job) error {
 	}
 
 	if info, ok := d.popInfo(j.ID()); ok {
-		grip.Debug(message.Fields{
+		grip.Debug(ctx, message.Fields{
 			"message":  "re-dispatching job that has already been dispatched before",
 			"queue_id": d.queue.ID(),
 			"job_id":   j.ID(),
 			"service":  "amboy.queue.dispatcher",
 		})
-		grip.Warning(message.WrapError(d.waitForPing(ctx, info), message.Fields{
+		grip.Warning(ctx, message.WrapError(d.waitForPing(ctx, info), message.Fields{
 			"message":  "could not wait for job ping to complete",
 			"op":       "re-dispatch",
 			"job_id":   j.ID(),
@@ -116,7 +116,7 @@ func (d *dispatcherImpl) Dispatch(ctx context.Context, j amboy.Job) error {
 	go func() {
 		defer func() {
 			if err := recovery.HandlePanicWithError(recover(), nil, "background lock ping"); err != nil {
-				grip.Error(message.WrapError(err, message.Fields{
+				grip.Error(info.pingCtx, message.WrapError(err, message.Fields{
 					"job_id":   j.ID(),
 					"service":  "amboy.queue.dispatcher",
 					"queue_id": d.queue.ID(),
@@ -128,7 +128,7 @@ func (d *dispatcherImpl) Dispatch(ctx context.Context, j amboy.Job) error {
 		}()
 
 		if err := pingJobLock(info.pingCtx, d.queue, j); err != nil {
-			grip.WarningWhen(info.pingCtx.Err() == nil, message.WrapError(err, message.Fields{
+			grip.WarningWhen(info.pingCtx, info.pingCtx.Err() == nil, message.WrapError(err, message.Fields{
 				"message":  "could not ping job lock",
 				"job_id":   j.ID(),
 				"service":  "amboy.queue.dispatcher",
@@ -152,7 +152,7 @@ func (d *dispatcherImpl) Release(ctx context.Context, j amboy.Job) {
 	}
 	d.mutex.Unlock()
 
-	grip.Warning(message.WrapError(d.waitForPing(ctx, info), message.Fields{
+	grip.Warning(ctx, message.WrapError(d.waitForPing(ctx, info), message.Fields{
 		"message":  "could not wait for job ping to complete",
 		"op":       "release",
 		"job_id":   j.ID(),
@@ -187,7 +187,7 @@ func (d *dispatcherImpl) Complete(ctx context.Context, j amboy.Job) {
 		j.AddError(errors.Wrap(info.pingCtx.Err(), "job was aborted during execution"))
 	}
 
-	grip.Warning(message.WrapError(d.waitForPing(ctx, info), message.Fields{
+	grip.Warning(ctx, message.WrapError(d.waitForPing(ctx, info), message.Fields{
 		"message":  "could not wait for job ping to complete",
 		"op":       "complete",
 		"job_id":   j.ID(),
@@ -258,7 +258,7 @@ func pingJobLock(ctx context.Context, q amboy.Queue, j amboy.Job) error {
 				return errors.Wrapf(err, "saving job for lock ping on cycle #%d", iters)
 			}
 
-			grip.Debug(message.Fields{
+			grip.Debug(ctx, message.Fields{
 				"queue_id":           q.ID(),
 				"job_id":             j.ID(),
 				"service":            "amboy.queue.dispatcher",

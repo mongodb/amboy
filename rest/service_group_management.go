@@ -47,7 +47,7 @@ func (s *ManagementGroupService) ListJobs(rw http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	gimlet.WriteJSON(rw, jobs)
+	gimlet.WriteJSON(ctx, rw, jobs)
 }
 
 // AbortAllJobs is an http.HandlerFunc that sends the signal to abort
@@ -64,7 +64,7 @@ func (s *ManagementGroupService) AbortAllJobs(rw http.ResponseWriter, r *http.Re
 			if pool, ok := queue.Runner().(amboy.AbortableRunner); ok {
 				if err := pool.AbortAll(ctx); err != nil {
 					if ctx.Err() != nil {
-						gimlet.WriteJSONResponse(rw, http.StatusRequestTimeout, struct{}{})
+						gimlet.WriteJSONResponse(ctx, rw, http.StatusRequestTimeout, struct{}{})
 						return
 					}
 					catcher.Wrapf(err, "queue '%s'", queue.ID())
@@ -73,11 +73,11 @@ func (s *ManagementGroupService) AbortAllJobs(rw http.ResponseWriter, r *http.Re
 		}
 	}
 	if catcher.HasErrors() {
-		gimlet.WriteJSONInternalError(rw, catcher.Resolve().Error())
+		gimlet.WriteJSONInternalError(ctx, rw, catcher.Resolve().Error())
 		return
 	}
 
-	gimlet.WriteJSON(rw, struct{}{})
+	gimlet.WriteJSON(ctx, rw, struct{}{})
 }
 
 // GetJobStatus is an http.HandlerFunc reports on the status (running
@@ -91,7 +91,7 @@ func (s *ManagementGroupService) GetJobStatus(rw http.ResponseWriter, r *http.Re
 		if queue, err := s.group.Get(ctx, group); err == nil {
 			if pool, ok := queue.Runner().(amboy.AbortableRunner); ok {
 				if pool.IsRunning(name) {
-					gimlet.WriteJSON(rw, map[string]string{
+					gimlet.WriteJSON(ctx, rw, map[string]string{
 						"name":   name,
 						"status": "running",
 						"group":  group,
@@ -102,7 +102,7 @@ func (s *ManagementGroupService) GetJobStatus(rw http.ResponseWriter, r *http.Re
 		}
 	}
 
-	gimlet.WriteJSONResponse(rw, http.StatusNotFound,
+	gimlet.WriteJSONResponse(ctx, rw, http.StatusNotFound,
 		map[string]string{
 			"name":   name,
 			"status": "not running",
@@ -121,7 +121,7 @@ func (s *ManagementGroupService) AbortRunningJob(rw http.ResponseWriter, r *http
 		if queue, err := s.group.Get(ctx, group); err == nil {
 			if pool, ok := queue.Runner().(amboy.AbortableRunner); ok {
 				if err = pool.Abort(ctx, name); err == nil {
-					gimlet.WriteJSON(rw, map[string]string{
+					gimlet.WriteJSON(ctx, rw, map[string]string{
 						"name":   name,
 						"status": "aborted",
 						"group":  group,
@@ -132,7 +132,7 @@ func (s *ManagementGroupService) AbortRunningJob(rw http.ResponseWriter, r *http
 		}
 	}
 
-	gimlet.WriteJSONResponse(rw, http.StatusNotFound,
+	gimlet.WriteJSONResponse(ctx, rw, http.StatusNotFound,
 		map[string]string{
 			"name":   name,
 			"status": "unknown",

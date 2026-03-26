@@ -28,7 +28,7 @@ const defaultLocalQueueCapcity = 10000
 
 func init() {
 	grip.SetName("amboy.queue.tests")
-	grip.Error(grip.SetSender(send.MakeNative()))
+	grip.Error(context.Background(), grip.SetSender(send.MakeNative()))
 
 	lvl := grip.GetSender().Level()
 	lvl.Threshold = level.Error
@@ -515,7 +515,7 @@ func basicTest(bctx context.Context, t *testing.T, test QueueTestCase, runner Po
 	}
 	assert.Equal(t, numJobs, statCounter, fmt.Sprintf("want job info for every job"))
 
-	grip.Infof("completed results check for %d worker smoke test", size.Size)
+	grip.Infof(ctx, "completed results check for %d worker smoke test", size.Size)
 }
 
 func waitUntilTest(bctx context.Context, t *testing.T, test QueueTestCase, runner PoolTestCase, size SizeTestCase) {
@@ -761,7 +761,7 @@ func multiExecutionTest(bctx context.Context, t *testing.T, test QueueTestCase, 
 
 	num = num * adderProcs
 
-	grip.Info("added jobs to queues")
+	grip.Info(ctx, "added jobs to queues")
 
 	// wait for all jobs to complete.
 	assert.True(t, amboy.WaitInterval(ctx, qOne, 100*time.Millisecond))
@@ -849,10 +849,10 @@ func manyQueueTest(bctx context.Context, t *testing.T, test QueueTestCase, runne
 		}
 	}
 
-	grip.Notice("waiting to add all jobs")
+	grip.Notice(ctx, "waiting to add all jobs")
 	wg.Wait()
 
-	grip.Notice("waiting to run jobs")
+	grip.Notice(ctx, "waiting to run jobs")
 
 	for _, q := range queues {
 		assert.True(t, amboy.WaitInterval(ctx, q, 20*time.Millisecond))

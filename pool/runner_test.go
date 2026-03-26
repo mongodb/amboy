@@ -19,7 +19,7 @@ func init() {
 		Threshold: level.Alert,
 		Default:   level.Warning,
 	}
-	grip.Warning(sender.SetLevel(lvl))
+	grip.Warning(context.Background(), sender.SetLevel(lvl))
 }
 
 type poolFactory func() amboy.Runner

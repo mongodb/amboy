@@ -56,18 +56,18 @@ func (s *QueueService) Create(w http.ResponseWriter, r *http.Request) {
 	err := gimlet.GetJSON(r.Body, jobPayload)
 	if err != nil {
 		resp.Error = err.Error()
-		grip.Error(err)
-		gimlet.WriteJSONError(w, resp)
+		grip.Error(ctx, err)
+		gimlet.WriteJSONError(ctx, w, resp)
 		return
 	}
 
 	resp, err = s.createJob(ctx, jobPayload)
 	if err != nil {
 		resp.Error = err.Error()
-		grip.Error(err)
-		gimlet.WriteJSONError(w, resp)
+		grip.Error(ctx, err)
+		gimlet.WriteJSONError(ctx, w, resp)
 		return
 	}
 
-	gimlet.WriteJSON(w, resp)
+	gimlet.WriteJSON(ctx, w, resp)
 }

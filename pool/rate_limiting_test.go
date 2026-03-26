@@ -134,7 +134,7 @@ func TestMultipleWorkers(t *testing.T) {
 		for i := 0; i < 100; i++ {
 			next := ema.getNextTime(time.Millisecond)
 			if !assert.True(t, next*workers > 750*time.Millisecond) || !assert.True(t, next < workers*time.Second) {
-				grip.Errorf("workers=%d, iter=%d, next=%s", workers, i, next)
+				grip.Errorf(context.Background(), "workers=%d, iter=%d, next=%s", workers, i, next)
 			}
 
 			require.InDelta(t, workers, float64(next), float64(workers*time.Second),
@@ -225,7 +225,7 @@ func TestWeightedAverageSmallSample(t *testing.T) {
 
 	assert.InDelta(6*time.Second, results.sum/time.Duration(results.total), float64(3*time.Second))
 	assert.True(results.total/2 > results.zero)
-	grip.Infof("after %d iterations, %d were 0s. last value=%s", results.total, results.zero, results.last)
+	grip.Infof(context.Background(), "after %d iterations, %d were 0s. last value=%s", results.total, results.zero, results.last)
 }
 
 func TestWeightedAverageLargeWorkerPoolLongDuration(t *testing.T) {
@@ -244,7 +244,7 @@ func TestWeightedAverageLargeWorkerPoolLongDuration(t *testing.T) {
 
 	assert.InDelta(30*time.Second, results.sum/time.Duration(results.total), float64(30*time.Minute))
 	assert.True(results.total/3 > results.zero, "zero:%s", results.zero)
-	grip.Infof("after %d iterations, %d were 0s. last value=%s", results.total, results.zero, results.last)
+	grip.Infof(context.Background(), "after %d iterations, %d were 0s. last value=%s", results.total, results.zero, results.last)
 }
 
 func TestWeightedAverageLargeWorkerPoolShortDuration(t *testing.T) {
@@ -263,5 +263,5 @@ func TestWeightedAverageLargeWorkerPoolShortDuration(t *testing.T) {
 
 	assert.InDelta(30*time.Second, results.sum/time.Duration(results.total), float64(10*time.Minute))
 	assert.True(float64(results.total)/1.5 > float64(results.zero), "zero:%s", results.zero)
-	grip.Infof("after %d iterations, %d were 0s. last value=%s", results.total, results.zero, results.last)
+	grip.Infof(context.Background(), "after %d iterations, %d were 0s. last value=%s", results.total, results.zero, results.last)
 }

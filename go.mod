@@ -5,11 +5,11 @@ go 1.24.0
 require (
 	github.com/VividCortex/ewma v1.2.0
 	github.com/cheynewallace/tabby v1.1.1
-	github.com/evergreen-ci/gimlet v0.0.0-20251205151908-163517996b82
+	github.com/evergreen-ci/gimlet v0.0.0-20260325201542-0eb4bfb95c82
 	github.com/evergreen-ci/utility v0.0.0-20251203163234-8a1c0ea8b717
 	github.com/fuyufjh/splunk-hec-go v0.3.4-0.20210909061418-feecd03924b7 // indirect
 	github.com/google/uuid v1.6.0
-	github.com/mongodb/grip v0.0.0-20251203205830-b5c5c666ab94
+	github.com/mongodb/grip v0.0.0-20260325175240-dee15316ed15
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.10.0
 	github.com/urfave/cli v1.22.10

@@ -46,17 +46,17 @@ func (s *ManagementService) GetJobStatus(rw http.ResponseWriter, r *http.Request
 
 	err := filter.Validate()
 	if err != nil {
-		gimlet.WriteResponse(rw, gimlet.MakeJSONErrorResponder(err))
+		gimlet.WriteResponse(ctx, rw, gimlet.MakeJSONErrorResponder(err))
 		return
 	}
 
 	data, err := s.manager.JobStatus(ctx, filter)
 	if err != nil {
-		gimlet.WriteResponse(rw, gimlet.MakeJSONInternalErrorResponder(err))
+		gimlet.WriteResponse(ctx, rw, gimlet.MakeJSONInternalErrorResponder(err))
 		return
 	}
 
-	gimlet.WriteJSON(rw, data)
+	gimlet.WriteJSON(ctx, rw, data)
 }
 
 // GetJobIDs is an http.HandlerFunc that produces a list of job IDs for jobs
@@ -67,18 +67,18 @@ func (s *ManagementService) GetJobIDs(rw http.ResponseWriter, r *http.Request) {
 	jobType := vars["type"]
 
 	if err := filter.Validate(); err != nil {
-		gimlet.WriteResponse(rw, gimlet.MakeJSONErrorResponder(err))
+		gimlet.WriteResponse(r.Context(), rw, gimlet.MakeJSONErrorResponder(err))
 		return
 	}
 
 	ctx := r.Context()
 	data, err := s.manager.JobIDsByState(ctx, jobType, filter)
 	if err != nil {
-		gimlet.WriteResponse(rw, gimlet.MakeJSONInternalErrorResponder(err))
+		gimlet.WriteResponse(ctx, rw, gimlet.MakeJSONInternalErrorResponder(err))
 		return
 	}
 
-	gimlet.WriteJSON(rw, data)
+	gimlet.WriteJSON(ctx, rw, data)
 }
 
 // MarkComplete is an http.Handlerfunc marks the given job complete.
@@ -88,11 +88,11 @@ func (s *ManagementService) MarkComplete(rw http.ResponseWriter, r *http.Request
 
 	ctx := r.Context()
 	if err := s.manager.CompleteJob(ctx, name); err != nil {
-		gimlet.WriteResponse(rw, gimlet.MakeTextInternalErrorResponder(errors.Wrapf(err, "completing job '%s'", name)))
+		gimlet.WriteResponse(ctx, rw, gimlet.MakeTextInternalErrorResponder(errors.Wrapf(err, "completing job '%s'", name)))
 		return
 	}
 
-	gimlet.WriteJSON(rw, struct {
+	gimlet.WriteJSON(ctx, rw, struct {
 		Message string `json:"message"`
 		JobName string `json:"job_name"`
 	}{
@@ -110,11 +110,11 @@ func (s *ManagementService) MarkCompleteByType(rw http.ResponseWriter, r *http.R
 
 	ctx := r.Context()
 	if err := s.manager.CompleteJobsByType(ctx, management.StatusFilter(filter), jobType); err != nil {
-		gimlet.WriteResponse(rw, gimlet.MakeTextInternalErrorResponder(errors.Wrapf(err, "completing jobs by type '%s'", jobType)))
+		gimlet.WriteResponse(ctx, rw, gimlet.MakeTextInternalErrorResponder(errors.Wrapf(err, "completing jobs by type '%s'", jobType)))
 		return
 	}
 
-	gimlet.WriteJSON(rw, struct {
+	gimlet.WriteJSON(ctx, rw, struct {
 		Message string `json:"message"`
 		JobType string `json:"job_type"`
 	}{
@@ -131,11 +131,11 @@ func (s *ManagementService) MarkManyComplete(rw http.ResponseWriter, r *http.Req
 
 	ctx := r.Context()
 	if err := s.manager.CompleteJobs(ctx, management.StatusFilter(filter)); err != nil {
-		gimlet.WriteResponse(rw, gimlet.MakeTextErrorResponder(errors.Wrapf(err, "completing jobs with filter '%s'", filter)))
+		gimlet.WriteResponse(ctx, rw, gimlet.MakeTextErrorResponder(errors.Wrapf(err, "completing jobs with filter '%s'", filter)))
 		return
 	}
 
-	gimlet.WriteJSON(rw, struct {
+	gimlet.WriteJSON(ctx, rw, struct {
 		Message string `json:"message"`
 	}{
 		Message: "mark jobs complete by filter successful",
@@ -151,11 +151,11 @@ func (s *ManagementService) MarkCompleteByPattern(rw http.ResponseWriter, r *htt
 
 	ctx := r.Context()
 	if err := s.manager.CompleteJobsByPattern(ctx, management.StatusFilter(filter), pattern); err != nil {
-		gimlet.WriteResponse(rw, gimlet.MakeTextInternalErrorResponder(errors.Wrapf(err, "completing jobs by pattern '%s' with filter '%s'", pattern, filter)))
+		gimlet.WriteResponse(ctx, rw, gimlet.MakeTextInternalErrorResponder(errors.Wrapf(err, "completing jobs by pattern '%s' with filter '%s'", pattern, filter)))
 		return
 	}
 
-	gimlet.WriteJSON(rw, struct {
+	gimlet.WriteJSON(ctx, rw, struct {
 		Message string `json:"message"`
 	}{
 		Message: "mark jobs complete by pattern successful",

@@ -308,7 +308,7 @@ func (q *limitedSizeSerializableLocal) Next(ctx context.Context) amboy.Job {
 				q.staleCount++
 				q.mu.Unlock()
 
-				grip.Notice(message.Fields{
+				grip.Notice(ctx, message.Fields{
 					"state":    "stale",
 					"job_id":   j.ID(),
 					"job_type": j.Type().Name,
@@ -622,7 +622,7 @@ func (q *limitedSizeSerializableLocal) saveCopy(j amboy.Job) {
 	name := q.getNameWithMetadata(j)
 	jobCopy, err := q.copyJob(j)
 	if err != nil {
-		grip.Error(message.Fields{
+		grip.Error(context.Background(), message.Fields{
 			"message":  "could not copy job",
 			"job_id":   j.ID(),
 			"queue_id": q.ID(),
@@ -642,7 +642,7 @@ func (q *limitedSizeSerializableLocal) getCopy(name string) (amboy.Job, bool) {
 	}
 	jobCopy, err := q.copyJob(j)
 	if err != nil {
-		grip.Debug(message.WrapError(err, message.Fields{
+		grip.Debug(context.Background(), message.WrapError(err, message.Fields{
 			"message":  "could not copy job",
 			"job_id":   j.ID(),
 			"queue_id": q.ID(),
@@ -684,7 +684,7 @@ func (q *limitedSizeSerializableLocal) Start(ctx context.Context) error {
 
 	q.started = true
 
-	grip.Info("job server running")
+	grip.Info(ctx, "job server running")
 
 	return nil
 }
@@ -692,7 +692,7 @@ func (q *limitedSizeSerializableLocal) Start(ctx context.Context) error {
 func (q *limitedSizeSerializableLocal) monitorStaleRetryingJobs(ctx context.Context) {
 	defer func() {
 		if err := recovery.HandlePanicWithError(recover(), nil, "stale retry job monitor"); err != nil {
-			grip.Error(message.WrapError(err, message.Fields{
+			grip.Error(ctx, message.WrapError(err, message.Fields{
 				"message":  "stale retry job monitor failed",
 				"queue_id": q.ID(),
 			}))
@@ -727,7 +727,7 @@ func (q *limitedSizeSerializableLocal) handleStaleRetryingJobs(ctx context.Conte
 		if j.RetryInfo().ShouldRetry() && time.Since(j.Status().ModificationTime) < q.info().LockTimeout {
 			continue
 		}
-		grip.Error(message.WrapError(q.retryHandler.Put(ctx, j), message.Fields{
+		grip.Error(ctx, message.WrapError(q.retryHandler.Put(ctx, j), message.Fields{
 			"message":  "could not enqueue stale retrying job",
 			"job_id":   j.ID(),
 			"queue_id": q.ID(),
