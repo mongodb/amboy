@@ -52,7 +52,7 @@ func executeJob(ctx context.Context, id string, j amboy.Job, q amboy.Queue) {
 	}
 	j.Run(jobCtx)
 	if err := q.Complete(ctx, j); err != nil {
-		grip.Warning(message.WrapError(err, message.Fields{
+		grip.Warning(ctx, message.WrapError(err, message.Fields{
 			"message":  "could not mark job complete",
 			"job_id":   j.ID(),
 			"queue_id": q.ID(),
@@ -71,7 +71,7 @@ func executeJob(ctx context.Context, id string, j amboy.Job, q amboy.Queue) {
 
 		rh := rq.RetryHandler()
 		if rh == nil {
-			grip.Error(message.Fields{
+			grip.Error(ctx, message.Fields{
 				"message":  "cannot retry a job in a queue that does not support retrying",
 				"job_id":   j.ID(),
 				"queue_id": rq.ID(),
@@ -80,7 +80,7 @@ func executeJob(ctx context.Context, id string, j amboy.Job, q amboy.Queue) {
 		}
 
 		if err := rh.Put(ctx, j); err != nil {
-			grip.Error(message.WrapError(err, message.Fields{
+			grip.Error(ctx, message.WrapError(err, message.Fields{
 				"message":  "could not prepare job for retry",
 				"job_id":   j.ID(),
 				"queue_id": rq.ID(),
@@ -103,11 +103,11 @@ func executeJob(ctx context.Context, id string, j amboy.Job, q amboy.Queue) {
 	}
 
 	if err := j.Error(); err != nil {
-		grip.Error(message.WrapError(err, msg))
+		grip.Error(ctx, message.WrapError(err, msg))
 		span.SetStatus(codes.Error, "job encountered error")
 		span.RecordError(err, trace.WithStackTrace(true))
 	} else {
-		grip.Info(msg)
+		grip.Info(ctx, msg)
 	}
 }
 
@@ -154,7 +154,7 @@ func worker(bctx context.Context, id string, q amboy.Queue, wg *sync.WaitGroup, 
 			if job != nil {
 				job.AddError(err)
 				if err := q.Complete(ctx, job); err != nil {
-					grip.Warning(message.WrapError(err, message.Fields{
+					grip.Warning(ctx, message.WrapError(err, message.Fields{
 						"message":     "could not mark job complete",
 						"job_id":      job.ID(),
 						"queue_id":    q.ID(),

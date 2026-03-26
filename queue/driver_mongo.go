@@ -242,7 +242,7 @@ func (d *mongoDriver) start(ctx context.Context, opts clientStartOptions) error 
 	startAt := time.Now()
 	go func() {
 		<-dCtx.Done()
-		grip.Info(message.Fields{
+		grip.Info(dCtx, message.Fields{
 			"message":   "closing session for driver",
 			"driver_id": d.instanceID,
 			"uptime":    time.Since(startAt),
@@ -899,7 +899,7 @@ func (d *mongoDriver) doUpdate(ctx context.Context, ji *registry.JobInterchange)
 
 	if ji.Status.InProgress && ji.Status.Completed {
 		err := errors.New("job was found both in progress and complete")
-		grip.Error(message.WrapError(err, message.Fields{
+		grip.Error(ctx, message.WrapError(err, message.Fields{
 			"message":     "programmer error: a job should not be saved as both in progress and complete - manually changing in progress to false",
 			"jira_ticket": "EVG-14609",
 			"job_id":      ji.Name,
@@ -932,7 +932,7 @@ func (d *mongoDriver) Jobs(ctx context.Context) <-chan amboy.Job {
 	go func() {
 		defer func() {
 			if err := recovery.HandlePanicWithError(recover(), nil, "getting jobs"); err != nil {
-				grip.Error(message.WrapError(err, message.Fields{
+				grip.Error(ctx, message.WrapError(err, message.Fields{
 					"message":   "failed while getting jobs from the DB",
 					"operation": "job iterator",
 					"service":   "amboy.queue.mdb",
@@ -946,7 +946,7 @@ func (d *mongoDriver) Jobs(ctx context.Context) <-chan amboy.Job {
 
 		iter, err := d.getCollection().Find(ctx, q, options.Find().SetSort(bson.M{"status.mod_ts": -1}))
 		if err != nil {
-			grip.Warning(message.WrapError(err, message.Fields{
+			grip.Warning(ctx, message.WrapError(err, message.Fields{
 				"message":   "problem with query",
 				"driver_id": d.instanceID,
 				"service":   "amboy.queue.mdb",
@@ -959,7 +959,7 @@ func (d *mongoDriver) Jobs(ctx context.Context) <-chan amboy.Job {
 		for iter.Next(ctx) {
 			ji := &registry.JobInterchange{}
 			if err = iter.Decode(ji); err != nil {
-				grip.Warning(message.WrapError(err, message.Fields{
+				grip.Warning(ctx, message.WrapError(err, message.Fields{
 					"message":   "problem decoding job document into interchange job",
 					"driver_id": d.instanceID,
 					"service":   "amboy.queue.mdb",
@@ -974,7 +974,7 @@ func (d *mongoDriver) Jobs(ctx context.Context) <-chan amboy.Job {
 			var j amboy.Job
 			j, err = ji.Resolve(d.opts.Format)
 			if err != nil {
-				grip.Warning(message.WrapError(err, message.Fields{
+				grip.Warning(ctx, message.WrapError(err, message.Fields{
 					"message":   "problem converting interchange job to in-memory job",
 					"driver_id": d.instanceID,
 					"service":   "amboy.queue.mdb",
@@ -992,7 +992,7 @@ func (d *mongoDriver) Jobs(ctx context.Context) <-chan amboy.Job {
 			}
 		}
 
-		grip.Error(message.WrapError(iter.Err(), message.Fields{
+		grip.Error(ctx, message.WrapError(iter.Err(), message.Fields{
 			"driver_id": d.instanceID,
 			"service":   "amboy.queue.mdb",
 			"is_group":  d.opts.UseGroups,
@@ -1011,7 +1011,7 @@ func (d *mongoDriver) RetryableJobs(ctx context.Context, filter retryableJobFilt
 	go func() {
 		defer func() {
 			if err := recovery.HandlePanicWithError(recover(), nil, "getting retryable jobs"); err != nil {
-				grip.Error(message.WrapError(err, message.Fields{
+				grip.Error(ctx, message.WrapError(err, message.Fields{
 					"message":   "failed while getting retryable jobs from the DB",
 					"operation": "retryable job iterator",
 					"service":   "amboy.queue.mdb",
@@ -1040,7 +1040,7 @@ func (d *mongoDriver) RetryableJobs(ctx context.Context, filter retryableJobFilt
 
 		iter, err := d.getCollection().Find(ctx, q, options.Find().SetSort(bson.M{"status.mod_ts": -1}))
 		if err != nil {
-			grip.Warning(message.WrapError(err, message.Fields{
+			grip.Warning(ctx, message.WrapError(err, message.Fields{
 				"message":   "problem with query",
 				"driver_id": d.instanceID,
 				"service":   "amboy.queue.mdb",
@@ -1053,7 +1053,7 @@ func (d *mongoDriver) RetryableJobs(ctx context.Context, filter retryableJobFilt
 		for iter.Next(ctx) {
 			ji := &registry.JobInterchange{}
 			if err = iter.Decode(ji); err != nil {
-				grip.Warning(message.WrapError(err, message.Fields{
+				grip.Warning(ctx, message.WrapError(err, message.Fields{
 					"message":   "problem decoding job document into job interchange",
 					"driver_id": d.instanceID,
 					"service":   "amboy.queue.mdb",
@@ -1067,7 +1067,7 @@ func (d *mongoDriver) RetryableJobs(ctx context.Context, filter retryableJobFilt
 			var j amboy.Job
 			j, err = ji.Resolve(d.opts.Format)
 			if err != nil {
-				grip.Warning(message.WrapError(err, message.Fields{
+				grip.Warning(ctx, message.WrapError(err, message.Fields{
 					"message":   "converting interchange job to in-memory job",
 					"driver_id": d.instanceID,
 					"service":   "amboy.queue.mdb",
@@ -1085,7 +1085,7 @@ func (d *mongoDriver) RetryableJobs(ctx context.Context, filter retryableJobFilt
 			}
 		}
 
-		grip.Error(message.WrapError(iter.Err(), message.Fields{
+		grip.Error(ctx, message.WrapError(iter.Err(), message.Fields{
 			"driver_id": d.instanceID,
 			"service":   "amboy.queue.mdb",
 			"is_group":  d.opts.UseGroups,
@@ -1120,7 +1120,7 @@ func (d *mongoDriver) JobInfo(ctx context.Context) <-chan amboy.JobInfo {
 				},
 			))
 		if err != nil {
-			grip.Warning(message.WrapError(err, message.Fields{
+			grip.Warning(ctx, message.WrapError(err, message.Fields{
 				"message":   "problem with query",
 				"driver_id": d.instanceID,
 				"service":   "amboy.queue.mdb",
@@ -1134,7 +1134,7 @@ func (d *mongoDriver) JobInfo(ctx context.Context) <-chan amboy.JobInfo {
 		for iter.Next(ctx) {
 			ji := &registry.JobInterchange{}
 			if err := iter.Decode(ji); err != nil {
-				grip.Warning(message.WrapError(err, message.Fields{
+				grip.Warning(ctx, message.WrapError(err, message.Fields{
 					"message":   "problem decoding job document into interchange job",
 					"driver_id": d.instanceID,
 					"service":   "amboy.queue.mdb",
@@ -1184,6 +1184,7 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 	startAt := time.Now()
 	defer func() {
 		grip.WarningWhen(
+			ctx,
 			time.Since(startAt) > time.Second,
 			message.Fields{
 				"duration_secs": time.Since(startAt).Seconds(),
@@ -1214,7 +1215,7 @@ func (d *mongoDriver) Next(ctx context.Context) amboy.Job {
 				if job != nil {
 					d.dispatcher.Release(ctx, job)
 				}
-				grip.Warning(message.WrapError(err, message.Fields{
+				grip.Warning(ctx, message.WrapError(err, message.Fields{
 					"message":       "problem getting next job",
 					"driver_id":     d.instanceID,
 					"service":       "amboy.queue.mdb",
@@ -1368,7 +1369,7 @@ func (d *mongoDriver) tryDispatchFromCursor(ctx context.Context, iter *mongo.Cur
 
 		ji := &registry.JobInterchange{}
 		if err := iter.Decode(ji); err != nil {
-			grip.Warning(message.WrapError(err, message.Fields{
+			grip.Warning(ctx, message.WrapError(err, message.Fields{
 				"message":       "problem decoding job document into interchange job",
 				"driver_id":     d.instanceID,
 				"service":       "amboy.queue.mdb",
@@ -1383,7 +1384,7 @@ func (d *mongoDriver) tryDispatchFromCursor(ctx context.Context, iter *mongo.Cur
 
 		j, err := ji.Resolve(d.opts.Format)
 		if err != nil {
-			grip.Warning(message.WrapError(err, message.Fields{
+			grip.Warning(ctx, message.WrapError(err, message.Fields{
 				"message":       "problem converting interchange job into in-memory job",
 				"driver_id":     d.instanceID,
 				"service":       "amboy.queue.mdb",
@@ -1410,8 +1411,8 @@ func (d *mongoDriver) tryDispatchFromCursor(ctx context.Context, iter *mongo.Cur
 				"group":         d.opts.GroupName,
 				"duration_secs": time.Since(startAt).Seconds(),
 			}
-			grip.Warning(message.WrapError(err, msg))
-			grip.NoticeWhen(err == nil, msg)
+			grip.Warning(ctx, message.WrapError(err, msg))
+			grip.NoticeWhen(ctx, err == nil, msg)
 			continue
 		}
 
@@ -1439,7 +1440,7 @@ func (d *mongoDriver) tryDispatchFromCursor(ctx context.Context, iter *mongo.Cur
 			// scope. This is also not an error condition and simply means
 			// scopes are working as designed.
 			isDueToContention := amboy.IsJobNotFoundError(err) || amboy.IsDuplicateJobScopeError(err)
-			grip.DebugWhen(!isDueToContention,
+			grip.DebugWhen(ctx, !isDueToContention,
 				message.WrapError(err, message.Fields{
 					"message":       "failed to dispatch job for reasons other than dispatch/scope contention",
 					"driver_id":     d.instanceID,
@@ -1509,7 +1510,7 @@ func (d *mongoDriver) Stats(ctx context.Context) amboy.QueueStats {
 
 	c, err := coll.Aggregate(ctx, pipeline)
 	if err != nil {
-		grip.Warning(message.WrapError(err, message.Fields{
+		grip.Warning(ctx, message.WrapError(err, message.Fields{
 			"driver_id":  d.instanceID,
 			"service":    "amboy.queue.mdb",
 			"collection": coll.Name(),
@@ -1529,7 +1530,7 @@ func (d *mongoDriver) Stats(ctx context.Context) amboy.QueueStats {
 		Count int `bson:"count"`
 	}{}
 	if err := c.All(ctx, &statusGroups); err != nil {
-		grip.Warning(message.WrapError(err, message.Fields{
+		grip.Warning(ctx, message.WrapError(err, message.Fields{
 			"driver_id":  d.instanceID,
 			"service":    "amboy.queue.mdb",
 			"collection": coll.Name(),
@@ -1565,7 +1566,7 @@ func (d *mongoDriver) Stats(ctx context.Context) amboy.QueueStats {
 	} else {
 		total, err = coll.EstimatedDocumentCount(ctx)
 	}
-	grip.Warning(message.WrapError(err, message.Fields{
+	grip.Warning(ctx, message.WrapError(err, message.Fields{
 		"driver_id":  d.instanceID,
 		"service":    "amboy.queue.mdb",
 		"collection": coll.Name(),

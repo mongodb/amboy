@@ -59,14 +59,14 @@ func NewQueueBackedSender(ctx context.Context, sender send.Sender, workers, capa
 	return s, nil
 }
 
-func (s *queueSender) Send(m message.Composer) {
+func (s *queueSender) Send(ctx context.Context, m message.Composer) {
 	if s.Level().ShouldLog(m) {
 		s.mu.RLock()
 		defer s.mu.RUnlock()
 
 		err := s.queue.Put(s.ctx, NewSendMessageJob(m, s.Sender))
 		if err != nil {
-			s.Send(message.NewErrorWrap(err, m.String()))
+			s.Sender.Send(ctx, message.NewErrorWrap(err, m.String()))
 		}
 	}
 }

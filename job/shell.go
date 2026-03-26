@@ -63,7 +63,7 @@ func NewShellJobInstance() *ShellJob {
 // the Output attribute, and returns the error value of the command.
 func (j *ShellJob) Run(ctx context.Context) {
 	defer j.MarkComplete()
-	grip.Debugf("running %s", j.Command)
+	grip.Debugf(ctx, "running %s", j.Command)
 
 	args := strings.Split(j.Command, " ")
 

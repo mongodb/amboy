@@ -15,7 +15,7 @@ import (
 
 func init() {
 	grip.SetName("amboy.rest.tests")
-	grip.Error(grip.SetSender(send.MakeNative()))
+	grip.Error(context.Background(), grip.SetSender(send.MakeNative()))
 
 	lvl := grip.GetSender().Level()
 	lvl.Threshold = level.Warning

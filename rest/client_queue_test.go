@@ -54,11 +54,11 @@ func (s *QueueClientSuite) SetupSuite() {
 	s.require.NoError(err)
 	s.info.host = s.server.URL[:portStart]
 	s.info.port = port
-	grip.Infof("running test rest service at '%s', on port '%d'", s.info.host, s.info.port)
+	grip.Infof(context.Background(), "running test rest service at '%s', on port '%d'", s.info.host, s.info.port)
 }
 
 func (s *QueueClientSuite) TearDownSuite() {
-	grip.Infof("closing test rest service at '%s', on port '%d'", s.info.host, s.info.port)
+	grip.Infof(context.Background(), "closing test rest service at '%s', on port '%d'", s.info.host, s.info.port)
 	s.server.Close()
 	s.closer()
 }

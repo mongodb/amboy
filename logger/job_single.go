@@ -36,7 +36,7 @@ func NewSendMessageJob(m message.Composer, s send.Sender) amboy.Job {
 	return j
 }
 
-func (j *sendMessageJob) Run(_ context.Context) {
+func (j *sendMessageJob) Run(ctx context.Context) {
 	defer j.MarkComplete()
 
 	if j.message == nil {
@@ -49,5 +49,5 @@ func (j *sendMessageJob) Run(_ context.Context) {
 		return
 	}
 
-	j.sender.Send(j.message)
+	j.sender.Send(ctx, j.message)
 }

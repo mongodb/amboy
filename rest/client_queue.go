@@ -315,8 +315,8 @@ func (c *QueueClient) Wait(ctx context.Context, name string) bool {
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		grip.Info(err)
-		grip.Debugf("%+v", resp)
+		grip.Info(ctx, err)
+		grip.Debugf(ctx, "%+v", resp)
 		return false
 	}
 	return true
@@ -338,8 +338,8 @@ func (c *QueueClient) WaitAll(ctx context.Context) bool {
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		grip.Info(err)
-		grip.Debugf("%+v", resp)
+		grip.Info(ctx, err)
+		grip.Debugf(ctx, "%+v", resp)
 		return false
 	}
 

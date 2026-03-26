@@ -16,14 +16,14 @@ func (s *QueueService) Fetch(w http.ResponseWriter, r *http.Request) {
 
 	job, ok := s.queue.Get(r.Context(), name)
 	if !ok {
-		grip.Infof("job named %s does not exist in the queue", name)
+		grip.Infof(r.Context(), "job named %s does not exist in the queue", name)
 		gimlet.WriteJSONResponse(w, http.StatusNotFound, nil)
 		return
 	}
 
 	resp, err := registry.MakeJobInterchange(job, amboy.JSON)
 	if err != nil {
-		grip.Warningf("problem converting job %s to interchange format", name)
+		grip.Warningf(r.Context(), "problem converting job %s to interchange format", name)
 		gimlet.WriteJSONResponse(w, http.StatusInternalServerError, resp)
 		return
 	}

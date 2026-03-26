@@ -100,7 +100,7 @@ func NewLocalQueueGroup(ctx context.Context, opts LocalQueueGroupOptions) (amboy
 				case <-ctx.Done():
 					return
 				case <-ticker.C:
-					grip.Error(message.WrapError(g.Prune(ctx),
+					grip.Error(ctx, message.WrapError(g.Prune(ctx),
 						message.Fields{
 							"group": "local queue group background pruning",
 							"ttl":   opts.TTL,

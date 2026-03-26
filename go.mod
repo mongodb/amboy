@@ -9,7 +9,7 @@ require (
 	github.com/evergreen-ci/utility v0.0.0-20251203163234-8a1c0ea8b717
 	github.com/fuyufjh/splunk-hec-go v0.3.4-0.20210909061418-feecd03924b7 // indirect
 	github.com/google/uuid v1.6.0
-	github.com/mongodb/grip v0.0.0-20251203205830-b5c5c666ab94
+	github.com/mongodb/grip v0.0.0-20260325175240-dee15316ed15
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.10.0
 	github.com/urfave/cli v1.22.10

@@ -26,7 +26,7 @@ type GroupQueueOperation struct {
 // function, it panics.
 func IntervalGroupQueueOperation(ctx context.Context, qg QueueGroup, interval time.Duration, startAt time.Time, conf QueueOperationConfig, ops ...GroupQueueOperation) {
 	if len(ops) == 0 {
-		grip.Error("queue group operation must contain at least one operation")
+		grip.Error(ctx, "queue group operation must contain at least one operation")
 		return
 	}
 
@@ -34,7 +34,7 @@ func IntervalGroupQueueOperation(ctx context.Context, qg QueueGroup, interval ti
 		var err error
 
 		if interval <= time.Microsecond {
-			grip.Criticalf("interval for queue group operation '%s' must be greater than a microsecond", interval)
+			grip.Criticalf(ctx, "interval for queue group operation '%s' must be greater than a microsecond", interval)
 			return
 		}
 
@@ -74,7 +74,7 @@ func IntervalGroupQueueOperation(ctx context.Context, qg QueueGroup, interval ti
 		for {
 			select {
 			case <-ctx.Done():
-				grip.InfoWhen(conf.DebugLogging, message.Fields{
+				grip.InfoWhen(ctx, conf.DebugLogging, message.Fields{
 					"message":       "exiting interval job scheduler",
 					"queue":         "group",
 					"num_intervals": count,
@@ -100,11 +100,11 @@ func scheduleGroupOp(ctx context.Context, group QueueGroup, op GroupQueueOperati
 		q, err := group.Get(ctx, op.Queue)
 		if err != nil {
 			if conf.ContinueOnError {
-				grip.WarningWhen(conf.LogErrors, err)
+				grip.WarningWhen(ctx, conf.LogErrors, err)
 				return nil
 			}
 
-			grip.CriticalWhen(conf.LogErrors, err)
+			grip.CriticalWhen(ctx, conf.LogErrors, err)
 			return errors.Wrapf(err, "getting queue '%s' from group", op.Queue)
 		}
 

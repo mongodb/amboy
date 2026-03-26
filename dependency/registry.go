@@ -1,6 +1,7 @@
 package dependency
 
 import (
+	"context"
 	"sync"
 
 	"github.com/mongodb/grip"
@@ -56,7 +57,7 @@ func (r *registryCache) addManager(name string, factory ManagerFactory) {
 	defer r.mmu.Unlock()
 
 	if _, ok := r.m[name]; ok {
-		grip.Warningf("overriding cached dependency manager '%s'", name)
+		grip.Warningf(context.Background(), "overriding cached dependency manager '%s'", name)
 	}
 
 	r.m[name] = factory
@@ -77,7 +78,7 @@ func (r *registryCache) addCheck(name string, factory CheckFactory) {
 	defer r.cmu.Unlock()
 
 	if _, ok := r.c[name]; ok {
-		grip.Warningf("overriding cached dependency callback '%s'", name)
+		grip.Warningf(context.Background(), "overriding cached dependency callback '%s'", name)
 	}
 
 	r.c[name] = factory

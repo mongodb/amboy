@@ -45,7 +45,7 @@ func (s *QueueService) Status(w http.ResponseWriter, r *http.Request) {
 func (s *QueueService) WaitAll(w http.ResponseWriter, r *http.Request) {
 	timeout, err := parseTimeout(r)
 	if err != nil {
-		grip.Infof("problem parsing timeout for wait-all operation: %v", err)
+		grip.Infof(r.Context(), "problem parsing timeout for wait-all operation: %v", err)
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), timeout)
 	defer cancel()

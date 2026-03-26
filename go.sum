@@ -92,8 +92,8 @@ github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 h1:6E+4a0GO5zZEnZ
 github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0/go.mod h1:zJYVVT2jmtg6P3p1VtQj7WsuWi/y4VnjVBn7F8KPB3I=
 github.com/mattn/go-xmpp v0.0.0-20211029151415-912ba614897a h1:BRuMO9LUDuGp6viOhrEbmuXNlvC78X5QdsnY9Wc+cqM=
 github.com/mattn/go-xmpp v0.0.0-20211029151415-912ba614897a/go.mod h1:Cs5mF0OsrRRmhkyOod//ldNPOwJsrBvJ+1WRspv0xoc=
-github.com/mongodb/grip v0.0.0-20251203205830-b5c5c666ab94 h1:kEIOld0OEhvbJSo26V3RrARWnV1gBpFW/6chCZJ1yx4=
-github.com/mongodb/grip v0.0.0-20251203205830-b5c5c666ab94/go.mod h1:nIxXGOFRWYjuwlgZlhj7BvCE6MjPuOFr3xbe9IcbKDo=
+github.com/mongodb/grip v0.0.0-20260325175240-dee15316ed15 h1:24uQdm0yD9ybTgkAyolNVjf6jf8UfLqPC3bfxnf1N0U=
+github.com/mongodb/grip v0.0.0-20260325175240-dee15316ed15/go.mod h1:nIxXGOFRWYjuwlgZlhj7BvCE6MjPuOFr3xbe9IcbKDo=
 github.com/montanaflynn/stats v0.7.1 h1:etflOAAHORrCC44V+aR6Ftzort912ZU+YLiSTuV8eaE=
 github.com/montanaflynn/stats v0.7.1/go.mod h1:etXPPgVO6n31NxCd9KQUMvCM+ve0ruNzt6R8Bnaayow=
 github.com/peterhellberg/link v1.2.0 h1:UA5pg3Gp/E0F2WdX7GERiNrPQrM1K6CVJUUWfHa4t6c=

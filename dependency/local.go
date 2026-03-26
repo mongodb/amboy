@@ -1,6 +1,7 @@
 package dependency
 
 import (
+	"context"
 	"os"
 
 	"github.com/mongodb/grip"
@@ -108,7 +109,7 @@ func (d *LocalFile) State() State {
 		thisStat, err := os.Stat(dep)
 		if os.IsNotExist(err) {
 			// this shouldn't trigger a rebuild.
-			grip.Warningf("dependency %s does not exist", dep)
+			grip.Warningf(context.Background(), "dependency %s does not exist", dep)
 		}
 
 		// presumably this happens for the first dependency

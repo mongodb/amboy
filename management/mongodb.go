@@ -302,7 +302,7 @@ func (m *dbQueueManager) completeJobs(ctx context.Context, query bson.M, f Statu
 	query = m.getStatusQuery(query, f)
 
 	res, err := m.collection.UpdateMany(ctx, query, m.getUpdateStatement())
-	grip.Info(message.Fields{
+	grip.Info(ctx, message.Fields{
 		"op":         "mark-jobs-complete",
 		"collection": m.collection.Name(),
 		"filter":     f,

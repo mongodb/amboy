@@ -146,7 +146,7 @@ func NewMongoDBSingleQueueGroup(ctx context.Context, opts MongoDBQueueGroupOptio
 				case <-ctx.Done():
 					return
 				case <-ticker.C:
-					grip.Error(message.WrapError(g.Prune(ctx), "pruning remote queue group database"))
+					grip.Error(ctx, message.WrapError(g.Prune(ctx), "pruning remote queue group database"))
 				}
 			}
 		}()
@@ -162,7 +162,7 @@ func NewMongoDBSingleQueueGroup(ctx context.Context, opts MongoDBQueueGroupOptio
 				case <-ctx.Done():
 					return
 				case <-ticker.C:
-					grip.Error(message.WrapError(g.startQueues(ctx), "starting external queues"))
+					grip.Error(ctx, message.WrapError(g.startQueues(ctx), "starting external queues"))
 				}
 			}
 		}()
@@ -315,7 +315,7 @@ func (g *remoteMongoQueueGroupSingle) Len() int { return g.cache.Len() }
 
 func (g *remoteMongoQueueGroupSingle) Queues(ctx context.Context) []string {
 	queues, err := g.getQueues(ctx)
-	grip.Warning(message.WrapError(err, "getting active queues in queue group"))
+	grip.Warning(ctx, message.WrapError(err, "getting active queues in queue group"))
 	return queues
 }
 

@@ -110,7 +110,7 @@ func IntervalQueueOperation(ctx context.Context, q Queue, interval time.Duration
 		var err error
 
 		if interval <= time.Microsecond {
-			grip.Criticalf("interval for queue operation '%s' must be greater than a microsecond", interval)
+			grip.Criticalf(ctx, "interval for queue operation '%s' must be greater than a microsecond", interval)
 			return
 		}
 
@@ -147,7 +147,7 @@ func IntervalQueueOperation(ctx context.Context, q Queue, interval time.Duration
 		for {
 			select {
 			case <-ctx.Done():
-				grip.InfoWhen(conf.DebugLogging, message.Fields{
+				grip.InfoWhen(ctx, conf.DebugLogging, message.Fields{
 					"message":       "exiting interval job scheduler",
 					"num_intervals": count,
 					"queue":         "single",
@@ -177,9 +177,9 @@ func scheduleOp(ctx context.Context, q Queue, op QueueOperation, conf QueueOpera
 		}
 
 		if conf.ContinueOnError {
-			grip.WarningWhen(conf.LogErrors, err)
+			grip.WarningWhen(ctx, conf.LogErrors, err)
 		} else {
-			grip.CriticalWhen(conf.LogErrors, err)
+			grip.CriticalWhen(ctx, conf.LogErrors, err)
 			return err
 		}
 	}

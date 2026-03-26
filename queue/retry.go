@@ -199,7 +199,7 @@ func (rh *BasicRetryHandler) Close(ctx context.Context) {
 func (rh *BasicRetryHandler) waitForJob(ctx context.Context) {
 	defer func() {
 		if err := recovery.HandlePanicWithError(recover(), nil, "retry handler worker"); err != nil {
-			grip.Error(message.WrapError(err, message.Fields{
+			grip.Error(ctx, message.WrapError(err, message.Fields{
 				"message":  "retry job worker failed",
 				"service":  "amboy.queue.retry",
 				"queue_id": rh.queue.ID(),
@@ -227,14 +227,14 @@ func (rh *BasicRetryHandler) waitForJob(ctx context.Context) {
 
 			defer func() {
 				if err := recovery.HandlePanicWithError(recover(), nil, "handling job retry"); err != nil {
-					grip.Error(message.WrapError(err, message.Fields{
+					grip.Error(ctx, message.WrapError(err, message.Fields{
 						"message":     "job retry failed",
 						"job_id":      j.ID(),
 						"job_attempt": j.RetryInfo().CurrentAttempt,
 						"queue_id":    rh.queue.ID(),
 						"service":     "amboy.queue.retry",
 					}))
-					grip.Error(message.WrapError(rh.put(ctx, j), message.Fields{
+					grip.Error(ctx, message.WrapError(rh.put(ctx, j), message.Fields{
 						"message":     "could not re-enqueue retrying job after panic",
 						"job_id":      j.ID(),
 						"job_attempt": j.RetryInfo().CurrentAttempt,
@@ -249,7 +249,7 @@ func (rh *BasicRetryHandler) waitForJob(ctx context.Context) {
 				if strings.Contains(err.Error(), errMaxAttempts.Error()) {
 					logLevel = level.Warning
 				}
-				grip.Log(logLevel, message.WrapError(err, message.Fields{
+				grip.Log(ctx, logLevel, message.WrapError(err, message.Fields{
 					"message":     "could not retry job",
 					"queue_id":    rh.queue.ID(),
 					"job_id":      j.ID(),
@@ -261,7 +261,7 @@ func (rh *BasicRetryHandler) waitForJob(ctx context.Context) {
 				// Since the job could not retry successfully, do not let the
 				// job retry again.
 				if err := rh.completeRetrying(ctx, j); err != nil {
-					grip.Warning(message.WrapError(err, message.Fields{
+					grip.Warning(ctx, message.WrapError(err, message.Fields{
 						"message":     "failed to mark job retry as processed",
 						"job_id":      j.ID(),
 						"job_attempt": j.RetryInfo().CurrentAttempt,
@@ -296,7 +296,7 @@ func (rh *BasicRetryHandler) completeRetrying(ctx context.Context, j amboy.Job) 
 					return errors.Wrapf(catcher.Resolve(), "giving up after attempt %d", attempt)
 				}
 
-				grip.Error(message.WrapError(err, message.Fields{
+				grip.Error(ctx, message.WrapError(err, message.Fields{
 					"message":                   "failed to mark retrying job as completed",
 					"complete_retrying_attempt": attempt,
 					"job_id":                    j.ID(),
@@ -338,7 +338,7 @@ func (rh *BasicRetryHandler) handleJob(ctx context.Context, j amboy.Job) error {
 			canRetry, err := rh.tryEnqueueJob(ctx, j)
 			if err != nil {
 				catcher.Wrapf(err, "attempt %d to enqueue retrying job", i)
-				grip.WarningWhen(canRetry, message.WrapError(err, message.Fields{
+				grip.WarningWhen(ctx, canRetry, message.WrapError(err, message.Fields{
 					"message":         "failed to enqueue job retry, but will re-attempt to enqueue",
 					"job_id":          j.ID(),
 					"job_attempt":     j.RetryInfo().CurrentAttempt,
@@ -392,7 +392,7 @@ func (rh *BasicRetryHandler) tryEnqueueJob(ctx context.Context, j amboy.Job) (ca
 		}
 
 		lockTimeout := rh.queue.Info().LockTimeout
-		grip.InfoWhen(time.Since(j.Status().ModificationTime) > lockTimeout, message.Fields{
+		grip.InfoWhen(ctx, time.Since(j.Status().ModificationTime) > lockTimeout, message.Fields{
 			"message":        "received stale retrying job",
 			"stale_owner":    j.Status().Owner,
 			"stale_mod_time": j.Status().ModificationTime,

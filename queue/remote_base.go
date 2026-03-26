@@ -125,7 +125,7 @@ func (q *remoteBase) Get(ctx context.Context, name string) (amboy.Job, bool) {
 
 	job, err := q.driver.Get(ctx, name)
 	if err != nil {
-		grip.Debug(message.WrapError(err, message.Fields{
+		grip.Debug(ctx, message.WrapError(err, message.Fields{
 			"driver": q.driver.ID(),
 			"type":   q.driverType,
 			"name":   name,
@@ -163,7 +163,7 @@ func (q *remoteBase) GetAllAttempts(ctx context.Context, id string) ([]amboy.Job
 }
 
 func (q *remoteBase) jobServer(ctx context.Context) {
-	grip.Info("starting queue job server for remote queue")
+	grip.Info(ctx, "starting queue job server for remote queue")
 
 	for {
 		select {
@@ -174,7 +174,7 @@ func (q *remoteBase) jobServer(ctx context.Context) {
 			if !q.lockDispatch(job) {
 				if job != nil {
 					q.dispatcher.Release(ctx, job)
-					grip.Warning(message.Fields{
+					grip.Warning(ctx, message.Fields{
 						"message":   "releasing a job that's already been dispatched",
 						"service":   "amboy.queue.mdb",
 						"operation": "post-dispatch lock",
@@ -253,7 +253,7 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) error {
 			err = q.driver.Complete(ctx, j)
 			if err != nil {
 				if attempt >= maxAttempts {
-					grip.Warning(message.WrapError(err, message.Fields{
+					grip.Warning(ctx, message.WrapError(err, message.Fields{
 						"message":       fmt.Sprintf("after %d attempts, aborting marking job complete", attempt),
 						"job_id":        id,
 						"driver_type":   q.driverType,
@@ -263,7 +263,7 @@ func (q *remoteBase) Complete(ctx context.Context, j amboy.Job) error {
 						"duration_secs": time.Since(startAt).Seconds(),
 					}))
 				} else if amboy.IsDuplicateJobError(err) || amboy.IsJobNotFoundError(err) {
-					grip.Warning(message.WrapError(err, message.Fields{
+					grip.Warning(ctx, message.WrapError(err, message.Fields{
 						"message":       "attempting to complete job without lock",
 						"job_id":        id,
 						"driver_type":   q.driverType,
@@ -485,14 +485,14 @@ func (q *remoteBase) Close(ctx context.Context) {
 		q.cancel()
 	}
 	if q.dispatcher != nil {
-		grip.Warning(message.WrapError(q.dispatcher.Close(ctx), message.Fields{
+		grip.Warning(ctx, message.WrapError(q.dispatcher.Close(ctx), message.Fields{
 			"message":  "dispatcher closed with errors",
 			"service":  "amboy.queue.mdb",
 			"queue_id": q.ID(),
 		}))
 	}
 	if q.driver != nil {
-		grip.Warning(message.WrapError(q.driver.Close(ctx), message.Fields{
+		grip.Warning(ctx, message.WrapError(q.driver.Close(ctx), message.Fields{
 			"message":  "driver closed with errors",
 			"service":  "amboy.queue.mdb",
 			"queue_id": q.ID(),
@@ -546,7 +546,7 @@ const defaultStaleRetryingMonitorInterval = time.Second
 func (q *remoteBase) monitorStaleRetryingJobs(ctx context.Context) {
 	defer func() {
 		if err := recovery.HandlePanicWithError(recover(), nil, "stale retry job monitor"); err != nil {
-			grip.Error(message.WrapError(err, message.Fields{
+			grip.Error(ctx, message.WrapError(err, message.Fields{
 				"message":  "stale retry job monitor failed",
 				"service":  "amboy.queue.mdb",
 				"queue_id": q.ID(),
@@ -567,7 +567,7 @@ func (q *remoteBase) monitorStaleRetryingJobs(ctx context.Context) {
 			return
 		case <-timer.C:
 			for j := range q.driver.RetryableJobs(ctx, retryableJobStaleRetrying) {
-				grip.Error(message.WrapError(q.retryHandler.Put(ctx, j), message.Fields{
+				grip.Error(ctx, message.WrapError(q.retryHandler.Put(ctx, j), message.Fields{
 					"message":  "could not enqueue stale retrying job",
 					"service":  "amboy.queue.mdb",
 					"job_id":   j.ID(),

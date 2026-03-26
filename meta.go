@@ -109,9 +109,9 @@ func RunJob(ctx context.Context, job Job) error {
 	}
 	err := errors.WithStack(job.Error())
 	if err != nil {
-		grip.Error(message.WrapError(err, msg))
+		grip.Error(ctx, message.WrapError(err, msg))
 	} else {
-		grip.Debug(msg)
+		grip.Debug(ctx, msg)
 	}
 
 	return err

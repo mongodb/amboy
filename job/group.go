@@ -97,10 +97,10 @@ func (g *Group) Run(ctx context.Context) {
 
 		depState := runnableJob.Dependency().State()
 		if depState == dependency.Passed {
-			grip.Infof("skipping job '%s' because of dependency", runnableJob.ID())
+			grip.Infof(ctx, "skipping job '%s' because of dependency", runnableJob.ID())
 			continue
 		} else if depState == dependency.Blocked || depState == dependency.Unresolved {
-			grip.Warningf("dispatching blocked/unresolved job '%s'", runnableJob.ID())
+			grip.Warningf(ctx, "dispatching blocked/unresolved job '%s'", runnableJob.ID())
 		}
 
 		wg.Add(1)
@@ -149,7 +149,7 @@ func (g *Group) Run(ctx context.Context) {
 // type.
 func (g *Group) SetDependency(d dependency.Manager) {
 	if d == nil || d.Type().Name != "always" {
-		grip.Warningf("group job types must have 'always' dependency types, '%s' is invalid", d.Type().Name)
+		grip.Warningf(context.Background(), "group job types must have 'always' dependency types, '%s' is invalid", d.Type().Name)
 		return
 	}
 

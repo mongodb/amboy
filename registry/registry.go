@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"context"
 	"sync"
 
 	"github.com/mongodb/grip"
@@ -39,7 +40,7 @@ func (r *typeRegistry) registerJobType(name string, f JobFactory) {
 	defer r.job.l.Unlock()
 
 	if _, exists := r.job.m[name]; exists {
-		grip.Warningf("job named '%s' is already registered. Overwriting existing value.", name)
+		grip.Warningf(context.Background(), "job named '%s' is already registered. Overwriting existing value.", name)
 	}
 
 	r.job.m[name] = f

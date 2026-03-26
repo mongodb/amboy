@@ -194,7 +194,7 @@ func (c *cacheImpl) Prune(ctx context.Context) error {
 							// enqueued will not execute unless the queue is
 							// restarted. This log makes it easier to identify
 							// if/when this occurs.
-							grip.Info(message.Fields{
+							grip.Info(ctx, message.Fields{
 								"message":  "pruning completed queue",
 								"queue_id": item.q.ID(),
 								"ttl":      item.ttl.String(),
